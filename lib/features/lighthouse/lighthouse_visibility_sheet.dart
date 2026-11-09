@@ -44,6 +44,7 @@ String _moduleLabel(String key) => switch (key) {
   'fund_plan' => '资管资金计划',
   'fund_flow' => '资管资金流水',
   'fund_transfer' => '资管资金调动',
+  'biz' => '业务平台',
   'discount' => '折扣返点',
   _ => key,
 };

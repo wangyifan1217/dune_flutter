@@ -33,13 +33,14 @@ void main() {
   testWidgets('fitToContent 时短内容不撑满最大宽度', (tester) async {
     const key = Key('bubble');
     await tester.pumpWidget(
-      const MaterialApp(
+      // RobotMarkdown 不是 const 构造，整棵树不能挂 const。
+      MaterialApp(
         home: Scaffold(
           body: Align(
             alignment: Alignment.centerLeft,
             child: ConstrainedBox(
               key: key,
-              constraints: BoxConstraints(maxWidth: 400),
+              constraints: const BoxConstraints(maxWidth: 400),
               child: RobotMarkdown(
                 markdown: '你好',
                 selectable: false,

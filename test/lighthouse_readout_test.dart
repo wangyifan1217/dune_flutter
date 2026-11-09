@@ -5,7 +5,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:dunes_app/features/lighthouse/lighthouse_readout.dart';
 
-const 万 = 10000.0;
+const wan = 10000.0;
 
 LhReadoutTotals t({
   double? sales,
@@ -37,23 +37,23 @@ void main() {
     test('同样两个百分比，净利占比不同 → 成本一涨一跌', () {
       // 净利是利润的 60%：ΔW = 2.4万 − 3.3万 = −0.9万，成本降了
       final rich = lhWedgeDelta(
-        profitPrev: 100 * 万,
-        profitCur: 102.4 * 万,
-        netPrev: 60 * 万,
-        netCur: 63.3 * 万,
+        profitPrev: 100 * wan,
+        profitCur: 102.4 * wan,
+        netPrev: 60 * wan,
+        netCur: 63.3 * wan,
       )!;
       expect(rich, lessThan(0));
-      expect(rich, closeTo(-0.9 * 万, 1));
+      expect(rich, closeTo(-0.9 * wan, 1));
 
       // 净利只有利润的 20%：ΔW = 2.4万 − 1.1万 = +1.3万，成本涨了
       final thin = lhWedgeDelta(
-        profitPrev: 100 * 万,
-        profitCur: 102.4 * 万,
-        netPrev: 20 * 万,
-        netCur: 21.1 * 万,
+        profitPrev: 100 * wan,
+        profitCur: 102.4 * wan,
+        netPrev: 20 * wan,
+        netCur: 21.1 * wan,
       )!;
       expect(thin, greaterThan(0));
-      expect(thin, closeTo(1.3 * 万, 1));
+      expect(thin, closeTo(1.3 * wan, 1));
     });
 
     test('两个环比异号时不需要临界比，符号本身就是结论', () {
@@ -62,14 +62,14 @@ void main() {
 
     test('W 的定义与 成本合计 − 项目成本 一致', () {
       // 收入 100、项目成本 30、成本合计 45 ⟹ 利润 70、净利 55、W = 15
-      final w = lhWedge(70 * 万, 55 * 万)!;
-      expect(w, closeTo((45 - 30) * 万, 1));
+      final w = lhWedge(70 * wan, 55 * wan)!;
+      expect(w, closeTo((45 - 30) * wan, 1));
     });
   });
 
   group('六个坑', () {
     test('坑一 · 零基数没有增长率', () {
-      expect(lhGrowth(1020 * 万, 0), isNull);
+      expect(lhGrowth(1020 * wan, 0), isNull);
       expect(lhGrowth(0, 0), isNull);
       expect(lhGrowth(null, 100), isNull);
     });
@@ -78,8 +78,8 @@ void main() {
       final r = lhBuildReadout(
         LhReadoutInput(
           period: LhReadoutPeriod.month,
-          prev: t(sales: 0.01 * 万, profit: 0.01 * 万, netProfit: 0.01 * 万),
-          cur: t(sales: 0.03 * 万, profit: 0.03 * 万, netProfit: 0.03 * 万),
+          prev: t(sales: 0.01 * wan, profit: 0.01 * wan, netProfit: 0.01 * wan),
+          cur: t(sales: 0.03 * wan, profit: 0.03 * wan, netProfit: 0.03 * wan),
         ),
       );
       // 基数远低于月报门槛 50万，所有结论都不该出现
@@ -95,8 +95,8 @@ void main() {
       final r = lhBuildReadout(
         LhReadoutInput(
           period: LhReadoutPeriod.month,
-          prev: t(revenue: 100 * 万, costTotal: 110 * 万, netProfit: -10 * 万),
-          cur: t(revenue: 100 * 万, costTotal: 105 * 万, netProfit: -5 * 万),
+          prev: t(revenue: 100 * wan, costTotal: 110 * wan, netProfit: -10 * wan),
+          cur: t(revenue: 100 * wan, costTotal: 105 * wan, netProfit: -5 * wan),
         ),
       );
       final loss = r.facts.firstWhere((f) => f.id == 'R1-loss');
@@ -110,11 +110,11 @@ void main() {
       LhReadoutInput make(LhPrevSource src) => LhReadoutInput(
         period: LhReadoutPeriod.month,
         prevSource: src,
-        prev: t(revenue: 1000 * 万, profit: 300 * 万, netProfit: 200 * 万),
+        prev: t(revenue: 1000 * wan, profit: 300 * wan, netProfit: 200 * wan),
         cur: t(
-          revenue: 1000 * 万,
-          profit: 303 * 万,
-          netProfit: 201 * 万,
+          revenue: 1000 * wan,
+          profit: 303 * wan,
+          netProfit: 201 * wan,
         ),
       );
       final measured = lhBuildReadout(make(LhPrevSource.measured));
@@ -129,13 +129,13 @@ void main() {
       final r = lhBuildReadout(
         LhReadoutInput(
           period: LhReadoutPeriod.month,
-          prev: t(revenue: 1000 * 万, profit: 300 * 万),
-          cur: t(revenue: 1200 * 万, profit: 340 * 万),
+          prev: t(revenue: 1000 * wan, profit: 300 * wan),
+          cur: t(revenue: 1200 * wan, profit: 340 * wan),
         ),
       );
       final f = r.facts.firstWhere((x) => x.id == 'R6-project-cost');
       // Δ项目成本 = Δ收入 − Δ利润 = 200万 − 40万 = 160万
-      expect(f.amount, closeTo(160 * 万, 1));
+      expect(f.amount, closeTo(160 * wan, 1));
       expect(f.derivation.contains('Δ收入 − Δ利润'), isTrue);
       expect(f.derivation.contains('业务成本'), isFalse);
     });
@@ -147,43 +147,43 @@ void main() {
         LhReadoutInput(
           period: LhReadoutPeriod.month,
           prev: t(
-            sales: 1562 * 万,
-            revenue: 101.3 * 万,
-            profit: 20.5 * 万,
-            netProfit: 14.1 * 万,
+            sales: 1562 * wan,
+            revenue: 101.3 * wan,
+            profit: 20.5 * wan,
+            netProfit: 14.1 * wan,
           ),
           cur: t(
-            sales: 1810 * 万,
-            revenue: 118.6 * 万,
-            profit: 24.4 * 万,
-            netProfit: 14.4 * 万,
+            sales: 1810 * wan,
+            revenue: 118.6 * wan,
+            profit: 24.4 * wan,
+            netProfit: 14.4 * wan,
           ),
         ),
       );
       final w = r.facts.firstWhere((f) => f.id == 'R7-wedge-cost');
-      expect(w.amount, closeTo(3.6 * 万, 100));
+      expect(w.amount, closeTo(3.6 * wan, 100));
       expect(w.text.contains('净增'), isTrue);
-      expect(LhReadoutGate.minProfitBase(LhReadoutPeriod.month), 5 * 万);
+      expect(LhReadoutGate.minProfitBase(LhReadoutPeriod.month), 5 * wan);
     });
 
     test('坑六 · 日 / 周只报事实，不下结论', () {
       LhReadoutInput make(LhReadoutPeriod p) => LhReadoutInput(
         period: p,
         prev: t(
-          sales: 1000 * 万,
-          verifiedSales: 900 * 万,
-          revenue: 1000 * 万,
-          costTotal: 700 * 万,
-          profit: 300 * 万,
-          netProfit: 300 * 万,
+          sales: 1000 * wan,
+          verifiedSales: 900 * wan,
+          revenue: 1000 * wan,
+          costTotal: 700 * wan,
+          profit: 300 * wan,
+          netProfit: 300 * wan,
         ),
         cur: t(
-          sales: 1400 * 万,
-          verifiedSales: 1300 * 万,
-          revenue: 1300 * 万,
-          costTotal: 1100 * 万,
-          profit: 200 * 万,
-          netProfit: 200 * 万,
+          sales: 1400 * wan,
+          verifiedSales: 1300 * wan,
+          revenue: 1300 * wan,
+          costTotal: 1100 * wan,
+          profit: 200 * wan,
+          netProfit: 200 * wan,
         ),
       );
       expect(lhBuildReadout(make(LhReadoutPeriod.day)).conclusions, isEmpty);
@@ -201,8 +201,8 @@ void main() {
       final r = lhBuildReadout(
         LhReadoutInput(
           period: LhReadoutPeriod.month,
-          prev: t(profit: 300 * 万, prepaid: 200 * 万),
-          cur: t(profit: 400 * 万, prepaid: 120 * 万),
+          prev: t(profit: 300 * wan, prepaid: 200 * wan),
+          cur: t(profit: 400 * wan, prepaid: 120 * wan),
         ),
       );
       final f = r.facts.firstWhere((x) => x.id == 'R2-cash-quality');
@@ -214,8 +214,8 @@ void main() {
       final r = lhBuildReadout(
         LhReadoutInput(
           period: LhReadoutPeriod.day,
-          prev: t(sales: 100 * 万, verifiedSales: 90 * 万),
-          cur: t(sales: 145 * 万, verifiedSales: 99 * 万),
+          prev: t(sales: 100 * wan, verifiedSales: 90 * wan),
+          cur: t(sales: 145 * wan, verifiedSales: 99 * wan),
         ),
       );
       final f = r.facts.firstWhere((x) => x.id == 'R3-settlement');
@@ -227,8 +227,8 @@ void main() {
       final r = lhBuildReadout(
         LhReadoutInput(
           period: LhReadoutPeriod.month,
-          prev: t(sales: 1000 * 万, profit: 100 * 万),
-          cur: t(sales: 1400 * 万, profit: 80 * 万),
+          prev: t(sales: 1000 * wan, profit: 100 * wan),
+          cur: t(sales: 1400 * wan, profit: 80 * wan),
         ),
       );
       expect(
@@ -249,13 +249,13 @@ void main() {
           period: LhReadoutPeriod.month,
           entityWord: '省份',
           // 整体毛利率 10% → 12%
-          prev: t(profit: 100 * 万, verifiedSales: 1000 * 万),
-          cur: t(profit: 144 * 万, verifiedSales: 1200 * 万),
+          prev: t(profit: 100 * wan, verifiedSales: 1000 * wan),
+          cur: t(profit: 144 * wan, verifiedSales: 1200 * wan),
           entities: [
             // 三个省的毛利率都在跌，整体却涨了 —— 高利润省份的量变大了
-            e('甲', 15, 13, 万),
-            e('乙', 12, 10, 万),
-            e('丙', 8, 6, 万),
+            e('甲', 15, 13, wan),
+            e('乙', 12, 10, wan),
+            e('丙', 8, 6, wan),
           ],
         ),
       );
@@ -268,8 +268,8 @@ void main() {
       final r = lhBuildReadout(
         LhReadoutInput(
           period: LhReadoutPeriod.month,
-          prev: t(sales: 1000 * 万, profit: 100 * 万, netProfit: 100 * 万),
-          cur: t(sales: 1010 * 万, profit: 101 * 万, netProfit: 101 * 万),
+          prev: t(sales: 1000 * wan, profit: 100 * wan, netProfit: 100 * wan),
+          cur: t(sales: 1010 * wan, profit: 101 * wan, netProfit: 101 * wan),
         ),
       );
       expect(r.facts, isNotEmpty);

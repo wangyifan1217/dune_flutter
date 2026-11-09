@@ -333,6 +333,13 @@ Widget _sectionHead(
 }
 
 Widget _pageHeader(BuildContext context, String title, {Widget? trailing}) {
+  if (_ZgEmbed.of(context)) {
+    if (trailing == null) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Align(alignment: Alignment.centerRight, child: trailing),
+    );
+  }
   return Padding(
     padding: const EdgeInsets.fromLTRB(4, 6, 12, 6),
     child: Row(
@@ -494,12 +501,26 @@ Color _groupColor(String group) => switch (group) {
 };
 
 /// 页面骨架：顶栏 + 下拉刷新 + 内容。
+/// 资管首页下方「分段卡」里嵌入的明细页：同一个页面组件，嵌入时不画 Scaffold / 返回栏 / 外层滚动，
+/// 只保留顶栏右侧的日期岛和正文，由首页统一滚动。
+class _ZgEmbed extends InheritedWidget {
+  const _ZgEmbed({required super.child});
+
+  static bool of(BuildContext context) => context.dependOnInheritedWidgetOfExactType<_ZgEmbed>() != null;
+
+  @override
+  bool updateShouldNotify(_ZgEmbed oldWidget) => false;
+}
+
 Widget _scaffold(
   BuildContext context, {
   required Widget header,
   required List<Widget> children,
   required Future<void> Function() onRefresh,
 }) {
+  if (_ZgEmbed.of(context)) {
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [header, ...children]);
+  }
   return Scaffold(
     backgroundColor: _bg(context, _kBg),
     body: SafeArea(
@@ -584,6 +605,9 @@ class LhBrandSwitch extends StatelessWidget {
     required this.idleColor,
     required this.trackColor,
     required this.thumbColor,
+    this.showAsset = true,
+    this.bizSelected = false,
+    this.onBiz,
   });
 
   final bool assetSelected;
@@ -593,11 +617,24 @@ class LhBrandSwitch extends StatelessWidget {
   final Color idleColor;
   final Color trackColor;
   final Color thumbColor;
+  final bool showAsset;
+  final bool bizSelected;
+  final VoidCallback? onBiz;
 
   @override
   Widget build(BuildContext context) {
+    final segments = <(String, VoidCallback)>[
+      ('灯塔', onLighthouse),
+      if (showAsset) ('资管', onAsset),
+      if (onBiz != null) ('业务', onBiz!),
+    ];
+    final selectedLabel = bizSelected && onBiz != null
+        ? '业务'
+        : (assetSelected && showAsset ? '资管' : '灯塔');
+    final hit = segments.indexWhere((e) => e.$1 == selectedLabel);
+    final selectedIndex = hit < 0 ? 0 : hit;
     return SizedBox(
-      width: 148,
+      width: 74.0 * segments.length,
       height: 34,
       child: DecoratedBox(
         decoration: BoxDecoration(
@@ -608,13 +645,13 @@ class LhBrandSwitch extends StatelessWidget {
           padding: const EdgeInsets.all(3),
           child: LayoutBuilder(
             builder: (context, constraints) {
-              final width = constraints.maxWidth / 2;
+              final width = constraints.maxWidth / segments.length;
               return Stack(
                 children: [
                   AnimatedPositioned(
                     duration: const Duration(milliseconds: 240),
                     curve: Curves.easeOutCubic,
-                    left: assetSelected ? width : 0,
+                    left: width * selectedIndex,
                     top: 0,
                     bottom: 0,
                     width: width,
@@ -634,18 +671,13 @@ class LhBrandSwitch extends StatelessWidget {
                   ),
                   Row(
                     children: [
-                      _segment(
-                        context,
-                        label: '灯塔',
-                        selected: !assetSelected,
-                        onTap: onLighthouse,
-                      ),
-                      _segment(
-                        context,
-                        label: '资管',
-                        selected: assetSelected,
-                        onTap: onAsset,
-                      ),
+                      for (var i = 0; i < segments.length; i++)
+                        _segment(
+                          context,
+                          label: segments[i].$1,
+                          selected: i == selectedIndex,
+                          onTap: segments[i].$2,
+                        ),
                     ],
                   ),
                 ],
@@ -1157,26 +1189,115 @@ class _ZgHubState extends State<LighthouseZgHubPage> with TickerProviderStateMix
   }
 
   Future<void> _refresh() async {
+    setState(() => _zgSeq++);
     await Future.wait([_fetchBf(), _fetchBills(), _fetchPlan(), _fetchTodayPlan(), _fetchFlow(), _fetchTransfer()]);
   }
 
-  void _push(String name, Widget page) {
-    Navigator.of(context).push(MaterialPageRoute<void>(settings: RouteSettings(name: name), builder: (_) => page));
+  // ── 下方分段卡：五张明细表放到首页里切换，和「业务」一样 ─────────────────
+
+  /// 当前分段：bf 业财对照 / bills 未结往来 / plan 资金计划 / flow 资金流水 / transfer 资金调动。
+  String _zgTab = '';
+
+  /// 下拉刷新时 +1，让嵌入的明细页重建并重新取数。
+  int _zgSeq = 0;
+  final GlobalKey _boardKey = GlobalKey();
+
+  List<(String, String)> get _zgTabs => [
+    if (!_bfForbidden) ('bf', '业财对照'),
+    if (!_billForbidden) ('bills', '未结往来'),
+    if (!_planForbidden) ('plan', '资金计划'),
+    if (!_flowForbidden) ('flow', '资金流水'),
+    if (!_transferForbidden) ('transfer', '资金调动'),
+  ];
+
+  String get _currentZgTab {
+    final tabs = _zgTabs;
+    if (tabs.isEmpty) return '';
+    return tabs.any((t) => t.$1 == _zgTab) ? _zgTab : tabs.first.$1;
   }
 
-  void _openBf() => _push('lighthouse/zg/bf', LighthouseBfLinkedPage(service: widget.service, session: widget.session));
-  void _openBills() =>
-      _push('lighthouse/zg/bills', LighthouseLedgerPage(service: widget.service, session: widget.session, initial: _bills));
-  void _openPlan() =>
-      _push('lighthouse/zg/fund-plan', LighthouseFundPlanPage(service: widget.service, session: widget.session, initial: _plan));
-  void _openFlow() => _push(
-    'lighthouse/zg/fund-flow',
-    LighthouseFundFlowPage(service: widget.service, session: widget.session, initialMonth: _flow),
-  );
-  void _openTransfer() => _push(
-    'lighthouse/zg/fund-transfer',
-    LighthouseFundTransferPage(service: widget.service, session: widget.session, initial: _transfer),
-  );
+  /// 点时钟里的指标格：切到对应分段，并把分段卡滚进视野。
+  void _selectZg(String key) {
+    setState(() => _zgTab = key);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final ctx = _boardKey.currentContext;
+      if (ctx != null && ctx.mounted) {
+        unawaited(Scrollable.ensureVisible(ctx, duration: const Duration(milliseconds: 320), curve: Curves.easeOutCubic, alignment: 0.02));
+      }
+    });
+  }
+
+  Widget _zgPage(String key) => switch (key) {
+    'bf' => LighthouseBfLinkedPage(service: widget.service, session: widget.session),
+    'bills' => LighthouseLedgerPage(service: widget.service, session: widget.session, initial: _bills),
+    'plan' => LighthouseFundPlanPage(service: widget.service, session: widget.session, initial: _plan),
+    'flow' => LighthouseFundFlowPage(service: widget.service, session: widget.session, initialMonth: _flow),
+    _ => LighthouseFundTransferPage(service: widget.service, session: widget.session, initial: _transfer),
+  };
+
+  Widget _zgBoard(BuildContext context) {
+    final tabs = _zgTabs;
+    final current = _currentZgTab;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
+      decoration: _glass(context, radius: 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          DecoratedBox(
+            decoration: BoxDecoration(border: Border(bottom: BorderSide(color: _ln(context, _kLine), width: 0.8))),
+            child: Row(
+              children: [
+                for (final (key, label) in tabs)
+                  Expanded(
+                    child: Semantics(
+                      button: true,
+                      selected: current == key,
+                      label: label,
+                      excludeSemantics: true,
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () => setState(() => _zgTab = key),
+                        child: SizedBox(
+                          height: 42,
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Text(
+                                  label,
+                                  maxLines: 1,
+                                  style: _sans(
+                                    context,
+                                    size: 13,
+                                    weight: current == key ? FontWeight.w700 : FontWeight.w500,
+                                    color: current == key ? _kInk : _kInk2,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 7),
+                              AnimatedContainer(
+                                duration: const Duration(milliseconds: 200),
+                                width: current == key ? 20 : 0,
+                                height: 2.5,
+                                decoration: BoxDecoration(color: _fg(context, _kPurple), borderRadius: BorderRadius.circular(2)),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          _ZgEmbed(child: KeyedSubtree(key: ValueKey('$current#$_zgSeq'), child: _zgPage(current))),
+        ],
+      ),
+    );
+  }
 
   void _visibility(String module, String title) {
     unawaited(_openVisibility(context, service: widget.service, session: widget.session, module: module, title: title));
@@ -1248,23 +1369,18 @@ class _ZgHubState extends State<LighthouseZgHubPage> with TickerProviderStateMix
                 padding: EdgeInsets.fromLTRB(0, 0, 0, dunesAppBottomNavContentPadding(context, fallback: 32)),
                 children: [
                   if (widget.embedded) const SizedBox(height: 8) else _switchHeader(context),
-                  LayoutBuilder(
-                    builder: (context, box) {
-                      // 窄屏维持原来的 640 卡片。PC 内容区铺满可用宽度，不再居中收成一条。
-                      final width = box.maxWidth.isFinite ? box.maxWidth : MediaQuery.sizeOf(context).width;
-                      final wide = width >= 800;
-                      final child = Padding(
-                        padding: EdgeInsets.symmetric(horizontal: wide ? 16 : 14),
-                        child: allForbidden ? _statusBox(context, '暂无资管板块权限') : _clockCard(context),
-                      );
-                      if (!wide) {
-                        return Center(
-                          child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 640), child: child),
-                        );
-                      }
-                      return child;
-                    },
+                  Padding(
+                    // 与灯塔 Hero 外框、业务总览外框共用 22pt 页面边距。
+                    padding: const EdgeInsets.symmetric(horizontal: 22),
+                    child: allForbidden ? _statusBox(context, '暂无资管板块权限') : _clockCard(context),
                   ),
+                  if (!allForbidden && _zgTabs.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 22),
+                      child: KeyedSubtree(key: _boardKey, child: _fadeIn(0.15, _zgBoard(context))),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -1344,7 +1460,7 @@ class _ZgHubState extends State<LighthouseZgHubPage> with TickerProviderStateMix
         icon: Icons.view_column_outlined,
         progress: _overlap,
         alert: alerts.contains('bf'),
-        onTap: _openBf,
+        onTap: () => _selectZg('bf'),
         horizontal: horizontal,
       ),
       if (!_billForbidden) _legendCell(
@@ -1357,7 +1473,7 @@ class _ZgHubState extends State<LighthouseZgHubPage> with TickerProviderStateMix
         icon: Icons.swap_horiz_rounded,
         progress: _overdueShare('CHANNEL'),
         alert: alerts.contains('bills'),
-        onTap: _openBills,
+        onTap: () => _selectZg('bills'),
         horizontal: horizontal,
       ),
       if (!_planForbidden) _legendCell(
@@ -1374,7 +1490,7 @@ class _ZgHubState extends State<LighthouseZgHubPage> with TickerProviderStateMix
         icon: Icons.event_note_outlined,
         progress: _planInProgress,
         alert: alerts.contains('plan'),
-        onTap: _openPlan,
+        onTap: () => _selectZg('plan'),
         horizontal: horizontal,
       ),
       if (!_flowForbidden) _legendCell(
@@ -1387,7 +1503,7 @@ class _ZgHubState extends State<LighthouseZgHubPage> with TickerProviderStateMix
         icon: Icons.waves_rounded,
         progress: _flowCoverage,
         alert: alerts.contains('flow'),
-        onTap: _openFlow,
+        onTap: () => _selectZg('flow'),
         horizontal: horizontal,
       ),
       if (!_transferForbidden) _legendCell(
@@ -1399,7 +1515,7 @@ class _ZgHubState extends State<LighthouseZgHubPage> with TickerProviderStateMix
         tone: const Color(0xFF8A78CB),
         icon: Icons.swap_calls_rounded,
         progress: _transfer?.crossShare,
-        onTap: _openTransfer,
+        onTap: () => _selectZg('transfer'),
         horizontal: horizontal,
       ),
     ];
@@ -1576,7 +1692,7 @@ class _ZgHubState extends State<LighthouseZgHubPage> with TickerProviderStateMix
         : (inR == null && outR == null ? '今日计划没有收付' : '回款 ${pct(inR)} · 付款 ${pct(outR)}');
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTap: _planForbidden ? null : _openPlan,
+      onTap: _planForbidden ? null : () => _selectZg('plan'),
       child: Column(
         children: [
           SizedBox(

@@ -50,6 +50,7 @@ import 'lighthouse_service.dart';
 import 'lighthouse_theme.dart';
 import 'lighthouse_visibility_sheet.dart';
 import 'lighthouse_bill_outstanding.dart';
+import 'lighthouse_biz.dart';
 import 'lighthouse_zg.dart';
 import 'lighthouse_pixel_mark.dart';
 import 'lighthouse_topic.dart';
@@ -15042,6 +15043,14 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
   bool _zgOpen = false;
   bool _zgSubpage = false;
 
+  /// 2026-11-06 · 灯塔 › 业务（业务平台）：跟资管一样嵌在内容区里切换，详情页在自己的 Navigator 里滑入。
+  /// null = 还没探到；true = 开了 biz 板块（或探测出错但不是 403，进页再报错）；false = 没权限。
+  final GlobalKey<NavigatorState> _bizNav = GlobalKey<NavigatorState>();
+  late final NavigatorObserver _bizObserver = _ZgNavObserver(_onBizNavChanged);
+  bool _bizOpen = false;
+  bool _bizSubpage = false;
+  double _backDragDistance = 0;
+
   /// 从财务「主体」切去净TA 前的账本维度，回业务时还原。
   String _bfReturnTab = 'product';
   bool get _isFinanceLedger => _financeLedger || _tab == 'netTa';
@@ -15982,7 +15991,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
       if (widget.financeOnly) _bf!.access.addListener(_onBfAccessForFinancePage);
       if (!widget.financeOnly) {
         unawaited(_probeZgBillsAccess());
-        // 标题里的「资管」随权限探测结果出现 / 消失。
+        // 标题里的「资管」「业务」随权限探测结果出现 / 消失。
         _bf!.access.addListener(_onZgAccessChanged);
         _zgBillsAccess.addListener(_onZgAccessChanged);
       }
@@ -16584,7 +16593,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
   }
 
   bool _hasInternalBackStack() =>
-      _zgOpen || _detailKey != null || _metricPageKey != null || _biViewOpen;
+      _zgOpen || _bizOpen || _detailKey != null || _metricPageKey != null || _biViewOpen;
 
   String _detailRouteKey() {
     final detail = '${_detailType ?? ''}:${_detailKey ?? ''}';
@@ -16623,6 +16632,15 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
   }
 
   bool _handleInternalBack() {
+    if (_bizOpen) {
+      final nav = _bizNav.currentState;
+      if (nav != null && nav.canPop()) {
+        nav.pop();
+        return true;
+      }
+      _openZgPage();
+      return true;
+    }
     if (_zgOpen) {
       final nav = _zgNav.currentState;
       if (nav != null && nav.canPop()) {
@@ -20178,7 +20196,17 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
         if (didPop) return;
         _handleInternalBack();
       },
-      child: Theme(
+      child: GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onHorizontalDragStart: _hasInternalBackStack() ? (_) => _backDragDistance = 0 : null,
+        onHorizontalDragUpdate: _hasInternalBackStack() ? (d) => _backDragDistance += d.delta.dx : null,
+        onHorizontalDragEnd: _hasInternalBackStack() ? (d) {
+          final shouldBack = _backDragDistance > 72 || (_backDragDistance > 24 && (d.primaryVelocity ?? 0) > 500);
+          _backDragDistance = 0;
+          if (shouldBack) _handleInternalBack();
+        } : null,
+        onHorizontalDragCancel: () => _backDragDistance = 0,
+        child: Theme(
         data: Theme.of(context).brightness == Brightness.dark
             ? Theme.of(context)
             : DunesTheme.light(),
@@ -20203,16 +20231,16 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
                   children: [
                     // L2/L3 详情自带 sticky header（返回·灯塔·缩放/更新），
                     // 若再挂一级 AppBar 会叠出双份标题与右侧按钮。
-                    if (_detailKey == null && !_biViewOpen && !(_zgOpen && _zgSubpage))
+                    if (_detailKey == null && !_biViewOpen && !(_zgOpen && _zgSubpage) && !(_bizOpen && _bizSubpage))
                       _buildAppBar(),
                     Expanded(
                       child: Stack(
                         fit: StackFit.expand,
                         children: [
                           Offstage(
-                            offstage: _zgOpen,
+                            offstage: _zgOpen || _bizOpen,
                             child: TickerMode(
-                              enabled: !_zgOpen,
+                              enabled: !_zgOpen && !_bizOpen,
                               child: !_hasAccess
                                   ? _buildNoAccessView()
                                   : Stack(
@@ -20338,6 +20366,27 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
                                 child: _buildZgHost(),
                               ),
                             ),
+                          if (_bizOpen)
+                            Positioned.fill(
+                              child: TweenAnimationBuilder<double>(
+                                tween: Tween(begin: 0, end: 1),
+                                duration: const Duration(milliseconds: 240),
+                                curve: Curves.easeOutCubic,
+                                builder: (context, t, child) => Opacity(
+                                  opacity: t,
+                                  child: Transform.translate(
+                                    offset: Offset(16 * (1 - t), 0),
+                                    child: child,
+                                  ),
+                                ),
+                                child: LighthouseBizHost(
+                                  navigatorKey: _bizNav,
+                                  observer: _bizObserver,
+                                  service: _service,
+                                  session: widget.session,
+                                ),
+                              ),
+                            ),
                         ],
                       ),
                     ),
@@ -20347,6 +20396,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
             ),
           ),
         ),
+      ),
       ),
     );
   }
@@ -20375,7 +20425,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
           const SizedBox(width: 9),
         ],
         // 2026-11-02 · 资管与灯塔同级：标题做成「灯塔  资管」切换，资管不再挂在右上角。
-        if (!widget.financeOnly && _zgTitleSwitchReady)
+        if (!widget.financeOnly && _titleSwitchReady)
           Flexible(child: _buildTitleSwitch(onDark: onDark))
         else
         Flexible(
@@ -20423,7 +20473,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
       builder: (context, c) {
         // 2026-10-26 · 方案 E：顶栏只剩一行 —— 左品牌，右「周期浮岛 + ⋯」。
         // 日周月季年收进浮岛，点开再选；缩放 / 刷新 / 声音收进 ⋯。
-        if (onDark && _zgOpen && !_zgSubpage) {
+        if (onDark && ((_zgOpen && !_zgSubpage) || (_bizOpen && !_bizSubpage))) {
           return _lhBand(
             shadow: true,
             padding: const EdgeInsets.fromLTRB(
@@ -21045,14 +21095,12 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
     if (mounted) setState(() {});
   }
 
-  /// 标题切换是否出现：业财对照 / 未结往来 / 净TA 任一有权限。
-  bool get _zgTitleSwitchReady {
-    final bf = _bf;
-    if (bf == null || widget.sharedCard != null) return false;
-    return _hasNetTaAccess || bf.access.value == true || _zgBillsAccess.value == true;
+  /// 主入口首帧固定显示三个分段，数据权限仍由对应接口校验。
+  bool get _titleSwitchReady {
+    return widget.sharedCard == null && widget.topic.trim().isEmpty;
   }
 
-  /// 「灯塔  资管」：滑动选中块，点另一侧就地切换，不盖住外侧导航。
+  /// 「灯塔  资管  业务」：滑动选中块，点另一格就地切换，不盖住外侧导航。
   Widget _buildTitleSwitch({required bool onDark}) {
     final on = onDark
         ? _kLhBandInkStrong
@@ -21060,10 +21108,22 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
     final off = onDark ? _kLhBandMute : DunesColors.resolve(context, LhColors.mute2);
     return LhBrandSwitch(
       assetSelected: _zgOpen,
+      showAsset: true,
+      bizSelected: _bizOpen,
+      onBiz: () {
+              LighthouseFeedback.instance.play(LighthouseFeedbackKind.navigate);
+              if (_bizOpen && _bizSubpage) {
+                _bizNav.currentState?.popUntil((route) => route.isFirst);
+                return;
+              }
+              if (_bizOpen) return;
+              _openBizPage();
+            },
       onLighthouse: () {
-        if (!_zgOpen) return;
+        if (!_zgOpen && !_bizOpen) return;
         LighthouseFeedback.instance.play(LighthouseFeedbackKind.navigate);
         _closeZgPage();
+        _closeBizPage();
       },
       onAsset: () {
         LighthouseFeedback.instance.play(LighthouseFeedbackKind.navigate);
@@ -21104,7 +21164,40 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
   void _openZgPage() {
     _closeDropdown();
     _pixelCtl.fire(LighthousePixelEvent.sync);
-    setState(() => _zgOpen = true);
+    setState(() {
+      _bizOpen = false;
+      _bizSubpage = false;
+      _zgOpen = true;
+    });
+  }
+
+  // ───── 灯塔 › 业务（2026-11-06）──────────────────────────────────────────
+
+  void _openBizPage() {
+    _closeDropdown();
+    _pixelCtl.fire(LighthousePixelEvent.sync);
+    setState(() {
+      _zgOpen = false;
+      _zgSubpage = false;
+      _bizOpen = true;
+    });
+  }
+
+  void _closeBizPage() {
+    if (!_bizOpen) return;
+    setState(() {
+      _bizOpen = false;
+      _bizSubpage = false;
+    });
+  }
+
+  void _onBizNavChanged() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_bizOpen) return;
+      final sub = _bizNav.currentState?.canPop() ?? false;
+      if (sub == _bizSubpage) return;
+      setState(() => _bizSubpage = sub);
+    });
   }
 
   Widget _buildZgHost() {
@@ -24704,7 +24797,8 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
     if (!mounted) return;
     _heroPointPickTimer?.cancel();
     if (i == null) {
-      if (_heroPointIndex != null) setState(() => _heroPointIndex = null);
+      // 日线末点就是今天；点它直接恢复本期和下方数据行。
+      _clearHeroPointSelection();
       return;
     }
     if (_heroPointIndex != i) {
@@ -24788,7 +24882,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
   bool get _heroLastPointIsPeriod =>
       lighthouseHeroLastPointIsPeriod(_period, isCustomRange: _isCustomRange);
 
-  /// 「回本期」：清掉走势上的选中，日期和列表也回到本期。
+  /// 点今天时清掉走势选中，日期和列表也回到本期。
   void _clearHeroPointSelection() {
     _heroPointPickTimer?.cancel();
     final pinned = _heroChartPin != null;
@@ -27456,7 +27550,6 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
                       const SizedBox(height: 5),
                       _heroDeltaLine(
                         pickOk ? pickDelta : _heroTotalAssetsDelta(),
-                        pointMode: pickOk,
                       ),
                     ],
                   ),
@@ -30260,7 +30353,6 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
                                           const SizedBox(height: 5),
                                           _heroDeltaLine(
                                             profitDelta,
-                                            pointMode: heroPointActive,
                                             isRate: mastheadIsRate,
                                             vsLabel: _heroDeltaVsLabel(
                                               pointMode: heroPointActive,
@@ -31120,7 +31212,8 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
     return labels.length == n ? labels : const <String>[];
   }
 
-  /// 点选走势图某一期：日线对上月同日，其余对前一点。率用 pp，金额用相对涨幅。
+  /// 点选走势图某一期：与前一格比较。日线即该日对前一日；
+  /// 未点选的本期仍使用后端下发的同期窗口环比。
   ({double pct, bool isUp})? _deltaAtHeroPoint(String key) {
     final i = _heroPointIndex;
     if (i == null) return null;
@@ -31137,9 +31230,6 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
       selectedIndex: i,
       suppressPointMom: lighthouseHeroSuppressPointMom,
       asPercentagePoints: lighthouseHeroMetricIsRate(key),
-      compareIndexOf: _dayComparesPrevMonth
-          ? (idx) => _heroCompareIndexOf(idx, series.length)
-          : null,
     );
     if (pct == null) return null;
     return (pct: pct, isUp: pct >= 0);
@@ -31159,6 +31249,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
     )) {
       return _periodVsLabel;
     }
+    if (_period == 'day') return 'vs 前一日';
     return lighthouseHeroPointVsLabel(
       _bundle?.metrics['heroSeriesGranularity']?.toString(),
       period: _isCustomRange ? 'custom' : _period,
@@ -31181,7 +31272,6 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
   /// 没有前一点时写「暂无对比」，并留「回本期」退出点选。
   Widget _heroDeltaLine(
     ({double pct, bool isUp})? d, {
-    bool pointMode = false,
     bool isRate = false,
     String? vsLabel,
   }) {
@@ -31225,86 +31315,13 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
         context: context,
       ),
     );
-    if (!pointMode) {
-      return Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          pctText,
-          const SizedBox(width: 7),
-          Flexible(child: vsText),
-        ],
-      );
-    }
-    // 「回本期」是退出点选的唯一文字入口，绝不能被裁。
-    //   旧版和环比、对照文案挤在一行，窄卡（手机上的产品汇总）里总被右沿吃掉。
-    //   做成不收缩的小胶囊：放得下就跟在同一行，放不下就单独起一行。
-    final backChip = GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: _clearHeroPointSelection,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-        decoration: BoxDecoration(
-          color: DunesColors.resolve(
-            context,
-            _LhPlum.primary,
-            role: DunesColorRole.surface,
-          ).withAlpha(20),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-            color: DunesColors.resolve(
-              context,
-              _LhPlum.primary,
-              role: DunesColorRole.border,
-            ).withAlpha(60),
-            width: 0.6,
-          ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.refresh_rounded,
-              size: 10,
-              color: DunesColors.resolve(context, _LhPlum.primary),
-            ),
-            const SizedBox(width: 3),
-            Text(
-              '回本期',
-              maxLines: 1,
-              softWrap: false,
-              style: LhTypography.mono(
-                size: 9.5,
-                color: DunesColors.resolve(context, _LhPlum.primary),
-                weight: FontWeight.w700,
-                letterSpacing: 0.3,
-                height: 1.0,
-                context: context,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-    return LayoutBuilder(
-      builder: (context, c) {
-        // 环比 ~48 + 对照文案至少 ~40 + 胶囊 ~62 + 间距；低于这个宽度就换行。
-        final oneLine = !c.maxWidth.isFinite || c.maxWidth >= 190;
-        final deltaRow = Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            pctText,
-            const SizedBox(width: 7),
-            Flexible(child: vsText),
-            if (oneLine) ...[const SizedBox(width: 8), backChip],
-          ],
-        );
-        if (oneLine) return deltaRow;
-        return Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [deltaRow, const SizedBox(height: 6), backChip],
-        );
-      },
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        pctText,
+        const SizedBox(width: 7),
+        Flexible(child: vsText),
+      ],
     );
   }
 

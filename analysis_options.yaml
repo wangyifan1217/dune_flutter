@@ -15,6 +15,8 @@ include: package:flutter_lints/flutter.yaml
 analyzer:
   exclude:
     - "_to_delete/**"
+    # Claude 产出的原型 / 备份（含与当前库对不上的旧 Dart 副本），不参与分析。
+    - "Claude outputs/**"
     - build/**
     - android/**
     - ios/**

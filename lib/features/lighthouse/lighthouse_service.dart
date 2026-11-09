@@ -25,7 +25,22 @@ class LighthouseService {
   final bool _ownsClient;
   final http.Client _client;
   final Map<Uri, Future<Map<String, dynamic>>> _inFlight = {};
+  final Map<Uri, ({DateTime expires, Map<String, dynamic> data})> _bizCache = {};
+  String? _bizCacheToken;
+  int _bizCacheGeneration = 0;
+  static const _bizCachedPaths = {
+    '/lighthouse/biz/overview',
+    '/lighthouse/biz/products',
+    '/lighthouse/biz/partners',
+    '/lighthouse/biz/settlements',
+  };
   final Duration requestTimeout;
+
+  /// 切换业务页面短暂复用数据；下拉刷新清除缓存后重新请求。
+  void clearBizCache() {
+    _bizCache.clear();
+    _bizCacheGeneration++;
+  }
 
   /// 页面级复用一个 Client，让摘要、列表、趋势等请求共享 keep-alive 连接。
   void dispose() {
@@ -809,12 +824,119 @@ class LighthouseService {
     return out;
   }
 
+  // ───── 灯塔 › 业务（2026-11-06）──────────────────────────────────────────
+  // 业务平台（资管业务库）的只读视图，lighthouse-go 按「谁能看到」的 biz 板块放行后转发 business-go。
+  // 没开 biz 板块 → 403 →「暂无权限」。
+
+  Future<Map<String, dynamic>> fetchBizOverview() {
+    return _getData('/lighthouse/biz/overview', const <String, String>{}, '业务总览加载失败');
+  }
+
+  /// [side] = channel（渠道产品）/ supplier（供应商产品）。[chain] 只对渠道产品生效。
+  Future<Map<String, dynamic>> fetchBizProducts({
+    String side = 'channel',
+    String keyword = '',
+    String syncSource = '',
+    String chain = '',
+    String partnerId = '',
+    int page = 1,
+    int size = 20,
+  }) {
+    return _getData(
+      '/lighthouse/biz/products',
+      <String, String>{
+        'side': side,
+        if (keyword.isNotEmpty) 'keyword': keyword,
+        if (syncSource.isNotEmpty) 'syncSource': syncSource,
+        // 链路分段：through / unconnected / half / unsettled，口径见 business-go chainScope。
+        if (chain.isNotEmpty) 'chain': chain,
+        // 合作主体详情：只看该渠道 / 供应商名下的产品。
+        if (partnerId.isNotEmpty) 'partnerId': partnerId,
+        'page': '$page',
+        'size': '$size',
+      },
+      '产品加载失败',
+    );
+  }
+
+  Future<Map<String, dynamic>> fetchBizProductDetail({required String side, required String id}) {
+    return _getData(
+      '/lighthouse/biz/products/${Uri.encodeComponent(side)}/${Uri.encodeComponent(id)}',
+      const <String, String>{},
+      '产品详情加载失败',
+    );
+  }
+
+  /// 结算配置按产品分页：[side] = channel / supplier；[configured] 为空 = 全部，
+  /// configured（已配置）/ unconfigured（未配置）。
+  Future<Map<String, dynamic>> fetchBizSettlements({String side = 'channel', String configured = '', String keyword = '', String partnerId = '', int page = 1, int size = 20}) {
+    return _getData(
+      '/lighthouse/biz/settlements',
+      <String, String>{
+        'side': side,
+        if (configured.isNotEmpty) 'configured': configured,
+        if (keyword.isNotEmpty) 'keyword': keyword,
+        if (partnerId.isNotEmpty) 'partnerId': partnerId,
+        'page': '$page',
+        'size': '$size',
+      },
+      '结算配置加载失败',
+    );
+  }
+
+  /// [kind] = channel / supplier / promoter。
+  Future<Map<String, dynamic>> fetchBizPartners({String kind = 'channel', String keyword = '', String subject = '', String id = '', int page = 1, int size = 20}) {
+    return _getData(
+      '/lighthouse/biz/partners',
+      <String, String>{
+        'kind': kind,
+        if (keyword.isNotEmpty) 'keyword': keyword,
+        if (subject.isNotEmpty) 'subject': subject,
+        if (id.isNotEmpty) 'id': id,
+        'page': '$page',
+        'size': '$size',
+      },
+      '合作主体加载失败',
+    );
+  }
+
+  /// 合作主体（法人档案）页：主体信息、旗下供应商 / 渠道与汇总。
+  Future<Map<String, dynamic>> fetchBizSubject({required String id}) {
+    return _getData('/lighthouse/biz/subjects/${Uri.encodeComponent(id)}', const <String, String>{}, '合作主体加载失败');
+  }
+
+  /// [kind] 为空 = 全部；sales / purchase。
+  Future<Map<String, dynamic>> fetchBizProposals({String kind = '', int page = 1, int size = 20}) {
+    return _getData(
+      '/lighthouse/biz/proposals',
+      <String, String>{if (kind.isNotEmpty) 'kind': kind, 'page': '$page', 'size': '$size'},
+      '提案落地加载失败',
+    );
+  }
+
+  /// [view] = push（今日推送失败）/ return（今日结算回传批次）。
+  Future<Map<String, dynamic>> fetchBizIntegration({String view = 'push'}) {
+    return _getData('/lighthouse/biz/integration', <String, String>{'view': view}, '对接动态加载失败');
+  }
+
   Future<Map<String, dynamic>> _getData(
     String path,
     Map<String, String> query,
     String errorPrefix,
   ) {
     final uri = _uri(path, query);
+    final cacheBiz = _bizCachedPaths.contains(path);
+    if (cacheBiz) {
+      if (_bizCacheToken != _session.token) {
+        clearBizCache();
+        _bizCacheToken = _session.token;
+      }
+      final cached = _bizCache[uri];
+      if (cached != null && DateTime.now().isBefore(cached.expires)) {
+        return Future.value(cached.data);
+      }
+    }
+    final generation = _bizCacheGeneration;
     // 同一个页面可能同时要当前供给列表与资金池利润，两个请求的 URI
     // 完全相同时只发一次；完成后立即移除，手动刷新仍取最新数据。
     final pending = _inFlight[uri];
@@ -823,11 +945,15 @@ class LighthouseService {
     _inFlight[uri] = future;
     unawaited(
       future.then<void>(
-        (_) {
-          _inFlight.remove(uri);
+        (data) {
+          if (cacheBiz && generation == _bizCacheGeneration) {
+            if (_bizCache.length >= 64) _bizCache.remove(_bizCache.keys.first);
+            _bizCache[uri] = (expires: DateTime.now().add(const Duration(seconds: 20)), data: data);
+          }
+          if (identical(_inFlight[uri], future)) _inFlight.remove(uri);
         },
         onError: (Object _) {
-          _inFlight.remove(uri);
+          if (identical(_inFlight[uri], future)) _inFlight.remove(uri);
         },
       ),
     );

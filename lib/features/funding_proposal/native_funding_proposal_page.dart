@@ -25,8 +25,16 @@ const _kInterestColor = Color(0xFF7B5CD8);
 const _kFeeColor = Color(0xFFC9842A);
 const _kBufferColor = Color(0xFFCDBEF2);
 
-Color _c(BuildContext context, Color light, {DunesColorRole role = DunesColorRole.foreground}) =>
-    DunesColors.resolve(context, light, role: role);
+Color _c(
+  BuildContext context,
+  Color light, {
+  DunesColorRole role = DunesColorRole.foreground,
+}) => DunesColors.resolve(context, light, role: role);
+
+/// 手机触摸点到输入框外默认不收键盘，这里点空白、点别的控件都收起。
+void _dismissKeyboard() {
+  FocusManager.instance.primaryFocus?.unfocus();
+}
 
 /// 工作台「资金提案」：融资立项申请的填写、提交和四级审批。
 ///
@@ -200,9 +208,13 @@ class _NativeFundingProposalPageState extends State<NativeFundingProposalPage> {
         onBack: _closeEditor,
       );
     }
-    return Material(
-      color: _c(context, ProposalPalette.page, role: DunesColorRole.surface),
-      child: _buildList(context),
+    return GestureDetector(
+      onTap: _dismissKeyboard,
+      behavior: HitTestBehavior.translucent,
+      child: Material(
+        color: _c(context, ProposalPalette.page, role: DunesColorRole.surface),
+        child: _buildList(context),
+      ),
     );
   }
 
@@ -226,6 +238,7 @@ class _NativeFundingProposalPageState extends State<NativeFundingProposalPage> {
     return RefreshIndicator(
       onRefresh: _reload,
       child: ListView(
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
         children: [
           Center(
@@ -253,6 +266,7 @@ class _NativeFundingProposalPageState extends State<NativeFundingProposalPage> {
                         width: 240,
                         child: TextField(
                           controller: _keyword,
+                          onTapOutside: (_) => _dismissKeyboard(),
                           decoration: proposalInputDecoration(
                             context: context,
                             hint: '搜索名称、编号、对方主体',
@@ -273,7 +287,10 @@ class _NativeFundingProposalPageState extends State<NativeFundingProposalPage> {
                           icon: const Icon(Icons.add, size: 18),
                           label: Text(_creating ? '新建中…' : '新建资金提案'),
                           style: FilledButton.styleFrom(
-                            backgroundColor: _c(context, ProposalPalette.purple),
+                            backgroundColor: _c(
+                              context,
+                              ProposalPalette.purple,
+                            ),
                             minimumSize: const Size(0, 44),
                           ),
                         ),
@@ -285,7 +302,9 @@ class _NativeFundingProposalPageState extends State<NativeFundingProposalPage> {
                       padding: const EdgeInsets.only(bottom: 12),
                       child: Text(
                         _error!,
-                        style: TextStyle(color: _c(context, ProposalPalette.coral)),
+                        style: TextStyle(
+                          color: _c(context, ProposalPalette.coral),
+                        ),
                       ),
                     ),
                   if (_loading && _list.items.isEmpty)
@@ -299,7 +318,9 @@ class _NativeFundingProposalPageState extends State<NativeFundingProposalPage> {
                       child: Center(
                         child: Text(
                           _scope == 'todo' ? '没有待你审批的资金提案' : '还没有资金提案',
-                          style: TextStyle(color: _c(context, ProposalPalette.text2)),
+                          style: TextStyle(
+                            color: _c(context, ProposalPalette.text2),
+                          ),
                         ),
                       ),
                     )
@@ -334,7 +355,11 @@ class _ScopeButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return Material(
       color: selected
-          ? _c(context, ProposalPalette.purpleSoft, role: DunesColorRole.surface)
+          ? _c(
+              context,
+              ProposalPalette.purpleSoft,
+              role: DunesColorRole.surface,
+            )
           : _c(context, ProposalPalette.card, role: DunesColorRole.surface),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(999),
@@ -423,7 +448,11 @@ class _FundingListTile extends StatelessWidget {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),
           side: BorderSide(
-            color: _c(context, ProposalPalette.border, role: DunesColorRole.border),
+            color: _c(
+              context,
+              ProposalPalette.border,
+              role: DunesColorRole.border,
+            ),
           ),
         ),
         child: InkWell(
@@ -462,9 +491,14 @@ class _FundingListTile extends StatelessWidget {
                     if (row.createdByName.isNotEmpty) row.createdByName,
                     _fmtTime(row.updatedAt),
                   ].where((s) => s.isNotEmpty).join(' · '),
-                  style: TextStyle(fontSize: 12, color: _c(context, ProposalPalette.text2)),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: _c(context, ProposalPalette.text2),
+                  ),
                 ),
-                if (financing.isNotEmpty || net.isNotEmpty || pending.isNotEmpty) ...[
+                if (financing.isNotEmpty ||
+                    net.isNotEmpty ||
+                    pending.isNotEmpty) ...[
                   const SizedBox(height: 6),
                   Text(
                     [
@@ -537,7 +571,9 @@ class _FundingEditorState extends State<_FundingEditor> {
 
   static Map<String, dynamic> _clone(Map<String, dynamic> raw) {
     final decoded = jsonDecode(jsonEncode(raw));
-    return decoded is Map ? Map<String, dynamic>.from(decoded) : <String, dynamic>{};
+    return decoded is Map
+        ? Map<String, dynamic>.from(decoded)
+        : <String, dynamic>{};
   }
 
   @override
@@ -571,14 +607,18 @@ class _FundingEditorState extends State<_FundingEditor> {
 
   Map<String, dynamic> get _approvers {
     final raw = _form['approvers'];
-    final map = raw is Map ? Map<String, dynamic>.from(raw) : <String, dynamic>{};
+    final map = raw is Map
+        ? Map<String, dynamic>.from(raw)
+        : <String, dynamic>{};
     _form['approvers'] = map;
     return map;
   }
 
   Map<String, dynamic> get _materials {
     final raw = _form['materials'];
-    final map = raw is Map ? Map<String, dynamic>.from(raw) : <String, dynamic>{};
+    final map = raw is Map
+        ? Map<String, dynamic>.from(raw)
+        : <String, dynamic>{};
     _form['materials'] = map;
     return map;
   }
@@ -673,21 +713,30 @@ class _FundingEditorState extends State<_FundingEditor> {
     try {
       await run();
     } catch (error) {
-      if (mounted) showDunesToast(context, friendlyErrorText(error, fallback: fallback));
+      if (mounted)
+        showDunesToast(context, friendlyErrorText(error, fallback: fallback));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
   }
 
   Future<void> _save() => _guard(() async {
-    final row = await widget.service.save(_row.id, _clone(_form), version: _row.version);
+    final row = await widget.service.save(
+      _row.id,
+      _clone(_form),
+      version: _row.version,
+    );
     if (!mounted) return;
     _adopt(row);
     showDunesToast(context, '已保存');
   }, '保存失败');
 
   Future<void> _submit() => _guard(() async {
-    final row = await widget.service.submit(_row.id, _clone(_form), version: _row.version);
+    final row = await widget.service.submit(
+      _row.id,
+      _clone(_form),
+      version: _row.version,
+    );
     if (!mounted) return;
     _adopt(row);
     showDunesToast(context, '已提交，等待${row.currentNodeLabel}审批');
@@ -755,8 +804,14 @@ class _FundingEditorState extends State<_FundingEditor> {
         title: Text(title),
         content: Text(body),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('确定')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('确定'),
+          ),
         ],
       ),
     );
@@ -802,7 +857,8 @@ class _FundingEditorState extends State<_FundingEditor> {
       }
       await _writeMaterials(key, current);
     } catch (error) {
-      if (mounted) showDunesToast(context, friendlyErrorText(error, fallback: '上传失败'));
+      if (mounted)
+        showDunesToast(context, friendlyErrorText(error, fallback: '上传失败'));
     } finally {
       if (mounted) setState(() => _uploading = false);
     }
@@ -816,7 +872,10 @@ class _FundingEditorState extends State<_FundingEditor> {
   }
 
   /// 可编辑时跟着表单一起保存；审批中只单独存材料。
-  Future<void> _writeMaterials(String key, List<Map<String, dynamic>> files) async {
+  Future<void> _writeMaterials(
+    String key,
+    List<Map<String, dynamic>> files,
+  ) async {
     final materials = _materials..[key] = files;
     _form['materials'] = materials;
     if (_editable) {
@@ -843,59 +902,65 @@ class _FundingEditorState extends State<_FundingEditor> {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: _c(context, ProposalPalette.page, role: DunesColorRole.surface),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final wide = constraints.maxWidth >= 1080;
-          final panel = _EstimatePanel(
-            estimate: _est,
-            loading: _estimating,
-            live: _editable,
-          );
-          final form = Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _businessSection(context),
-              _financingSection(context),
-              _materialsSection(context),
-              _approversSection(context),
-              _noteSection(context),
-              if (_row.events.isNotEmpty || _perm.canDecide) _historySection(context),
-            ],
-          );
-          return ListView(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 48),
-            children: [
-              Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 1360),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      _header(context),
-                      const SizedBox(height: 16),
-                      if (wide)
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Expanded(child: form),
-                            const SizedBox(width: 20),
-                            SizedBox(width: 360, child: panel),
-                          ],
-                        )
-                      else ...[
-                        panel,
+    return GestureDetector(
+      onTap: _dismissKeyboard,
+      behavior: HitTestBehavior.translucent,
+      child: Material(
+        color: _c(context, ProposalPalette.page, role: DunesColorRole.surface),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final wide = constraints.maxWidth >= 1080;
+            final panel = _EstimatePanel(
+              estimate: _est,
+              loading: _estimating,
+              live: _editable,
+            );
+            final form = Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _businessSection(context),
+                _financingSection(context),
+                _materialsSection(context),
+                _approversSection(context),
+                _noteSection(context),
+                if (_row.events.isNotEmpty || _perm.canDecide)
+                  _historySection(context),
+              ],
+            );
+            return ListView(
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 48),
+              children: [
+                Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 1360),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _header(context),
                         const SizedBox(height: 16),
-                        form,
+                        if (wide)
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(child: form),
+                              const SizedBox(width: 20),
+                              SizedBox(width: 360, child: panel),
+                            ],
+                          )
+                        else ...[
+                          panel,
+                          const SizedBox(height: 16),
+                          form,
+                        ],
                       ],
-                    ],
+                    ),
                   ),
                 ),
-              ),
-            ],
-          );
-        },
+              ],
+            );
+          },
+        ),
       ),
     );
   }
@@ -904,7 +969,11 @@ class _FundingEditorState extends State<_FundingEditor> {
     final perm = _perm;
     final buttons = <Widget>[
       if (perm.canDelete)
-        _ActionButton(label: '删除', onPressed: _busy ? null : _delete, tone: _ActionTone.danger),
+        _ActionButton(
+          label: '删除',
+          onPressed: _busy ? null : _delete,
+          tone: _ActionTone.danger,
+        ),
       if (perm.canWithdraw)
         _ActionButton(label: '撤回', onPressed: _busy ? null : _withdraw),
       if (perm.canEdit)
@@ -950,7 +1019,13 @@ class _FundingEditorState extends State<_FundingEditor> {
               kind: _statusKind(_row.status),
             ),
             if (_dirty && _editable)
-              Text('未保存', style: TextStyle(fontSize: 12, color: _c(context, ProposalPalette.amber))),
+              Text(
+                '未保存',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: _c(context, ProposalPalette.amber),
+                ),
+              ),
           ],
         ),
         const SizedBox(height: 6),
@@ -960,7 +1035,10 @@ class _FundingEditorState extends State<_FundingEditor> {
             if (_row.createdByName.isNotEmpty) '申请人 ${_row.createdByName}',
             if (_row.createdAt != null) _fmtTime(_row.createdAt),
           ].join(' · '),
-          style: TextStyle(fontSize: 13, color: _c(context, ProposalPalette.text2)),
+          style: TextStyle(
+            fontSize: 13,
+            color: _c(context, ProposalPalette.text2),
+          ),
         ),
         const SizedBox(height: 12),
         _ApprovalPath(row: _row, options: _opts),
@@ -1028,22 +1106,40 @@ class _FundingEditorState extends State<_FundingEditor> {
               _Field(
                 label: '采购折扣率（%）',
                 required: true,
-                child: _textInput(context, 'purchaseDiscount', number: true, hint: '如 97'),
+                child: _textInput(
+                  context,
+                  'purchaseDiscount',
+                  number: true,
+                  hint: '如 97',
+                ),
               ),
               _Field(
                 label: '销售折扣率（%）',
                 required: true,
-                child: _textInput(context, 'salesDiscount', number: true, hint: '如 98.8'),
+                child: _textInput(
+                  context,
+                  'salesDiscount',
+                  number: true,
+                  hint: '如 98.8',
+                ),
               ),
               _Field(
                 label: '预付打款日',
                 required: true,
-                child: _dateInput(context, _text('prepayDate'), (v) => _set('prepayDate', v)),
+                child: _dateInput(
+                  context,
+                  _text('prepayDate'),
+                  (v) => _set('prepayDate', v),
+                ),
               ),
               _Field(
                 label: '客户回款日',
                 required: true,
-                child: _dateInput(context, _text('collectDate'), (v) => _set('collectDate', v)),
+                child: _dateInput(
+                  context,
+                  _text('collectDate'),
+                  (v) => _set('collectDate', v),
+                ),
               ),
               _Field(
                 label: '预付货款 · 业务毛利',
@@ -1058,7 +1154,12 @@ class _FundingEditorState extends State<_FundingEditor> {
           const SizedBox(height: 14),
           _Field(
             label: '申请说明',
-            child: _textInput(context, 'applyNote', hint: '为什么要这笔钱、时间窗口', maxLines: 3),
+            child: _textInput(
+              context,
+              'applyNote',
+              hint: '为什么要这笔钱、时间窗口',
+              maxLines: 3,
+            ),
           ),
         ],
       ),
@@ -1083,16 +1184,29 @@ class _FundingEditorState extends State<_FundingEditor> {
               _Field(
                 label: '还本付息方式',
                 required: true,
-                child: _optionSelect(context, 'repayMethod', _opts.repayMethods),
+                child: _optionSelect(
+                  context,
+                  'repayMethod',
+                  _opts.repayMethods,
+                ),
               ),
               _Field(
                 label: '回款账户',
                 required: true,
-                child: _optionSelect(context, 'collectionAccount', _opts.collectionAccounts),
+                child: _optionSelect(
+                  context,
+                  'collectionAccount',
+                  _opts.collectionAccounts,
+                ),
               ),
               _Field(
                 label: '登记等杂费（元）',
-                child: _textInput(context, 'otherFee', number: true, hint: '没有可不填'),
+                child: _textInput(
+                  context,
+                  'otherFee',
+                  number: true,
+                  hint: '没有可不填',
+                ),
               ),
               _Field(
                 label: '金额大写',
@@ -1109,7 +1223,11 @@ class _FundingEditorState extends State<_FundingEditor> {
           const SizedBox(height: 16),
           Text(
             '资金方',
-            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: _c(context, ProposalPalette.text)),
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: _c(context, ProposalPalette.text),
+            ),
           ),
           const SizedBox(height: 8),
           if (funders.isEmpty)
@@ -1117,10 +1235,14 @@ class _FundingEditorState extends State<_FundingEditor> {
               padding: const EdgeInsets.symmetric(vertical: 8),
               child: Text(
                 '还没有资金方',
-                style: TextStyle(fontSize: 13, color: _c(context, ProposalPalette.text2)),
+                style: TextStyle(
+                  fontSize: 13,
+                  color: _c(context, ProposalPalette.text2),
+                ),
               ),
             ),
-          for (var i = 0; i < funders.length; i++) _funderCard(context, i, funders[i]),
+          for (var i = 0; i < funders.length; i++)
+            _funderCard(context, i, funders[i]),
           if (_editable)
             Align(
               alignment: Alignment.centerLeft,
@@ -1130,7 +1252,13 @@ class _FundingEditorState extends State<_FundingEditor> {
                 label: const Text('添加资金方'),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: _c(context, ProposalPalette.purpleDeep),
-                  side: BorderSide(color: _c(context, ProposalPalette.purpleLine, role: DunesColorRole.border)),
+                  side: BorderSide(
+                    color: _c(
+                      context,
+                      ProposalPalette.purpleLine,
+                      role: DunesColorRole.border,
+                    ),
+                  ),
                   minimumSize: const Size(0, 44),
                 ),
               ),
@@ -1138,14 +1266,21 @@ class _FundingEditorState extends State<_FundingEditor> {
           const SizedBox(height: 6),
           Text(
             '合计 ${_est.text('funderTotal', fallback: '0.00')}',
-            style: TextStyle(fontSize: 12, color: _c(context, ProposalPalette.text2)),
+            style: TextStyle(
+              fontSize: 12,
+              color: _c(context, ProposalPalette.text2),
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _funderCard(BuildContext context, int index, Map<String, dynamic> row) {
+  Widget _funderCard(
+    BuildContext context,
+    int index,
+    Map<String, dynamic> row,
+  ) {
     final rowId = '${row['rowId'] ?? ''}';
     String v(String key) => '${row[key] ?? ''}'.trim();
     final result = _est.funder(rowId);
@@ -1153,7 +1288,8 @@ class _FundingEditorState extends State<_FundingEditor> {
         ? ''
         : [
             if (result.interest.text.isNotEmpty) '利息 ${result.interest.text}',
-            if (result.serviceFee.text.isNotEmpty) '服务费 ${result.serviceFee.text}',
+            if (result.serviceFee.text.isNotEmpty)
+              '服务费 ${result.serviceFee.text}',
             if (result.interestDays > 0) '计息 ${result.interestDays} 天',
             if (result.maturityDate.isNotEmpty) '到期 ${result.maturityDate}',
           ].join(' · ');
@@ -1161,9 +1297,14 @@ class _FundingEditorState extends State<_FundingEditor> {
       if (!_editable) return _readText(context, _grouped(v(key)));
       return TextField(
         controller: _ctl('f:$rowId:$key', v(key)),
+        onTapOutside: (_) => _dismissKeyboard(),
         keyboardType: const TextInputType.numberWithOptions(decimal: true),
         inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
-        decoration: proposalInputDecoration(context: context, hint: hint, forceUnderline: true),
+        decoration: proposalInputDecoration(
+          context: context,
+          hint: hint,
+          forceUnderline: true,
+        ),
         onChanged: (text) => _setFunder(rowId, key, text.trim()),
       );
     }
@@ -1174,7 +1315,13 @@ class _FundingEditorState extends State<_FundingEditor> {
       decoration: BoxDecoration(
         color: _c(context, ProposalPalette.app, role: DunesColorRole.surface),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: _c(context, ProposalPalette.borderSoft, role: DunesColorRole.border)),
+        border: Border.all(
+          color: _c(
+            context,
+            ProposalPalette.borderSoft,
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1183,14 +1330,22 @@ class _FundingEditorState extends State<_FundingEditor> {
             children: [
               Text(
                 '资金方 ${index + 1}',
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: _c(context, ProposalPalette.purpleDeep)),
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: _c(context, ProposalPalette.purpleDeep),
+                ),
               ),
               const Spacer(),
               if (_editable)
                 IconButton(
                   tooltip: '删除这个资金方',
                   onPressed: () => _removeFunder(rowId),
-                  icon: Icon(Icons.delete_outline, size: 20, color: _c(context, ProposalPalette.text2)),
+                  icon: Icon(
+                    Icons.delete_outline,
+                    size: 20,
+                    color: _c(context, ProposalPalette.text2),
+                  ),
                 ),
             ],
           ),
@@ -1205,11 +1360,18 @@ class _FundingEditorState extends State<_FundingEditor> {
                         value: v('type').isEmpty ? null : v('type'),
                         options: [
                           for (final o in _opts.funderTypes)
-                            ProposalSelectOption(value: o.value, label: o.label),
+                            ProposalSelectOption(
+                              value: o.value,
+                              label: o.label,
+                            ),
                         ],
-                        onSelected: (value) => _setFunder(rowId, 'type', value ?? ''),
+                        onSelected: (value) =>
+                            _setFunder(rowId, 'type', value ?? ''),
                       )
-                    : _readText(context, _opts.labelOf(_opts.funderTypes, v('type'))),
+                    : _readText(
+                        context,
+                        _opts.labelOf(_opts.funderTypes, v('type')),
+                      ),
               ),
               _Field(
                 label: '机构',
@@ -1235,11 +1397,26 @@ class _FundingEditorState extends State<_FundingEditor> {
               _Field(
                 label: '提款日',
                 required: true,
-                child: _dateInput(context, v('drawDate'), (d) => _setFunder(rowId, 'drawDate', d)),
+                child: _dateInput(
+                  context,
+                  v('drawDate'),
+                  (d) => _setFunder(rowId, 'drawDate', d),
+                ),
               ),
-              _Field(label: '期限（天）', required: true, child: input('termDays', hint: '如 60')),
-              _Field(label: '年化利率（%）', required: true, child: input('annualRate', hint: '如 7.5')),
-              _Field(label: '服务费率（%）', child: input('serviceFeeRate', hint: '没有填 0')),
+              _Field(
+                label: '期限（天）',
+                required: true,
+                child: input('termDays', hint: '如 60'),
+              ),
+              _Field(
+                label: '年化利率（%）',
+                required: true,
+                child: input('annualRate', hint: '如 7.5'),
+              ),
+              _Field(
+                label: '服务费率（%）',
+                child: input('serviceFeeRate', hint: '没有填 0'),
+              ),
             ],
           ),
           if (summary.isNotEmpty) ...[
@@ -1264,7 +1441,13 @@ class _FundingEditorState extends State<_FundingEditor> {
       index: '3',
       title: '材料',
       trailing: _uploading
-          ? Text('上传中…', style: TextStyle(fontSize: 12, color: _c(context, ProposalPalette.text2)))
+          ? Text(
+              '上传中…',
+              style: TextStyle(
+                fontSize: 12,
+                color: _c(context, ProposalPalette.text2),
+              ),
+            )
           : null,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1274,7 +1457,13 @@ class _FundingEditorState extends State<_FundingEditor> {
               padding: const EdgeInsets.symmetric(vertical: 10),
               decoration: BoxDecoration(
                 border: Border(
-                  bottom: BorderSide(color: _c(context, ProposalPalette.borderSoft, role: DunesColorRole.border)),
+                  bottom: BorderSide(
+                    color: _c(
+                      context,
+                      ProposalPalette.borderSoft,
+                      role: DunesColorRole.border,
+                    ),
+                  ),
                 ),
               ),
               child: Wrap(
@@ -1286,14 +1475,21 @@ class _FundingEditorState extends State<_FundingEditor> {
                     width: 180,
                     child: Text(
                       m.label,
-                      style: TextStyle(fontSize: 14, color: _c(context, ProposalPalette.text)),
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: _c(context, ProposalPalette.text),
+                      ),
                     ),
                   ),
                   ProposalStatusChip(
-                    label: _filesOf(m.key).isNotEmpty ? '已上传' : (m.required ? '待补' : '选填'),
+                    label: _filesOf(m.key).isNotEmpty
+                        ? '已上传'
+                        : (m.required ? '待补' : '选填'),
                     kind: _filesOf(m.key).isNotEmpty
                         ? ProposalChipKind.ok
-                        : (m.required ? ProposalChipKind.warn : ProposalChipKind.normal),
+                        : (m.required
+                              ? ProposalChipKind.warn
+                              : ProposalChipKind.normal),
                   ),
                   for (var i = 0; i < _filesOf(m.key).length; i++)
                     InputChip(
@@ -1302,15 +1498,22 @@ class _FundingEditorState extends State<_FundingEditor> {
                         overflow: TextOverflow.ellipsis,
                       ),
                       onPressed: () => unawaited(_openFile(_filesOf(m.key)[i])),
-                      onDeleted: canUpload ? () => unawaited(_removeFile(m.key, i)) : null,
+                      onDeleted: canUpload
+                          ? () => unawaited(_removeFile(m.key, i))
+                          : null,
                     ),
                   if (canUpload)
                     TextButton.icon(
-                      onPressed: _uploading ? null : () => unawaited(_pickFiles(m.key)),
+                      onPressed: _uploading
+                          ? null
+                          : () => unawaited(_pickFiles(m.key)),
                       icon: const Icon(Icons.upload_file, size: 18),
                       label: const Text('上传'),
                       style: TextButton.styleFrom(
-                        foregroundColor: _c(context, ProposalPalette.purpleDeep),
+                        foregroundColor: _c(
+                          context,
+                          ProposalPalette.purpleDeep,
+                        ),
                         minimumSize: const Size(0, 40),
                       ),
                     ),
@@ -1320,7 +1523,10 @@ class _FundingEditorState extends State<_FundingEditor> {
           const SizedBox(height: 8),
           Text(
             '进入总经理审批前，必备材料须全部上传。审批中也可以补。',
-            style: TextStyle(fontSize: 12, color: _c(context, ProposalPalette.text2)),
+            style: TextStyle(
+              fontSize: 12,
+              color: _c(context, ProposalPalette.text2),
+            ),
           ),
         ],
       ),
@@ -1337,7 +1543,8 @@ class _FundingEditorState extends State<_FundingEditor> {
         children: [
           for (final node in kFundingNodeOrder)
             _Field(
-              label: '${kFundingNodeOrder.indexOf(node) + 1} · ${_opts.nodeLabel(node)}',
+              label:
+                  '${kFundingNodeOrder.indexOf(node) + 1} · ${_opts.nodeLabel(node)}',
               required: true,
               child: _personSelect(
                 context,
@@ -1346,7 +1553,9 @@ class _FundingEditorState extends State<_FundingEditor> {
                     : const <String, dynamic>{},
                 onPick: (person) {
                   final map = _approvers;
-                  map[node] = person == null ? <String, dynamic>{} : {'userId': person.userId, 'name': person.name};
+                  map[node] = person == null
+                      ? <String, dynamic>{}
+                      : {'userId': person.userId, 'name': person.name};
                   _form['approvers'] = map;
                   _changed();
                 },
@@ -1361,7 +1570,12 @@ class _FundingEditorState extends State<_FundingEditor> {
     return _Section(
       index: '5',
       title: '其他说明',
-      child: _textInput(context, 'otherNote', hint: '选填：担保、增信、特殊风险', maxLines: 3),
+      child: _textInput(
+        context,
+        'otherNote',
+        hint: '选填：担保、增信、特殊风险',
+        maxLines: 3,
+      ),
     );
   }
 
@@ -1377,7 +1591,11 @@ class _FundingEditorState extends State<_FundingEditor> {
             Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: _c(context, ProposalPalette.soft, role: DunesColorRole.surface),
+                color: _c(
+                  context,
+                  ProposalPalette.soft,
+                  role: DunesColorRole.surface,
+                ),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Column(
@@ -1385,11 +1603,16 @@ class _FundingEditorState extends State<_FundingEditor> {
                 children: [
                   Text(
                     '待你以${_row.currentNodeLabel}身份审批',
-                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: _c(context, ProposalPalette.purpleDeep)),
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: _c(context, ProposalPalette.purpleDeep),
+                    ),
                   ),
                   const SizedBox(height: 10),
                   TextField(
                     controller: _decisionComment,
+                    onTapOutside: (_) => _dismissKeyboard(),
                     maxLines: 3,
                     minLines: 2,
                     decoration: proposalInputDecoration(
@@ -1403,8 +1626,16 @@ class _FundingEditorState extends State<_FundingEditor> {
                     spacing: 10,
                     runSpacing: 10,
                     children: [
-                      _ActionButton(label: '有问题，驳回', onPressed: _busy ? null : _reject, tone: _ActionTone.danger),
-                      _ActionButton(label: '同意', onPressed: _busy ? null : _approve, tone: _ActionTone.primary),
+                      _ActionButton(
+                        label: '有问题，驳回',
+                        onPressed: _busy ? null : _reject,
+                        tone: _ActionTone.danger,
+                      ),
+                      _ActionButton(
+                        label: '同意',
+                        onPressed: _busy ? null : _approve,
+                        tone: _ActionTone.primary,
+                      ),
                     ],
                   ),
                 ],
@@ -1431,18 +1662,29 @@ class _FundingEditorState extends State<_FundingEditor> {
                             ev.actorName,
                             ev.actionLabel,
                           ].where((s) => s.isNotEmpty).join(' · '),
-                          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: _c(context, ProposalPalette.text)),
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: _c(context, ProposalPalette.text),
+                          ),
                         ),
                         Text(
                           _fmtTime(ev.createdAt),
-                          style: TextStyle(fontSize: 12, color: _c(context, ProposalPalette.text2)),
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: _c(context, ProposalPalette.text2),
+                          ),
                         ),
                         if (ev.comment.isNotEmpty)
                           Padding(
                             padding: const EdgeInsets.only(top: 4),
                             child: Text(
                               ev.comment,
-                              style: TextStyle(fontSize: 13, height: 1.5, color: _c(context, ProposalPalette.text)),
+                              style: TextStyle(
+                                fontSize: 13,
+                                height: 1.5,
+                                color: _c(context, ProposalPalette.text),
+                              ),
                             ),
                           ),
                       ],
@@ -1465,7 +1707,10 @@ class _FundingEditorState extends State<_FundingEditor> {
         value.isEmpty ? '—' : value,
         style: TextStyle(
           fontSize: 14,
-          color: _c(context, value.isEmpty ? ProposalPalette.text3 : ProposalPalette.text),
+          color: _c(
+            context,
+            value.isEmpty ? ProposalPalette.text3 : ProposalPalette.text,
+          ),
           fontFeatures: const [FontFeature.tabularFigures()],
         ),
       ),
@@ -1503,6 +1748,7 @@ class _FundingEditorState extends State<_FundingEditor> {
     if (!_editable) return _readText(context, number ? _grouped(value) : value);
     return TextField(
       controller: _ctl('k:$key', value),
+      onTapOutside: (_) => _dismissKeyboard(),
       maxLines: maxLines,
       minLines: 1,
       keyboardType: number
@@ -1511,12 +1757,20 @@ class _FundingEditorState extends State<_FundingEditor> {
       inputFormatters: number
           ? [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))]
           : null,
-      decoration: proposalInputDecoration(context: context, hint: hint, forceUnderline: true),
+      decoration: proposalInputDecoration(
+        context: context,
+        hint: hint,
+        forceUnderline: true,
+      ),
       onChanged: (text) => _set(key, text.trim()),
     );
   }
 
-  Widget _dateInput(BuildContext context, String value, ValueChanged<String> onPick) {
+  Widget _dateInput(
+    BuildContext context,
+    String value,
+    ValueChanged<String> onPick,
+  ) {
     if (!_editable) return _readText(context, value);
     return InkWell(
       onTap: () async {
@@ -1533,23 +1787,35 @@ class _FundingEditorState extends State<_FundingEditor> {
         onPick('${picked.year}-${two(picked.month)}-${two(picked.day)}');
       },
       child: InputDecorator(
-        decoration: proposalInputDecoration(context: context, hint: '选择日期', forceUnderline: true),
+        decoration: proposalInputDecoration(
+          context: context,
+          hint: '选择日期',
+          forceUnderline: true,
+        ),
         isEmpty: value.isEmpty,
         child: Text(
           value,
-          style: TextStyle(fontSize: 14, color: _c(context, ProposalPalette.text)),
+          style: TextStyle(
+            fontSize: 14,
+            color: _c(context, ProposalPalette.text),
+          ),
         ),
       ),
     );
   }
 
-  Widget _optionSelect(BuildContext context, String key, List<FundingOption> list) {
+  Widget _optionSelect(
+    BuildContext context,
+    String key,
+    List<FundingOption> list,
+  ) {
     final value = _text(key);
     if (!_editable) return _readText(context, _opts.labelOf(list, value));
     return ProposalSelectField<String>(
       value: value.isEmpty ? null : value,
       options: [
-        for (final o in list) ProposalSelectOption(value: o.value, label: o.label),
+        for (final o in list)
+          ProposalSelectOption(value: o.value, label: o.label),
       ],
       onSelected: (v) => _set(key, v ?? ''),
     );
@@ -1565,7 +1831,8 @@ class _FundingEditorState extends State<_FundingEditor> {
     required void Function(String code, String name) onPick,
   }) {
     if (!_editable) return _readText(context, name.isNotEmpty ? name : code);
-    String stored(CatalogRef ref) => ref.code.trim().isNotEmpty ? ref.code.trim() : ref.name.trim();
+    String stored(CatalogRef ref) =>
+        ref.code.trim().isNotEmpty ? ref.code.trim() : ref.name.trim();
     final options = <ProposalSelectOption<String>>[];
     final seen = <String>{};
     for (final ref in catalog) {
@@ -1580,7 +1847,10 @@ class _FundingEditorState extends State<_FundingEditor> {
       );
     }
     if (code.isNotEmpty && !seen.contains(code)) {
-      options.insert(0, ProposalSelectOption(value: code, label: name.isNotEmpty ? name : code));
+      options.insert(
+        0,
+        ProposalSelectOption(value: code, label: name.isNotEmpty ? name : code),
+      );
     }
     return ProposalSelectField<String>(
       value: code.isEmpty ? null : code,
@@ -1607,18 +1877,35 @@ class _FundingEditorState extends State<_FundingEditor> {
     required Map<String, dynamic> current,
     required ValueChanged<ProposalPerson?> onPick,
   }) {
-    final userId = current['userId'] is num ? (current['userId'] as num).toInt() : int.tryParse('${current['userId'] ?? ''}') ?? 0;
+    final userId = current['userId'] is num
+        ? (current['userId'] as num).toInt()
+        : int.tryParse('${current['userId'] ?? ''}') ?? 0;
     final name = '${current['name'] ?? ''}'.trim();
     if (!_editable) return _readText(context, name);
     final options = <ProposalSelectOption<int>>[];
     var hasCurrent = false;
     for (final p in widget.people) {
       if (p.userId == userId) hasCurrent = true;
-      final meta = [p.departmentName, p.positionName].where((s) => s.trim().isNotEmpty).join(' · ');
-      options.add(ProposalSelectOption(value: p.userId, label: p.name, meta: meta.isEmpty ? null : meta));
+      final meta = [
+        p.departmentName,
+        p.positionName,
+      ].where((s) => s.trim().isNotEmpty).join(' · ');
+      options.add(
+        ProposalSelectOption(
+          value: p.userId,
+          label: p.name,
+          meta: meta.isEmpty ? null : meta,
+        ),
+      );
     }
     if (userId > 0 && !hasCurrent) {
-      options.insert(0, ProposalSelectOption(value: userId, label: name.isEmpty ? '#$userId' : name));
+      options.insert(
+        0,
+        ProposalSelectOption(
+          value: userId,
+          label: name.isEmpty ? '#$userId' : name,
+        ),
+      );
     }
     return ProposalSelectField<int>(
       value: userId > 0 ? userId : null,
@@ -1635,7 +1922,9 @@ class _FundingEditorState extends State<_FundingEditor> {
         for (final p in widget.people) {
           if (p.userId == value) person = p;
         }
-        onPick(person ?? ProposalPerson(userId: value, name: name, positionName: ''));
+        onPick(
+          person ?? ProposalPerson(userId: value, name: name, positionName: ''),
+        );
       },
     );
   }
@@ -1666,7 +1955,13 @@ class _Section extends StatelessWidget {
       decoration: BoxDecoration(
         color: _c(context, ProposalPalette.card, role: DunesColorRole.surface),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: _c(context, ProposalPalette.border, role: DunesColorRole.border)),
+        border: Border.all(
+          color: _c(
+            context,
+            ProposalPalette.border,
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1676,18 +1971,30 @@ class _Section extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                 decoration: BoxDecoration(
-                  color: _c(context, ProposalPalette.purpleSoft, role: DunesColorRole.surface),
+                  color: _c(
+                    context,
+                    ProposalPalette.purpleSoft,
+                    role: DunesColorRole.surface,
+                  ),
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
                   index,
-                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: _c(context, ProposalPalette.purpleDeep)),
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: _c(context, ProposalPalette.purpleDeep),
+                  ),
                 ),
               ),
               const SizedBox(width: 10),
               Text(
                 title,
-                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: _c(context, ProposalPalette.text)),
+                style: TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w700,
+                  color: _c(context, ProposalPalette.text),
+                ),
               ),
               const Spacer(),
               if (trailing != null) trailing!,
@@ -1714,13 +2021,17 @@ class _FieldGrid extends StatelessWidget {
       builder: (context, constraints) {
         const gap = 24.0;
         final width = constraints.maxWidth;
-        final cols = math.max(1, math.min(3, ((width + gap) / (minColumnWidth + gap)).floor()));
+        final cols = math.max(
+          1,
+          math.min(3, ((width + gap) / (minColumnWidth + gap)).floor()),
+        );
         final itemWidth = (width - gap * (cols - 1)) / cols;
         return Wrap(
           spacing: gap,
           runSpacing: 14,
           children: [
-            for (final child in children) SizedBox(width: itemWidth, child: child),
+            for (final child in children)
+              SizedBox(width: itemWidth, child: child),
           ],
         );
       },
@@ -1754,18 +2065,37 @@ class _Field extends StatelessWidget {
           crossAxisAlignment: WrapCrossAlignment.center,
           children: [
             if (required)
-              Text('*', style: TextStyle(fontSize: 12, color: _c(context, ProposalPalette.coral))),
+              Text(
+                '*',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: _c(context, ProposalPalette.coral),
+                ),
+              ),
             Text(
               label,
-              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: _c(context, ProposalPalette.text2)),
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: _c(context, ProposalPalette.text2),
+              ),
             ),
             if (computed)
               Text(
                 '后端计算',
-                style: TextStyle(fontSize: 11, color: _c(context, ProposalPalette.green)),
+                style: TextStyle(
+                  fontSize: 11,
+                  color: _c(context, ProposalPalette.green),
+                ),
               ),
             if (hint != null)
-              Text(hint!, style: TextStyle(fontSize: 11, color: _c(context, ProposalPalette.text3))),
+              Text(
+                hint!,
+                style: TextStyle(
+                  fontSize: 11,
+                  color: _c(context, ProposalPalette.text3),
+                ),
+              ),
           ],
         ),
         const SizedBox(height: 4),
@@ -1800,12 +2130,20 @@ class _ActionButton extends StatelessWidget {
         child: Text(label),
       );
     }
-    final color = tone == _ActionTone.danger ? ProposalPalette.coral : ProposalPalette.purpleDeep;
+    final color = tone == _ActionTone.danger
+        ? ProposalPalette.coral
+        : ProposalPalette.purpleDeep;
     return OutlinedButton(
       onPressed: onPressed,
       style: OutlinedButton.styleFrom(
         foregroundColor: _c(context, color),
-        side: BorderSide(color: _c(context, ProposalPalette.borderStrong, role: DunesColorRole.border)),
+        side: BorderSide(
+          color: _c(
+            context,
+            ProposalPalette.borderStrong,
+            role: DunesColorRole.border,
+          ),
+        ),
         minimumSize: const Size(88, 44),
       ),
       child: Text(label),
@@ -1832,7 +2170,8 @@ class _ApprovalPath extends StatelessWidget {
     String? rejectedNode;
     if (row.status == kFundingStatusRejected) {
       for (final ev in row.events) {
-        if (ev.round == row.round && ev.action == 'reject') rejectedNode = ev.node;
+        if (ev.round == row.round && ev.action == 'reject')
+          rejectedNode = ev.node;
       }
     }
     final items = <Widget>[];
@@ -1842,8 +2181,10 @@ class _ApprovalPath extends StatelessWidget {
           ? Map<String, dynamic>.from(approvers[node] as Map)
           : const <String, dynamic>{};
       final name = '${ap['name'] ?? ''}'.trim();
-      final done = row.status == kFundingStatusApproved || approvedNodes.contains(node);
-      final current = row.status == kFundingStatusReviewing && row.currentNode == node;
+      final done =
+          row.status == kFundingStatusApproved || approvedNodes.contains(node);
+      final current =
+          row.status == kFundingStatusReviewing && row.currentNode == node;
       final rejected = rejectedNode == node;
       final (bg, fg) = rejected
           ? (ProposalPalette.coralSoft, ProposalPalette.coral)
@@ -1853,7 +2194,13 @@ class _ApprovalPath extends StatelessWidget {
           ? (ProposalPalette.greenSoft, ProposalPalette.green)
           : (ProposalPalette.borderSoft, ProposalPalette.text2);
       if (i > 0) {
-        items.add(Icon(Icons.chevron_right, size: 18, color: _c(context, ProposalPalette.text3)));
+        items.add(
+          Icon(
+            Icons.chevron_right,
+            size: 18,
+            color: _c(context, ProposalPalette.text3),
+          ),
+        );
       }
       items.add(
         Container(
@@ -1890,15 +2237,30 @@ class _EventDot extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final (bg, fg, icon) = switch (action) {
-      'approve' => (ProposalPalette.greenSoft, ProposalPalette.green, Icons.check),
-      'reject' => (ProposalPalette.coralSoft, ProposalPalette.coral, Icons.close),
-      'withdraw' => (ProposalPalette.amberSoft, ProposalPalette.amber, Icons.undo),
+      'approve' => (
+        ProposalPalette.greenSoft,
+        ProposalPalette.green,
+        Icons.check,
+      ),
+      'reject' => (
+        ProposalPalette.coralSoft,
+        ProposalPalette.coral,
+        Icons.close,
+      ),
+      'withdraw' => (
+        ProposalPalette.amberSoft,
+        ProposalPalette.amber,
+        Icons.undo,
+      ),
       _ => (ProposalPalette.purpleSoft, ProposalPalette.purpleDeep, Icons.send),
     };
     return Container(
       width: 26,
       height: 26,
-      decoration: BoxDecoration(color: _c(context, bg, role: DunesColorRole.surface), shape: BoxShape.circle),
+      decoration: BoxDecoration(
+        color: _c(context, bg, role: DunesColorRole.surface),
+        shape: BoxShape.circle,
+      ),
       child: Icon(icon, size: 14, color: _c(context, fg)),
     );
   }
@@ -1943,13 +2305,23 @@ class _EstimatePanel extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  Text('测算结果', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: text)),
+                  Text(
+                    '测算结果',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: text,
+                    ),
+                  ),
                   const Spacer(),
                   Container(
                     width: 6,
                     height: 6,
                     decoration: BoxDecoration(
-                      color: _c(context, loading ? ProposalPalette.amber : _kNetColor),
+                      color: _c(
+                        context,
+                        loading ? ProposalPalette.amber : _kNetColor,
+                      ),
                       shape: BoxShape.circle,
                     ),
                   ),
@@ -1958,7 +2330,14 @@ class _EstimatePanel extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 16),
-              Text('融资净收益（元）', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: text2)),
+              Text(
+                '融资净收益（元）',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: text2,
+                ),
+              ),
               const SizedBox(height: 2),
               Text(
                 est.text('netProfit'),
@@ -1973,7 +2352,11 @@ class _EstimatePanel extends StatelessWidget {
               const SizedBox(height: 2),
               Text(
                 '毛利 ${est.text('grossProfit')} − 融资成本 ${est.text('financingCost')}',
-                style: TextStyle(fontSize: 12, color: text2, fontFeatures: const [FontFeature.tabularFigures()]),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: text2,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
               ),
               const SizedBox(height: 16),
               if (est.composition.isNotEmpty) ...[
@@ -1986,7 +2369,12 @@ class _EstimatePanel extends StatelessWidget {
                       children: [
                         _Swatch(color: _sliceColor(s.key)),
                         const SizedBox(width: 8),
-                        Expanded(child: Text(s.label, style: TextStyle(fontSize: 13, color: text))),
+                        Expanded(
+                          child: Text(
+                            s.label,
+                            style: TextStyle(fontSize: 13, color: text),
+                          ),
+                        ),
                         Text(
                           s.amount,
                           style: TextStyle(
@@ -2001,29 +2389,59 @@ class _EstimatePanel extends StatelessWidget {
                           child: Text(
                             s.percent,
                             textAlign: TextAlign.right,
-                            style: TextStyle(fontSize: 13, color: text2, fontFeatures: const [FontFeature.tabularFigures()]),
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: text2,
+                              fontFeatures: const [
+                                FontFeature.tabularFigures(),
+                              ],
+                            ),
                           ),
                         ),
                       ],
                     ),
                   ),
               ] else
-                Text('填完业务和资金方后显示毛利构成', style: TextStyle(fontSize: 12, color: text2)),
+                Text(
+                  '填完业务和资金方后显示毛利构成',
+                  style: TextStyle(fontSize: 12, color: text2),
+                ),
               const SizedBox(height: 16),
               Row(
                 children: [
-                  Expanded(child: _Tile(label: '综合年化成本', value: est.text('annualCostRate'))),
+                  Expanded(
+                    child: _Tile(
+                      label: '综合年化成本',
+                      value: est.text('annualCostRate'),
+                    ),
+                  ),
                   const SizedBox(width: 10),
-                  Expanded(child: _Tile(label: '融资到期日', value: est.text('maturityDate'))),
+                  Expanded(
+                    child: _Tile(
+                      label: '融资到期日',
+                      value: est.text('maturityDate'),
+                    ),
+                  ),
                 ],
               ),
               const SizedBox(height: 12),
               _Line(label: '预付货款', value: est.text('prepayAmount')),
               _Line(label: '业务总收入', value: est.text('revenue')),
               _Line(label: '毛利率', value: est.text('grossMargin')),
-              _Line(label: '利息 / 服务费', value: '${est.text('interestTotal')} / ${est.text('serviceFeeTotal')}'),
+              _Line(
+                label: '利息 / 服务费',
+                value:
+                    '${est.text('interestTotal')} / ${est.text('serviceFeeTotal')}',
+              ),
               const SizedBox(height: 14),
-              Divider(height: 1, color: _c(context, ProposalPalette.borderSoft, role: DunesColorRole.border)),
+              Divider(
+                height: 1,
+                color: _c(
+                  context,
+                  ProposalPalette.borderSoft,
+                  role: DunesColorRole.border,
+                ),
+              ),
               const SizedBox(height: 14),
               _TimelineView(timeline: est.timeline),
             ],
@@ -2054,7 +2472,13 @@ class _PanelCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: _c(context, ProposalPalette.card, role: DunesColorRole.surface),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: _c(context, ProposalPalette.border, role: DunesColorRole.border)),
+        border: Border.all(
+          color: _c(
+            context,
+            ProposalPalette.border,
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: child,
     );
@@ -2087,7 +2511,10 @@ class _CompositionBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final visible = [for (final s in slices) if (s.weight > 0) s];
+    final visible = [
+      for (final s in slices)
+        if (s.weight > 0) s,
+    ];
     return Semantics(
       label: '毛利构成：${slices.map((s) => '${s.label} ${s.percent}').join('，')}',
       child: SizedBox(
@@ -2100,7 +2527,10 @@ class _CompositionBar extends StatelessWidget {
                 flex: visible[i].weight,
                 child: Container(
                   decoration: BoxDecoration(
-                    color: _c(context, _EstimatePanel._sliceColor(visible[i].key)),
+                    color: _c(
+                      context,
+                      _EstimatePanel._sliceColor(visible[i].key),
+                    ),
                     borderRadius: BorderRadius.horizontal(
                       left: Radius.circular(i == 0 ? 4 : 0),
                       right: Radius.circular(i == visible.length - 1 ? 4 : 0),
@@ -2133,7 +2563,14 @@ class _Tile extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: _c(context, ProposalPalette.text2))),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: _c(context, ProposalPalette.text2),
+            ),
+          ),
           const SizedBox(height: 2),
           Text(
             value,
@@ -2162,7 +2599,15 @@ class _Line extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         children: [
-          Expanded(child: Text(label, style: TextStyle(fontSize: 13, color: _c(context, ProposalPalette.text2)))),
+          Expanded(
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                color: _c(context, ProposalPalette.text2),
+              ),
+            ),
+          ),
           Text(
             value,
             style: TextStyle(
@@ -2193,7 +2638,14 @@ class _TimelineView extends StatelessWidget {
     final text2 = _c(context, ProposalPalette.text2);
     final title = Row(
       children: [
-        Text('时间安全垫', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: text)),
+        Text(
+          '时间安全垫',
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+            color: text,
+          ),
+        ),
         const Spacer(),
         Text('单位：天', style: TextStyle(fontSize: 12, color: text2)),
       ],
@@ -2208,7 +2660,9 @@ class _TimelineView extends StatelessWidget {
         ],
       );
     }
-    final maxDay = math.max(1, [turnover, maturity, breakEven ?? 0].reduce(math.max)) * 1.12;
+    final maxDay =
+        math.max(1, [turnover, maturity, breakEven ?? 0].reduce(math.max)) *
+        1.12;
     double at(int day) => (day / maxDay).clamp(0.0, 1.0);
     final buffer = timeline.bufferDays ?? (maturity - turnover);
     final room = breakEven == null ? null : breakEven - maturity;
@@ -2218,7 +2672,8 @@ class _TimelineView extends StatelessWidget {
         title,
         const SizedBox(height: 10),
         Semantics(
-          label: '第 $turnover 天回款，第 $maturity 天融资到期${breakEven == null ? '' : '，第 $breakEven 天盈亏平衡'}',
+          label:
+              '第 $turnover 天回款，第 $maturity 天融资到期${breakEven == null ? '' : '，第 $breakEven 天盈亏平衡'}',
           child: SizedBox(
             height: 40,
             child: LayoutBuilder(
@@ -2231,7 +2686,11 @@ class _TimelineView extends StatelessWidget {
                   child: Text(
                     '$day',
                     textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: text),
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: text,
+                    ),
                   ),
                 );
                 return Stack(
@@ -2244,7 +2703,11 @@ class _TimelineView extends StatelessWidget {
                       height: 10,
                       child: Container(
                         decoration: BoxDecoration(
-                          color: _c(context, ProposalPalette.borderSoft, role: DunesColorRole.surface),
+                          color: _c(
+                            context,
+                            ProposalPalette.borderSoft,
+                            role: DunesColorRole.surface,
+                          ),
                           borderRadius: BorderRadius.circular(4),
                         ),
                       ),
@@ -2257,7 +2720,9 @@ class _TimelineView extends StatelessWidget {
                       child: Container(
                         decoration: BoxDecoration(
                           color: _c(context, _kInterestColor),
-                          borderRadius: const BorderRadius.horizontal(left: Radius.circular(4)),
+                          borderRadius: const BorderRadius.horizontal(
+                            left: Radius.circular(4),
+                          ),
                         ),
                       ),
                     ),
@@ -2266,7 +2731,10 @@ class _TimelineView extends StatelessWidget {
                         left: at(turnover) * w + 2,
                         top: 10,
                         height: 10,
-                        width: math.max(0.0, (at(maturity) - at(turnover)) * w - 2),
+                        width: math.max(
+                          0.0,
+                          (at(maturity) - at(turnover)) * w - 2,
+                        ),
                         child: ColoredBox(color: _c(context, _kBufferColor)),
                       ),
                     Positioned(
@@ -2274,7 +2742,9 @@ class _TimelineView extends StatelessWidget {
                       top: 4,
                       height: 22,
                       width: 2,
-                      child: ColoredBox(color: _c(context, ProposalPalette.purpleDeep)),
+                      child: ColoredBox(
+                        color: _c(context, ProposalPalette.purpleDeep),
+                      ),
                     ),
                     if (breakEven != null)
                       Positioned(
@@ -2313,7 +2783,12 @@ class _TimelineView extends StatelessWidget {
     );
   }
 
-  Widget _legend(BuildContext context, Color color, String label, {bool thin = false}) {
+  Widget _legend(
+    BuildContext context,
+    Color color,
+    String label, {
+    bool thin = false,
+  }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 3),
       child: Row(
@@ -2321,7 +2796,13 @@ class _TimelineView extends StatelessWidget {
           thin ? _Swatch(color: color, height: 2) : _Swatch(color: color),
           const SizedBox(width: 8),
           Expanded(
-            child: Text(label, style: TextStyle(fontSize: 12, color: _c(context, ProposalPalette.text))),
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                color: _c(context, ProposalPalette.text),
+              ),
+            ),
           ),
         ],
       ),
@@ -2345,21 +2826,39 @@ class _ChecksView extends StatelessWidget {
       children: [
         Row(
           children: [
-            Text('校验', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: text)),
+            Text(
+              '校验',
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+                color: text,
+              ),
+            ),
             const Spacer(),
             Text(
-              estimate.blocking > 0 ? '$passed 通过 · ${estimate.blocking} 项挡提交' : '$passed 通过 · $failed 提醒',
-              style: TextStyle(fontSize: 12, color: _c(context, ProposalPalette.text2)),
+              estimate.blocking > 0
+                  ? '$passed 通过 · ${estimate.blocking} 项挡提交'
+                  : '$passed 通过 · $failed 提醒',
+              style: TextStyle(
+                fontSize: 12,
+                color: _c(context, ProposalPalette.text2),
+              ),
             ),
           ],
         ),
         const SizedBox(height: 8),
         if (estimate.missing.isNotEmpty)
-          _checkRow(context, _CheckState.block, '待填写：${estimate.missing.join('、')}'),
+          _checkRow(
+            context,
+            _CheckState.block,
+            '待填写：${estimate.missing.join('、')}',
+          ),
         for (final c in checks)
           _checkRow(
             context,
-            c.pass ? _CheckState.ok : (c.blocking ? _CheckState.block : _CheckState.warn),
+            c.pass
+                ? _CheckState.ok
+                : (c.blocking ? _CheckState.block : _CheckState.warn),
             c.message,
           ),
       ],
@@ -2368,9 +2867,21 @@ class _ChecksView extends StatelessWidget {
 
   Widget _checkRow(BuildContext context, _CheckState state, String message) {
     final (bg, fg, icon) = switch (state) {
-      _CheckState.ok => (ProposalPalette.greenSoft, ProposalPalette.green, Icons.check),
-      _CheckState.warn => (ProposalPalette.amberSoft, ProposalPalette.amber, Icons.priority_high),
-      _CheckState.block => (ProposalPalette.coralSoft, ProposalPalette.coral, Icons.close),
+      _CheckState.ok => (
+        ProposalPalette.greenSoft,
+        ProposalPalette.green,
+        Icons.check,
+      ),
+      _CheckState.warn => (
+        ProposalPalette.amberSoft,
+        ProposalPalette.amber,
+        Icons.priority_high,
+      ),
+      _CheckState.block => (
+        ProposalPalette.coralSoft,
+        ProposalPalette.coral,
+        Icons.close,
+      ),
     };
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 5),
@@ -2381,14 +2892,21 @@ class _ChecksView extends StatelessWidget {
             width: 18,
             height: 18,
             margin: const EdgeInsets.only(top: 1),
-            decoration: BoxDecoration(color: _c(context, bg, role: DunesColorRole.surface), shape: BoxShape.circle),
+            decoration: BoxDecoration(
+              color: _c(context, bg, role: DunesColorRole.surface),
+              shape: BoxShape.circle,
+            ),
             child: Icon(icon, size: 12, color: _c(context, fg)),
           ),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
               message,
-              style: TextStyle(fontSize: 13, height: 1.45, color: _c(context, ProposalPalette.text)),
+              style: TextStyle(
+                fontSize: 13,
+                height: 1.45,
+                color: _c(context, ProposalPalette.text),
+              ),
             ),
           ),
         ],

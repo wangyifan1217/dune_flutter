@@ -1193,8 +1193,8 @@ String proposalCostFormulaText(ProposalCostEstimateKind kind) => switch (kind) {
   ProposalCostEstimateKind.vat => '(销项 − 进项) × 1.12',
   ProposalCostEstimateKind.stamp => '销售规模 × 0.0006',
   ProposalCostEstimateKind.incomeTax => '(收入 − 项目成本 − 业务成本 − 经营成本) × 25%',
-  ProposalCostEstimateKind.businessBn => '(收入 − 项目成本 − 经营成本) × 10%',
-  ProposalCostEstimateKind.businessU => '(收入 − 项目成本 − 经营成本) × 45%',
+  ProposalCostEstimateKind.businessBn => '（收入 − 项目成本）× 填写的比例',
+  ProposalCostEstimateKind.businessU => '（收入 − 项目成本）× 填写的比例',
 };
 
 ProposalCostFormulaHelp? proposalCostFormulaHelpOf({
@@ -1257,7 +1257,6 @@ String proposalCostFormulaSubstitution({
   final r = proposalFormatWan;
   final base = math.max(0.0, revenue - procurement - project);
   final vat = proposalVatEstimate(form);
-  final bizBase = math.max(0.0, base - operating);
   final incomeBase = math.max(
     0.0,
     revenue - procurement - project - business - operating,
@@ -1273,11 +1272,22 @@ String proposalCostFormulaSubstitution({
       '${r(salesScale)} × 0.0006 = ${r(salesScale * 0.0006)} 万元',
     ProposalCostEstimateKind.incomeTax =>
       '(${r(revenue)} − ${r(project)} − ${r(business)} − ${r(operating)}) × 25% = ${r(incomeBase * 0.25)} 万元',
-    ProposalCostEstimateKind.businessBn =>
-      '(${r(revenue)} − ${r(project)} − ${r(operating)}) × 10% = ${r(bizBase * 0.10)} 万元',
+    ProposalCostEstimateKind.businessBn ||
     ProposalCostEstimateKind.businessU =>
-      '(${r(revenue)} − ${r(project)} − ${r(operating)}) × 45% = ${r(bizBase * 0.45)} 万元',
+      '（收入 − 项目成本）× 填写的比例',
   };
+}
+
+double? _businessCostByFilledRatio(
+  Map<String, dynamic> form,
+  String name,
+  double base,
+) {
+  final rate = proposalParseBusinessCostRatio(
+    proposalBusinessCostRatioText(form, name),
+  );
+  if (rate == null) return null;
+  return math.max(0.0, base) * rate;
 }
 
 double? proposalEstimateAmountForName({
@@ -1313,10 +1323,9 @@ double? proposalEstimateAmountForName({
     ProposalCostEstimateKind.incomeTax =>
       math.max(0.0, revenue - procurement - project - business - operating) *
           0.25,
-    ProposalCostEstimateKind.businessBn =>
-      math.max(0.0, base - operating) * 0.10,
+    ProposalCostEstimateKind.businessBn ||
     ProposalCostEstimateKind.businessU =>
-      math.max(0.0, base - operating) * 0.45,
+      _businessCostByFilledRatio(form, name, base - operating),
   };
 }
 

@@ -188,15 +188,22 @@ void main() {
       expect(line.missing, isNotEmpty, reason: '按 0 计了却没有缺项提示');
     });
 
-    test('业务成本不跟着产品项走，按提案所选公式各算一次', () {
+    test('业务成本不跟着产品项走，按提案所选名单各算一次', () {
       final followed = _eval(mockProposal(business: ['渠道侧N', '渠道侧H']));
       expect(followed.total(kProposalCostCategoryBusiness), 0);
       final selected = _eval(
-        mockProposal()..['businessFormulaCodes'] = ['8'],
+        mockProposal()
+          ..['businessCostItems'] = ['渠道侧N']
+          ..['businessCostItemRatios'] = {'渠道侧N': '0.12'},
       );
       final line = selected.buckets[kProposalCostCategoryBusiness]!.lines.single;
-      expect(line.formula?.code, '8');
-      expect(line.name, '核销实际支付金额*结算比例');
+      expect(line.name, '渠道侧N');
+      expect(line.formula?.code, 'BIZ_NET');
+      final base = selected.revenue.amount - selected.total(kProposalCostCategoryProject);
+      final floor = base < 0 ? 0.0 : base;
+      expect(line.amount, closeTo(floor * 0.12, 0.01));
+      final blank = _eval(mockProposal()..['businessCostItems'] = ['渠道侧N']);
+      expect(blank.buckets[kProposalCostCategoryBusiness]!.lines.single.missing, contains('比例'));
     });
 
     test('税务成本：增值税要用到销售结算税率；没填税率要标缺项', () {

@@ -246,45 +246,22 @@ void main() {
     expect(line.substitution, contains('33.33 × 0.8'));
     expect(line.amount, closeTo(229.97, .05));
   });
-  test('business formulas are chosen once for the proposal, not per product', () {
+  test('business cost items are chosen once for the proposal, not per product', () {
     final followed = proposalEvaluateFinance(sample());
     expect(followed.bucket('business')!.names, isEmpty);
     final selected = proposalEvaluateFinance({
       ...sample(),
-      'businessFormulaCodes': ['8', '3'],
+      'businessCostItems': ['渠道侧N', '供给侧U'],
+      'businessCostItemRatios': {'渠道侧N': '0.10', '供给侧U': '45%'},
     });
     final lines = selected.bucket('business')!.lines;
-    expect(lines.map((line) => line.formula?.code), ['8', '3']);
-    expect(lines.map((line) => line.name), isNot(contains('渠道侧N')));
+    expect(lines.map((line) => line.name), ['渠道侧N', '供给侧U']);
+    expect(lines.map((line) => line.formula?.code), ['BIZ_NET', 'BIZ_NET']);
+    final base = selected.revenue.amount - selected.total('project');
+    final floor = base < 0 ? 0.0 : base;
+    expect(lines[0].amount, closeTo(floor * 0.10, 0.01));
+    expect(lines[1].amount, closeTo(floor * 0.45, 0.01));
     expect(selected.total('business'), closeTo(lines[0].amount + lines[1].amount, 0.01));
-  });
-  test('business cost uses the filled ratio or face, not the income ratio', () {
-    final form = {
-      'salesScale': '1000',
-      'skuDetails': [
-        {
-          'id': 'sku-1',
-          'faceValue': '100',
-          'settlements': [
-            {'id': 'in', 'kind': 'income', 'settleRatio': '1', 'scale': '1000'},
-          ],
-        },
-      ],
-      'businessFormulaCodes': ['3'],
-    };
-    final bare = proposalEvaluateFinance(form);
-    expect(bare.total('business'), 0);
-    expect(bare.bucket('business')!.lines.single.missing, contains('比例或面值'));
-    final byRatio = proposalEvaluateFinance({
-      ...form,
-      'businessSettleRatio': '0.2',
-    });
-    expect(byRatio.total('business'), closeTo(200, 0.01));
-    final byFace = proposalEvaluateFinance({
-      ...form,
-      'businessFaceValue': '80',
-    });
-    expect(byFace.total('business'), closeTo(80, 0.01));
   });
   test('proposal tax overrides old product selections and is assessed once', () {
     final form = sample();

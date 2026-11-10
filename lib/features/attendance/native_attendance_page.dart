@@ -10,6 +10,7 @@ import '../auth/auth_session.dart';
 import 'attendance_face_capture.dart';
 import 'attendance_face_enrollment_page.dart';
 import 'attendance_history_page.dart';
+import 'attendance_location.dart';
 import 'attendance_models.dart';
 import 'attendance_punch_flow.dart';
 import 'attendance_service.dart';
@@ -306,14 +307,18 @@ class _NativeAttendancePageState extends State<NativeAttendancePage>
           permission != LocationPermission.whileInUse) {
         return;
       }
-      final position = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.high,
-          timeLimit: Duration(seconds: 12),
-        ),
+      final position = await _awaitRefinedPosition(
+        const Duration(seconds: 12),
       );
       if (mounted && !_submitting && !_locating) {
-        setState(() => _position = position);
+        final chosen = betterAttendancePosition(
+          _position,
+          position,
+          DateTime.now(),
+        );
+        if (chosen != null && !identical(chosen, _position)) {
+          setState(() => _position = chosen);
+        }
       }
     } catch (_) {
       // Keep the last position on a transient refresh failure; submit rechecks it.
@@ -392,12 +397,7 @@ class _NativeAttendancePageState extends State<NativeAttendancePage>
       if (permission == LocationPermission.deniedForever) {
         throw Exception('位置权限已关闭，请前往系统设置开启');
       }
-      final pos = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.best,
-          timeLimit: Duration(seconds: 18),
-        ),
-      );
+      final pos = await _awaitRefinedPosition(const Duration(seconds: 18));
       if (!mounted) return;
       setState(() {
         _position = pos;
@@ -415,6 +415,113 @@ class _NativeAttendancePageState extends State<NativeAttendancePage>
           _locating = false;
         });
       }
+    }
+  }
+
+  LocationSettings _attendanceLocationSettings() {
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) {
+      return AppleSettings(
+        accuracy: LocationAccuracy.bestForNavigation,
+        activityType: ActivityType.otherNavigation,
+        pauseLocationUpdatesAutomatically: false,
+        distanceFilter: 0,
+        allowBackgroundLocationUpdates: false,
+      );
+    }
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+      return AndroidSettings(
+        accuracy: LocationAccuracy.best,
+        distanceFilter: 0,
+        intervalDuration: const Duration(seconds: 1),
+        maxUpdateAge: attendanceCachedSampleAge,
+      );
+    }
+    return const LocationSettings(accuracy: LocationAccuracy.best);
+  }
+
+  /// iOS delivers a cell-tower point first and then refines it. The one-shot
+  /// request stops on that first point, so keep the stream open until the
+  /// error radius settles.
+  Future<Position> _awaitRefinedPosition(Duration timeout) {
+    final completer = Completer<Position>();
+    final started = DateTime.now();
+    Position? best;
+    StreamSubscription<Position>? subscription;
+    Timer? timer;
+    var settled = false;
+
+    void succeed(Position position) {
+      if (settled) return;
+      settled = true;
+      timer?.cancel();
+      unawaited(subscription?.cancel());
+      completer.complete(position);
+    }
+
+    void fail(Object error, [StackTrace? stack]) {
+      if (settled) return;
+      settled = true;
+      timer?.cancel();
+      unawaited(subscription?.cancel());
+      completer.completeError(error, stack);
+    }
+
+    Future<void> finishWithoutNewFix(Object error, [StackTrace? stack]) async {
+      final found = best;
+      if (found != null) {
+        succeed(found);
+        return;
+      }
+      final cached = await _recentCachedPosition();
+      if (cached != null) {
+        succeed(cached);
+        return;
+      }
+      fail(error, stack);
+    }
+
+    timer = Timer(timeout, () {
+      unawaited(
+        finishWithoutNewFix(Exception('定位超时，请到窗边或室外重试')),
+      );
+    });
+
+    subscription = Geolocator.getPositionStream(
+      locationSettings: _attendanceLocationSettings(),
+    ).listen(
+      (position) {
+        final now = DateTime.now();
+        final chosen = betterAttendancePosition(best, position, now);
+        if (chosen == null || identical(chosen, best)) return;
+        best = chosen;
+        if (attendanceShouldStopWaiting(
+          position: chosen,
+          now: now,
+          waited: now.difference(started),
+        )) {
+          succeed(chosen);
+        }
+      },
+      onError: (Object error, StackTrace stack) {
+        unawaited(finishWithoutNewFix(error, stack));
+      },
+      onDone: () {
+        unawaited(
+          finishWithoutNewFix(Exception('暂时没有定位结果，请稍后重试')),
+        );
+      },
+    );
+    return completer.future;
+  }
+
+  Future<Position?> _recentCachedPosition() async {
+    try {
+      final cached = await Geolocator.getLastKnownPosition();
+      if (cached == null) return null;
+      if (!attendanceSampleIsRecent(cached, DateTime.now())) return null;
+      return cached;
+    } catch (_) {
+      return null;
     }
   }
 
@@ -1537,11 +1644,11 @@ class _LocationPanel extends StatelessWidget {
                   ),
                   _AttendanceDiagnosticRow(
                     label: '手机定位精度',
-                    value: accuracy == null
-                        ? null
-                        : accuracy! <= 0
-                        ? null
-                        : '约 ${accuracy!.round()} 米（仅供参考）',
+                    value: attendanceAccuracyLabel(
+                      position,
+                      accuracy,
+                      DateTime.now(),
+                    ),
                     unavailable: locating ? '正在获取…' : '尚未获取',
                   ),
                   _AttendanceDiagnosticRow(
@@ -1562,7 +1669,7 @@ class _LocationPanel extends StatelessWidget {
                   Padding(
                     padding: const EdgeInsets.only(top: 8),
                     child: Text(
-                      '围栏半径是人离地点中心的距离。定位精度仅供参考，不限制打卡；系统仍按当前 GPS 坐标校验围栏范围。Wi-Fi 仅作辅助凭据。',
+                      '围栏半径是人离地点中心的距离。定位精度仅供参考，不限制打卡；系统仍按当前 GPS 坐标校验围栏范围。手机会先给出基站粗点，页面会继续等到更准的位置。一直没有新位置时，改用两分钟内的缓存位置。Wi-Fi 仅作辅助凭据。',
                       style: TextStyle(
                         fontSize: 10,
                         height: 1.45,

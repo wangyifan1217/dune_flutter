@@ -4211,7 +4211,14 @@ class _NativeChatViewState extends State<NativeChatView>
       )) {
         await _load(silent: true);
       }
-      if (_supportsMobileEggs) await _ensureEggSettings();
+      // 消息已经发出。彩蛋配置读的是本地存储，失败不能再标成发送失败。
+      if (_supportsMobileEggs) {
+        try {
+          await _ensureEggSettings();
+        } catch (e, st) {
+          debugPrint('[Chat] egg settings failed: $e\n$st');
+        }
+      }
       final sentEffect = _supportsMobileEggs ? matchImEggEffect(text) : null;
       final activeConversationId = conv.id;
       if (sentEffect != null &&

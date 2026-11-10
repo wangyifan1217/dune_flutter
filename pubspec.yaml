@@ -2,7 +2,7 @@ name: dunes_app
 description: "æ²ä¸ Â· ç»ä¸å®¡æ¹ App â åºäº index.html åå 100% è¿åç Flutter å£³"
 publish_to: 'none'
 
-version: 2.0.2+202
+version: 2.0.3+203
 
 environment:
   sdk: ^3.11.0
@@ -70,6 +70,13 @@ dev_dependencies:
     sdk: flutter
   flutter_lints: ^6.0.0
   flutter_launcher_icons: ^0.14.4
+
+# Android 17 上 2.5/2.3 的 JNI 协程结果会变成 JObject，
+# 本地存储和目录接口抛错，发送、会议提交被误报失败。
+# 这两个版本仍走 MethodChannel，并兼容当前 AGP 9。
+dependency_overrides:
+  shared_preferences_android: 2.4.28
+  path_provider_android: 2.2.23
 
 flutter_launcher_icons:
   android: true

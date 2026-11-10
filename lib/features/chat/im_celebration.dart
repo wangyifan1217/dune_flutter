@@ -617,8 +617,13 @@ class ImEggSettings {
   }
 
   Future<void> _load({required String apiBase, required String token}) async {
-    final prefs = await SharedPreferences.getInstance();
-    final cached = prefs.getString(_cacheKey);
+    SharedPreferences? prefs;
+    try {
+      prefs = await SharedPreferences.getInstance();
+    } catch (e, st) {
+      debugPrint('[ImEgg] prefs unavailable: $e\n$st');
+    }
+    final cached = prefs?.getString(_cacheKey);
     if (cached != null) {
       try {
         _config = Map<String, dynamic>.from(jsonDecode(cached) as Map);
@@ -640,7 +645,7 @@ class ImEggSettings {
       final config = raw is String ? jsonDecode(raw) : raw;
       if (config is! Map) return;
       _config = Map<String, dynamic>.from(config);
-      await prefs.setString(_cacheKey, jsonEncode(_config));
+      await prefs?.setString(_cacheKey, jsonEncode(_config));
       AppEggThemeController.instance.refresh();
     } catch (_) {
       // 使用本机缓存/内置默认值，IM 收发不依赖配置接口可用。

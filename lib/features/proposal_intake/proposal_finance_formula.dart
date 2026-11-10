@@ -83,6 +83,7 @@ const kProposalFinanceFormulaFormKeys = <String>[
   kProposalPromotionTiersKey,
   'costItemFormulas',
   'businessCostItemFormulas',
+  'businessCostItemRatios',
   'taxCostItemFormulas',
 ];
 
@@ -460,20 +461,16 @@ const _kPromotionTierFormula = ProposalFinanceFormula(
   kind: ProposalFinanceFormulaKind.tiered,
 );
 
+const kProposalBusinessCostFormulaCode = 'BIZ_NET';
+const kProposalBusinessCostRatiosKey = 'businessCostItemRatios';
+
+/// 业务成本只有一种算法：（收入 − 项目成本）× 填写的比例。比例不写在公式里。
 const _kBusinessCostFormulas = <ProposalFinanceFormula>[
   ProposalFinanceFormula(
-    code: 'BIZ_NET_10',
-    name: '（收入 − 项目成本）× 10%',
-    expression: '(收入 − 项目成本) × 10%',
+    code: kProposalBusinessCostFormulaCode,
+    name: '（收入 − 项目成本）× 比例',
+    expression: '(收入 − 项目成本) × 比例',
     kind: ProposalFinanceFormulaKind.netOpRate,
-    rate: 0.10,
-  ),
-  ProposalFinanceFormula(
-    code: 'BIZ_NET_45',
-    name: '（收入 − 项目成本）× 45%',
-    expression: '(收入 − 项目成本) × 45%',
-    kind: ProposalFinanceFormulaKind.netOpRate,
-    rate: 0.45,
   ),
 ];
 
@@ -541,6 +538,15 @@ const _kDefaultBusinessCostNames = <String>[
   '供给侧U',
 ];
 
+const _kBusinessCostCodes = <String, String>{
+  '供给侧H': 'ap_YWCB_GJCH',
+  '供给侧N': 'ap_YWCB_GJCN',
+  '供给侧U': 'ap_YWCB_GJCUN',
+  '渠道侧H': 'ap_YWCB_QDCH',
+  '渠道侧N': 'ap_YWCB_QDCN',
+  '渠道侧U': 'ap_YWCB_qdcu',
+};
+
 ProposalCostTypeOption _projectCostOption(String name) {
   if (name == '推广费') {
     return const ProposalCostTypeOption(
@@ -563,12 +569,10 @@ ProposalCostTypeOption _projectCostOption(String name) {
 
 ProposalCostTypeOption _businessCostOption(String name) {
   return ProposalCostTypeOption(
-    code: name,
+    code: _kBusinessCostCodes[name] ?? name,
     name: name,
     formulas: _kBusinessCostFormulas,
-    defaultFormula: name.toUpperCase().endsWith('U')
-        ? 'BIZ_NET_45'
-        : 'BIZ_NET_10',
+    defaultFormula: kProposalBusinessCostFormulaCode,
   );
 }
 
@@ -663,7 +667,8 @@ ProposalFinanceFormulaCatalog _buildFallbackCatalog() {
         amountsKey: 'businessCostItemAmounts',
         totalKey: 'businessCost',
         formulasKey: 'businessCostItemFormulas',
-        filler: '财务部负责人一多选公式；仅财务部负责人一和最终审批人可见',
+        filler: '财务部负责人一从资管业务成本名单多选，并为每一项填写比例；仅财务部负责人一和最终审批人可见',
+        hint: '名单来自资管账单三级、类别为业务成本。选中后填写比例，按（收入 − 项目成本）× 该比例计算。',
         items: [
           for (final name in _kDefaultBusinessCostNames)
             _businessCostOption(name),
@@ -2205,32 +2210,13 @@ ProposalFinanceEvaluation _aggregateFinance({
   }
   double total(String key) => buckets[key]?.total ?? 0;
   if (proposalForm != null) {
-    final business = dict.category(kProposalCostCategoryBusiness);
-    if (business != null) {
-      final measure = _businessMeasure(proposalForm, scale);
-      final redacted = proposalForm['businessCostRedacted'] == true;
-      final codes = [
-        for (final item in _listOf(proposalForm['businessFormulaCodes']))
-          if (_str(item).isNotEmpty) _str(item),
-      ];
-      buckets[kProposalCostCategoryBusiness] = ProposalFinanceBucket(
-        category: business,
-        lines: [
-          for (final code in codes)
-            if (dict.formulaByCode(code) case final formula?)
-              _proposalBusinessFormulaLine(
-                formula,
-                scale: scale,
-                measure: measure,
-                redacted: redacted,
-                couponReceivableRatio: proposalCouponSalesReceivableRatio(
-                  proposalForm,
-                  const [],
-                ),
-              ),
-        ],
-      );
-    }
+    buckets[kProposalCostCategoryBusiness] = proposalBusinessCostBucket(
+      form: proposalForm,
+      dict: dict,
+      scale: scale,
+      revenue: revenueAmount,
+      project: total(kProposalCostCategoryProject),
+    );
   }
   if (proposalForm != null) {
     final category = dict.category(kProposalCostCategoryTax);
@@ -2295,90 +2281,97 @@ ProposalFinanceEvaluation _aggregateFinance({
   );
 }
 
-class _BusinessMeasure {
-  const _BusinessMeasure({
-    required this.base,
-    required this.ratio,
-    required this.ready,
-    required this.byFace,
-  });
-
-  final double base;
-  final double ratio;
-  final bool ready;
-  final bool byFace;
+ProposalFinanceFormula? _businessFormulaFor(
+  Map<String, dynamic> form,
+  ProposalCostCategory category,
+  String name,
+) {
+  return proposalFinanceItemFormula(form, category, name);
 }
 
-/// 比例、面值二选一。填比例时数量用年化规模；填面值时数量用这个面值，结算比例按 1。
-_BusinessMeasure _businessMeasure(Map<String, dynamic> form, double scale) {
-  final ratioText = _str(form['businessSettleRatio']);
-  if (ratioText.isNotEmpty) {
-    return _BusinessMeasure(
-      base: scale,
-      ratio: proposalParseSettleRatio(ratioText),
-      ready: true,
-      byFace: false,
-    );
-  }
-  final faceText = _str(form['businessFaceValue']);
-  if (faceText.isNotEmpty) {
-    return _BusinessMeasure(
-      base: proposalIntakeParseFaceNumber(faceText),
-      ratio: 1,
-      ready: true,
-      byFace: true,
-    );
-  }
-  return const _BusinessMeasure(base: 0, ratio: 0, ready: false, byFace: false);
+/// 业务成本比例：存小数（0.12 = 12%）。带 % 或绝对值 ≥ 2 的按百分数。
+double? proposalParseBusinessCostRatio(Object? raw) {
+  final text = proposalIntakeNormalizeSettleRatio(raw);
+  if (text.isEmpty) return null;
+  final n = double.tryParse(text);
+  if (n == null) return null;
+  if (proposalRatioUsesPercentPoints(n)) return n / 100;
+  return n;
 }
 
-ProposalFinanceLine _proposalBusinessFormulaLine(
-  ProposalFinanceFormula formula, {
+String proposalBusinessCostRatioText(Map<String, dynamic> form, String name) {
+  final raw = form[kProposalBusinessCostRatiosKey];
+  if (raw is! Map) return '';
+  final value = raw[name];
+  if (value == null) return '';
+  return '$value'.trim();
+}
+
+Map<String, String> proposalBusinessCostRatioMap(Map<String, dynamic> form) {
+  final raw = form[kProposalBusinessCostRatiosKey];
+  if (raw is! Map) return const {};
+  return {
+    for (final entry in raw.entries)
+      if ('${entry.key}'.trim().isNotEmpty)
+        '${entry.key}'.trim(): '${entry.value}'.trim(),
+  };
+}
+
+Map<String, dynamic> proposalFinanceWriteBusinessRatio(
+  Map<String, dynamic> finance,
+  String name,
+  String ratio,
+) {
+  final key = name.trim();
+  final ratios = _mapOf(finance[kProposalBusinessCostRatiosKey]);
+  final text = ratio.trim();
+  if (key.isEmpty) return finance;
+  if (text.isEmpty) {
+    ratios.remove(key);
+  } else {
+    ratios[key] = text;
+  }
+  return Map<String, dynamic>.from(finance)
+    ..[kProposalBusinessCostRatiosKey] = ratios;
+}
+
+/// 整份提案的业务成本：每项按（收入 − 项目成本）× 填写的比例算一次。
+ProposalFinanceBucket proposalBusinessCostBucket({
+  required Map<String, dynamic> form,
+  required ProposalFinanceFormulaCatalog dict,
   required double scale,
-  required _BusinessMeasure measure,
-  required bool redacted,
-  double? couponReceivableRatio,
+  required double revenue,
+  required double project,
 }) {
-  if (redacted) {
-    return ProposalFinanceLine(
-      name: formula.name,
-      formula: formula,
-      amount: 0,
-      pending: true,
-      substitution: '业务成本仅财务部负责人一和最终审批人可查看',
-    );
-  }
-  if (!measure.ready) {
-    return ProposalFinanceLine(
-      name: formula.name,
-      formula: formula,
-      amount: 0,
-      pending: true,
-      missing: const ['比例或面值'],
-      substitution: '请填写比例或面值',
-    );
-  }
-  final eval = _evaluateRevenueExpression(
-    formula.expression.isEmpty ? formula.name : formula.expression,
-    base: measure.base,
-    ratio: measure.ratio,
-    costOf: (_) => null,
-    couponReceivableRatio: couponReceivableRatio,
-  );
-  final amount = eval.ok
-      ? eval.amount
-      : proposalRoundWan(measure.base * measure.ratio);
-  return ProposalFinanceLine(
-    name: formula.name,
-    formula: formula,
-    amount: amount,
-    pending: !eval.ok,
-    substitution: eval.ok
-        ? '${eval.display} = ${_wan(amount)} 万元'
-        : measure.byFace
-        ? '公式无法自动代入，按面值 ${_wan(measure.base)} 万元'
-        : '公式无法自动代入，按 年化规模 × 比例：${_wan(scale)} × ${_pct(measure.ratio)} = ${_wan(amount)} 万元',
-    missing: [if (!measure.byFace && scale <= 0) '销售规模', ...eval.missing],
+  final category =
+      dict.category(kProposalCostCategoryBusiness) ??
+      ProposalFinanceFormulaCatalog.fallback.category(
+        kProposalCostCategoryBusiness,
+      )!;
+  final names = proposalFinanceSelectedNames(form, category);
+  final redacted = form['businessCostRedacted'] == true;
+  return ProposalFinanceBucket(
+    category: category,
+    lines: [
+      for (final name in names)
+        if (redacted)
+          ProposalFinanceLine(
+            name: name,
+            formula: _businessFormulaFor(form, category, name),
+            amount: 0,
+            pending: true,
+            substitution: '业务成本仅财务部负责人一和最终审批人可查看',
+          )
+        else
+          _evaluateBusinessCostLine(
+            form,
+            name: name,
+            formula: _businessFormulaFor(form, category, name),
+            scale: scale,
+            revenue: revenue,
+            project: project,
+          ),
+    ],
   );
 }
 
@@ -2984,10 +2977,63 @@ Map<String, dynamic> proposalFinanceWriteSelection(
     ..removeWhere((name, _) => !list.contains(name));
   final touched = _mapOf(finance[kProposalFinanceFormulaTouchedKey])
     ..[category.key] = true;
-  return Map<String, dynamic>.from(finance)
+  final next = Map<String, dynamic>.from(finance)
     ..[category.namesKey] = list
     ..[category.formulasKey] = formulas
     ..[kProposalFinanceFormulaTouchedKey] = touched;
+  if (category.key == kProposalCostCategoryBusiness) {
+    final ratios = _mapOf(finance[kProposalBusinessCostRatiosKey])
+      ..removeWhere((name, _) => !list.contains(name));
+    next[kProposalBusinessCostRatiosKey] = ratios;
+  }
+  return next;
+}
+
+ProposalFinanceLine _evaluateBusinessCostLine(
+  Map<String, dynamic> form, {
+  required String name,
+  required ProposalFinanceFormula? formula,
+  required double scale,
+  required double revenue,
+  required double project,
+}) {
+  final base = formula ??
+      const ProposalFinanceFormula(
+        code: kProposalBusinessCostFormulaCode,
+        name: '（收入 − 项目成本）× 比例',
+        expression: '(收入 − 项目成本) × 比例',
+        kind: ProposalFinanceFormulaKind.netOpRate,
+      );
+  final rate = proposalParseBusinessCostRatio(
+    proposalBusinessCostRatioText(form, name),
+  );
+  if (rate == null) {
+    return ProposalFinanceLine(
+      name: name,
+      formula: base,
+      amount: 0,
+      pending: true,
+      missing: const ['比例'],
+      substitution: '（收入 − 项目成本）× 比例，请填写比例',
+    );
+  }
+  return _evaluateCostLine(
+    form,
+    name: name,
+    formula: ProposalFinanceFormula(
+      code: base.code,
+      name: '（收入 − 项目成本）× ${_pct(rate)}',
+      expression: '(收入 − 项目成本) × ${_pct(rate)}',
+      kind: ProposalFinanceFormulaKind.netOpRate,
+      rate: rate,
+    ),
+    scale: scale,
+    revenue: revenue,
+    project: project,
+    operating: 0,
+    business: 0,
+    settleCost: (_) => null,
+  );
 }
 
 Map<String, dynamic> proposalFinanceWriteItemFormula(

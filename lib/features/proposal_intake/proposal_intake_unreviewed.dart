@@ -9,6 +9,7 @@ const _kBusinessCostFormKeys = {
   'businessCostItemAmounts',
   'businessCostItemSettleTerms',
   'businessCostItemFormulas',
+  'businessCostItemRatios',
   'businessCost',
 };
 

@@ -6587,7 +6587,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       ProposalIntakeNavSection.tech =>
         '$sub 填（含业务平台产品）· 科技部负责人 ${owner('technologyOwner')} 复核 · 财务技术接口由财务部负责人二填',
       ProposalIntakeNavSection.finance =>
-        '$sub 填产品结算、收入公式、项目 / 税务成本与周转 · 财务部负责人二 ${owner('financeOwner2')} 逐条复核 · 财务部负责人一 ${owner('financeOwner1')} 复核时选业务成本公式并整板块复核',
+        '$sub 填产品结算、收入公式、项目 / 税务成本与周转 · 财务部负责人二 ${owner('financeOwner2')} 逐条复核 · 财务部负责人一 ${owner('financeOwner1')} 复核时选业务成本并填写比例，再整板块复核',
       ProposalIntakeNavSection.flow => '四流不用填：由市场、科技、财务三部分自动串联，只读',
       _ => '$sub 填 · 市场部负责人一 ${owner('marketOwner1')} 整板块复核',
     };
@@ -12009,7 +12009,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           (
             section: ProposalIntakeNavSection.finance,
             no: '三',
-            desc: '填产品结算、收入与项目 / 税务成本；业务成本由财务部负责人一在复核时选择',
+            desc: '填产品结算、收入与项目 / 税务成本；业务成本由财务部负责人一在复核时选择并填写比例',
             flag: 'financeCompleted',
           ),
           if (!_isPurchase)
@@ -13223,8 +13223,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   /// 整单测算：主产品 + 子产品加总。成本 / 利润块顶、下面按产品的各行、
   /// 市场部三格、左侧格子和主 hero 都用这一份，数字对得上。
   ProposalFinanceEvaluation get _allFinanceEvaluation {
-    if (!_isPurchase)
+    if (!_isPurchase) {
       return _remoteFinance.result?.total ?? _emptyRemoteFinanceEvaluation;
+    }
     final main = _mainFinanceEvaluation;
     if (!proposalIntakeHasChildProducts(_form) || main.products.isEmpty) {
       return main;
@@ -14916,7 +14917,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     if (_isLocked || _showSelectedAsText) return '';
     final notes = <String>[];
     if (_canEditAsSubmitter) {
-      notes.add('填写人：按产品选好收入公式和项目 / 税务成本，并填周转。业务成本不用填，财务复核时由财务部负责人一选择。');
+      notes.add('填写人：按产品选好收入公式和项目 / 税务成本，并填周转。业务成本不用填，财务复核时由财务部负责人一选择并填写比例。');
     } else if (_isOwner('financeOwner2')) {
       notes.add(
         _canEditUnreviewedFinance
@@ -14925,9 +14926,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       );
     }
     if (_canEditBusinessCost) {
-      notes.add('财务部负责人一：请在下面「业务成本」多选公式；仅你和最终审批人可查看金额。');
+      notes.add('财务部负责人一：请在下面「业务成本」从资管名单里多选，并为每一项填写比例；仅你和最终审批人可查看金额。');
     } else if (_isOwner('financeOwner1') && _stage != 'reviewing') {
-      notes.add('财务部负责人一：进入财务复核后，在成本里选择业务成本公式。');
+      notes.add('财务部负责人一：进入财务复核后，在成本里选择业务成本并填写比例。');
     }
     if (_isOwner('financeOwner1') && _stage == 'reviewing') {
       notes.add('负责人二逐条复核完成后，在本板块底部整板块复核。');
@@ -15050,7 +15051,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       revenueEditable: editable,
       categoryEditable: {
         kProposalCostCategoryProject: editable,
-        // 复核默认是只读简单行。业务成本仍要让财务部负责人一在这里多选公式。
+        // 复核默认是只读简单行。业务成本仍要让财务部负责人一在这里从名单多选。
         kProposalCostCategoryBusiness: !readOnly && _canEditBusinessCost,
         kProposalCostCategoryOperating:
             editable &&
@@ -15069,8 +15070,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       productEditable: _productFormulaEditable,
       businessSealed: businessSealed ?? _businessCostSealed,
       businessWaitingText: _isPurchase
-          ? '财务复核时由市场部负责人一选择公式'
-          : '财务复核时由财务部负责人一选择公式',
+          ? '财务复核时由市场部负责人一选择'
+          : '财务复核时由财务部负责人一选择',
       roleNote: readOnly ? '' : _financeRoleNote,
       onPromotionPlans: (skuId, plans) => _writeProductFormula(
         skuId,
@@ -15143,6 +15144,33 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               names,
             ),
           );
+        } else if (category.key == kProposalCostCategoryBusiness) {
+          _writeFinanceFormula(
+            kProposalProductFinanceMain,
+            (form) {
+              final selected = proposalFinanceWriteSelection(
+                form,
+                category,
+                names,
+              );
+              final fromAsset = widget.options.businessCostItemOptions;
+              return proposalSyncCostSelection(
+                form: selected,
+                names: names,
+                catalog: fromAsset.isNotEmpty
+                    ? fromAsset
+                    : [
+                        for (final item in category.items)
+                          ProposalCostItemOption(code: item.code, name: item.name),
+                      ],
+                namesKey: 'businessCostItems',
+                codesKey: 'businessCostItemCodes',
+                amountsKey: 'businessCostItemAmounts',
+                totalKey: 'businessCost',
+                settleTermsKey: 'businessCostItemSettleTerms',
+              );
+            },
+          );
         } else {
           _writeProductFormula(
             skuId,
@@ -15161,6 +15189,11 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               code,
             ),
           );
+        } else if (category.key == kProposalCostCategoryBusiness) {
+          _writeFinanceFormula(
+            kProposalProductFinanceMain,
+            (form) => proposalFinanceWriteItemFormula(form, category, name, code),
+          );
         } else {
           _writeProductFormula(
             skuId,
@@ -15169,18 +15202,12 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           );
         }
       },
-      onBusinessFormulas: (codes) => _writeFinanceFormula(
-        kProposalProductFinanceMain,
-        (form) =>
-            Map<String, dynamic>.from(form)..['businessFormulaCodes'] = codes,
+      businessRatios: proposalBusinessCostRatioMap(
+        proposalIntakeProductFinance(_form, owner: owner),
       ),
-      businessSettleRatio: '${_form['businessSettleRatio'] ?? ''}'.trim(),
-      businessFaceValue: '${_form['businessFaceValue'] ?? ''}'.trim(),
-      onBusinessMeasure: (ratio, face) => _writeFinanceFormula(
+      onBusinessRatio: (name, ratio) => _writeFinanceFormula(
         kProposalProductFinanceMain,
-        (form) => Map<String, dynamic>.from(form)
-          ..['businessSettleRatio'] = ratio
-          ..['businessFaceValue'] = face,
+        (form) => proposalFinanceWriteBusinessRatio(form, name, ratio),
       ),
       operatingItems: proposalCostSelectedNames(
         _form,

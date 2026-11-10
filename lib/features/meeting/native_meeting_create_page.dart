@@ -737,7 +737,7 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
       if (!mounted) return;
       final msg = friendlyErrorText(
         e,
-        fallback: generate ? '提交失败，请稍后重试' : '草稿保存失败，请稍后重试',
+        fallback: '请稍后重试',
       );
       setState(() => _error = generate ? '提交失败：$msg' : '草稿保存失败：$msg');
       showDunesToast(context, msg, kind: DunesToastKind.error);

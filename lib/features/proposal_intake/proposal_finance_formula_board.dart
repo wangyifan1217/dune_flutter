@@ -22,7 +22,7 @@ const kProposalFinanceShowEstimates = true;
 /// 谁能改什么由页面按角色传进 [ProposalFinanceBoardConfig]：
 /// - 填写人：收入公式、项目 / 税务成本（产品结算里已有的项目成本自动带出、锁定）；
 /// - 财务部负责人二：同上并按产品逐条复核；业务成本与利润对其加密；
-/// - 财务部负责人一：财务复核时整份提案多选业务成本公式；
+/// - 财务部负责人一：财务复核时整份提案多选业务成本，并为每一项填写比例；
 /// - 其他人：只读。
 class ProposalFinanceBoardConfig {
   const ProposalFinanceBoardConfig({
@@ -33,7 +33,7 @@ class ProposalFinanceBoardConfig {
     this.categoryEditable = const {},
     this.productEditable,
     this.businessSealed = false,
-    this.businessWaitingText = '财务复核时由财务部负责人一选择公式',
+    this.businessWaitingText = '财务复核时由财务部负责人一选择并填写比例',
     this.roleNote = '',
     this.reviewToggle,
     this.reviewStatus,
@@ -42,6 +42,8 @@ class ProposalFinanceBoardConfig {
     this.onCostItemsChanged,
     this.onCostFormula,
     this.onBusinessFormulas,
+    this.businessRatios = const {},
+    this.onBusinessRatio,
     this.businessSettleRatio = '',
     this.businessFaceValue = '',
     this.onBusinessMeasure,
@@ -125,6 +127,10 @@ class ProposalFinanceBoardConfig {
 
   /// 业务成本公式（整份提案多选，和收入、项目成本同一套计算公式）。
   final ValueChanged<List<String>>? onBusinessFormulas;
+
+  /// 每个业务成本项填写的比例。键是成本项名称。
+  final Map<String, String> businessRatios;
+  final void Function(String name, String ratio)? onBusinessRatio;
 
   /// 业务成本测算用的比例、面值，二选一。
   final String businessSettleRatio;
@@ -817,18 +823,13 @@ class ProposalFinanceCostPanel extends StatelessWidget {
       );
     }
     if (key == kProposalCostCategoryBusiness) {
-      final bucket =
-          config.evaluation.bucket(key) ??
-          ProposalFinanceBucket(category: category, lines: const []);
-    final editable =
-          !readOnly &&
-          config.categoryEditable[key] == true &&
-          config.onBusinessFormulas != null;
-      final codes = [
-        for (final line in bucket.lines)
-          if (line.formula != null && line.formula!.code.isNotEmpty)
-            line.formula!.code,
-      ];
+      final measured = config.evaluation.bucket(key);
+      final bucket = ProposalFinanceBucket(
+        category: category,
+        lines: measured?.lines ?? const [],
+        computedTotal: measured?.total,
+      );
+      final editable = !readOnly && config.categoryEditable[key] == true;
       final waiting = bucket.names.isEmpty && !editable;
       return ProposalFinanceRow(
         key: const ValueKey('finance-proposal-business'),
@@ -836,7 +837,7 @@ class ProposalFinanceCostPanel extends StatelessWidget {
         initiallyOpen: bucket.names.isEmpty,
         forceOpen: config.focusKeys.contains('businessCost'),
         summary: bucket.names.isEmpty
-            ? (editable ? '点开多选计算公式' : config.businessWaitingText)
+            ? (editable ? '点开选择业务成本' : config.businessWaitingText)
             : '整份提案 · ${bucket.names.join('、')}',
         value: config.showEstimates && bucket.names.isNotEmpty
             ? '${_wan(bucket.total)} 万'
@@ -849,22 +850,19 @@ class ProposalFinanceCostPanel extends StatelessWidget {
               )
             : const ProposalFinanceTag('整份提案'),
         collapsedReview: config.reviewStatus?.call('businessCost'),
-        detail: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _ProposalBusinessFormulas(
-              formulas: config.catalog.settlementFormulas,
-              lines: bucket.lines,
-              selectedCodes: codes,
-              editable: editable,
-              showEstimates: config.showEstimates,
-              waitingText: config.businessWaitingText,
-              onChanged: editable ? config.onBusinessFormulas : null,
-              ratio: config.businessSettleRatio,
-              face: config.businessFaceValue,
-              onMeasure: editable ? config.onBusinessMeasure : null,
-            ),
-          ],
+        detail: _CategoryDetail(
+          bucket: bucket,
+          editable: editable,
+          allowItemEdit: editable,
+          showEstimates: config.showEstimates,
+          ratios: config.businessRatios,
+          onRatio: editable ? config.onBusinessRatio : null,
+          onItemsChanged: editable && config.onCostItemsChanged != null
+              ? (names) => config.onCostItemsChanged!('', category, names)
+              : null,
+          onFormula: editable && config.onCostFormula != null
+              ? (name, code) => config.onCostFormula!('', category, name, code)
+              : null,
         ),
       );
     }
@@ -1036,233 +1034,6 @@ abstract final class ProposalFinanceFormulaBoardKeys {
   };
 }
 
-/// 业务成本：整份提案多选，选项和收入、项目成本的计算公式是同一套。
-class _ProposalBusinessFormulas extends StatelessWidget {
-  const _ProposalBusinessFormulas({
-    required this.formulas,
-    required this.lines,
-    required this.selectedCodes,
-    required this.editable,
-    required this.showEstimates,
-    required this.waitingText,
-    this.onChanged,
-    this.ratio = '',
-    this.face = '',
-    this.onMeasure,
-  });
-
-  final List<ProposalFinanceFormula> formulas;
-  final List<ProposalFinanceLine> lines;
-  final List<String> selectedCodes;
-  final bool editable;
-  final bool showEstimates;
-  final String waitingText;
-  final ValueChanged<List<String>>? onChanged;
-  final String ratio;
-  final String face;
-  final void Function(String ratio, String face)? onMeasure;
-
-  @override
-  Widget build(BuildContext context) {
-    final chosen = selectedCodes.toSet();
-    final remaining = [
-      for (final formula in formulas)
-        if (!chosen.contains(formula.code)) formula,
-    ];
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Padding(
-          padding: const EdgeInsets.only(top: 4),
-          child: Text(
-            editable
-                ? '整份提案选一次，可多选。选完后填写比例或面值，二选一。'
-                : lines.isEmpty
-                ? waitingText
-                : '整份提案统一测算，不跟产品走。',
-            style: _sans(context, size: 12, color: _K.grey),
-          ),
-        ),
-        if (lines.isEmpty && editable)
-          Padding(
-            padding: const EdgeInsets.only(top: 4),
-            child: Text(
-              '尚未选择',
-              style: _sans(context, size: 12, color: _K.grey),
-            ),
-          ),
-        for (final line in lines)
-          Padding(
-            padding: const EdgeInsets.only(top: 6),
-            child: Row(
-                    children: [
-                        Expanded(
-                  child: Text(
-                    line.formula?.name ?? line.name,
-                    style: _sans(context, size: 12.5, weight: FontWeight.w600),
-                  ),
-                ),
-                if (showEstimates)
-                  Text(
-                    '${_wan(line.amount)} 万',
-                    style: _mono(context, size: 12),
-                  ),
-                if (onChanged != null && line.formula != null)
-                  IconButton(
-                    tooltip: '移除',
-                    visualDensity: VisualDensity.compact,
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(
-                      minWidth: 28,
-                      minHeight: 28,
-                    ),
-                    onPressed: () => onChanged!([
-                      for (final code in selectedCodes)
-                        if (code != line.formula!.code) code,
-                    ]),
-                    icon: Icon(
-                      Icons.close_rounded,
-                      size: 16,
-                      color: _c(context, _K.grey),
-                    ),
-                  ),
-                    ],
-                  ),
-          ),
-        if (lines.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: _BusinessMeasureFields(
-              ratio: ratio,
-              face: face,
-              editable: onMeasure != null,
-              onChanged: onMeasure,
-            ),
-          ),
-        if (onChanged != null && remaining.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: ProposalSelectField<String>(
-              value: null,
-              title: '业务成本计算公式',
-              hint: '选择计算公式，可多选',
-              searchable: true,
-              options: [
-                for (final formula in remaining)
-                  ProposalSelectOption(
-                    value: formula.code,
-                    label: formula.name,
-                    meta: [
-                      '编码 ${formula.code}',
-                      if (formula.settleMethodName.isNotEmpty)
-                        formula.settleMethodName,
-                      if (formula.expression.isNotEmpty) formula.expression,
-                    ].join(' · '),
-                  ),
-              ],
-              onSelected: (code) {
-                if (code == null || chosen.contains(code)) return;
-                onChanged!([...selectedCodes, code]);
-              },
-            ),
-        ),
-      ],
-    );
-  }
-}
-
-class _BusinessMeasureFields extends StatefulWidget {
-  const _BusinessMeasureFields({
-    required this.ratio,
-    required this.face,
-    required this.editable,
-    this.onChanged,
-  });
-
-  final String ratio;
-  final String face;
-  final bool editable;
-  final void Function(String ratio, String face)? onChanged;
-
-  @override
-  State<_BusinessMeasureFields> createState() => _BusinessMeasureFieldsState();
-}
-
-class _BusinessMeasureFieldsState extends State<_BusinessMeasureFields> {
-  late final TextEditingController _ratio;
-  late final TextEditingController _face;
-
-  @override
-  void initState() {
-    super.initState();
-    _ratio = TextEditingController(text: widget.ratio);
-    _face = TextEditingController(text: widget.face);
-  }
-
-  @override
-  void didUpdateWidget(covariant _BusinessMeasureFields oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.ratio != _ratio.text) _ratio.text = widget.ratio;
-    if (widget.face != _face.text) _face.text = widget.face;
-  }
-
-  @override
-  void dispose() {
-    _ratio.dispose();
-    _face.dispose();
-    super.dispose();
-  }
-
-  Widget _input(
-    String label,
-    TextEditingController controller,
-    String hint,
-    void Function(String value) write,
-  ) {
-    return ProposalField(
-      label: label,
-      child: TextFormField(
-        controller: controller,
-        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-        inputFormatters: const [ProposalSettleRatioFormatter()],
-        onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
-        onChanged: write,
-        decoration: proposalInputDecoration(context: context, hint: hint),
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (!widget.editable) {
-      final ratio = widget.ratio.trim();
-      final face = widget.face.trim();
-      final text = ratio.isNotEmpty
-          ? '比例 $ratio'
-          : face.isNotEmpty
-          ? '面值 $face'
-          : '未填比例或面值';
-      return Text(text, style: _sans(context, size: 12, color: _K.grey));
-    }
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          child: _input('比例', _ratio, '如 0.08，1 表示 100%', (value) {
-            widget.onChanged?.call(value.trim(), '');
-          }),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: _input('面值', _face, '填数字，按这个面值测算', (value) {
-            widget.onChanged?.call('', value.trim());
-          }),
-        ),
-      ],
-    );
-  }
-}
-
 class _CategoryDetail extends StatelessWidget {
   const _CategoryDetail({
     required this.bucket,
@@ -1271,6 +1042,8 @@ class _CategoryDetail extends StatelessWidget {
     this.allowItemEdit = true,
     this.onItemsChanged,
     this.onFormula,
+    this.ratios = const {},
+    this.onRatio,
     this.promotionPlans = const [],
     this.onPromotionPlans,
   });
@@ -1281,6 +1054,8 @@ class _CategoryDetail extends StatelessWidget {
   final bool allowItemEdit;
   final ValueChanged<List<String>>? onItemsChanged;
   final void Function(String name, String code)? onFormula;
+  final Map<String, String> ratios;
+  final void Function(String name, String ratio)? onRatio;
   final List<ProposalPromotionTierPlan> promotionPlans;
   final ValueChanged<List<ProposalPromotionTierPlan>>? onPromotionPlans;
 
@@ -1315,6 +1090,8 @@ class _CategoryDetail extends StatelessWidget {
       onFormula: onFormula == null || line.locked
           ? null
           : (code) => onFormula!(line.name, code),
+      ratio: ratios[line.name] ?? '',
+      onRatio: onRatio == null ? null : (value) => onRatio!(line.name, value),
       showEstimates: showEstimates,
       promotionPlans: promotionPlans,
       onPromotionPlans: onPromotionPlans,
@@ -1388,6 +1165,8 @@ class _CategoryDetail extends StatelessWidget {
           onFormula: onFormula == null || line.locked
               ? null
               : (code) => onFormula!(line.name, code),
+          ratio: ratios[line.name] ?? '',
+          onRatio: onRatio == null ? null : (value) => onRatio!(line.name, value),
           showEstimates: showEstimates,
           promotionPlans: promotionPlans,
           onPromotionPlans: onPromotionPlans,
@@ -1846,6 +1625,8 @@ class _CostLine extends StatelessWidget {
     required this.showEstimates,
     this.onRemove,
     this.onFormula,
+    this.ratio = '',
+    this.onRatio,
     this.promotionPlans = const [],
     this.onPromotionPlans,
   });
@@ -1855,8 +1636,34 @@ class _CostLine extends StatelessWidget {
   final bool showEstimates;
   final VoidCallback? onRemove;
   final ValueChanged<String>? onFormula;
+  final String ratio;
+  final ValueChanged<String>? onRatio;
   final List<ProposalPromotionTierPlan> promotionPlans;
   final ValueChanged<List<ProposalPromotionTierPlan>>? onPromotionPlans;
+
+  Widget _businessRatio(BuildContext context) {
+    final shown = ratio.trim().isEmpty ? '未填' : ratio.trim();
+    return Padding(
+      padding: const EdgeInsets.only(top: 6, right: 10),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 36,
+            child: Text('比例', style: _sans(context, size: 12, color: _K.grey)),
+          ),
+          Expanded(
+            child: onRatio == null
+                ? Text(shown, style: _mono(context, size: 12.5, weight: FontWeight.w600))
+                : _PromotionTextField(
+                    value: ratio,
+                    hint: '如 0.12 或 12%',
+                    onText: onRatio!,
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
 
   static bool _canPickFormula(
     ProposalCostCategory category,
@@ -1879,6 +1686,7 @@ class _CostLine extends StatelessWidget {
     required bool canChangeFormula,
   }) {
     final item = category.resolveItem(line.name);
+    if (category.key == kProposalCostCategoryBusiness) return false;
     return !showEstimates &&
         !item.tiered &&
         !_canPickFormula(category, line, canChangeFormula);
@@ -2060,6 +1868,7 @@ class _CostLine extends StatelessWidget {
                 style: _sans(context, size: 11, color: _K.grey),
               ),
             ),
+          if (category.key == kProposalCostCategoryBusiness) _businessRatio(context),
           if (canChoose &&
               category.key == kProposalCostCategoryTax &&
               line.name == kProposalStampTaxName &&
@@ -3098,6 +2907,14 @@ class _CostItemPickerDialogState extends State<_CostItemPickerDialog> {
     if (widget.category.key == kProposalCostCategoryProject) {
               return '产品结算里还没有，需在上方补一行应付';
             }
+    if (widget.category.key == kProposalCostCategoryBusiness) {
+      final formula = item.defaultFormulaRef;
+      final code = item.code == name ? '' : item.code;
+      return [
+        if (code.isNotEmpty) code,
+        if (formula != null) formula.name,
+      ].join(' · ');
+    }
             final parts = [
               if (item.hint.isNotEmpty) item.hint,
               if (item.formulas.isNotEmpty)

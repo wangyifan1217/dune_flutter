@@ -118,5 +118,9 @@ String friendlyErrorText(Object? error, {String fallback = '操作失败，请�
       low.contains('invalid card type')) {
     return '对账板块无效，请从工作台重新进入';
   }
+  if (low.contains("instance of 'jobject'") ||
+      low.contains('instance of "jobject"')) {
+    return '本地存储暂不可用，请稍后重试';
+  }
   return fallback;
 }

@@ -25,7 +25,6 @@ Map<String, String> dunesAuthHeaders(
 Future<http.Response> _dunesRequestWithRetry(
   AuthSession session,
   Future<http.Response> Function(AuthSession active) send, {
-  http.Client? client,
   bool retried = false,
 }) async {
   final active = AuthSessionCoordinator.instance.resolve(session);
@@ -46,20 +45,30 @@ Future<http.Response> _dunesRequestWithRetry(
   return resp;
 }
 
+Future<http.Response> _withClient(
+  http.Client? client,
+  Future<http.Response> Function(http.Client client) send,
+) {
+  if (client != null) return send(client);
+  final owned = http.Client();
+  return send(owned).whenComplete(owned.close);
+}
+
 Future<http.Response> dunesHttpGet(
   AuthSession session,
   String path, {
   Map<String, String>? headers,
   http.Client? client,
 }) {
-  final c = client ?? http.Client();
-  return _dunesRequestWithRetry(
-    session,
-    (active) => c.get(
-      dunesApiUri(active, path),
-      headers: dunesAuthHeaders(active, headers),
+  return _withClient(
+    client,
+    (c) => _dunesRequestWithRetry(
+      session,
+      (active) => c.get(
+        dunesApiUri(active, path),
+        headers: dunesAuthHeaders(active, headers),
+      ),
     ),
-    client: c,
   );
 }
 
@@ -70,15 +79,16 @@ Future<http.Response> dunesHttpPost(
   Map<String, String>? headers,
   http.Client? client,
 }) {
-  final c = client ?? http.Client();
-  return _dunesRequestWithRetry(
-    session,
-    (active) => c.post(
-      dunesApiUri(active, path),
-      headers: dunesAuthHeaders(active, headers),
-      body: body,
+  return _withClient(
+    client,
+    (c) => _dunesRequestWithRetry(
+      session,
+      (active) => c.post(
+        dunesApiUri(active, path),
+        headers: dunesAuthHeaders(active, headers),
+        body: body,
+      ),
     ),
-    client: c,
   );
 }
 
@@ -89,15 +99,16 @@ Future<http.Response> dunesHttpPatch(
   Map<String, String>? headers,
   http.Client? client,
 }) {
-  final c = client ?? http.Client();
-  return _dunesRequestWithRetry(
-    session,
-    (active) => c.patch(
-      dunesApiUri(active, path),
-      headers: dunesAuthHeaders(active, headers),
-      body: body,
+  return _withClient(
+    client,
+    (c) => _dunesRequestWithRetry(
+      session,
+      (active) => c.patch(
+        dunesApiUri(active, path),
+        headers: dunesAuthHeaders(active, headers),
+        body: body,
+      ),
     ),
-    client: c,
   );
 }
 
@@ -108,15 +119,16 @@ Future<http.Response> dunesHttpPut(
   Map<String, String>? headers,
   http.Client? client,
 }) {
-  final c = client ?? http.Client();
-  return _dunesRequestWithRetry(
-    session,
-    (active) => c.put(
-      dunesApiUri(active, path),
-      headers: dunesAuthHeaders(active, headers),
-      body: body,
+  return _withClient(
+    client,
+    (c) => _dunesRequestWithRetry(
+      session,
+      (active) => c.put(
+        dunesApiUri(active, path),
+        headers: dunesAuthHeaders(active, headers),
+        body: body,
+      ),
     ),
-    client: c,
   );
 }
 
@@ -126,13 +138,14 @@ Future<http.Response> dunesHttpDelete(
   Map<String, String>? headers,
   http.Client? client,
 }) {
-  final c = client ?? http.Client();
-  return _dunesRequestWithRetry(
-    session,
-    (active) => c.delete(
-      dunesApiUri(active, path),
-      headers: dunesAuthHeaders(active, headers),
+  return _withClient(
+    client,
+    (c) => _dunesRequestWithRetry(
+      session,
+      (active) => c.delete(
+        dunesApiUri(active, path),
+        headers: dunesAuthHeaders(active, headers),
+      ),
     ),
-    client: c,
   );
 }

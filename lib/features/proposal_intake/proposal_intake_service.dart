@@ -82,8 +82,11 @@ class ProposalIntakeService {
     return ProposalIntakeOptions.fromJson(_asMap(data));
   }
 
-  Future<List<ProposalPerson>> fetchPeople() async {
-    final data = _unwrap(await http.get(_uri('/org/users'), headers: _headers));
+  Future<List<ProposalPerson>> fetchPeople({http.Client? client}) async {
+    final response = client == null
+        ? await http.get(_uri('/org/users'), headers: _headers)
+        : await client.get(_uri('/org/users'), headers: _headers);
+    final data = _unwrap(response);
     final rows = data is List ? data : const [];
     return rows
         .whereType<Map>()

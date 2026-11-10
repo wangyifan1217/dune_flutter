@@ -360,6 +360,10 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     debugLabel: 'workbench-keep-alive',
   );
 
+  /// 工作台滑出期间才留着 ticker。滑完就停，避免藏起来的加载圈每帧重绘整棵界面。
+  bool _workbenchExitAnimating = false;
+  Timer? _workbenchExitTimer;
+
   /// Keep「我的」主页 alive：进审批/会议/画像详情再返回时不 dispose，保留滚动位置与当前 Tab。
   bool _myPageMounted = false;
 
@@ -840,6 +844,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       );
       _reportedActiveViewConvId = 0;
     }
+    _workbenchExitTimer?.cancel();
     _commBadgeRefreshDebounce?.cancel();
     _commBadgeRecorrectTimer?.cancel();
     _workbenchBadgeRefreshDebounce?.cancel();
@@ -3795,25 +3800,27 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     );
     return Positioned.fill(
       child: TickerMode(
-        // APP 侧滑进出时需保持 ticker，否则收起动画会被冻住。
-        enabled: active || useSlide,
+        // 侧滑那 280ms 要有 ticker，滑完必须停。否则藏在屏幕外的加载圈会每帧重绘。
+        enabled: active || _workbenchExitAnimating,
         child: IgnorePointer(
           ignoring: !active,
-          child: useSlide
-              ? AnimatedSlide(
-                  offset: active ? Offset.zero : const Offset(1, 0),
-                  duration: const Duration(milliseconds: 280),
-                  curve: Curves.easeOutCubic,
-                  child: ColoredBox(
-                    color: DunesColors.resolve(
-                      context,
-                      DunesColors.bgApp,
-                      role: DunesColorRole.surface,
+          child: RepaintBoundary(
+            child: useSlide
+                ? AnimatedSlide(
+                    offset: active ? Offset.zero : const Offset(1, 0),
+                    duration: const Duration(milliseconds: 280),
+                    curve: Curves.easeOutCubic,
+                    child: ColoredBox(
+                      color: DunesColors.resolve(
+                        context,
+                        DunesColors.bgApp,
+                        role: DunesColorRole.surface,
+                      ),
+                      child: panel,
                     ),
-                    child: panel,
-                  ),
-                )
-              : Opacity(opacity: active ? 1 : 0, child: panel),
+                  )
+                : Opacity(opacity: active ? 1 : 0, child: panel),
+          ),
         ),
       ),
     );
@@ -5599,6 +5606,19 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     }
     if (isWorkbench) {
       _workbenchMounted = true;
+      if (_workbenchExitAnimating) {
+        _workbenchExitTimer?.cancel();
+        _workbenchExitAnimating = false;
+      }
+    } else if (previousScreen == 'QJA' &&
+        !isDesktopCommOnly &&
+        !_workbenchExitAnimating) {
+      _workbenchExitAnimating = true;
+      _workbenchExitTimer?.cancel();
+      _workbenchExitTimer = Timer(const Duration(milliseconds: 320), () {
+        if (!mounted || widget.navigation.currentScreen == 'QJA') return;
+        setState(() => _workbenchExitAnimating = false);
+      });
     }
     final isQianjiHub =
         screen == 'QJ' || (isSearch && _searchUnderlayScreen == 'QJ');

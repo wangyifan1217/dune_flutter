@@ -5,6 +5,7 @@ import 'dart:math' as math;
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/theme/dunes_theme.dart';
@@ -50,8 +51,10 @@ class NativeFundingProposalPage extends StatefulWidget {
 }
 
 class _NativeFundingProposalPageState extends State<NativeFundingProposalPage> {
+  final http.Client _http = http.Client();
   late final FundingProposalService _service = FundingProposalService(
     session: widget.session,
+    client: _http,
   );
   late final ProposalIntakeService _intake = ProposalIntakeService(
     session: widget.session,
@@ -59,6 +62,8 @@ class _NativeFundingProposalPageState extends State<NativeFundingProposalPage> {
   final SettlementCatalogService _catalog = SettlementCatalogService();
   final _keyword = TextEditingController();
   Timer? _searchDebounce;
+  bool _disposed = false;
+  bool _lookupsStarted = false;
 
   FundingAccess _access = const FundingAccess();
   FundingOptions _options = const FundingOptions();
@@ -80,9 +85,31 @@ class _NativeFundingProposalPageState extends State<NativeFundingProposalPage> {
     unawaited(_bootstrap());
   }
 
+  bool get _alive => mounted && !_disposed;
+
+  /// 离开页面前先丢掉焦点。键盘连接留着的话，返回后整个界面还会跟着刷新。
+  void _releaseFocus() {
+    final focus = FocusManager.instance.primaryFocus;
+    final nodeContext = focus?.context;
+    if (nodeContext is! Element || !nodeContext.mounted) return;
+    if (nodeContext
+            .findAncestorStateOfType<_NativeFundingProposalPageState>() ==
+        this) {
+      focus?.unfocus();
+    }
+  }
+
+  @override
+  void deactivate() {
+    _releaseFocus();
+    super.deactivate();
+  }
+
   @override
   void dispose() {
+    _disposed = true;
     _searchDebounce?.cancel();
+    _http.close();
     _keyword.dispose();
     _catalog.dispose();
     super.dispose();
@@ -94,24 +121,23 @@ class _NativeFundingProposalPageState extends State<NativeFundingProposalPage> {
         _service.fetchAccess(),
         _service.fetchOptions(),
       ]);
-      if (!mounted) return;
+      if (!_alive) return;
       setState(() {
         _access = results[0] as FundingAccess;
         _options = results[1] as FundingOptions;
       });
       await _reload();
-      if (mounted && _list.todoCount > 0 && _list.items.isEmpty) {
+      if (_alive && _list.todoCount > 0 && _list.items.isEmpty) {
         setState(() => _scope = 'todo');
         await _reload();
       }
     } catch (error) {
-      if (mounted) {
+      if (_alive) {
         setState(() => _error = friendlyErrorText(error, fallback: '资金提案加载失败'));
       }
     } finally {
-      if (mounted) setState(() => _booting = false);
+      if (_alive) setState(() => _booting = false);
     }
-    unawaited(_loadLookups());
   }
 
   /// 人员和主体字典只在填写时用，加载失败不挡列表。
@@ -124,13 +150,16 @@ class _NativeFundingProposalPageState extends State<NativeFundingProposalPage> {
       }
     }
 
-    final people = await safe(_intake.fetchPeople, const <ProposalPerson>[]);
+    final people = await safe(
+      () => _intake.fetchPeople(client: _http),
+      const <ProposalPerson>[],
+    );
     final ours = await safe(_catalog.fetchOurEntities, const <CatalogRef>[]);
     final theirs = await safe(
       _catalog.fetchCounterpartyEntities,
       const <CatalogRef>[],
     );
-    if (!mounted) return;
+    if (!_alive) return;
     setState(() {
       _people = people;
       _ourEntities = ours;
@@ -138,7 +167,15 @@ class _NativeFundingProposalPageState extends State<NativeFundingProposalPage> {
     });
   }
 
+  /// 人员和组织字典只在打开某一条提案时用，列表页不拉，避免返回后还在解析。
+  void _ensureLookups() {
+    if (_lookupsStarted || _disposed) return;
+    _lookupsStarted = true;
+    unawaited(_loadLookups());
+  }
+
   Future<void> _reload() async {
+    if (!_alive) return;
     setState(() {
       _loading = true;
       _error = null;
@@ -148,14 +185,14 @@ class _NativeFundingProposalPageState extends State<NativeFundingProposalPage> {
         scope: _scope,
         keyword: _keyword.text,
       );
-      if (!mounted) return;
+      if (!_alive) return;
       setState(() => _list = list);
     } catch (error) {
-      if (mounted) {
+      if (_alive) {
         setState(() => _error = friendlyErrorText(error, fallback: '列表加载失败'));
       }
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (_alive) setState(() => _loading = false);
     }
   }
 
@@ -164,24 +201,26 @@ class _NativeFundingProposalPageState extends State<NativeFundingProposalPage> {
     setState(() => _creating = true);
     try {
       final row = await _service.create(const {});
-      if (!mounted) return;
+      if (!_alive) return;
+      _ensureLookups();
       setState(() => _open = row);
     } catch (error) {
-      if (mounted) {
+      if (mounted && !_disposed) {
         showDunesToast(context, friendlyErrorText(error, fallback: '新建失败'));
       }
     } finally {
-      if (mounted) setState(() => _creating = false);
+      if (_alive) setState(() => _creating = false);
     }
   }
 
   Future<void> _openRow(FundingProposal row) async {
     try {
+      _ensureLookups();
       final full = await _service.fetch(row.id);
-      if (!mounted) return;
+      if (!_alive) return;
       setState(() => _open = full);
     } catch (error) {
-      if (mounted) {
+      if (mounted && !_disposed) {
         showDunesToast(context, friendlyErrorText(error, fallback: '打开失败'));
       }
     }
@@ -196,24 +235,32 @@ class _NativeFundingProposalPageState extends State<NativeFundingProposalPage> {
   Widget build(BuildContext context) {
     final open = _open;
     if (open != null) {
-      return _FundingEditor(
-        key: ValueKey('funding-${open.id}'),
-        initial: open,
-        service: _service,
-        intake: _intake,
-        options: _options,
-        people: _people,
-        ourEntities: _ourEntities,
-        counterparties: _counterparties,
-        onBack: _closeEditor,
+      return RepaintBoundary(
+        child: _FundingEditor(
+          key: ValueKey('funding-${open.id}'),
+          initial: open,
+          service: _service,
+          intake: _intake,
+          options: _options,
+          people: _people,
+          ourEntities: _ourEntities,
+          counterparties: _counterparties,
+          onBack: _closeEditor,
+        ),
       );
     }
-    return GestureDetector(
-      onTap: _dismissKeyboard,
-      behavior: HitTestBehavior.translucent,
-      child: Material(
-        color: _c(context, ProposalPalette.page, role: DunesColorRole.surface),
-        child: _buildList(context),
+    return RepaintBoundary(
+      child: GestureDetector(
+        onTap: _dismissKeyboard,
+        behavior: HitTestBehavior.translucent,
+        child: Material(
+          color: _c(
+            context,
+            ProposalPalette.page,
+            role: DunesColorRole.surface,
+          ),
+          child: _buildList(context),
+        ),
       ),
     );
   }
@@ -238,6 +285,7 @@ class _NativeFundingProposalPageState extends State<NativeFundingProposalPage> {
     return RefreshIndicator(
       onRefresh: _reload,
       child: ListView(
+        primary: false,
         keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
         children: [
@@ -928,6 +976,7 @@ class _FundingEditorState extends State<_FundingEditor> {
               ],
             );
             return ListView(
+              primary: false,
               keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 48),
               children: [

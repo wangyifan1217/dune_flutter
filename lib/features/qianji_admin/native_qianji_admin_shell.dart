@@ -14,6 +14,7 @@ import '../broadcast/native_workbench_broadcast_page.dart';
 import '../contract_register/contract_register_service.dart';
 import '../contract_register/native_contract_register_page.dart';
 import '../drive/native_drive_page.dart';
+import '../funding_proposal/native_funding_proposal_page.dart';
 import '../proposal_intake/native_proposal_intake_page.dart';
 import '../proposal_intake/proposal_intake_service.dart';
 import '../kpi/native_workbench_kpi_page.dart';
@@ -95,6 +96,7 @@ enum _WorkbenchView {
   contracts,
   proposalIntake,
   purchaseProposalIntake,
+  fundingProposal,
   travelImport,
   kpiPerformance,
   payrollReports,
@@ -138,6 +140,7 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
     _WorkbenchView.contracts: '合同归集',
     _WorkbenchView.proposalIntake: '销售提案',
     _WorkbenchView.purchaseProposalIntake: '采购提案',
+    _WorkbenchView.fundingProposal: '资金提案',
     _WorkbenchView.travelImport: '差旅导入',
     _WorkbenchView.kpiPerformance: '月度绩效考评',
     _WorkbenchView.payrollReports: '工资报表',
@@ -940,6 +943,11 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
           kind: 'purchase',
           onChromeChanged: _onTaskChrome,
         );
+      case _WorkbenchView.fundingProposal:
+        return NativeFundingProposalPage(
+          key: const ValueKey<String>('workbench-funding-proposal'),
+          session: _session,
+        );
       case _WorkbenchView.travelImport:
         return NativeTravelImportPage(
           key: const ValueKey<String>('workbench-travel-import'),
@@ -1014,13 +1022,22 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
           enabled: true,
           onTap: () => _open(_WorkbenchView.purchaseProposalIntake),
         ),
+      if (!_session.isExternalUser && _canSeeProposalIntake == true)
+        _WorkbenchTile(
+          title: '资金提案',
+          subtitle: '融资立项 · 四级审批',
+          icon: Icons.account_balance_outlined,
+          color: DunesColors.resolve(context, const Color(0xFF3F8F5A)),
+          enabled: true,
+          onTap: () => _open(_WorkbenchView.fundingProposal),
+        ),
     ];
 
     final businessTiles = <_WorkbenchTile>[
       if (proposalChoices.isNotEmpty)
         _WorkbenchTile(
           title: '提案填报',
-          subtitle: '销售提案 · 采购提案',
+          subtitle: '销售 · 采购 · 资金提案',
           icon: Icons.assignment_outlined,
           color: _themePurple,
           enabled: true,

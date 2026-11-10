@@ -31,6 +31,7 @@ import 'lighthouse_pk_vs.dart';
 import 'lighthouse_product_rules.dart';
 import 'lighthouse_gross_margin_label.dart';
 import 'lighthouse_discount_metric.dart';
+import 'lighthouse_discount_strip.dart';
 import 'lighthouse_equity_link.dart';
 import 'lighthouse_equity_popover.dart';
 import 'lighthouse_forecast.dart';
@@ -15048,6 +15049,12 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
   final GlobalKey<NavigatorState> _bizNav = GlobalKey<NavigatorState>();
   late final NavigatorObserver _bizObserver = _ZgNavObserver(_onBizNavChanged);
   bool _bizOpen = false;
+
+  /// 供给方卡片「阶梯」折叠条展开的卡片 key（tier::prefix::name::group）。
+  final Set<String> _expandedSupplyTier = <String>{};
+
+  /// 第一次进供给方时默认选中「中石油」：等分类选项到齐（有中石油）再落一次，之后尊重用户选择。
+  bool _supplyDefaultGroupPending = true;
   bool _bizSubpage = false;
   double _backDragDistance = 0;
 
@@ -15094,6 +15101,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
   /// tab → (rowKey → trend)。不依赖该维列表是否已加载；二级/三级展开靠它回填。
   final Map<String, Map<String, Map<String, dynamic>>> _trendCache = {};
   bool _discountsLoading = false;
+  String _supplyTierFilter = 'all';
   Map<String, dynamic> _discountsByName = const {};
   bool _fundPoolLoading = false;
   Map<String, LighthouseFundPoolAmounts> _fundPoolByProvince = const {};
@@ -15744,6 +15752,34 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
       current: _groupFilter,
       options: opts,
     );
+    // 供给方默认看中石油（阶梯价格按「省份 × 中石油」签，一张卡对一家）。
+    if (_tab == 'supply' &&
+        _supplyDefaultGroupPending &&
+        !_inTopic &&
+        opts.contains(lighthouseSupplyDefaultGroup)) {
+      _supplyDefaultGroupPending = false;
+      if (_groupFilter == '全部') _groupFilter = lighthouseSupplyDefaultGroup;
+    }
+    if (_tab == 'supply') _ensureSupplyDiscountsLoaded();
+  }
+
+  /// 最近一次成功拉到 /discounts 时的期间（period|offset|start|end）。
+  String? _discountsLoadedKey;
+
+  String get _discountsRequestKey =>
+      '$_period|$_periodOffset|$_customStart|$_customEnd';
+
+  /// 进供给方就补拉折扣。原来只在「供给方数据加载完成且当时正停在供给方」时拉一次：
+  /// 供给方数据若在别的维度时就已加载（或命中缓存），切过来就永远不会再拉，阶梯条一直不出现。
+  void _ensureSupplyDiscountsLoaded() {
+    if (!lighthouseSupplyDiscountStripEnabled && !lighthouseLedgerShowsDiscountUi) {
+      return;
+    }
+    if (_discountsLoading || _discountsLoadedKey == _discountsRequestKey) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _tab != 'supply') return;
+      unawaited(_loadDiscounts());
+    });
   }
 
   List<String> _categoryOptions(String tab) {
@@ -17653,7 +17689,10 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
       if (tab == 'supply') {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!mounted || _tab != 'supply') return;
-          if (lighthouseLedgerShowsDiscountUi) unawaited(_loadDiscounts());
+          if (lighthouseLedgerShowsDiscountUi ||
+              lighthouseSupplyDiscountStripEnabled) {
+            unawaited(_loadDiscounts());
+          }
           unawaited(_loadFundPool());
           unawaited(_loadFundPoolProfit());
         });
@@ -17751,7 +17790,10 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
   }
 
   Future<void> _loadDiscounts() async {
-    if (!lighthouseLedgerShowsDiscountUi) return;
+    if (!lighthouseLedgerShowsDiscountUi &&
+        !lighthouseSupplyDiscountStripEnabled) {
+      return;
+    }
     if (_discountsLoading) return;
     final requestedPeriod = _period;
     final requestedOffset = _periodOffset;
@@ -17778,12 +17820,15 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
       }
       setState(() {
         _discountsByName = discounts;
+        _discountsLoadedKey =
+            '$requestedPeriod|$requestedOffset|$requestedStart|$requestedEnd';
         final base = _bundle ?? LighthouseDataBundle.empty();
         _bundle = base.withDiscounts(discounts);
         _rowsCacheKey = '';
         _rowsCache = null;
       });
-    } catch (_) {
+    } catch (e) {
+      debugPrint('lighthouse discounts load failed: $e');
       if (!mounted ||
           requestedPeriod != _period ||
           requestedOffset != _periodOffset ||
@@ -20384,6 +20429,8 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
                                   observer: _bizObserver,
                                   service: _service,
                                   session: widget.session,
+                                  onOpenLighthouseSupply:
+                                      _openLighthouseSupplyFromBiz,
                                 ),
                               ),
                             ),
@@ -21181,6 +21228,95 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
       _zgSubpage = false;
       _bizOpen = true;
     });
+  }
+
+  /// 灯塔 → 业务：打开业务页并直接推到这条规则的阶梯详情（/tier）。
+  void _openBizTier(String ruleId, {String supplierKey = ''}) {
+    if (ruleId.isEmpty) return;
+    LighthouseFeedback.instance.play(LighthouseFeedbackKind.navigate);
+    if (!_bizOpen) _openBizPage();
+    void push([int retry = 0]) {
+      final nav = _bizNav.currentState;
+      if (nav == null) {
+        if (retry < 3 && mounted) {
+          WidgetsBinding.instance.addPostFrameCallback((_) => push(retry + 1));
+        }
+        return;
+      }
+      nav.popUntil((route) => route.isFirst);
+      nav.pushNamed(
+        '/tier',
+        arguments: {'ruleId': ruleId, 'supplierKey': supplierKey},
+      );
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) => push());
+  }
+
+  /// 业务 → 灯塔：关掉业务页，切到供给方并打开「省份 × 分类」详情。
+  void _openLighthouseSupplyFromBiz(String province, String group) {
+    final name = province.trim();
+    if (name.isEmpty) return;
+    _closeBizPage();
+    if (_tab != 'supply') _enterLedgerTab('supply');
+    final detKey = group.trim().isEmpty ? name : '$name::${group.trim()}';
+    _captureMainListScroll();
+    unawaited(_loadDetail('supply', detKey));
+    setState(() {
+      _closeMetricPage();
+      _detailReturnStack.clear();
+      _detailKey = detKey;
+      _detailType = 'supply';
+      _detailSubTab = '';
+      _detailPage = 1;
+      _heroPointIndex = null;
+      _resetDetailSkuSearch();
+      _resetDetailDrill();
+      _detailDrillReloadAttempted = false;
+    });
+  }
+
+  /// 供给方「阶梯」展开区：每条规则一张卡，左侧引导线挂在父卡片下（同产品三级）。
+  Widget _buildSupplyTierCards(
+    List<LhSupplyTierRule> rules,
+    Color groupColor,
+  ) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 0, 0, 8),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          border: Border(
+            left: BorderSide(
+              color: DunesColors.resolve(
+                context,
+                groupColor.withAlpha(88),
+                role: DunesColorRole.border,
+              ),
+              width: 1.2,
+            ),
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.only(top: 2),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (final rule in rules)
+                LhSupplyTierCard(
+                  rule: rule,
+                  scale: _ledgerScale,
+                  onDetail: rule.ruleId.isEmpty
+                      ? null
+                      : () => _openBizTier(
+                          rule.ruleId,
+                          supplierKey: rule.supplierKey,
+                        ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   void _closeBizPage() {
@@ -24216,7 +24352,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
     if (key == 'profit' && raw == null) {
       raw = e['deltaPct'] as num?;
     }
-    if (raw == null || raw.abs() < 1e-9) return null;
+    if (raw == null) return null;
     final v = raw.toDouble();
     return (pct: v, isUp: v >= 0);
   }
@@ -31212,7 +31348,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
     return labels.length == n ? labels : const <String>[];
   }
 
-  /// 点选走势图某一期：与前一格比较。日线即该日对前一日；
+  /// 点选走势图某一期：日线与上月同日比较；
   /// 未点选的本期仍使用后端下发的同期窗口环比。
   ({double pct, bool isUp})? _deltaAtHeroPoint(String key) {
     final i = _heroPointIndex;
@@ -31228,6 +31364,9 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
       partialPeriod: _periodInProgress,
       series: series,
       selectedIndex: i,
+      compareIndexOf: _dayComparesPrevMonth
+          ? (index) => _heroCompareIndexOf(index, series.length)
+          : null,
       suppressPointMom: lighthouseHeroSuppressPointMom,
       asPercentagePoints: lighthouseHeroMetricIsRate(key),
     );
@@ -31249,6 +31388,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
     )) {
       return _periodVsLabel;
     }
+    if (_period == 'day' && !_isCustomRange) return 'vs 上月同日';
     if (_period == 'day') return 'vs 前一日';
     return lighthouseHeroPointVsLabel(
       _bundle?.metrics['heroSeriesGranularity']?.toString(),
@@ -40260,6 +40400,22 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
                   )
                   .toList(),
             ),
+          if (_tab == 'supply' && _detailKey == null && widget.sharedCard == null)
+            filterRow(
+              kicker: '阶梯',
+              divider: true,
+              cells: [
+                for (final option in const [('all', '全部'), ('reach', '本期可跨档'), ('hard', '本期难达')])
+                  _filterPill(
+                    label: option.$2,
+                    isOn: _supplyTierFilter == option.$1,
+                    onTap: () => setState(() {
+                      _supplyTierFilter = option.$1;
+                      _listLimit = _listPageSize;
+                    }),
+                  ),
+              ],
+            ),
           if (showHun && hunOpts.isNotEmpty && !supplyFolded)
             filterRow(
               kicker: 'HUN',
@@ -42752,7 +42908,23 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
       );
     }
     final baseRows = _ledgerSearchFiltered(_currentRows);
-    final rows = _rowsAtSelectedHeroPoint(baseRows);
+    final pointRows = _rowsAtSelectedHeroPoint(baseRows);
+    final rows = _tab == 'supply' && _detailKey == null && _supplyTierFilter != 'all'
+        ? pointRows.where((row) {
+            final rules = lighthouseSupplyTierRules(
+              discountsByName: _discountsByName,
+              rowName: row['name']?.toString() ?? '',
+              rowGroup: row['group']?.toString() ?? '',
+              supplyGroups: row['supplyGroups'],
+            );
+            return rules.any((rule) {
+              final discount = _DiscountRow.fromApi(rule.data, rule.supplierKey);
+              if (discount == null) return false;
+              final reachable = _discountStripOf(discount).reachable;
+              return reachable != null && reachable == (_supplyTierFilter == 'reach');
+            });
+          }).toList()
+        : pointRows;
     if (rows.isEmpty) {
       // 空列表要说清楚是「没有数据」还是「筛没了」—— 后者用户自己能修。
       return Padding(
@@ -54773,6 +54945,23 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
         ? lighthouseProductL3LedgerRows(r)
         : const <Map<String, dynamic>>[];
     final l3Key = 'l3::$prefix::$name::$group';
+    // 供给方阶梯价格：只在一级供给方卡片上，数据来自 /discounts（按规则周期，不随日周月）。
+    final tierRules =
+        lighthouseSupplyDiscountStripEnabled &&
+            tab == 'supply' &&
+            _detailKey == null &&
+            !isChildRow &&
+            widget.sharedCard == null
+        ? lighthouseSupplyTierRules(
+            discountsByName: _discountsByName,
+            rowName: name,
+            rowGroup: group,
+            supplyGroups: r['supplyGroups'],
+          )
+        : const <LhSupplyTierRule>[];
+    final tierKey = 'tier::$prefix::$name::$group';
+    final tierOpen =
+        tierRules.isNotEmpty && _expandedSupplyTier.contains(tierKey);
     final l3SearchHit =
         l3Children.isNotEmpty &&
         _ledgerSearchActive &&
@@ -55062,6 +55251,26 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
                         ),
                       ),
                     ),
+                    // 供给方一级卡片底部「阶梯 N · 主规则进度 · 展开」折叠条，样子同产品「细分」。
+                    if (tierRules.isNotEmpty)
+                      _buildProductL3Bar(
+                        children: const [],
+                        open: tierOpen,
+                        groupColor: groupColor,
+                        kicker: '阶梯',
+                        chipText: '阶梯 ${tierRules.length}',
+                        previewText: lighthouseSupplyTierPreview(tierRules),
+                        semanticsLabel: tierOpen
+                            ? '收起阶梯价格'
+                            : '展开 ${tierRules.length} 条阶梯价格',
+                        onTap: () {
+                          setState(() {
+                            if (!_expandedSupplyTier.remove(tierKey)) {
+                              _expandedSupplyTier.add(tierKey);
+                            }
+                          });
+                        },
+                      ),
                     if (l3Children.isNotEmpty)
                       _buildProductL3Bar(
                         children: l3Children,
@@ -55147,6 +55356,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
           ),
         ),
       ),
+      if (tierOpen) _buildSupplyTierCards(tierRules, groupColor),
       if (l3Open)
         _buildProductL3ChildList(
           parent: r,
@@ -55424,15 +55634,20 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
     required Color groupColor,
     required VoidCallback onTap,
     String kicker = '细分',
+    String? chipText,
+    String? previewText,
+    String? semanticsLabel,
   }) {
     final real = lighthouseProductL3RealCount(children);
     final preview = lighthouseProductL3Preview(children);
     final hasUnassigned = children.length > real;
     return Semantics(
       button: true,
-      label: open
-          ? (kicker == '细分' ? '收起细分产品' : '收起$kicker')
-          : (kicker == '细分' ? '展开 $real 个细分产品' : '展开 $real 个$kicker'),
+      label:
+          semanticsLabel ??
+          (open
+              ? (kicker == '细分' ? '收起细分产品' : '收起$kicker')
+              : (kicker == '细分' ? '展开 $real 个细分产品' : '展开 $real 个$kicker')),
       child: LhProductL3HoverRegion(
         cursor: SystemMouseCursors.click,
         builder: (hovered) => GestureDetector(
@@ -55490,7 +55705,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
                     borderRadius: BorderRadius.circular(_fs(4)),
                   ),
                   child: Text(
-                    '$kicker $real',
+                    chipText ?? '$kicker $real',
                     style: _tabular(
                       LhTypography.sans(
                         size: _fs(10),
@@ -55505,9 +55720,10 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
                 SizedBox(width: _fs(7)),
                 Expanded(
                   child: Text(
-                    hasUnassigned && preview.isNotEmpty
-                        ? '$preview · 含$lighthouseProductL3Unassigned'
-                        : preview,
+                    previewText ??
+                        (hasUnassigned && preview.isNotEmpty
+                            ? '$preview · 含$lighthouseProductL3Unassigned'
+                            : preview),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: LhTypography.sans(
@@ -57970,6 +58186,8 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
                   //   用户是从冻结列那条折扣条点进来的，第一眼必须看到它；
                   //   而且「这个省怎么定价」本来就是读下面规模/成本/利润的前提。
                   //   非供给维、或这一行没有折扣规则时整段不出现，不留空槽。
+                  if (lighthouseRuleKeysForRow(r).isNotEmpty)
+                    TextButton(onPressed: () => Navigator.of(context, rootNavigator: true).push(MaterialPageRoute<void>(builder: (_) => LighthouseLinkedRulesPage(service: _service, ruleKeys: lighthouseRuleKeysForRow(r)))), child: const Text('查看关联阶梯规则')),
                   if (discountCard != null) ...[
                     sec(
                       '折扣档位',

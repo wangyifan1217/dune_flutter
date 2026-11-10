@@ -21,6 +21,7 @@ import '../conversation/inbox_hidden_storage.dart';
 import '../conversation/notification_service.dart';
 import '../chat/im_celebration.dart';
 import '../chat/app_theme_guide.dart';
+import '../funding_proposal/native_funding_proposal_page.dart';
 import '../kb/native_kb_models.dart';
 import '../kb/native_kb_service.dart';
 import '../meeting/meeting_live_controller.dart';
@@ -1222,6 +1223,18 @@ class _NativeMyWorkProfileCenterPageState
     widget.navigation.go(kind == 'purchase' ? 'B2PURCHASE' : 'B2SALES');
   }
 
+  /// 资金提案没有单独的屏幕编号，直接压一页。
+  void _openFundingProposal() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => Scaffold(
+          appBar: AppBar(title: const Text('资金提案')),
+          body: NativeFundingProposalPage(session: widget.session),
+        ),
+      ),
+    );
+  }
+
   void _openDesktopProposal(ProposalIntakeRow row) {
     setState(() => _desktopProposal = row);
   }
@@ -1470,6 +1483,9 @@ class _NativeMyWorkProfileCenterPageState
                   showProposals: showProposals,
                   onSales: () => _openProposalIntake('sales'),
                   onPurchase: () => _openProposalIntake('purchase'),
+                  onFunding: widget.session.isExternalUser
+                      ? null
+                      : _openFundingProposal,
                   onApproval: () => widget.onOpenB3(),
                   onMeeting: () => widget.navigation.go('MM-L'),
                   onKnowledge: () => widget.navigation.go('K1'),

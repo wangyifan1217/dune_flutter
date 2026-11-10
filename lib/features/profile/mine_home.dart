@@ -524,6 +524,7 @@ Future<void> showMineCreateSheet(
   required VoidCallback onSales,
   required VoidCallback onPurchase,
   required VoidCallback onApproval,
+  VoidCallback? onFunding,
   required VoidCallback onMeeting,
   required VoidCallback onKnowledge,
   VoidCallback? onWorkbench,
@@ -719,6 +720,18 @@ Future<void> showMineCreateSheet(
                         subtitle: '完成后在提案内发起业务审批',
                         onTap: onPurchase,
                       ),
+                      if (onFunding != null)
+                        option(
+                          icon: Icons.account_balance_outlined,
+                          iconGradient: const [
+                            Color(0xFF34A06A),
+                            Color(0xFF1F6B45),
+                          ],
+                          bg: MinePalette.wash,
+                          title: '资金提案',
+                          subtitle: '融资立项申请，提交后四级审批',
+                          onTap: onFunding,
+                        ),
                     ],
                     option(
                       icon: Icons.add_task_rounded,

@@ -838,6 +838,7 @@ class LighthouseService {
     String keyword = '',
     String syncSource = '',
     String chain = '',
+    String priceType = '',
     String partnerId = '',
     int page = 1,
     int size = 20,
@@ -846,6 +847,7 @@ class LighthouseService {
       '/lighthouse/biz/products',
       <String, String>{
         'side': side,
+        if (priceType.isNotEmpty) 'priceType': priceType,
         if (keyword.isNotEmpty) 'keyword': keyword,
         if (syncSource.isNotEmpty) 'syncSource': syncSource,
         // 链路分段：through / unconnected / half / unsettled，口径见 business-go chainScope。
@@ -869,11 +871,12 @@ class LighthouseService {
 
   /// 结算配置按产品分页：[side] = channel / supplier；[configured] 为空 = 全部，
   /// configured（已配置）/ unconfigured（未配置）。
-  Future<Map<String, dynamic>> fetchBizSettlements({String side = 'channel', String configured = '', String keyword = '', String partnerId = '', int page = 1, int size = 20}) {
+  Future<Map<String, dynamic>> fetchBizSettlements({String side = 'channel', String configured = '', String priceType = '', String keyword = '', String partnerId = '', int page = 1, int size = 20}) {
     return _getData(
       '/lighthouse/biz/settlements',
       <String, String>{
         'side': side,
+        if (priceType.isNotEmpty) 'priceType': priceType,
         if (configured.isNotEmpty) 'configured': configured,
         if (keyword.isNotEmpty) 'keyword': keyword,
         if (partnerId.isNotEmpty) 'partnerId': partnerId,
@@ -885,11 +888,12 @@ class LighthouseService {
   }
 
   /// [kind] = channel / supplier / promoter。
-  Future<Map<String, dynamic>> fetchBizPartners({String kind = 'channel', String keyword = '', String subject = '', String id = '', int page = 1, int size = 20}) {
+  Future<Map<String, dynamic>> fetchBizPartners({String kind = 'channel', String keyword = '', String subject = '', String priceType = '', String id = '', int page = 1, int size = 20}) {
     return _getData(
       '/lighthouse/biz/partners',
       <String, String>{
         'kind': kind,
+        if (priceType.isNotEmpty) 'priceType': priceType,
         if (keyword.isNotEmpty) 'keyword': keyword,
         if (subject.isNotEmpty) 'subject': subject,
         if (id.isNotEmpty) 'id': id,

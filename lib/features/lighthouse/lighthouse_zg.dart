@@ -334,11 +334,11 @@ Widget _sectionHead(
 
 Widget _pageHeader(BuildContext context, String title, {Widget? trailing}) {
   if (_ZgEmbed.of(context)) {
-    if (trailing == null) return const SizedBox.shrink();
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Align(alignment: Alignment.centerRight, child: trailing),
-    );
+    final embed = context.dependOnInheritedWidgetOfExactType<_ZgEmbed>()!;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (context.mounted) embed.header.value = trailing;
+    });
+    return const SizedBox.shrink();
   }
   return Padding(
     padding: const EdgeInsets.fromLTRB(4, 6, 12, 6),
@@ -504,7 +504,9 @@ Color _groupColor(String group) => switch (group) {
 /// 资管首页下方「分段卡」里嵌入的明细页：同一个页面组件，嵌入时不画 Scaffold / 返回栏 / 外层滚动，
 /// 只保留顶栏右侧的日期岛和正文，由首页统一滚动。
 class _ZgEmbed extends InheritedWidget {
-  const _ZgEmbed({required super.child});
+  const _ZgEmbed({required this.header, required super.child});
+
+  final ValueNotifier<Widget?> header;
 
   static bool of(BuildContext context) => context.dependOnInheritedWidgetOfExactType<_ZgEmbed>() != null;
 
@@ -1201,6 +1203,7 @@ class _ZgHubState extends State<LighthouseZgHubPage> with TickerProviderStateMix
   /// 下拉刷新时 +1，让嵌入的明细页重建并重新取数。
   int _zgSeq = 0;
   final GlobalKey _boardKey = GlobalKey();
+  final ValueNotifier<Widget?> _zgHeader = ValueNotifier<Widget?>(null);
 
   List<(String, String)> get _zgTabs => [
     if (!_bfForbidden) ('bf', '业财对照'),
@@ -1238,13 +1241,7 @@ class _ZgHubState extends State<LighthouseZgHubPage> with TickerProviderStateMix
   Widget _zgBoard(BuildContext context) {
     final tabs = _zgTabs;
     final current = _currentZgTab;
-    return Container(
-      padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
-      decoration: _glass(context, radius: 20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          DecoratedBox(
+    return DecoratedBox(
             decoration: BoxDecoration(border: Border(bottom: BorderSide(color: _ln(context, _kLine), width: 0.8))),
             child: Row(
               children: [
@@ -1291,12 +1288,7 @@ class _ZgHubState extends State<LighthouseZgHubPage> with TickerProviderStateMix
                   ),
               ],
             ),
-          ),
-          const SizedBox(height: 12),
-          _ZgEmbed(child: KeyedSubtree(key: ValueKey('$current#$_zgSeq'), child: _zgPage(current))),
-        ],
-      ),
-    );
+          );
   }
 
   void _visibility(String module, String title) {
@@ -1365,21 +1357,37 @@ class _ZgHubState extends State<LighthouseZgHubPage> with TickerProviderStateMix
           SafeArea(
             child: RefreshIndicator(
               onRefresh: _refresh,
-              child: ListView(
-                padding: EdgeInsets.fromLTRB(0, 0, 0, dunesAppBottomNavContentPadding(context, fallback: 32)),
-                children: [
-                  if (widget.embedded) const SizedBox(height: 8) else _switchHeader(context),
-                  Padding(
-                    // 与灯塔 Hero 外框、业务总览外框共用 22pt 页面边距。
-                    padding: const EdgeInsets.symmetric(horizontal: 22),
-                    child: allForbidden ? _statusBox(context, '暂无资管板块权限') : _clockCard(context),
-                  ),
-                  if (!allForbidden && _zgTabs.isNotEmpty) ...[
+              child: CustomScrollView(
+                slivers: [
+                  SliverToBoxAdapter(child: Column(children: [
+                    if (widget.embedded) const SizedBox(height: 8) else _switchHeader(context),
+                    Padding(padding: const EdgeInsets.symmetric(horizontal: 22), child: allForbidden ? _statusBox(context, '暂无资管板块权限') : _clockCard(context)),
                     const SizedBox(height: 12),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 22),
-                      child: KeyedSubtree(key: _boardKey, child: _fadeIn(0.15, _zgBoard(context))),
+                  ])),
+                  if (!allForbidden && _zgTabs.isNotEmpty) ...[
+                    SliverPersistentHeader(
+                      pinned: true,
+                      delegate: _ZgPinnedHeader(
+                        child: Container(
+                          key: _boardKey,
+                          margin: const EdgeInsets.symmetric(horizontal: 22),
+                          padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
+                          decoration: BoxDecoration(color: _bg(context, _kBg), borderRadius: const BorderRadius.vertical(top: Radius.circular(20))),
+                          child: Column(children: [
+                            _zgBoard(context),
+                            const SizedBox(height: 8),
+                            SizedBox(height: 34, child: ValueListenableBuilder<Widget?>(
+                              valueListenable: _zgHeader,
+                              builder: (context, header, _) => Align(alignment: Alignment.centerRight, child: header),
+                            )),
+                          ]),
+                        ),
+                      ),
                     ),
+                    SliverToBoxAdapter(child: Padding(
+                      padding: EdgeInsets.fromLTRB(34, 4, 34, dunesAppBottomNavContentPadding(context, fallback: 32)),
+                      child: _ZgEmbed(header: _zgHeader, child: KeyedSubtree(key: ValueKey('$_currentZgTab#$_zgSeq'), child: _zgPage(_currentZgTab))),
+                    )),
                   ],
                 ],
               ),
@@ -2565,6 +2573,11 @@ class _BfLinkedState extends State<LighthouseBfLinkedPage> {
     final only = ok ? (b - f).abs() : null;
     final moonColor = bizBig ? _kPurple : _kFin;
 
+    double? groupSum(String group, double? Function(LhBfRow) value) {
+      final values = s.rows.where((row) => row.group == group).map(value).whereType<double>().toList();
+      return values.isEmpty ? null : values.reduce((a, b) => a + b);
+    }
+
     final stats = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -2581,6 +2594,36 @@ class _BfLinkedState extends State<LighthouseBfLinkedPage> {
         ),
         const SizedBox(height: 3),
         _amount(context, lhBfWan(only), size: 13, color: ok ? (bizBig ? _kDeep : _kFin) : _kInk),
+        if (!s.rowsRestricted && s.rows.isNotEmpty) ...[
+          const SizedBox(height: 10),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+            decoration: BoxDecoration(
+              color: _fg(context, _kPurple).withValues(alpha: .055),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text('分供给方汇总 · 业务 / 财务（万元）', style: _sans(context, size: 9, color: _kInk2)),
+                const SizedBox(height: 4),
+                for (final group in const ['中石油', '中石化', '中油BP'])
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 3),
+                    child: Row(
+                      children: [
+                        Container(width: 5, height: 5, decoration: BoxDecoration(color: _fg(context, _groupColor(group)), shape: BoxShape.circle)),
+                        const SizedBox(width: 5),
+                        Text(group, style: _sans(context, size: 10, color: _kInk)),
+                        const Spacer(),
+                        Flexible(child: Text('${lhBfWan(groupSum(group, (r) => _bizVal(r, p)))} / ${lhBfWan(groupSum(group, (r) => _finVal(r, p)))}', maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: TextAlign.end, style: _sans(context, size: 10, color: _kDeep))),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
       ],
     );
 
@@ -4549,4 +4592,13 @@ class _LedgerPageState extends State<LighthouseLedgerPage> {
       ),
     );
   }
+}
+
+class _ZgPinnedHeader extends SliverPersistentHeaderDelegate {
+  _ZgPinnedHeader({required this.child});
+  final Widget child;
+  @override double get minExtent => 96;
+  @override double get maxExtent => 96;
+  @override Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) => child;
+  @override bool shouldRebuild(covariant _ZgPinnedHeader oldDelegate) => true;
 }

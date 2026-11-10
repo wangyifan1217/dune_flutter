@@ -7,16 +7,18 @@ import 'package:flutter/material.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../auth/auth_session.dart';
 import '../shell/dunes_main_tab_bar.dart';
+import 'lighthouse_discount_strip.dart';
 import 'lighthouse_service.dart';
 import 'lighthouse_theme.dart';
 import 'lighthouse_visibility_sheet.dart';
+
+part 'lighthouse_biz_tier.dart';
 
 // ════════════════════════════════════════════════════════════════════════
 // 灯塔 › 业务（2026-11-06）
 //
 //   灯塔顶部「灯塔 | 资管 | 业务」的第三格：业务平台（资管业务库）的只读视图。
-//     · 上面「业务脉搏」：左链路盘（四圈存量）+ 右环形心电（今日推送）+ 2×2 读数格，点圈 / 格子切到对应分段；
-//       链路口径与 business-go chainScope 一致，流向图、产品列表分段计数、卡片断点三处可以对账；
+//     · 上面「业务脉搏」：四格分段 + 横滑（阶梯 / 跨档进度 / 推送 / 到期），一屏一图，见文末「业务脉搏 · 方案 A」；
 //     · 下面一张卡：下划线分段 + 筛选 + 卡片列表（同灯塔账本卡的样式）；
 //     · 点产品卡：详情页从右滑入（在业务自己的 Navigator 里推，底栏不动），左上返回 / 右滑返回。
 //   数据经 lighthouse-go /api/v1/lighthouse/biz/* 转发 business-go，权限是「谁能看到」里的 biz 板块。
@@ -40,11 +42,18 @@ const _kGrey = Color(0xFF5A5C56);
 const _kGreySoft = Color(0xFFEEEEF1);
 const _kHeroNum = Color(0xFF4A3A7A);
 const _kChainGrey = Color(0xFF9A98A3);
+// 灯塔 Hero 同款（native_lighthouse_page _LhPlum.heroFill / heroEdge / heroPanelEdge）。
+const _kHeroFill = Color(0xFFF7F3FC);
+const _kHeroEdge = Color(0xFFE2D8F0);
+const _kHeroPanelEdge = Color(0xFFEAE6F1);
+const _kHeroMute = Color(0xFF6E6890);
+// 四个视角的颜色，取自灯塔 Hero 六段色：核销紫 / 深紫 / 销售蓝 / 收入暖金。
+const _kLensColors = [Color(0xFF7054C5), Color(0xFF5A458F), Color(0xFF5488DD), Color(0xFFC88E52)];
 
 
 // ───────────── 业务链路口径（与 business-go chainScope 一一对应） ─────────────
-//   以渠道产品为单位逐层嵌套：渠道产品 ⊇ 已连接供给 ⊇ 双端生效 ⊇ 已配结算。
-//   四个互斥分段：已贯通 / 未连接供给 / 未双端生效 / 未配结算，合起来正好是全部渠道产品。
+//   以渠道产品为单位逐层嵌套：渠道产品 ⊇ 已连接供给 ⊇ 双端可售 ⊇ 已配结算。
+//   四个互斥分段：已贯通 / 未连接供给 / 未双端可售 / 未配结算，合起来正好是全部渠道产品。
 const _kChainThrough = 'through';
 const _kChainLeakKeys = ['unconnected', 'half', 'unsettled'];
 
@@ -52,7 +61,7 @@ const _kChainLeakKeys = ['unconnected', 'half', 'unsettled'];
 (String, Color, Color) _chainSeg(String key) => switch (key) {
   _kChainThrough => ('已贯通', _kHeroNum, _kLavender),
   'unconnected' => ('未连接供给', _kChainGrey, _kGreySoft),
-  'half' => ('未双端生效', _kCoral, _kCoralSoft),
+  'half' => ('未双端可售', _kCoral, _kCoralSoft),
   'unsettled' => ('未配结算', _kCopper, _kCopperSoft),
   _ => ('全部', _kDeep, _kLavender),
 };
@@ -151,6 +160,74 @@ String _subjectDisplay(Object? v) {
   return name.startsWith(prefix) ? name.substring(prefix.length) : name;
 }
 
+// ───────────── 主体：谁的主体、没关联时怎么补 ─────────────
+//   「主体」在不同页面指的是不同的公司，所以一律写清是谁的：
+//     · 供应商主体 = 供应商档案关联的合作主体（产品卡、供应商卡）；
+//     · 渠道主体   = 渠道档案关联的合作主体（渠道卡、渠道产品的结算页），对应结算规则里的「对方」；
+//     · 我方签约   = 渠道档案 entity_name / 规则 our_entity（广州亿力、上海卓悦…），是我们自己的公司。
+//   档案没关联时不当成断点标红：结算明细里本来就有对方公司，后端按名称去主体档案里找同名主体给出建议。
+
+String _legalLabel(String kind) => kind == 'channel' ? '渠道主体' : '供应商主体';
+
+/// 结算对方里档案已有同名主体的那几家（后端 counterparties，已按规则条数倒序）。
+List<Map<String, dynamic>> _suggestedSubjects(Object? counterparties) =>
+    _list(counterparties).where((c) => _s(c['subjectId']).isNotEmpty).toList();
+
+/// 未关联主体时链格里写什么：有同名档案 → 「待补 · 可关联」，否则「待补」。
+String _unlinkedValue(Object? counterparties) => _suggestedSubjects(counterparties).isNotEmpty ? '待补 · 可关联' : '待补';
+
+/// 未关联主体时的一句话：直接给出建议关联谁，没有建议时说清影响。
+String _unlinkedHint(String legal, Object? counterparties) {
+  final all = _list(counterparties);
+  final sug = _suggestedSubjects(counterparties);
+  if (sug.isNotEmpty) {
+    final first = _subjectDisplay(sug.first['subjectName']);
+    return '$legal待补：结算对方「$first」${sug.length > 1 ? '等 ${sug.length} 家' : ''}已有主体档案，可直接关联';
+  }
+  if (all.isNotEmpty) return '$legal待补：结算对方「${_s(all.first['name'])}」还没有主体档案';
+  return '$legal待补：关联后才能核对结算对方是不是同一家公司';
+}
+
+/// 结算对方汇总：每家对方公司 · 规则条数 · 档案里的同名主体（可点进主体页）。
+Widget _counterpartyList(BuildContext context, Object? counterparties) {
+  final all = _list(counterparties);
+  if (all.isEmpty) return const SizedBox.shrink();
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      for (final c in all)
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: _s(c['subjectId']).isEmpty ? null : () => _openBizSubject(context, _s(c['subjectId']), _s(c['subjectName'])),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 5),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(_s(c['name']), style: _sans(context, size: 12, weight: FontWeight.w600)),
+                      const SizedBox(height: 2),
+                      Text(
+                        _s(c['subjectId']).isEmpty ? '主体档案里没有同名主体，需先在资管建档' : '档案已有：${_subjectDisplay(c['subjectName'])} · 待确认',
+                        style: _sans(context, size: 10.5, color: _s(c['subjectId']).isEmpty ? _kMute : _kDeep),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text('${_count(_i(c['rules']))} 条规则', style: LhTypography.mono(context: context, size: 10.5, color: _fg(context, _kMute))),
+                if (_s(c['subjectId']).isNotEmpty) Icon(Icons.chevron_right_rounded, size: 15, color: _fg(context, _kDeep)),
+              ],
+            ),
+          ),
+        ),
+    ],
+  );
+}
+
 /// 比例：资管存小数或百分数都有，只做去尾零展示，不换算。
 String _plain(Object? v) {
   final raw = _s(v);
@@ -195,7 +272,7 @@ Widget _tag(BuildContext context, String text, _Tone tone) {
 
 /// 产品配置提交状态，对齐资管 ProductSubmitStatus。
 (String, _Tone) _submitStatus(String v) => switch (v.toUpperCase()) {
-  'EFFECTIVE' => ('生效', _Tone.purple),
+  'EFFECTIVE' => ('已审核', _Tone.purple),
   'PENDING_AUDIT' => ('待审核', _Tone.copper),
   '' => ('—', _Tone.grey),
   _ => ('未配置', _Tone.grey),
@@ -206,7 +283,7 @@ String _productStatus(String side, String v) {
   if (side == 'supplier') return v == '1' ? '启用' : (v == '0' ? '停用' : (v.isEmpty ? '—' : v));
   return switch (v) {
     'active' => '启用',
-    'pending' => '待生效',
+    'pending' => '待启用',
     'inactive' || 'disabled' => '停用',
     '' => '—',
     _ => v,
@@ -267,6 +344,7 @@ class LighthouseBizHost extends StatelessWidget {
     required this.observer,
     required this.service,
     required this.session,
+    this.onOpenLighthouseSupply,
   });
 
   final GlobalKey<NavigatorState> navigatorKey;
@@ -274,9 +352,14 @@ class LighthouseBizHost extends StatelessWidget {
   final LighthouseService service;
   final AuthSession session;
 
+  /// 业务 → 灯塔：打开灯塔供给方（行名 + 中石油 / 中石化）。宿主不给就不出现跳转入口。
+  final void Function(String province, String group)? onOpenLighthouseSupply;
+
   @override
   Widget build(BuildContext context) {
-    return Navigator(
+    return LhBizLinks(
+      openSupply: onOpenLighthouseSupply,
+      child: Navigator(
       key: navigatorKey,
       observers: [observer],
       onGenerateRoute: (settings) {
@@ -296,10 +379,16 @@ class LighthouseBizHost extends StatelessWidget {
             ),
           );
         }
+        if (settings.name == '/tier') {
+          return CupertinoPageRoute<void>(
+            settings: settings,
+            builder: (_) => LighthouseBizTierPage(service: service, ruleId: _s(args['ruleId'])),
+          );
+        }
         if (settings.name == '/settlement') {
           return CupertinoPageRoute<void>(
             settings: settings,
-            builder: (_) => LighthouseBizSettlementPage(service: service, side: _s(args['side']), id: _s(args['id']), title: _s(args['name'])),
+            builder: (_) => LighthouseBizProductPage(service: service, side: _s(args['side']), id: _s(args['id']), title: _s(args['name'])),
           );
         }
         if (settings.name == '/subject') {
@@ -327,6 +416,7 @@ class LighthouseBizHost extends StatelessWidget {
           pageBuilder: (_, __, ___) => LighthouseBizHubPage(service: service, session: session),
         );
       },
+      ),
     );
   }
 }
@@ -352,14 +442,15 @@ class _BizHubState extends State<LighthouseBizHubPage> {
   String? _overviewError;
 
   _BizTab _tab = _BizTab.product;
-  String _productSide = 'channel';
+  String _productSide = 'supplier';
   String _partnerKind = 'channel';
   String _subjectFilter = '';
   String _settleSide = 'channel';
   String _settleConfigured = '';
+  final Map<_BizTab, String> _priceTypes = {_BizTab.product: 'tiered'};
+  String get _priceType => _priceTypes[_tab] ?? '';
   String _chain = '';
   Map<String, dynamic>? _chainCounts;
-  bool _showChainDef = false;
   String _proposalKind = '';
   String _linkView = 'push';
   String _platform = '';
@@ -410,14 +501,15 @@ class _BizHubState extends State<LighthouseBizHubPage> {
     return switch (_tab) {
       _BizTab.product => s.fetchBizProducts(
         side: _productSide,
+        priceType: _priceType,
         keyword: _keyword,
         syncSource: _platform,
         chain: _productSide == 'channel' ? _chain : '',
         page: page,
         size: _pageSize,
       ),
-      _BizTab.partner => s.fetchBizPartners(kind: _partnerKind, keyword: _keyword, subject: _partnerKind != 'promoter' ? _subjectFilter : '', page: page, size: _pageSize),
-      _BizTab.settlement => s.fetchBizSettlements(side: _settleSide, configured: _settleConfigured, keyword: _keyword, page: page, size: _pageSize),
+      _BizTab.partner => s.fetchBizPartners(kind: _partnerKind, priceType: _partnerKind == 'promoter' ? '' : _priceType, keyword: _keyword, subject: _partnerKind != 'promoter' ? _subjectFilter : '', page: page, size: _pageSize),
+      _BizTab.settlement => s.fetchBizSettlements(side: _settleSide, priceType: _priceType, configured: _settleConfigured, keyword: _keyword, page: page, size: _pageSize),
       _BizTab.proposal => s.fetchBizProposals(kind: _proposalKind, page: page, size: _pageSize),
       _BizTab.link => s.fetchBizIntegration(view: _linkView),
     };
@@ -519,9 +611,15 @@ class _BizHubState extends State<LighthouseBizHubPage> {
   Widget _buildOverviewCard(BuildContext context) {
     final o = _overview;
     final synced = _s(o?['generatedAt']);
+    // 2026-11-10 · 灯塔风格：整页唯一一块有色面 = 这张 Hero（雾紫底 + 轻紫描边），
+    // 里面白色主图区 + 底部三组指标格，与灯塔「本期合计」Hero 同一套层级。
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
-      decoration: _cardDeco(context, radius: 20),
+      decoration: BoxDecoration(
+        color: _bg(context, _kHeroFill),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: _ln(context, _kHeroEdge), width: 1),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -531,7 +629,8 @@ class _BizHubState extends State<LighthouseBizHubPage> {
                 width: 28,
                 height: 28,
                 decoration: BoxDecoration(
-                  gradient: LinearGradient(colors: [_bg(context, const Color(0xFFEEE9FE)), _bg(context, const Color(0xFFE2F1FD))]),
+                  color: _bg(context, Colors.white),
+                  border: Border.all(color: _ln(context, _kHeroPanelEdge), width: 0.8),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Icon(Icons.monitor_heart_outlined, size: 16, color: _fg(context, _kDeep)),
@@ -541,16 +640,32 @@ class _BizHubState extends State<LighthouseBizHubPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('业务脉搏', style: _sans(context, size: 13.5, weight: FontWeight.w700)),
+                    Text('业务脉搏', style: _sans(context, size: 13.5, weight: FontWeight.w700, color: _kHeroNum)),
                     const SizedBox(height: 2),
-                    Text('链路存量 · 今日推送节奏', style: _sans(context, size: 10.5, color: _kInk2)),
+                    Text(
+                      '阶梯 · 推送 · 结算',
+                      style: LhTypography.mono(context: context, size: 10, weight: FontWeight.w500, color: _fg(context, _kHeroMute), letterSpacing: 1.2),
+                    ),
                   ],
                 ),
               ),
               if (synced.length >= 16) ...[
-                _LiveDot(color: _fg(context, _kPurple)),
-                const SizedBox(width: 5),
-                Text(synced.substring(11, 16), style: LhTypography.mono(context: context, size: 10.5, color: _fg(context, _kInk2))),
+                Container(
+                  padding: const EdgeInsets.fromLTRB(8, 3, 9, 3),
+                  decoration: BoxDecoration(
+                    color: _bg(context, Colors.white),
+                    border: Border.all(color: _ln(context, _kHeroPanelEdge), width: 0.8),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _LiveDot(color: _fg(context, _kPurple)),
+                      const SizedBox(width: 5),
+                      Text('同步于 ${synced.substring(11, 16)}', style: LhTypography.mono(context: context, size: 10.5, color: _fg(context, _kDeep))),
+                    ],
+                  ),
+                ),
                 const SizedBox(width: 8),
               ],
               LhVisibilityChip(
@@ -570,409 +685,16 @@ class _BizHubState extends State<LighthouseBizHubPage> {
           if (_overviewError != null && o == null)
             _inlineError(context, _overviewError!, _loadOverview)
           else
-            // 数据没到也先出表盘骨架（刻度、空轨道、心电基线、读数格），到了再把圆弧和心电画出来。
-            ..._pulseBody(context, o ?? const <String, dynamic>{}, loading: o == null),
+            // 数据没到也先出分段和骨架，到了再画图。
+            _BizPulseHero(
+              service: widget.service,
+              overview: o ?? const <String, dynamic>{},
+              loading: o == null,
+              onOpenPush: _openPushLog,
+              onOpenExpiring: _openExpiringSettlements,
+            ),
         ],
       ),
-    );
-  }
-
-  /// 链路分层计数 [渠道产品, 已连接供给, 双端生效, 已配结算]；缺任何一层 → null。
-  List<int>? _chainValues(Map<String, dynamic> o) {
-    final v = [_i(o['chainTotal']), _i(o['chainConnected']), _i(o['chainUsable']), _i(o['chainSettled'])];
-    if (v.any((e) => e == null)) return null;
-    return v.cast<int>();
-  }
-
-  /// 比上一层缩得最多的那一圈（1–3）；用于蜜桃色高亮和底部结论。
-  int _chainDropIndex(List<int> v) {
-    var drop = 1;
-    for (var i = 2; i < 4; i++) {
-      if (v[i - 1] - v[i] > v[drop - 1] - v[drop]) drop = i;
-    }
-    return drop;
-  }
-
-  List<Widget> _pulseBody(BuildContext context, Map<String, dynamic> o, {bool loading = false}) {
-    final v = _chainValues(o);
-    final pulseReady = o['pulse'] is Map;
-    final drop = v == null || v[0] == 0 ? -1 : _chainDropIndex(v);
-    final pulse = _map(o['pulse']);
-    final pushes = [
-      for (final e in _list(pulse['pushes'])) (_i(e['minute']) ?? 0, _i(e['count']) ?? 0, _i(e['failed']) ?? 0),
-    ];
-    final returns = [
-      for (final e in _list(pulse['returns'])) (_i(e['minute']) ?? 0, e['abnormal'] == true),
-    ];
-    final pushTotal = _i(o['todayPushes']) ?? pushes.fold<int>(0, (a, e) => a + e.$2);
-    final pushFailed = _i(o['todayPushFailed']) ?? 0;
-    final retTotal = _i(o['todayReturnBatches']) ?? returns.length;
-    final retAbnormal = _i(o['todayReturnAbnormal']) ?? 0;
-    final last = _s(pulse['lastPushAt']);
-    return [
-      LayoutBuilder(
-        builder: (context, box) {
-          // 与资管时钟同一把尺：手机约 190，宽屏 240。
-          final d = math.min((box.maxWidth - 16) / 2, box.maxWidth >= 720 ? 240.0 : 190.0);
-          return Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
-                  children: [
-                    _dialKicker(context, '链路 · 存量'),
-                    const SizedBox(height: 6),
-                    SizedBox(
-                      width: d,
-                      height: d,
-                      child: loading || (v != null && v[0] > 0)
-                          ? _ChainRingDial(values: loading ? null : v, drop: drop, onPick: _openChain)
-                          : Center(child: Text(v == null ? '链路计数暂不可用' : '还没有渠道产品', style: _sans(context, size: 10.5, color: _kMute))),
-                    ),
-                    const SizedBox(height: 8),
-                    if (loading || (v != null && v[0] > 0)) _ringLegend(context, loading ? null : v, drop),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  children: [
-                    _dialKicker(context, '今日 · 24H'),
-                    const SizedBox(height: 6),
-                    SizedBox(
-                      width: d,
-                      height: d,
-                      child: _PulseDial(pushes: pushes, returns: returns, total: pushTotal, onTap: () => _switchTab(_BizTab.link)),
-                    ),
-                    const SizedBox(height: 8),
-                    _todayRow(context, '推送', loading ? '—' : '${_count(pushTotal)} 次', loading ? '' : '失败 ${_count(pushFailed)}', pushFailed > 0),
-                    _todayRow(context, '结算回传', loading ? '—' : '${_count(retTotal)} 批', loading ? '' : '异常 ${_count(retAbnormal)}', retAbnormal > 0),
-                    _todayRow(context, '最近一次', last.length >= 16 ? last.substring(11, 16) : '—', '', false),
-                    if (!loading && !pulseReady)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 2),
-                        child: Text('心电数据未就绪（服务端未返回分时数据）', style: _sans(context, size: 9.5, color: _kMute)),
-                      ),
-                  ],
-                ),
-              ),
-            ],
-          );
-        },
-      ),
-      const SizedBox(height: 14),
-      _vitalBoard(context, o, v, loading: loading),
-      const SizedBox(height: 10),
-      _flowInsight(context, o, v, drop),
-    ];
-  }
-
-  Widget _dialKicker(BuildContext context, String text) =>
-      Text(text, style: _sans(context, size: 10, color: _kInk2, height: 1.2).copyWith(letterSpacing: 1.2));
-
-  /// 链路盘图例：四层的数量与占渠道产品的比例；流失最多的一层用蜜桃色。点行进入对应产品。
-  Widget _ringLegend(BuildContext context, List<int>? values, int drop) {
-    final v = values ?? const [0, 0, 0, 0];
-    final ready = values != null;
-    return Column(
-      children: [
-        for (var i = 0; i < 4; i++)
-          Semantics(
-            button: true,
-            label: ready ? '${_kRingNames[i]} ${v[i]}，占渠道产品 ${_pct(v[i], v[0])}' : '${_kRingNames[i]} 加载中',
-            excludeSemantics: true,
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: () => _openChain(_kRingKeys[i]),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 7,
-                      height: 7,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: LinearGradient(colors: [for (final c in (i == drop ? _kRingDropGrad : _kRingGrad[i])) _fg(context, c)]),
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Text(
-                        _kRingNames[i],
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: _sans(context, size: 10.5, color: i == drop ? _kCoral : _kInk2),
-                      ),
-                    ),
-                    Text(ready ? _count(v[i]) : '—', style: LhTypography.mono(context: context, size: 10.5, weight: FontWeight.w600, color: _fg(context, _kInk))),
-                    SizedBox(
-                      width: 34,
-                      child: Text(
-                        ready ? _pct(v[i], v[0]) : '',
-                        textAlign: TextAlign.right,
-                        style: LhTypography.mono(context: context, size: 9.5, color: _fg(context, i == drop ? _kCoral : _kMute)),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-      ],
-    );
-  }
-
-  Widget _todayRow(BuildContext context, String label, String value, String extra, bool alert) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
-      child: Row(
-        children: [
-          Text(label, style: _sans(context, size: 10.5, color: _kInk2)),
-          const Spacer(),
-          Text(value, style: LhTypography.mono(context: context, size: 10.5, weight: FontWeight.w600, color: _fg(context, _kInk))),
-          if (extra.isNotEmpty) ...[
-            Text(' · ', style: _sans(context, size: 10.5, color: _kMute)),
-            Text(extra, style: LhTypography.mono(context: context, size: 10.5, weight: FontWeight.w600, color: _fg(context, alert ? _kCoral : _kInk))),
-          ],
-        ],
-      ),
-    );
-  }
-
-  /// 2×2 读数格，样式同资管时钟的指标格：图标 + 名称、数值 + 小环、说明。
-  Widget _vitalBoard(BuildContext context, Map<String, dynamic> o, List<int>? v, {bool loading = false}) {
-    final sLinked = _i(o['suppliersWithSubject']) ?? 0;
-    final sTotal = _i(o['supplierTotal']) ?? 0;
-    final cLinked = _i(o['channelsWithSubject']) ?? 0;
-    final cTotal = _i(o['channelTotal']) ?? 0;
-    final settled = _i(o['channelProductsWithSettlement']) ?? 0;
-    final total = v?[0] ?? _i(o['channelProducts']) ?? 0;
-    final connected = v?[1] ?? 0;
-    final usable = v?[2] ?? 0;
-    double? ratio(int a, int b) => b <= 0 ? null : (a / b).clamp(0.0, 1.0).toDouble();
-    // 加载中：格子照常画（图标、名称、空环），数值写「—」。
-    String val(String text) => loading ? '—' : text;
-    String sub(String text) => loading ? '' : text;
-    double? prog(double? x) => loading ? null : x;
-    final cells = [
-      _vitalCell(
-        context,
-        title: '主体关联',
-        icon: Icons.apartment_rounded,
-        tone: _kPurple,
-        value: val('${_count(sLinked)} / ${_count(sTotal)}'),
-        sub: sub('供应商 · ${_pct(sLinked, sTotal)}'),
-        progress: prog(ratio(sLinked, sTotal)),
-        onTap: () => _openPartners('supplier', 'linked'),
-      ),
-      _vitalCell(
-        context,
-        title: '渠道关联',
-        icon: Icons.hub_outlined,
-        tone: const Color(0xFF4F7FC8),
-        value: val('${_count(cLinked)} / ${_count(cTotal)}'),
-        sub: sub(cLinked == 0 ? '断点 · 未关联法人主体' : '渠道 · ${_pct(cLinked, cTotal)}'),
-        progress: prog(ratio(cLinked, cTotal)),
-        alert: !loading && cLinked == 0 && cTotal > 0,
-        onTap: () => _openPartners('channel', ''),
-      ),
-      _vitalCell(
-        context,
-        title: '结算覆盖',
-        icon: Icons.receipt_long_outlined,
-        tone: const Color(0xFF4F7FC8),
-        value: val(_pct(settled, total)),
-        sub: sub('${_count(settled)} 个渠道产品'),
-        progress: prog(ratio(settled, total)),
-        onTap: _openSettlements,
-      ),
-      _vitalCell(
-        context,
-        title: '双端可用率',
-        icon: Icons.sync_alt_rounded,
-        tone: const Color(0xFF9A5CB8),
-        value: val(_pct(usable, connected)),
-        sub: sub('${_count(usable)} / ${_count(connected)} 已连接'),
-        progress: prog(ratio(usable, connected)),
-        onTap: () => _openChain('usable'),
-      ),
-    ];
-    final line = _ln(context, _kLine);
-    return Container(
-      decoration: BoxDecoration(
-        color: _bg(context, Colors.white).withValues(alpha: 0.6),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: line, width: 0.8),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Column(
-        children: [
-          for (var r = 0; r < 2; r++) ...[
-            if (r > 0) Divider(height: 1, thickness: 0.8, color: line),
-            IntrinsicHeight(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Expanded(child: cells[r * 2]),
-                  Container(width: 0.8, color: line),
-                  Expanded(child: cells[r * 2 + 1]),
-                ],
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _vitalCell(
-    BuildContext context, {
-    required String title,
-    required IconData icon,
-    required Color tone,
-    required String value,
-    required String sub,
-    required VoidCallback onTap,
-    double? progress,
-    bool alert = false,
-  }) {
-    final color = alert ? _kCoral : tone;
-    return Semantics(
-      button: true,
-      label: '$title $value，$sub',
-      excludeSemantics: true,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.fromLTRB(10, 7, 8, 7),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [_fg(context, color).withValues(alpha: 0.07), _bg(context, Colors.white).withValues(alpha: 0.02)],
-            ),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    width: 17,
-                    height: 17,
-                    decoration: BoxDecoration(color: _fg(context, color).withValues(alpha: 0.16), shape: BoxShape.circle),
-                    child: Icon(icon, size: 10, color: _fg(context, color)),
-                  ),
-                  const SizedBox(width: 5),
-                  Expanded(child: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: _sans(context, size: 10, color: _kInk2))),
-                  Icon(Icons.chevron_right_rounded, size: 13, color: _fg(context, _kMute)),
-                ],
-              ),
-              const SizedBox(height: 2),
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      value,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: LhTypography.mono(context: context, size: 14, weight: FontWeight.w700, color: _fg(context, alert ? _kCoral : const Color(0xFF2B2147))),
-                    ),
-                  ),
-                  SizedBox(
-                    width: 21,
-                    height: 21,
-                    child: CustomPaint(painter: _MiniRingPainter(value: progress, color: _fg(context, color))),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 1),
-              Text(
-                sub,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: LhTypography.mono(context: context, size: 9.5, color: _fg(context, alert ? _kCoral : _kInk2)),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  /// 底部结论：最大流失 + 主体层断点；点结论进入流失的那段产品，「口径」可展开。
-  Widget _flowInsight(BuildContext context, Map<String, dynamic> o, List<int>? v, int drop) {
-    final spans = <InlineSpan>[];
-    if (v != null && drop > 0) {
-      final lost = v[drop - 1] - v[drop];
-      spans.addAll([
-        // 缺口 = 上一圈里没走到这一圈的产品，用缺口本身的名字（未连接供给 / 未双端生效 / 未配结算），
-        // 比例的分母写明是哪一圈，避免读成「已连接供给流失了」。
-        const TextSpan(text: '最大缺口：'),
-        TextSpan(text: _chainSeg(_kChainLeakKeys[drop - 1]).$1, style: _sans(context, size: 10.5, weight: FontWeight.w600, color: _kCoral)),
-        const TextSpan(text: ' '),
-        TextSpan(text: _count(lost), style: LhTypography.mono(context: context, size: 10.5, weight: FontWeight.w600, color: _fg(context, _kInk))),
-        TextSpan(text: '（占${_kRingNames[drop - 1]} ${_pct(lost, v[drop - 1])}）'),
-      ]);
-    }
-    if ((_i(o['channelsWithSubject']) ?? 0) == 0 && (_i(o['channelTotal']) ?? 0) > 0) {
-      spans.addAll([
-        TextSpan(text: spans.isEmpty ? '' : ' · '),
-        const TextSpan(text: '渠道尚未关联主体'),
-      ]);
-    }
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: drop > 0 ? () => _openChain(_kChainLeakKeys[drop - 1]) : null,
-                child: Text.rich(TextSpan(children: spans), style: _sans(context, size: 10.5, color: _kMute, height: 1.5)),
-              ),
-            ),
-            const SizedBox(width: 8),
-            GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: () => setState(() => _showChainDef = !_showChainDef),
-              child: Padding(
-                padding: const EdgeInsets.only(left: 4, bottom: 2),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.info_outline_rounded, size: 12, color: _fg(context, _kMute)),
-                    const SizedBox(width: 2),
-                    Text('口径', style: _sans(context, size: 10.5, color: _kMute)),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-        if (_showChainDef) ...[
-          const SizedBox(height: 6),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
-            decoration: BoxDecoration(color: _bg(context, _kPanel), borderRadius: BorderRadius.circular(10)),
-            child: Text(
-              '链路盘以未删除的渠道产品为单位，四圈逐层嵌套：\n'
-              '已连接供给：至少一条货源指向未删除的供应商产品；\n'
-              '双端生效：渠道产品审核生效且启用，并且至少一条货源的供应商产品审核生效且启用；\n'
-              '已配结算：在双端生效之上，存在未删除的渠道侧结算明细。\n'
-              '「结算覆盖」统计全部渠道产品（含未双端生效的），所以大于最内圈；「双端可用率」= 双端生效 ÷ 已连接供给。\n'
-              '右盘：今日每 10 分钟一档的推送，跳得越高条数越多，失败向内跳；内圈菱形是结算回传批次。',
-              style: _sans(context, size: 10.5, color: _kInk2, height: 1.6),
-            ),
-          ),
-        ],
-      ],
     );
   }
 
@@ -982,34 +704,23 @@ class _BizHubState extends State<LighthouseBizHubPage> {
     _searchCtl.clear();
   }
 
-  /// 从流向图进入产品列表：[chain] 为空 = 全部渠道产品。清掉平台筛选，列表数字才和流向图同口径。
-  void _openChain(String chain) {
-    setState(() {
-      _tab = _BizTab.product;
-      _productSide = 'channel';
-      _chain = chain;
-      _platform = '';
-      _resetSearch();
-    });
-    unawaited(_loadList());
-  }
-
-  void _openPartners(String kind, String subject) {
-    setState(() {
-      _tab = _BizTab.partner;
-      _partnerKind = kind;
-      _subjectFilter = kind == 'supplier' ? subject : '';
-      _resetSearch();
-    });
-    unawaited(_loadList());
-  }
-
-  /// 总览「结算覆盖」是已配规则的产品数，进入时默认筛已配置，列表总数与之对得上。
-  void _openSettlements() {
+  /// 脉搏「到期」页 → 结算列表「30 天内到期」，与点阵同口径。
+  void _openExpiringSettlements() {
     setState(() {
       _tab = _BizTab.settlement;
       _settleSide = 'channel';
-      _settleConfigured = 'configured';
+      _settleConfigured = 'expiring';
+      _priceTypes.remove(_BizTab.settlement);
+      _resetSearch();
+    });
+    unawaited(_loadList());
+  }
+
+  /// 脉搏「推送」页 → 对接 › 推送日志。
+  void _openPushLog() {
+    setState(() {
+      _tab = _BizTab.link;
+      _linkView = 'push';
       _resetSearch();
     });
     unawaited(_loadList());
@@ -1027,6 +738,10 @@ class _BizHubState extends State<LighthouseBizHubPage> {
           _tabBar(context),
           const SizedBox(height: 10),
           _filterRow(context),
+          if (_tab == _BizTab.product || _tab == _BizTab.settlement || (_tab == _BizTab.partner && _partnerKind != 'promoter')) ...[
+            const SizedBox(height: 8),
+            _priceFilter(context),
+          ],
           if (_tab == _BizTab.product && _productSide == 'channel') ...[
             const SizedBox(height: 10),
             _chainFilter(context),
@@ -1068,21 +783,35 @@ class _BizHubState extends State<LighthouseBizHubPage> {
   }
 
   Widget _tabBar(BuildContext context) {
-    const tabs = [(_BizTab.product, '产品'), (_BizTab.partner, '合作主体'), (_BizTab.settlement, '结算'), (_BizTab.proposal, '提案落地'), (_BizTab.link, '对接')];
+    const tabs = [(_BizTab.product, 'supplier', '供应商产品'), (_BizTab.product, 'channel', '渠道产品与结算'), (_BizTab.partner, '', '合作主体'), (_BizTab.proposal, '', '提案落地'), (_BizTab.link, '', '对接')];
+    bool selected(_BizTab tab, String side) => tab == _BizTab.product
+        ? (_tab == _BizTab.product && _productSide == side || _tab == _BizTab.settlement && _settleSide == side)
+        : _tab == tab;
     return DecoratedBox(
       decoration: BoxDecoration(border: Border(bottom: BorderSide(color: _ln(context, _kLine), width: 0.8))),
       child: Row(
         children: [
-          for (final (tab, label) in tabs)
+          for (final (tab, side, label) in tabs)
             Expanded(
               child: Semantics(
                 button: true,
-                selected: _tab == tab,
+                selected: selected(tab, side),
                 label: label,
                 excludeSemantics: true,
                 child: GestureDetector(
                   behavior: HitTestBehavior.opaque,
-                  onTap: () => _switchTab(tab),
+                  onTap: () {
+                    if (tab != _BizTab.product) { _switchTab(tab); return; }
+                    if (_tab == tab && _productSide == side) return;
+                    setState(() {
+                      _tab = tab;
+                      _productSide = side;
+                      _chain = '';
+                      _chainCounts = null;
+                      _resetSearch();
+                    });
+                    unawaited(_loadList());
+                  },
                   child: SizedBox(
                     height: 44,
                     child: Column(
@@ -1090,17 +819,19 @@ class _BizHubState extends State<LighthouseBizHubPage> {
                       children: [
                         Text(
                           label,
+                          maxLines: 2,
+                          textAlign: TextAlign.center,
                           style: _sans(
                             context,
-                            size: 13,
-                            weight: _tab == tab ? FontWeight.w700 : FontWeight.w500,
-                            color: _tab == tab ? _kInk : _kMute,
+                            size: MediaQuery.sizeOf(context).width < 600 ? 11.5 : 13,
+                            weight: selected(tab, side) ? FontWeight.w700 : FontWeight.w500,
+                            color: selected(tab, side) ? _kInk : _kMute,
                           ),
                         ),
                         const SizedBox(height: 7),
                         AnimatedContainer(
                           duration: const Duration(milliseconds: 200),
-                          width: _tab == tab ? 20 : 0,
+                          width: selected(tab, side) ? 20 : 0,
                           height: 2.5,
                           decoration: BoxDecoration(color: _fg(context, _kPurple), borderRadius: BorderRadius.circular(2)),
                         ),
@@ -1148,6 +879,23 @@ class _BizHubState extends State<LighthouseBizHubPage> {
     );
   }
 
+  Widget _priceFilter(BuildContext context) => SingleChildScrollView(
+    scrollDirection: Axis.horizontal,
+    child: Row(children: [
+      for (final (value, label) in const [('', '全部价格'), ('tiered', '阶梯价格'), ('fixed', '固定价格')]) ...[
+        if (value.isNotEmpty) const SizedBox(width: 6),
+        _chip(context, label, _priceType == value, () {
+          if (_priceType == value) return;
+          setState(() {
+            _priceTypes[_tab] = value;
+            if (_tab == _BizTab.product) _chainCounts = null;
+          });
+          unawaited(_loadList());
+        }),
+      ],
+    ]),
+  );
+
   Widget _filterRow(BuildContext context) {
     void pick(VoidCallback change) {
       setState(change);
@@ -1157,10 +905,10 @@ class _BizHubState extends State<LighthouseBizHubPage> {
     final chips = <Widget>[
       ...switch (_tab) {
         _BizTab.product => [
-          _chip(context, '渠道产品', _productSide == 'channel', () => pick(() => _productSide = 'channel')),
-          _chip(context, '供应商产品', _productSide == 'supplier', () => pick(() => _productSide = 'supplier')),
-          if (_platform.isNotEmpty)
-            _chip(context, _platformLabel(), true, () => pick(() => _platform = ''), trailing: Icons.close_rounded),
+          _chip(context, '全部平台', _platform.isEmpty, () => pick(() { _platform = ''; _chainCounts = null; })),
+          for (final p in _list(_overview?['platforms']))
+            if (_s(p['code']).isNotEmpty)
+              _chip(context, _s(p['name']).isEmpty ? _s(p['code']) : _s(p['name']), _platform == _s(p['code']), () => pick(() { _platform = _s(p['code']); _chainCounts = null; })),
         ],
         _BizTab.partner => [
           _chip(context, '渠道', _partnerKind == 'channel', () => pick(() => _partnerKind = 'channel')),
@@ -1198,28 +946,6 @@ class _BizHubState extends State<LighthouseBizHubPage> {
             ),
           ),
         ),
-        if (_tab == _BizTab.product) ...[
-          const SizedBox(width: 6),
-          Semantics(
-            button: true,
-            label: '按业务平台筛选',
-            excludeSemantics: true,
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: _pickPlatform,
-              child: Container(
-                width: 32,
-                height: 32,
-                decoration: BoxDecoration(
-                  color: _bg(context, _platform.isNotEmpty ? _kLavender : Colors.white),
-                  shape: BoxShape.circle,
-                  border: Border.all(color: _ln(context, _platform.isNotEmpty ? const Color(0xFFC9BCF3) : _kEdge), width: 0.9),
-                ),
-                child: Icon(Icons.tune_rounded, size: 16, color: _fg(context, _kDeep)),
-              ),
-            ),
-          ),
-        ],
         if (canSearch) ...[
           const SizedBox(width: 6),
           Semantics(
@@ -1276,47 +1002,6 @@ class _BizHubState extends State<LighthouseBizHubPage> {
         unawaited(_loadList());
       },
     );
-  }
-
-  String _platformLabel() {
-    if (_platform.isEmpty) return '业务平台';
-    for (final p in _list(_overview?['platforms'])) {
-      if (_s(p['code']) == _platform) return _s(p['name']).isEmpty ? _platform : _s(p['name']);
-    }
-    return _platform;
-  }
-
-  Future<void> _pickPlatform() async {
-    final platforms = _list(_overview?['platforms']);
-    final picked = await showModalBottomSheet<String>(
-      context: context,
-      useRootNavigator: true,
-      backgroundColor: _bg(context, Colors.white),
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(18))),
-      builder: (ctx) => SafeArea(
-        child: ListView(
-          shrinkWrap: true,
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 6, 20, 8),
-              child: Text('业务平台', style: _sans(ctx, size: 15, weight: FontWeight.w700)),
-            ),
-            for (final p in [<String, dynamic>{'code': '', 'name': '全部业务平台'}, ...platforms])
-              ListTile(
-                dense: true,
-                title: Text(_s(p['name']).isEmpty ? _s(p['code']) : _s(p['name']), style: _sans(ctx, size: 14)),
-                subtitle: _s(p['code']).isEmpty ? null : Text(_s(p['code']), style: _sans(ctx, size: 11, color: _kMute)),
-                trailing: _s(p['code']) == _platform ? Icon(Icons.check_rounded, color: _fg(ctx, _kPurple), size: 18) : null,
-                onTap: () => Navigator.of(ctx).pop(_s(p['code'])),
-              ),
-          ],
-        ),
-      ),
-    );
-    if (picked == null || picked == _platform || !mounted) return;
-    setState(() => _platform = picked);
-    unawaited(_loadList());
   }
 
   // ───────────── 列表 ─────────────
@@ -1392,8 +1077,8 @@ class _BizHubState extends State<LighthouseBizHubPage> {
 
   // ───────────── 产品 · 链路筛选 ─────────────
 
-  /// 与链路盘四圈一一对应的累积筛选：全部 / 已连接 / 双端生效 / 已配结算。
-  /// 从底部结论进入的「缺口」分段（未连接供给 / 未双端生效 / 未配结算）以一个可关闭的标签显示。
+  /// 与链路盘四圈一一对应的累积筛选：全部 / 已连接 / 双端可售 / 已配结算。
+  /// 从底部结论进入的「缺口」分段（未连接供给 / 未双端可售 / 未配结算）以一个可关闭的标签显示。
   Widget _chainFilter(BuildContext context) {
     final c = _chainCounts;
     final total = _i(c?['total']), connected = _i(c?['connected']), usable = _i(c?['usable']), settled = _i(c?['settled']);
@@ -1505,7 +1190,7 @@ class _BizHubState extends State<LighthouseBizHubPage> {
       final eff = (_i(ch['effective']) ?? 0) + (_i(sp['effective']) ?? 0);
       final pend = (_i(ch['pending']) ?? 0) + (_i(sp['pending']) ?? 0);
       if (chTotal + spTotal > 0) {
-        parts.add(eff == chTotal + spTotal ? '全部生效' : '生效 $eff${pend > 0 ? ' · 待审核 $pend' : ''}');
+        parts.add(eff == chTotal + spTotal ? '全部已审核' : '已审核 $eff${pend > 0 ? ' · 待审核 $pend' : ''}');
       } else {
         parts.add('资管里还没有关联这个提案的产品');
       }
@@ -1841,7 +1526,7 @@ class _BizProductState extends State<LighthouseBizProductPage> {
           ),
           Expanded(
             child: Text(
-              _supplier ? '供应商产品' : '渠道产品',
+              _supplier ? '供应商产品与结算' : '渠道产品与结算',
               textAlign: TextAlign.center,
               style: _sans(context, size: 15, weight: FontWeight.w700),
             ),
@@ -1855,7 +1540,6 @@ class _BizProductState extends State<LighthouseBizProductPage> {
   List<Widget> _sections(BuildContext context, Map<String, dynamic> d) {
     final p = _map(d['product']);
     final links = _map(d['links']);
-    final productName = _s(p['productName']).isEmpty ? widget.title : _s(p['productName']);
     final out = <Widget>[_detailChain(context, d), _hero(context, p, d)];
     final proposal = _map(d['proposal']);
     if (_s(proposal['code']).isNotEmpty) {
@@ -1882,6 +1566,7 @@ class _BizProductState extends State<LighthouseBizProductPage> {
                   .join(' · '),
               value: _yuan(c['cost']),
               valueLabel: '成本',
+              showValue: double.tryParse(_s(c['cost'])) != null,
             ),
           ),
       ]));
@@ -1906,9 +1591,9 @@ class _BizProductState extends State<LighthouseBizProductPage> {
                   ? [_s(src[i]['realSupplierCode']), if (_s(src[i]['isActive']) == '0') '停用'].where((e) => e.isNotEmpty).join(' · ')
                   : [
                       if (_s(src[i]['supplierProductName']).isNotEmpty) _s(src[i]['supplierProductName']),
-                      _s(src[i]['subjectName']).isEmpty ? '主体未关联' : '主体 ${_subjectDisplay(src[i]['subjectName'])}',
+                      _s(src[i]['subjectName']).isEmpty ? '供应商主体待补' : '供应商主体 ${_subjectDisplay(src[i]['subjectName'])}',
                       switch (_s(src[i]['state'])) {
-                        'effective' => '生效',
+                        'effective' => '可供货',
                         'pending' => '待审核',
                         'disabled' => '已停用',
                         'broken' => '供应商产品已删除',
@@ -1923,55 +1608,37 @@ class _BizProductState extends State<LighthouseBizProductPage> {
       ]));
     }
     final items = _list(d['settlementItems']);
-    out.add(_card(context, '结算规则 · ${_supplier ? '供应商侧' : '渠道侧'}', [
-      if (items.isEmpty) _emptyLine(context, '还没有结算行'),
-      for (var i = 0; i < items.length; i++) ...[
-        if (i > 0) Divider(height: 18, thickness: 0.6, color: _ln(context, _kLine)),
-        ..._settlementRows(context, items[i]),
-      ],
-      _linkRow(
-        context,
-        onTap: () => _openBizSettlement(context, widget.side, widget.id, productName),
-        child: Padding(
-          padding: const EdgeInsets.only(top: 8, bottom: 2),
-          child: Row(
-            children: [
-              Text(items.isEmpty ? '去结算详情' : '结算详情 · 时间线与主体核对', style: _sans(context, size: 12, weight: FontWeight.w600, color: _kDeep)),
-              const Spacer(),
-              Icon(Icons.chevron_right_rounded, size: 16, color: _fg(context, _kDeep)),
-            ],
-          ),
-        ),
-      ),
-    ]));
+    final tierRules = _list(d['tierRules']);
     final rules = _list(d['priceRules']);
-    if (rules.isNotEmpty) {
-      out.add(_card(context, '价格规则 · ${rules.length} 条', [
+    final hasTieredSettlement = items.any((it) => _s(it['settleMethod']) == '3');
+    final otherRules = tierRules.where((r) => !hasTieredSettlement || !_isSettlementPriceSource(r)).toList();
+    out.add(_card(context, '结算规则 · ${_supplier ? '供应商侧' : '渠道侧'} · ${items.length} 条', [
+      if (items.isEmpty) _emptyLine(context, '还没有结算规则'),
+      for (var i = 0; i < items.length; i++) ...[
+        if (i > 0) Divider(height: 24, thickness: 0.6, color: _ln(context, _kLine)),
+        ..._settlementRows(context, items[i]),
+        if (_s(items[i]['settleMethod']) == '3') _tierPriceInline(context, items[i], tierRules),
+      ],
+      if (otherRules.isNotEmpty) ...[
+        const SizedBox(height: 14),
+        Text('其他关联价格配置', style: _sans(context, size: 12, weight: FontWeight.w600)),
+        const SizedBox(height: 4),
+        Text('采购侧、参与核算或其他关联规则，按各自标注的用途展示。', style: _sans(context, size: 11, color: _kMute)),
+        const SizedBox(height: 8),
+        _bizSpaced([for (final r in otherRules) _tierRuleCard(context, r)]),
+      ] else if (tierRules.isEmpty && rules.isNotEmpty) ...[
+        const SizedBox(height: 10),
+        Text('关联价格配置', style: _sans(context, size: 12, weight: FontWeight.w600)),
         for (final r in rules)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 5),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(_s(r['ruleName']).isEmpty ? '—' : _s(r['ruleName']), style: _sans(context, size: 13.5, weight: FontWeight.w600)),
-                      const SizedBox(height: 2),
-                      Text(
-                        [_s(r['ruleCode']), if (_s(r['effectiveStartTime']).isNotEmpty) '${_date(r['effectiveStartTime'])} 起'].where((e) => e.isNotEmpty).join(' · '),
-                        style: LhTypography.mono(context: context, size: 10.5, color: _fg(context, _kMute)),
-                      ),
-                    ],
-                  ),
-                ),
-                _tag(context, _s(r['status']) == '1' ? '启用' : (_s(r['status']) == '0' ? '停用' : (_s(r['status']).isEmpty ? '—' : _s(r['status']))),
-                    _s(r['status']) == '1' ? _Tone.purple : _Tone.grey),
-              ],
-            ),
-          ),
-      ]));
-    }
+          _kv(context, _s(r['ruleName']).isEmpty ? '价格规则' : _s(r['ruleName']), _s(r['ruleCode'])),
+      ],
+      if (items.isNotEmpty) ...[
+        const SizedBox(height: 14),
+        Text('对方主体核对', style: _sans(context, size: 12, weight: FontWeight.w600)),
+        const SizedBox(height: 6),
+        _settlementCounterpartyCheck(context, items, _map(links['partner']), _supplier ? '供应商' : '渠道', links['partnerCounterparties']),
+      ],
+    ]));
     final pushes = _list(d['pushes']);
     out.add(_card(context, '最近推送到业务平台', [
       if (pushes.isEmpty) _emptyLine(context, '没有推送记录'),
@@ -2070,7 +1737,7 @@ class _BizProductState extends State<LighthouseBizProductPage> {
     };
   }
 
-  /// 顶部关系链：和列表卡片同一条——法人主体 › 供应商 › 本产品 › 结算，下面是同一句状态说明。
+  /// 顶部关系链：和列表卡片同一条——供应商主体 › 供应商 › 本产品 › 结算，下面是同一句状态说明。
   /// 渠道产品的渠道放在标题下的标签里（见 [_channelChip]），不进这条链。
   Widget _detailChain(BuildContext context, Map<String, dynamic> d) {
     final (segs, hint, hintColor) = _productChain(context, _cardLike(d), widget.side);
@@ -2079,8 +1746,7 @@ class _BizProductState extends State<LighthouseBizProductPage> {
       children: [
         _relationChain(context, [
           ...segs.take(2),
-          const _ChainSeg('产品', '本产品', current: true),
-          ...segs.skip(2),
+          _ChainSeg('产品与结算', '本产品', sub: '${_list(d['settlementItems']).length} 条结算规则', current: true),
         ]),
         if (hint != null)
           Padding(
@@ -2091,7 +1757,7 @@ class _BizProductState extends State<LighthouseBizProductPage> {
     );
   }
 
-  /// 渠道产品标题下的渠道标签：点进渠道详情；渠道没关联法人主体时顺带标出。
+  /// 渠道产品标题下的渠道标签：点进渠道详情；顺带写渠道主体（没关联写「待补」，不标红）。
   Widget _channelChip(BuildContext context, Map<String, dynamic> partner) {
     final linked = _s(partner['subjectId']).isNotEmpty;
     return Align(
@@ -2112,8 +1778,8 @@ class _BizProductState extends State<LighthouseBizProductPage> {
                 Text('渠道 · ${_s(partner['name'])}', style: _sans(context, size: 11, weight: FontWeight.w600, color: _kDeep)),
                 const SizedBox(width: 6),
                 Text(
-                  linked ? '法人主体 ${_subjectDisplay(partner['subjectName'])}' : '法人主体未关联',
-                  style: _sans(context, size: 10.5, color: linked ? _kInk2 : _kCoral),
+                  linked ? '渠道主体 ${_subjectDisplay(partner['subjectName'])}' : '渠道主体待补',
+                  style: _sans(context, size: 10.5, color: linked ? _kInk2 : _kCopper),
                 ),
                 Icon(Icons.chevron_right_rounded, size: 15, color: _fg(context, _kDeep)),
               ],
@@ -2152,7 +1818,7 @@ class _BizProductState extends State<LighthouseBizProductPage> {
     final firstSource = _list(d['sources']).isNotEmpty ? _list(d['sources']).first : const <String, dynamic>{};
     final cells = _supplier
         ? <(String, String)>[
-            ('单价', _yuan(p['unitPrice'])),
+            if (double.tryParse(_s(p['unitPrice'])) != null) ('单价', _yuan(p['unitPrice'])),
             ('面值', _yuanFromFen(p['faceValue'])),
             ('门槛金额', _yuan(p['thresholdAmount'])),
           ]
@@ -2252,6 +1918,7 @@ class _BizProductState extends State<LighthouseBizProductPage> {
       '1' => '比例 ${_plain(it['settlementRatio'])}',
       '2' => '单价 ${_yuan(it['unitPrice'])}',
       '5' => '${_yuan(it['unitPrice'])} × ${_plain(it['settlementRatio'])}',
+      '3' => '档位见下方',
       _ => '',
     };
     final effective = _s(it['effectiveTime']);
@@ -2261,10 +1928,10 @@ class _BizProductState extends State<LighthouseBizProductPage> {
       _kv(context, '结算方式', [_s(it['settleMethodLabel']), value].where((e) => e.isNotEmpty).join(' · ')),
       if (_s(it['formulaName']).isNotEmpty) _kv(context, '计算公式', _s(it['formulaName'])),
       if (_s(it['thresholdAmount']).isNotEmpty) _kv(context, '门槛金额', _yuan(it['thresholdAmount'])),
-      _kv(context, '我方 / 对方主体', [_s(it['ourEntity']), _s(it['counterpartyEntity'])].map((e) => e.isEmpty ? '—' : e).join(' / ')),
+      _kv(context, '签约双方', '我方 ${_s(it['ourEntity']).isEmpty ? '—' : _s(it['ourEntity'])} ⇄ 对方 ${_s(it['counterpartyEntity']).isEmpty ? '—' : _s(it['counterpartyEntity'])}'),
       _kv(
         context,
-        '生效期',
+        '有效期',
         effective.isEmpty && expire.isEmpty
             ? '—'
             : '${effective.isEmpty ? '—' : _date(effective)} 起${expire.isEmpty ? ' · 长期' : ' · 至 ${_date(expire)}'}',
@@ -2318,6 +1985,7 @@ class _BizProductState extends State<LighthouseBizProductPage> {
     required String value,
     required String valueLabel,
     bool first = false,
+    bool showValue = true,
   }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
@@ -2346,14 +2014,16 @@ class _BizProductState extends State<LighthouseBizProductPage> {
               ],
             ),
           ),
-          const SizedBox(width: 8),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(value, style: _num(context, size: 14)),
-              Text(valueLabel, style: _sans(context, size: 10, color: _kMute)),
-            ],
-          ),
+          if (showValue) ...[
+            const SizedBox(width: 8),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(value, style: _num(context, size: 14)),
+                Text(valueLabel, style: _sans(context, size: 10, color: _kMute)),
+              ],
+            ),
+          ],
         ],
       ),
     );
@@ -2492,7 +2162,7 @@ Widget _bizProductCard(BuildContext context, Map<String, dynamic> p, int index, 
                   const SizedBox(height: 4),
                 ],
                 _tag(context, submitLabel, submitTone),
-                if (status == '停用' || status == '待生效') ...[
+                if (status == '停用' || status == '待启用') ...[
                   const SizedBox(height: 4),
                   _tag(context, status, status == '停用' ? _Tone.grey : _Tone.copper),
                 ],
@@ -2502,6 +2172,7 @@ Widget _bizProductCard(BuildContext context, Map<String, dynamic> p, int index, 
         ),
         _miniChain(context, segs),
         if (hint != null) _chainHint(context, hint, hintColor),
+        if (side == 'supplier') _bizProductTierLine(context, p),
       ],
     ),
   );
@@ -2750,9 +2421,9 @@ class _BizPartnerState extends State<LighthouseBizPartnerPage> {
       final settled = settledN ?? (_total['settle'] ?? 0);
       children.add(_relationChain(context, [
         _ChainSeg(
-          '法人主体',
-          linked ? (_s(p['subjectName']).isEmpty ? '主体档案不可用' : _subjectDisplay(p['subjectName'])) : '未关联',
-          tone: linked ? _SegTone.normal : _SegTone.bad,
+          _kind == 'promoter' ? '主体' : _legalLabel(_kind),
+          linked ? (_s(p['subjectName']).isEmpty ? '主体档案不可用' : _subjectDisplay(p['subjectName'])) : _unlinkedValue(p['counterparties']),
+          tone: linked ? _SegTone.normal : _SegTone.warn,
           onTap: linked ? () => _openBizSubject(context, _s(p['subjectId']), _s(p['subjectName'])) : null,
         ),
         _ChainSeg(_kindLabel, name, current: true),
@@ -2764,6 +2435,28 @@ class _BizPartnerState extends State<LighthouseBizPartnerPage> {
       children
         ..add(const SizedBox(height: 10))
         ..add(_infoCard(context, p, name));
+      if (!linked && _kind != 'promoter' && _list(p['counterparties']).isNotEmpty) {
+        children.add(Container(
+          margin: const EdgeInsets.only(top: 12),
+          decoration: _cardDeco(context, radius: 16),
+          child: ExpansionTile(
+            initiallyExpanded: false,
+            shape: const Border(),
+            collapsedShape: const Border(),
+            title: Text('该$_kindLabel结算规则涉及的对方公司', style: _sans(context, size: 12, weight: FontWeight.w600)),
+            subtitle: Text('全部产品汇总 · 按规则数量展示前 5 家', style: _sans(context, size: 10.5, color: _kMute)),
+            childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+            children: [
+              _counterpartyList(context, p['counterparties']),
+              const SizedBox(height: 6),
+              Text(
+                '同名主体档案仅供核对。请确认实际签约关系后再关联，不能按规则数量最多直接认定主体。',
+                style: _sans(context, size: 10.5, color: _kMute, height: 1.5),
+              ),
+            ],
+          ),
+        ));
+      }
       if (_kind == 'promoter') {
         children.add(Padding(
           padding: const EdgeInsets.symmetric(vertical: 24),
@@ -2788,7 +2481,7 @@ class _BizPartnerState extends State<LighthouseBizPartnerPage> {
     final expiring = _i(p['expiringProducts']) ?? 0;
     String n(Object? v) => _i(v) == null ? '—' : '${_count(_i(v))} 个';
     final cells = <(String, String)>[
-      ('审核生效产品', '${_count(effective)} 个'),
+      ('已审核产品', '${_count(effective)} 个'),
       if (_kind == 'channel') ('已贯通', n(p['throughProducts'])) else ('被渠道采用', n(p['usedProducts'])),
       ('结算覆盖', settledN == null ? '—' : _pct(settledN, products)),
     ];
@@ -2980,11 +2673,11 @@ class _BizSettlementState extends State<LighthouseBizSettlementPage> {
     final now = DateTime.now();
     final eff = DateTime.tryParse(_s(r['effectiveTime']));
     final exp = DateTime.tryParse(_s(r['expireTime']));
-    if (eff != null && eff.isAfter(now)) return ('未生效', _Tone.grey);
+    if (eff != null && eff.isAfter(now)) return ('未开始', _Tone.grey);
     if (exp != null && exp.isBefore(now)) return ('已到期', _Tone.grey);
     final days = _daysUntil(r['expireTime']);
     if (days != null && days <= 30) return (days <= 0 ? '今天到期' : '$days 天到期', _Tone.copper);
-    return ('生效中', _Tone.purple);
+    return ('执行中', _Tone.purple);
   }
 
   @override
@@ -2998,14 +2691,20 @@ class _BizSettlementState extends State<LighthouseBizSettlementPage> {
       final links = _map(d['links']);
       final partner = _map(links['partner']);
       final rules = _list(d['settlementItems']);
+      final tierRules = _list(d['tierRules']);
+      final currentParties = rules.map((r) => _s(r['counterpartyEntity']).toLowerCase()).toSet();
+      final counterparties = _list(links['partnerCounterparties'])
+          .where((c) => currentParties.contains(_s(c['name']).toLowerCase()))
+          .toList();
       final name = _s(p['productName']).isEmpty ? widget.title : _s(p['productName']);
       final kindLabel = _supplier ? '供应商' : '渠道';
       final subjectName = _s(partner['subjectName']);
       children
         ..add(_relationChain(context, [
+          // 渠道 / 供应商档案上的主体，对应规则里的「对方」；我方主体在每条规则的「签约双方」里。
           _ChainSeg(
-            '法人主体',
-            subjectName.isEmpty ? '未关联' : _subjectDisplay(subjectName),
+            '$kindLabel主体',
+            subjectName.isEmpty ? (_suggestedSubjects(counterparties).isEmpty ? '待补' : '待补 · 待确认') : _subjectDisplay(subjectName),
             tone: subjectName.isEmpty ? _SegTone.warn : _SegTone.normal,
             onTap: _s(partner['subjectId']).isEmpty ? null : () => _openBizSubject(context, _s(partner['subjectId']), subjectName),
           ),
@@ -3027,9 +2726,22 @@ class _BizSettlementState extends State<LighthouseBizSettlementPage> {
       if (rules.isNotEmpty) {
         children
           ..add(_bizSection(context, '规则', count: rules.length))
-          ..add(_bizSpaced([for (final r in rules) _ruleCard(context, r)]))
-          ..add(_bizSection(context, '主体核对', note: '规则里的对方主体 vs $kindLabel关联的法人主体'))
-          ..add(_check(context, rules, partner, kindLabel));
+          ..add(_bizSpaced([for (final r in rules) _ruleCard(context, r, tierRules)]));
+      }
+      children
+        ..add(_bizSection(context, '阶梯与价格规则', count: tierRules.length))
+        ..add(Container(
+          width: double.infinity,
+          margin: EdgeInsets.only(bottom: tierRules.isEmpty ? 0 : 8),
+          padding: const EdgeInsets.fromLTRB(11, 9, 11, 9),
+          decoration: BoxDecoration(color: _bg(context, _kPanel), borderRadius: BorderRadius.circular(12)),
+          child: Text(_tierIntro(widget.side, rules, tierRules), style: _sans(context, size: 11, color: _kInk2, height: 1.6)),
+        ));
+      if (tierRules.isNotEmpty) children.add(_bizSpaced([for (final r in tierRules) _tierRuleCard(context, r)]));
+      if (rules.isNotEmpty) {
+        children
+          ..add(_bizSection(context, '对方主体核对', note: '规则「对方」vs $kindLabel档案上的主体'))
+          ..add(_settlementCounterpartyCheck(context, rules, partner, kindLabel, counterparties));
       }
     }
     return _bizSubPage(context, title: '结算', onRefresh: _load, children: children);
@@ -3037,7 +2749,7 @@ class _BizSettlementState extends State<LighthouseBizSettlementPage> {
 
   Widget _summary(BuildContext context, List<Map<String, dynamic>> rules) {
     final statuses = [for (final r in rules) _ruleStatus(r).$1];
-    final active = statuses.where((s) => s == '生效中' || s.endsWith('到期') && s != '已到期').length;
+    final active = statuses.where((s) => s == '执行中' || s.endsWith('到期') && s != '已到期').length;
     final soon = statuses.where((s) => s.endsWith('天到期') || s == '今天到期').length;
     final now = DateTime.now();
     final y0 = DateTime(now.year);
@@ -3050,7 +2762,7 @@ class _BizSettlementState extends State<LighthouseBizSettlementPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _bizCellGrid(context, [('规则', '${rules.length} 条'), ('生效中', '$active 条'), ('30 天内到期', '$soon 条')]),
+          _bizCellGrid(context, [('规则', '${rules.length} 条'), ('执行中', '$active 条'), ('30 天内到期', '$soon 条')]),
           if (rules.isEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 12),
@@ -3060,7 +2772,7 @@ class _BizSettlementState extends State<LighthouseBizSettlementPage> {
             const SizedBox(height: 14),
             Row(
               children: [
-                Text('生效期', style: _sans(context, size: 12, weight: FontWeight.w700)),
+                Text('有效期', style: _sans(context, size: 12, weight: FontWeight.w700)),
                 const Spacer(),
                 Text('${now.year}', style: LhTypography.mono(context: context, size: 10.5, color: _fg(context, _kMute))),
               ],
@@ -3128,11 +2840,12 @@ class _BizSettlementState extends State<LighthouseBizSettlementPage> {
     );
   }
 
-  Widget _ruleCard(BuildContext context, Map<String, dynamic> r) {
+  Widget _ruleCard(BuildContext context, Map<String, dynamic> r, List<Map<String, dynamic>> tierRules) {
     final (label, tone) = _ruleStatus(r);
     final eff = _s(r['effectiveTime']);
     final exp = _s(r['expireTime']);
-    final value = _ruleShort(_s(r['settleMethod']), r['settlementRatio'], r['unitPrice'], '');
+    final tiered = _s(r['settleMethod']) == '3';
+    final value = tiered ? '档位见下' : _ruleShort(_s(r['settleMethod']), r['settlementRatio'], r['unitPrice'], '');
     Widget kv(String k, String v, {bool mono = false}) => Padding(
       padding: const EdgeInsets.symmetric(vertical: 3),
       child: Row(
@@ -3173,15 +2886,20 @@ class _BizSettlementState extends State<LighthouseBizSettlementPage> {
           kv('结算方式', [_s(r['settleMethodLabel']), value].where((e) => e.isNotEmpty).join(' · '), mono: true),
           if (_s(r['formulaName']).isNotEmpty) kv('计算公式', _s(r['formulaName'])),
           if (_s(r['thresholdAmount']).isNotEmpty) kv('门槛金额', _yuan(r['thresholdAmount']), mono: true),
-          kv('我方主体', _s(r['ourEntity'])),
-          kv('对方主体', _s(r['counterpartyEntity'])),
-          kv('生效期', '${eff.isEmpty ? '—' : _date(eff)} → ${exp.isEmpty ? '长期' : _date(exp)}', mono: true),
+          if (tiered && _s(r['settlementRatio']).isNotEmpty) kv('结算比例', _plain(r['settlementRatio']), mono: true),
+          // 签约双方：我方（我们自己的公司）⇄ 对方（签合同、开票、收付款的那家），一行看清，不和上面的「主体」混。
+          kv('签约双方', '我方 ${_s(r['ourEntity']).isEmpty ? '—' : _s(r['ourEntity'])}  ⇄  对方 ${_s(r['counterpartyEntity']).isEmpty ? '—' : _s(r['counterpartyEntity'])}'),
+          kv('有效期', '${eff.isEmpty ? '—' : _date(eff)} → ${exp.isEmpty ? '长期' : _date(exp)}', mono: true),
+          if (tiered) _tierPriceInline(context, r, tierRules),
         ],
       ),
     );
   }
 
-  Widget _check(BuildContext context, List<Map<String, dynamic>> rules, Map<String, dynamic> partner, String kindLabel) {
+
+}
+
+Widget _settlementCounterpartyCheck(BuildContext context, List<Map<String, dynamic>> rules, Map<String, dynamic> partner, String kindLabel, Object? counterparties) {
     final subjectId = _s(partner['subjectId']);
     final full = _s(partner['subjectFullName']);
     final short = _s(partner['subjectName']);
@@ -3193,11 +2911,19 @@ class _BizSettlementState extends State<LighthouseBizSettlementPage> {
     VoidCallback? onTap;
     String action = '';
     if (subjectId.isEmpty) {
-      text = '$kindLabel「${_s(partner['name'])}」还没有关联法人主体，无法核对规则里的对方主体${parties.isEmpty ? '' : '（${parties.join('、')}）'}是否同一法人。';
+      // 渠道级汇总只用来核实当前规则是否有同名档案，不在产品页展示其他公司。
+      final names = parties.map((name) => name.trim().toLowerCase()).toSet();
+      final matches = _suggestedSubjects(counterparties)
+          .where((c) => names.contains(_s(c['name']).trim().toLowerCase()))
+          .map((c) => _s(c['name']))
+          .toSet();
+      text = '${parties.isEmpty ? '当前规则未填写结算对方。' : '结算对方：${parties.join('、')}。'}\n'
+          '$kindLabel「${_s(partner['name'])}」尚未关联主体，暂时无法核对。'
+          '${matches.isEmpty ? '' : '\n已找到「${matches.join('、')}」的同名主体档案，可前往$kindLabel档案确认；同名不代表已确认是同一家公司。'}';
       color = _kCopper;
       soft = _kCopperSoft;
-      onTap = () => _openBizPartner(context, _supplier ? 'supplier' : 'channel', _s(partner['id']), name: _s(partner['name']));
-      action = '去看$kindLabel ›';
+      onTap = () => _openBizPartner(context, kindLabel == '供应商' ? 'supplier' : 'channel', _s(partner['id']), name: _s(partner['name']));
+      action = '查看$kindLabel档案 ›';
     } else if (parties.isEmpty) {
       text = '规则里没有填写对方主体。';
       color = _kInk2;
@@ -3205,16 +2931,16 @@ class _BizSettlementState extends State<LighthouseBizSettlementPage> {
     } else {
       final bad = parties.where((e) => !same(e)).toList();
       if (bad.isEmpty) {
-        text = '规则对方主体与法人主体「${full.isEmpty ? short : full}」一致。';
+        text = '规则「对方」与$kindLabel主体「${full.isEmpty ? short : full}」是同一家。';
         color = _kDeep;
         soft = _kLavender;
       } else {
-        text = '规则对方主体「${bad.join('、')}」与法人主体「${full.isEmpty ? short : full}」不一致，请确认是否同一法人。';
+        text = '规则「对方」${bad.join('、')} 与$kindLabel主体「${full.isEmpty ? short : full}」不是同一家，请确认是否签错主体。';
         color = _kCoral;
         soft = _kCoralSoft;
       }
       onTap = () => _openBizSubject(context, subjectId, short);
-      action = '看法人主体 ›';
+      action = '看$kindLabel主体 ›';
     }
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -3235,9 +2961,8 @@ class _BizSettlementState extends State<LighthouseBizSettlementPage> {
       ),
     );
   }
-}
 
-// ── 主体页（合作主体法人档案）──
+// ── 主体页（合作主体主体档案）──
 
 class LighthouseBizSubjectPage extends StatefulWidget {
   const LighthouseBizSubjectPage({super.key, required this.service, required this.id, this.title = ''});
@@ -3292,7 +3017,7 @@ class _BizSubjectState extends State<LighthouseBizSubjectPage> {
       final nChannels = _i(totals['channels']) ?? channels.length;
       children
         ..add(_relationChain(context, [
-          _ChainSeg('法人主体', short.isEmpty ? (widget.title.isEmpty ? '—' : widget.title) : short, current: true),
+          _ChainSeg('主体', short.isEmpty ? (widget.title.isEmpty ? '—' : widget.title) : short, current: true),
           _ChainSeg('供应商', '${_count(_i(totals['suppliers']) ?? suppliers.length)} 家'),
           _ChainSeg('渠道', '${_count(nChannels)} 家', tone: nChannels == 0 ? _SegTone.bad : _SegTone.normal),
           _ChainSeg('结算', '${_count(settled)} 个产品', tone: expiring > 0 ? _SegTone.warn : _SegTone.normal, sub: expiring > 0 ? '$expiring 个快到期' : ''),
@@ -3313,7 +3038,7 @@ class _BizSubjectState extends State<LighthouseBizSubjectPage> {
               const SizedBox(height: 12),
               _bizCellGrid(context, [
                 ('旗下产品', '${_count(products)} 个'),
-                ('审核生效', '${_count(_i(totals['effectiveProducts']))} 个'),
+                ('已审核', '${_count(_i(totals['effectiveProducts']))} 个'),
                 ('结算覆盖', _pct(settled, products)),
               ]),
             ],
@@ -3332,7 +3057,7 @@ class _BizSubjectState extends State<LighthouseBizSubjectPage> {
         children.add(_bizSpaced([for (final p in channels) _bizPartnerCard(context, p)]));
       }
     }
-    return _bizSubPage(context, title: '法人主体', onRefresh: _load, children: children);
+    return _bizSubPage(context, title: '主体', onRefresh: _load, children: children);
   }
 
   Widget _emptyNote(BuildContext context, String text) => Container(
@@ -3344,655 +3069,19 @@ class _BizSubjectState extends State<LighthouseBizSubjectPage> {
 
 // ═════════════════════════════ 业务脉搏 · 画法 ═════════════════════════════
 //
-//   左：链路盘。四圈从外到内 = 渠道产品 / 已连接供给 / 双端生效 / 已配结算，弧长 = 占渠道产品的比例；
-//       比上一圈缩得最多的那一圈用蜜桃色。中心是贯通率（已配结算 ÷ 渠道产品）。点某圈 → 产品列表对应分段。
-//   右：环形心电。一圈 = 24 小时，0 点在正上方；每 10 分钟一档推送跳一个心搏（条数越多越高），失败向内跳；
-//       内圈菱形是结算回传批次；未到的时间是虚线，线头的光点是「现在」。
+//   链路分段键（产品列表「全部 / 已连接 / 可用 / 已配结算」）与总览缓存。新版 hero 的画法见文末「业务脉搏 · 方案 A」。
 
 const _kRingKeys = ['', 'connected', 'usable', _kChainThrough];
 
 /// 上一次拿到的业务总览：切走再回来时先用它画，同时后台刷新。
 Map<String, dynamic>? _bizOverviewCache;
-const _kRingNames = ['渠道产品', '已连接供给', '双端生效', '已配结算'];
-const _kRingGrad = [
-  [Color(0xFFE4DFFD), Color(0xFFC9C0F8)],
-  [Color(0xFFCBD7FC), Color(0xFF9DB3F6)],
-  [Color(0xFFC7D9FB), Color(0xFF8FB6F2)],
-  [Color(0xFFB9A6F0), Color(0xFF7B5CD8)],
-];
-const _kRingDropGrad = [Color(0xFFFBD3C6), Color(0xFFF09B82)];
-const _kRingRadii = [0.385, 0.318, 0.25, 0.183];
-
 String _chainLabel(String key) => switch (key) {
   '' => '全部',
-  'connected' => '已连接',
-  'usable' => '双端生效',
-  _kChainThrough => '已配结算',
+  'connected' => '已连接供给产品',
+  'usable' => '审核生效且启用',
+  _kChainThrough => '渠道及供给侧均已配结算',
   _ => _chainSeg(key).$1,
 };
-
-Offset _polar(Offset c, double r, double angle) => c + Offset(math.cos(angle), math.sin(angle)) * r;
-
-class _ChainRingDial extends StatefulWidget {
-  const _ChainRingDial({required this.values, required this.drop, required this.onPick});
-
-  /// [渠道产品, 已连接供给, 双端生效, 已配结算]；null = 数据还没到，只画刻度和空轨道。
-  final List<int>? values;
-  final int drop;
-  final ValueChanged<String> onPick;
-
-  @override
-  State<_ChainRingDial> createState() => _ChainRingDialState();
-}
-
-class _ChainRingDialState extends State<_ChainRingDial> with SingleTickerProviderStateMixin {
-  late final AnimationController _intro = AnimationController(vsync: this, duration: const Duration(milliseconds: 1300))..forward();
-  int? _pressed;
-
-  @override
-  void dispose() {
-    _intro.dispose();
-    super.dispose();
-  }
-
-  @override
-  void didUpdateWidget(covariant _ChainRingDial oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    // 骨架 → 真数据：圆弧从 0 画到位，和资管时钟一样「先出盘、再走针」。
-    if (oldWidget.values == null && widget.values != null) {
-      unawaited(_intro.forward(from: 0));
-    }
-  }
-
-  int? _hit(Offset p, double d) {
-    final r = (p - Offset(d / 2, d / 2)).distance / d;
-    for (var i = 0; i < _kRingRadii.length; i++) {
-      if ((r - _kRingRadii[i]).abs() <= 0.034) return i;
-    }
-    return null;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final ready = widget.values != null;
-    final v = widget.values ?? const [0, 0, 0, 0];
-    final through = v[0] <= 0 ? 0.0 : v[3] / v[0];
-    final grads = [
-      for (var i = 0; i < 4; i++) [for (final c in (i == widget.drop ? _kRingDropGrad : _kRingGrad[i])) _fg(context, c)],
-    ];
-    return LayoutBuilder(
-      builder: (context, box) {
-        final d = box.maxWidth;
-        return Semantics(
-          label: '链路盘：渠道产品 ${v[0]}，已连接供给 ${v[1]}，双端生效 ${v[2]}，已配结算 ${v[3]}，贯通率 ${(through * 100).round()}%',
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTapDown: (e) => setState(() => _pressed = _hit(e.localPosition, d)),
-            onTapCancel: () => setState(() => _pressed = null),
-            onTapUp: (e) {
-              final i = _hit(e.localPosition, d);
-              setState(() => _pressed = null);
-              widget.onPick(_kRingKeys[i ?? 0]);
-            },
-            child: AnimatedBuilder(
-              animation: _intro,
-              builder: (context, child) => CustomPaint(
-                painter: _ChainRingPainter(
-                  values: v,
-                  t: _intro.value,
-                  pressed: _pressed,
-                  tick: _fg(context, _kDeep),
-                  track: _fg(context, _kPurple),
-                  grads: grads,
-                ),
-                child: child,
-              ),
-              child: SizedBox(
-                width: d,
-                height: d,
-                child: Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        ready ? '${(through * 100).round()}%' : '—',
-                        style: LhTypography.mono(context: context, size: 18, weight: FontWeight.w700, color: _fg(context, _kHeroNum)),
-                      ),
-                      const SizedBox(height: 1),
-                      Text('贯通', style: _sans(context, size: 9.5, color: _kMute)),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-}
-
-class _ChainRingPainter extends CustomPainter {
-  _ChainRingPainter({
-    required this.values,
-    required this.t,
-    required this.pressed,
-    required this.tick,
-    required this.track,
-    required this.grads,
-  });
-
-  final List<int> values;
-  final double t;
-  final int? pressed;
-  final Color tick;
-  final Color track;
-  final List<List<Color>> grads;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final d = size.shortestSide;
-    final c = size.center(Offset.zero);
-    final stroke = d * 0.042;
-    // 外圈刻度：0–100%，每 10% 一根长刻度
-    for (var i = 0; i < 50; i++) {
-      final a = i / 50 * 2 * math.pi - math.pi / 2;
-      final long = i % 5 == 0;
-      canvas.drawLine(
-        _polar(c, d * 0.468, a),
-        _polar(c, d * (long ? 0.44 : 0.452), a),
-        Paint()
-          ..color = tick.withValues(alpha: long ? 0.35 : 0.14)
-          ..strokeWidth = long ? 1 : 0.8
-          ..strokeCap = StrokeCap.round,
-      );
-    }
-    final total = values[0];
-    for (var i = 0; i < 4; i++) {
-      final r = d * _kRingRadii[i];
-      final rect = Rect.fromCircle(center: c, radius: r);
-      canvas.drawCircle(
-        c,
-        r,
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = stroke
-          ..color = track.withValues(alpha: 0.07),
-      );
-      final p = total <= 0 ? 0.0 : (values[i] / total).clamp(0.0, 1.0).toDouble();
-      final local = Curves.easeOutCubic.transform(((t * 1.35) - i * 0.1).clamp(0.0, 1.0).toDouble());
-      final sweep = 2 * math.pi * p * local;
-      if (sweep <= 0.001) continue;
-      final alpha = pressed == null || pressed == i ? 1.0 : 0.25;
-      Shader shader(double a) => SweepGradient(
-        endAngle: math.max(sweep, 0.01),
-        colors: [for (final g in grads[i]) g.withValues(alpha: a)],
-        transform: const GradientRotation(-math.pi / 2),
-      ).createShader(rect);
-      canvas.drawArc(
-        rect,
-        -math.pi / 2,
-        sweep,
-        false,
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = stroke
-          ..strokeCap = StrokeCap.round
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.2)
-          ..shader = shader(0.5 * alpha),
-      );
-      canvas.drawArc(
-        rect,
-        -math.pi / 2,
-        sweep,
-        false,
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = stroke
-          ..strokeCap = StrokeCap.round
-          ..shader = shader(alpha),
-      );
-      if (p < 0.995 && local >= 1) {
-        canvas.drawCircle(_polar(c, r, -math.pi / 2 + sweep), stroke * 0.28, Paint()..color = Colors.white.withValues(alpha: alpha));
-      }
-    }
-  }
-
-  @override
-  bool shouldRepaint(_ChainRingPainter old) =>
-      old.t != t || old.pressed != pressed || old.values != values || old.tick != tick || old.grads != grads;
-}
-
-class _PulseDial extends StatefulWidget {
-  const _PulseDial({required this.pushes, required this.returns, required this.total, required this.onTap});
-
-  /// (当天分钟数, 条数, 失败数)，10 分钟一档。
-  final List<(int, int, int)> pushes;
-
-  /// (当天分钟数, 是否异常)
-  final List<(int, bool)> returns;
-  final int total;
-  final VoidCallback onTap;
-
-  @override
-  State<_PulseDial> createState() => _PulseDialState();
-}
-
-class _PulseDialState extends State<_PulseDial> with TickerProviderStateMixin {
-  late final AnimationController _intro = AnimationController(vsync: this, duration: const Duration(milliseconds: 1800))..forward();
-  /// 心跳节拍：约 48 次 / 分，每拍「咚—哒」两下。
-  late final AnimationController _breath = AnimationController(vsync: this, duration: const Duration(milliseconds: 1250))..repeat();
-
-  List<Offset> _pts = const [];
-  String _cacheKey = '';
-
-  @override
-  void didUpdateWidget(covariant _PulseDial oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    // 首次拿到当天数据时，心电线从 0 点重新画到现在。
-    final wasEmpty = oldWidget.pushes.isEmpty && oldWidget.returns.isEmpty;
-    final hasData = widget.pushes.isNotEmpty || widget.returns.isNotEmpty;
-    if (wasEmpty && hasData) unawaited(_intro.forward(from: 0));
-  }
-
-  @override
-  void dispose() {
-    _intro.dispose();
-    _breath.dispose();
-    super.dispose();
-  }
-
-  static double _hourAngle(double h) => h / 24 * 2 * math.pi - math.pi / 2;
-
-  /// 心电采样点：基线是一条圆，每档推送在档位中点跳一个心搏（只画成功的条数，失败另画）。
-  List<Offset> _ecg(double d, double nowH) {
-    final key = '${d.toStringAsFixed(1)}|${(nowH * 60).floor()}|${widget.pushes.length}|${widget.returns.length}|${widget.total}';
-    if (key == _cacheKey) return _pts;
-    final c = Offset(d / 2, d / 2);
-    final base = d * 0.29;
-    double g(double x, double m, double w) => math.exp(-((x - m) * (x - m)) / (2 * w * w));
-    // 推送是大心跳（10 分钟一档，条数越多越高）；结算回传是小心跳（每批一下，异常的另画珊瑚色菱形）。
-    final beats = [
-      for (final p in widget.pushes)
-        if (p.$2 - p.$3 > 0) ((p.$1 + 5) / 60.0, d * math.min(0.12, 0.03 + 0.016 * math.log(1 + (p.$2 - p.$3)))),
-    ];
-    // 回传一天几百批，逐批叠加会把线顶出表盘；先按 10 分钟合并，再按对数给一个细尖峰。
-    final retBuckets = <int, int>{};
-    for (final r in widget.returns) {
-      if (r.$2) continue; // 异常批次另画珊瑚色菱形
-      final m = r.$1 ~/ 10 * 10;
-      retBuckets[m] = (retBuckets[m] ?? 0) + 1;
-    }
-    final smallBeats = [
-      for (final e in retBuckets.entries) ((e.key + 5) / 60.0, d * math.min(0.022, 0.008 + 0.005 * math.log(1 + e.value))),
-    ];
-    final cap = d * 0.415;
-    final pts = <Offset>[];
-    for (var h = 0.0; h <= nowH; h += 0.01) {
-      var r = base;
-      // 每个点只取最高的那个心搏，不叠加：同一时段再密也不会越跳越高。
-      var bump = 0.0;
-      for (final (hc, a) in beats) {
-        final x = h - hc;
-        if (x.abs() > 0.7) continue;
-        bump = math.max(bump, a * (0.07 * g(x, -0.3, 0.07) + g(x, 0, 0.045) - 0.12 * g(x, 0.12, 0.04) + 0.1 * g(x, 0.38, 0.1)));
-      }
-      for (final (hc, a) in smallBeats) {
-        final x = h - hc;
-        if (x.abs() > 0.1) continue;
-        bump = math.max(bump, a * g(x, 0, 0.022));
-      }
-      r = math.min(r + bump, cap);
-      pts.add(_polar(c, r, _hourAngle(h)));
-    }
-    _cacheKey = key;
-    _pts = pts;
-    return pts;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, box) {
-        final d = box.maxWidth;
-        final now = DateTime.now();
-        final nowH = now.hour + now.minute / 60;
-        final pts = _ecg(d, nowH);
-        final failed = widget.pushes.fold<int>(0, (a, e) => a + e.$3);
-        return Semantics(
-          button: true,
-          label: '今日推送 ${widget.total} 次，失败 $failed 次，查看对接',
-          excludeSemantics: true,
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: widget.onTap,
-            child: Stack(
-              children: [
-                Positioned.fill(
-                  child: AnimatedBuilder(
-                    animation: _intro,
-                    builder: (context, _) => CustomPaint(
-                      painter: _PulsePainter(
-                        pts: pts,
-                        nowH: nowH,
-                        t: Curves.easeInOutCubic.transform(_intro.value),
-                        pushes: widget.pushes,
-                        returns: widget.returns,
-                        tick: _fg(context, _kDeep),
-                        lineA: _fg(context, const Color(0xFF8FB6F2)),
-                        lineB: _fg(context, _kPurple),
-                        coral: _fg(context, const Color(0xFFE58C72)),
-                        hot: _fg(context, _kHeroNum),
-                        diamond: _fg(context, const Color(0xFFA9BEF8)),
-                        disc: _bg(context, Colors.white),
-                        discEdge: _bg(context, const Color(0xFFF0ECFE)),
-                        label: LhTypography.mono(context: context, size: 8, weight: FontWeight.w600, color: _fg(context, _kMute)),
-                      ),
-                    ),
-                  ),
-                ),
-                Positioned.fill(
-                  child: AnimatedBuilder(
-                    animation: Listenable.merge([_intro, _breath]),
-                    builder: (context, _) => CustomPaint(
-                      painter: _PulseNowPainter(
-                        at: pts.isEmpty ? null : pts.last,
-                        nowH: nowH,
-                        visible: _intro.value >= 1,
-                        phase: _breath.value,
-                        color: _fg(context, _kHeroNum),
-                        ring: _bg(context, Colors.white),
-                      ),
-                    ),
-                  ),
-                ),
-                Center(
-                  // 中心数字跟着心跳「咚—哒」轻轻放大。
-                  child: AnimatedBuilder(
-                    animation: _breath,
-                    builder: (context, child) {
-                      final ph = _breath.value;
-                      final beat = (_PulseNowPainter._g(ph, 0.08, 0.035) + 0.55 * _PulseNowPainter._g(ph, 0.26, 0.035)).clamp(0.0, 1.0).toDouble();
-                      return Transform.scale(scale: 1 + 0.03 * beat, child: child);
-                    },
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(_count(widget.total), style: LhTypography.mono(context: context, size: 18, weight: FontWeight.w700, color: _fg(context, _kHeroNum))),
-                        const SizedBox(height: 1),
-                        Text('次推送', style: _sans(context, size: 9.5, color: _kMute)),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-}
-
-class _PulsePainter extends CustomPainter {
-  _PulsePainter({
-    required this.pts,
-    required this.nowH,
-    required this.t,
-    required this.pushes,
-    required this.returns,
-    required this.tick,
-    required this.lineA,
-    required this.lineB,
-    required this.coral,
-    required this.hot,
-    required this.diamond,
-    required this.disc,
-    required this.discEdge,
-    required this.label,
-  });
-
-  final List<Offset> pts;
-  final double nowH;
-  final double t;
-  final List<(int, int, int)> pushes;
-  final List<(int, bool)> returns;
-  final Color tick;
-  final Color lineA;
-  final Color lineB;
-  final Color coral;
-  final Color hot;
-  final Color diamond;
-  final Color disc;
-  final Color discEdge;
-  final TextStyle label;
-
-  static double _a(double h) => h / 24 * 2 * math.pi - math.pi / 2;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final d = size.shortestSide;
-    final c = size.center(Offset.zero);
-    final base = d * 0.29;
-    // 小时刻度与 0 / 6 / 12 / 18
-    for (var h = 0; h < 24; h++) {
-      final main = h % 6 == 0;
-      canvas.drawLine(
-        _polar(c, d * 0.45, _a(h.toDouble())),
-        _polar(c, d * (main ? 0.42 : 0.435), _a(h.toDouble())),
-        Paint()
-          ..color = tick.withValues(alpha: main ? 0.38 : 0.15)
-          ..strokeWidth = main ? 1.1 : 0.8
-          ..strokeCap = StrokeCap.round,
-      );
-    }
-    for (final h in const [0, 6, 12, 18]) {
-      final tp = TextPainter(text: TextSpan(text: '$h', style: label), textDirection: TextDirection.ltr)..layout();
-      final p = _polar(c, d * 0.49, _a(h.toDouble()));
-      tp.paint(canvas, p - Offset(tp.width / 2, tp.height / 2));
-    }
-    // 表心
-    final discR = d * 0.21;
-    canvas.drawCircle(
-      c,
-      discR,
-      Paint()..shader = RadialGradient(colors: [disc, discEdge.withValues(alpha: 0.6)]).createShader(Rect.fromCircle(center: c, radius: discR)),
-    );
-    canvas.drawCircle(c, discR, Paint()..style = PaintingStyle.stroke..strokeWidth = 0.6..color = tick.withValues(alpha: 0.08));
-    // 未到的时间：虚线基线
-    final dash = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1
-      ..strokeCap = StrokeCap.round
-      ..color = tick.withValues(alpha: 0.22);
-    final rect = Rect.fromCircle(center: c, radius: base);
-    for (var h = nowH + 0.15; h < 24; h += 0.32) {
-      canvas.drawArc(rect, _a(h), 0.08 / 24 * 2 * math.pi, false, dash);
-    }
-    // 回传批次：内圈小菱形
-    for (final (m, abnormal) in returns) {
-      // 正常回传已经画成心电上的小心跳，这里只标异常批次。
-      if (!abnormal) continue;
-      final p = _polar(c, d * 0.234, _a(m / 60));
-      final s = d * 0.016;
-      canvas.save();
-      canvas.translate(p.dx, p.dy);
-      canvas.rotate(math.pi / 4);
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(Rect.fromCenter(center: Offset.zero, width: s * 2, height: s * 2), Radius.circular(s * 0.3)),
-        Paint()..color = abnormal ? coral : diamond,
-      );
-      canvas.restore();
-    }
-    if (pts.length < 2) return;
-    // 心电：入场时从 0 点画到现在
-    final n = math.max(2, (pts.length * t).round());
-    final path = Path()..moveTo(pts.first.dx, pts.first.dy);
-    for (var i = 1; i < n; i++) {
-      path.lineTo(pts[i].dx, pts[i].dy);
-    }
-    final shader = LinearGradient(colors: [lineA, const Color(0xFF9C84EA), lineB]).createShader(Offset.zero & size);
-    canvas.drawPath(
-      path,
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 3
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.4)
-        ..shader = LinearGradient(colors: [lineA.withValues(alpha: 0.35), lineB.withValues(alpha: 0.35)]).createShader(Offset.zero & size),
-    );
-    canvas.drawPath(
-      path,
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.5
-        ..strokeJoin = StrokeJoin.round
-        ..strokeCap = StrokeCap.round
-        ..shader = shader,
-    );
-    // 最近一小时（约 100 个采样点）从主紫渐变到深紫，线头一段更沉、更清楚。
-    if (t >= 1) {
-      const hot = 100;
-      const deep = Color(0xFF3B246E);
-      final from = math.max(1, n - hot);
-      for (var i = from; i < n; i++) {
-        final k = (i - from) / math.max(1, n - from);
-        canvas.drawLine(
-          pts[i - 1],
-          pts[i],
-          Paint()
-            ..strokeWidth = 1.6
-            ..strokeCap = StrokeCap.round
-            ..color = Color.lerp(lineB, deep, k)!,
-        );
-      }
-    }
-    // 失败：同一时刻向内跳一下，珊瑚色
-    final drawnH = nowH * t;
-    for (final (m, _, failed) in pushes) {
-      if (failed <= 0) continue;
-      final hc = (m + 5) / 60;
-      if (hc > drawnH) continue;
-      final a = d * math.min(0.08, 0.025 + 0.014 * math.log(1 + failed));
-      final fp = Path();
-      for (var k = -12; k <= 12; k++) {
-        final x = k * 0.01;
-        final r = base - a * math.exp(-(x * x) / (2 * 0.045 * 0.045));
-        final p = _polar(c, r, _a(hc + x));
-        if (k == -12) {
-          fp.moveTo(p.dx, p.dy);
-        } else {
-          fp.lineTo(p.dx, p.dy);
-        }
-      }
-      canvas.drawPath(
-        fp,
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 1.5
-          ..strokeJoin = StrokeJoin.round
-          ..color = coral,
-      );
-    }
-  }
-
-  @override
-  bool shouldRepaint(_PulsePainter old) =>
-      old.t != t || old.pts != pts || old.nowH != nowH || old.tick != tick || old.pushes != pushes;
-}
-
-/// 「现在」：线头一直在跳的心跳。每拍「咚—哒」两下：线头向前探出一小段心搏波形，光点随之放大、外圈扩散。
-/// 这段只表示「正在监测」，画在未来那一侧，不覆盖今天真实的推送波形。
-class _PulseNowPainter extends CustomPainter {
-  _PulseNowPainter({required this.at, required this.nowH, required this.visible, required this.phase, required this.color, required this.ring});
-
-  final Offset? at;
-  final double nowH;
-  final bool visible;
-  final double phase;
-  final Color color;
-  final Color ring;
-
-  static double _g(double x, double m, double w) => math.exp(-((x - m) * (x - m)) / (2 * w * w));
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final p = at;
-    if (p == null || !visible) return;
-    final c = size.center(Offset.zero);
-    final d = size.shortestSide;
-    final rHead = (p - c).distance;
-    // 节拍包络：0.08 处「咚」，0.26 处「哒」
-    final beat = (_g(phase, 0.08, 0.035) + 0.55 * _g(phase, 0.26, 0.035)).clamp(0.0, 1.0).toDouble();
-    // 线头探出的一小段心搏：0.4 小时宽，R 波朝外
-    final tip = Path()..moveTo(p.dx, p.dy);
-    for (var i = 1; i <= 24; i++) {
-      final x = i / 24;
-      final h = nowH + x * 0.4;
-      final r = rHead + d * 0.08 * beat * (_g(x, 0.32, 0.07) - 0.35 * _g(x, 0.5, 0.06));
-      tip.lineTo(c.dx + r * math.cos(h / 24 * 2 * math.pi - math.pi / 2), c.dy + r * math.sin(h / 24 * 2 * math.pi - math.pi / 2));
-    }
-    canvas.drawPath(
-      tip,
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.5
-        ..strokeJoin = StrokeJoin.round
-        ..strokeCap = StrokeCap.round
-        ..color = color.withValues(alpha: 0.2 + 0.6 * beat),
-    );
-    // 线头：深紫圆点，外面一圈细环随节拍缓慢扩散，像监护仪的采样点——稳，不闹。
-    final halo = (phase / 0.7).clamp(0.0, 1.0).toDouble();
-    canvas.drawCircle(
-      p,
-      4 + 9 * halo,
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1
-        ..color = color.withValues(alpha: 0.45 * (1 - halo)),
-    );
-    final r = 2.6 + 0.6 * beat;
-    canvas.drawCircle(p, r + 1.2, Paint()..color = ring);
-    canvas.drawCircle(p, r, Paint()..color = color);
-  }
-
-  @override
-  bool shouldRepaint(_PulseNowPainter old) => old.phase != phase || old.at != at || old.visible != visible || old.nowH != nowH;
-}
-
-/// 读数格右侧的小环；value 为 0 时只在起点留一个点，为 null 时只画底环。
-class _MiniRingPainter extends CustomPainter {
-  _MiniRingPainter({required this.value, required this.color});
-
-  final double? value;
-  final Color color;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final c = size.center(Offset.zero);
-    final r = size.shortestSide / 2 - 2;
-    canvas.drawCircle(c, r, Paint()..style = PaintingStyle.stroke..strokeWidth = 2.8..color = color.withValues(alpha: 0.16));
-    final v = value;
-    if (v == null) return;
-    if (v <= 0) {
-      canvas.drawCircle(_polar(c, r, -math.pi / 2), 1.8, Paint()..color = color);
-      return;
-    }
-    canvas.drawArc(
-      Rect.fromCircle(center: c, radius: r),
-      -math.pi / 2,
-      2 * math.pi * v,
-      false,
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 2.8
-        ..strokeCap = StrokeCap.round
-        ..color = color,
-    );
-  }
-
-  @override
-  bool shouldRepaint(_MiniRingPainter old) => old.value != value || old.color != color;
-}
 
 /// 标题旁的实时小点：1.6 秒一次呼吸。
 class _LiveDot extends StatefulWidget {
@@ -4028,6 +3117,1645 @@ class _LiveDotState extends State<_LiveDot> with SingleTickerProviderStateMixin 
       ),
     );
   }
+}
+
+// ═════════════════════════════ 业务脉搏 · 方案 A（一屏一图 · 横滑） ═════════════════════════════
+//
+//   顶部四格分段（阶梯 / 跨档进度 / 推送 / 到期）与左右滑动同步，每页 = 一句读数 + 一张图：
+//     · 阶梯：选中规则本期的累计基数爬坡线（期初 → 各档到档时间 → 最近一次计算，都是真实锚点）、
+//             档位门槛台阶、按本期日均外推的预测锥与到档日期区间；长按图可读任一天的数；
+//     · 跨档进度：本期全部阶梯规则按最快到下一档排序，可按 可跨档 / 难达 / 满档 筛选、上下滑动；点行切到「阶梯」看大图；
+//       阶梯页顶部有 ‹ 当前规则 › 切换条，点中间可从全部规则里搜索选择，右侧是档位明细；
+//     · 推送：今日逐条推送，针高 = 耗时、颜色 = 推送类型、珊瑚色 = 失败；下方镜像是每 10 分钟的结算回传批次；
+//     · 到期：未来 30 天两侧结算明细到期点阵，7 天内用临期色；点进去 = 结算列表「30 天内到期」。
+//   数据：business-go Overview 的 tierBoard / pulse.events / settleExpiry（见 business-go internal/mobile/hero.go）。
+
+const _kTypeSettle = Color(0xFF7B5CD8);
+const _kTypePrice = Color(0xFF2E8FB8);
+const _kTypeBill = Color(0xFFD0619A);
+const _kWarnMark = Color(0xFFB5791A);
+
+/// 推送类型 → (名称, 颜色)；未知类型用灰。
+(String, Color) _pushTypeTone(String v) => switch (v.toUpperCase()) {
+  'PRODUCT_SETTLEMENT' => ('产品结算配置', _kTypeSettle),
+  'PRICE_RULE' => ('价格规则', _kTypePrice),
+  'BILL_CONFIG' => ('账单配置', _kTypeBill),
+  _ => (v.isEmpty ? '其他' : v, _kChainGrey),
+};
+
+double? _hNum(Object? v) => v is num ? v.toDouble() : double.tryParse(_s(v));
+
+/// 「2026-11-10 13:44:00」→ 本地墙钟时间（资管库按北京时间存，这里不做时区换算）。
+DateTime? _hDt(Object? v) {
+  final s = _s(v);
+  if (s.length >= 19) return DateTime.tryParse(s.substring(0, 19).replaceFirst(' ', 'T'));
+  if (s.length >= 10) return DateTime.tryParse(s.substring(0, 10));
+  return null;
+}
+
+String _hMd(DateTime d) => '${d.month.toString().padLeft(2, '0')}/${d.day.toString().padLeft(2, '0')}';
+
+/// 一条阶梯规则本期的进度（tierBoard.rules[i]）。
+class _TierRule {
+  _TierRule(this.m)
+    : tiers = [for (final t in _list(m['tiers'])) (_hNum(t['min']) ?? 0.0, _rate(t['rate']))],
+      reaches = [
+        for (final e in _list(m['reaches']))
+          if (_hDt(e['at']) != null) (_i(e['level']) ?? 0, _hDt(e['at'])!),
+      ];
+
+  final Map<String, dynamic> m;
+  final List<(double, String)> tiers;
+  final List<(int, DateTime)> reaches;
+
+  String get id => _s(m['ruleId']);
+  String get code => _s(m['code']);
+  String get name => _s(m['name']).isEmpty ? '阶梯规则' : _s(m['name']);
+  String get title => code.isEmpty ? name : '$code $name';
+  double get stat => _hNum(m['stat']) ?? 0;
+  int get level => _i(m['level']) ?? 0;
+  bool get full => m['full'] == true;
+  bool get reachable => m['reachable'] == true;
+  double? get next => _hNum(m['next']);
+  double? get gap => _hNum(m['gap']);
+  double get rate => _hNum(m['ratePerDay']) ?? 0;
+  String get discount => _rate(m['discount']);
+  DateTime? get start => _hDt(m['periodStart']);
+  DateTime? get end => _hDt(m['periodEnd']);
+  DateTime? get asOf => _hDt(m['asOf']);
+  DateTime? get eta => _hDt(m['eta']);
+  DateTime? get etaEarly => _hDt(m['etaEarly']);
+  DateTime? get etaLate => _hDt(m['etaLate']);
+
+  /// 到下一档的进度 0–1；满档 = 1。
+  double get frac {
+    final n = next;
+    if (full || n == null) return 1;
+    final prev = level > 0 && level <= tiers.length ? tiers[level - 1].$1 : 0.0;
+    if (n <= prev) return 0;
+    return ((stat - prev) / (n - prev)).clamp(0.0, 1.0).toDouble();
+  }
+
+  /// 爬坡锚点：期初 0 → 各档到档时间（取门槛）→ 最近一次计算时的基数。
+  List<(DateTime, double)> get anchors {
+    final s = start, a = asOf;
+    if (s == null || a == null) return const [];
+    final out = <(DateTime, double)>[(s, 0)];
+    for (final (lv, at) in reaches) {
+      if (lv < 1 || lv > tiers.length) continue;
+      final v = tiers[lv - 1].$1;
+      if (v <= 0 || v > stat || at.isBefore(s) || at.isAfter(a)) continue;
+      if (at.isBefore(out.last.$1) || v < out.last.$2) continue;
+      out.add((at, v));
+    }
+    out.add((a, stat));
+    return out;
+  }
+
+  /// 任一时刻的读数：(基数, 预测下沿, 预测上沿, 是否预测)。
+  (double, double, double, bool) valueAt(DateTime t) {
+    final a = asOf;
+    if (a != null && t.isAfter(a)) {
+      final days = t.difference(a).inMinutes / 1440;
+      return (stat + days * rate, stat + days * rate * 0.7, stat + days * rate * 1.3, true);
+    }
+    final pts = anchors;
+    for (var i = 1; i < pts.length; i++) {
+      if (!t.isAfter(pts[i].$1)) {
+        final (t0, v0) = pts[i - 1];
+        final (t1, v1) = pts[i];
+        final span = t1.difference(t0).inMinutes;
+        final f = span <= 0 ? 1.0 : (t.difference(t0).inMinutes / span).clamp(0.0, 1.0);
+        final v = v0 + (v1 - v0) * f;
+        return (v, v, v, false);
+      }
+    }
+    return (stat, stat, stat, false);
+  }
+
+  int levelOf(double v) {
+    var lv = 0;
+    for (var i = 0; i < tiers.length; i++) {
+      if (v >= tiers[i].$1) lv = i + 1;
+    }
+    return lv;
+  }
+}
+
+/// 画图用的一组已按明暗解析过的颜色与字样。
+class _HeroInk {
+  _HeroInk(BuildContext context)
+    : purple = _fg(context, _kPurple),
+      deep = _fg(context, _kDeep),
+      ink = _fg(context, _kInk),
+      ink2 = _fg(context, _kInk2),
+      mute = _fg(context, _kMute),
+      edge = _ln(context, _kEdge),
+      line = _ln(context, _kLine),
+      card = _bg(context, Colors.white),
+      panel = _bg(context, _kPanel),
+      coral = _fg(context, _kCoral),
+      warn = _fg(context, _kWarnMark),
+      warnInk = _fg(context, _kCopper),
+      warnSoft = _bg(context, _kCopperSoft),
+      mono = LhTypography.mono(context: context, size: 9, color: _fg(context, _kMute)),
+      sans = LhTypography.sans(context: context, size: 9, color: _fg(context, _kInk2));
+
+  final Color purple, deep, ink, ink2, mute, edge, line, card, panel, coral, warn, warnInk, warnSoft;
+  final TextStyle mono, sans;
+}
+
+void _paintText(Canvas c, String text, TextStyle style, Offset at, {TextAlign align = TextAlign.left, Color? halo}) {
+  final tp = TextPainter(text: TextSpan(text: text, style: style), textDirection: TextDirection.ltr)..layout();
+  var dx = at.dx;
+  if (align == TextAlign.right) dx -= tp.width;
+  if (align == TextAlign.center) dx -= tp.width / 2;
+  if (halo != null) {
+    final stroke = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 3
+      ..strokeJoin = StrokeJoin.round
+      ..color = halo;
+    (TextPainter(text: TextSpan(text: text, style: style.copyWith(foreground: stroke)), textDirection: TextDirection.ltr)..layout())
+        .paint(c, Offset(dx, at.dy));
+  }
+  tp.paint(c, Offset(dx, at.dy));
+}
+
+double _textWidth(String text, TextStyle style) =>
+    (TextPainter(text: TextSpan(text: text, style: style), textDirection: TextDirection.ltr)..layout()).width;
+
+void _dashLine(Canvas c, Offset a, Offset b, Paint p, {double dash = 4, double gap = 3}) {
+  final d = b - a;
+  final len = d.distance;
+  if (len == 0) return;
+  final u = d / len;
+  for (double s = 0; s < len; s += dash + gap) {
+    c.drawLine(a + u * s, a + u * math.min(s + dash, len), p);
+  }
+}
+
+void _hatch(Canvas c, Rect r, Color color) {
+  if (r.width <= 0 || r.height <= 0) return;
+  c.save();
+  c.clipRect(r);
+  final p = Paint()
+    ..color = color
+    ..strokeWidth = 1;
+  for (double x = r.left - r.height; x < r.right; x += 5) {
+    c.drawLine(Offset(x, r.bottom), Offset(x + r.height, r.top), p);
+  }
+  c.restore();
+}
+
+class _BizPulseHero extends StatefulWidget {
+  const _BizPulseHero({
+    this.initialPage = 0,
+    this.ruleOnly = false,
+    required this.overview,
+    required this.service,
+    required this.loading,
+    required this.onOpenPush,
+    required this.onOpenExpiring,
+  });
+
+  final bool ruleOnly;
+  final int initialPage;
+  final LighthouseService service;
+  final Map<String, dynamic> overview;
+  final bool loading;
+  final VoidCallback onOpenPush;
+  final VoidCallback onOpenExpiring;
+
+  @override
+  State<_BizPulseHero> createState() => _BizPulseHeroState();
+}
+
+class _BizPulseHeroState extends State<_BizPulseHero> {
+  List<String> get _lenses => widget.ruleOnly ? const ['跨档进度', '阶梯'] : const ['跨档进度', '阶梯', '推送', '到期'];
+  static const _slideHeight = 300.0;
+  static const _tierPad = EdgeInsets.fromLTRB(2, 14, 50, 15);
+
+  late final PageController _pc = PageController(initialPage: widget.initialPage);
+  late int _page = widget.initialPage;
+  String _ruleId = '';
+  String _raceFilter = 'all'; // 跨档进度筛选：all / reach / hard / full
+  double? _scrub; // 阶梯图上长按的位置：本期进度 0–1
+  bool _showDef = false;
+
+  @override
+  void dispose() {
+    _pc.dispose();
+    super.dispose();
+  }
+
+  void _go(int i) {
+    setState(() {
+      _page = i;
+      _scrub = null;
+    });
+    _pc.animateToPage(i, duration: const Duration(milliseconds: 300), curve: Curves.easeOutCubic);
+  }
+
+  List<_TierRule> get _rules => [for (final r in _list(_map(widget.overview['tierBoard'])['rules'])) _TierRule(r)];
+
+  @override
+  Widget build(BuildContext context) {
+    final rules = _rules;
+    _TierRule? pick;
+    for (final r in rules) {
+      if (r.id == _ruleId) pick = r;
+    }
+    pick ??= rules.isEmpty ? null : rules.first;
+    final ink = _HeroInk(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _lensBar(context),
+        const SizedBox(height: 10),
+        Container(
+          height: _slideHeight + 24,
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: _bg(context, Colors.white),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: _ln(context, _kHeroPanelEdge), width: 0.9),
+          ),
+          child: PageView(
+            controller: _pc,
+            onPageChanged: (i) => setState(() {
+              _page = i;
+              _scrub = null;
+            }),
+            children: [
+              _raceSlide(context, ink, rules, pick),
+              _tierSlide(context, ink, rules, pick),
+              if (!widget.ruleOnly) ...[_pushSlide(context, ink), _expirySlide(context, ink)],
+            ],
+          ),
+        ),
+        if (!widget.ruleOnly && !widget.loading) ...[
+          const SizedBox(height: 10),
+          _tilesRow(context, rules),
+        ],
+        const SizedBox(height: 8),
+        _dotsRow(context),
+        if (_showDef) ...[const SizedBox(height: 6), _defBox(context)],
+      ],
+    );
+  }
+
+  /// 底部三组指标格（同灯塔 Hero 下面那排）：阶梯 / 推送 / 结算。只放接口给的数，不编环比。
+  Widget _tilesRow(BuildContext context, List<_TierRule> rules) {
+    final o = widget.overview;
+    final board = _map(o['tierBoard']);
+    final pulse = _map(o['pulse']);
+    final expiry = _map(o['settleExpiry']);
+    String n(Object? v) => _i(v) == null ? '—' : _count(_i(v));
+    final full = rules.where((r) => r.full).length;
+    final p95 = _i(pulse['costP95']);
+    final failed = _i(o['todayPushFailed']) ?? 0;
+    final abnormal = _i(o['todayReturnAbnormal']) ?? 0;
+    final groups = <(String, Color, VoidCallback, List<(String, String, String, Color)>)>[
+      ('阶梯', _kLensColors[0], () => _go(0), [
+        ('本期规则', n(board['total'] ?? rules.length), '条', _kInk),
+        ('本期可跨', n(board['periodCross']), '条', _kHeroNum),
+        ('已满档', _count(full), '条', _kInk),
+      ]),
+      ('推送', _kLensColors[2], widget.onOpenPush, [
+        ('今日推送', n(o['todayPushes']), '次', _kInk),
+        ('失败', _count(failed), '次', failed > 0 ? _kCoral : _kInk),
+        ('P95 耗时', p95 == null ? '—' : _count(p95), p95 == null ? '' : 'ms', _kInk),
+      ]),
+      ('结算', _kLensColors[3], widget.onOpenExpiring, [
+        ('30 天到期', n(expiry['total']), '条', _kInk),
+        ('本周到期', n(expiry['week']), '条', _kInk),
+        ('回传异常', _count(abnormal), '批', abnormal > 0 ? _kCoral : _kInk),
+      ]),
+    ];
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (var g = 0; g < groups.length; g++) ...[
+          if (g > 0) const SizedBox(width: 8),
+          Expanded(
+            child: Semantics(
+              button: true,
+              label: '${groups[g].$1}：${[for (final r in groups[g].$4) '${r.$1} ${r.$2}${r.$3}'].join('，')}',
+              excludeSemantics: true,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: groups[g].$3,
+                child: Container(
+                  padding: const EdgeInsets.fromLTRB(10, 8, 10, 4),
+                  decoration: BoxDecoration(
+                    color: _bg(context, Colors.white),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: _ln(context, _kHeroPanelEdge), width: 0.9),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(width: 6, height: 6, decoration: BoxDecoration(color: _fg(context, groups[g].$2), shape: BoxShape.circle)),
+                          const SizedBox(width: 4),
+                          Text(groups[g].$1, style: _sans(context, size: 10.5, weight: FontWeight.w600, color: groups[g].$2)),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      for (final r in groups[g].$4)
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(vertical: 5),
+                          decoration: BoxDecoration(border: Border(top: BorderSide(color: _ln(context, _kLine), width: 0.8))),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(r.$1, style: _sans(context, size: 10, color: _kInk2)),
+                              const SizedBox(height: 1),
+                              Text.rich(
+                                TextSpan(
+                                  children: [
+                                    TextSpan(text: r.$2, style: LhTypography.mono(context: context, size: 14, weight: FontWeight.w500, color: _fg(context, r.$4))),
+                                    if (r.$3.isNotEmpty)
+                                      TextSpan(text: r.$3, style: _sans(context, size: 9, color: _kInk2)),
+                                  ],
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  /// 视角切换：灯塔「本期合计」图例那种带色点的下划线 tab，不再是灰底分段控件。
+  Widget _lensBar(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(border: Border(bottom: BorderSide(color: _ln(context, _kHeroEdge), width: 1))),
+      child: Row(
+        children: [
+          for (var i = 0; i < _lenses.length; i++) ...[
+            if (i > 0) const SizedBox(width: 16),
+            Semantics(
+              button: true,
+              selected: i == _page,
+              label: _lenses[i],
+              excludeSemantics: true,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => _go(i),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 180),
+                  constraints: const BoxConstraints(minHeight: 32),
+                  padding: const EdgeInsets.only(bottom: 6),
+                  decoration: BoxDecoration(
+                    border: Border(
+                      bottom: BorderSide(
+                        color: i == _page ? _fg(context, _kLensColors[i % _kLensColors.length]) : Colors.transparent,
+                        width: 2,
+                      ),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 4),
+                        child: Container(
+                          width: 7,
+                          height: 7,
+                          decoration: BoxDecoration(
+                            color: _fg(context, _kLensColors[i % _kLensColors.length]).withValues(alpha: i == _page ? 1 : 0.45),
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 5),
+                      Text(
+                        _lenses[i],
+                        style: _sans(
+                          context,
+                          size: 12.5,
+                          weight: i == _page ? FontWeight.w600 : FontWeight.w400,
+                          color: i == _page ? _kHeroNum : _kHeroMute,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _dotsRow(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: Align(
+            alignment: Alignment.centerRight,
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => setState(() => _showDef = !_showDef),
+              child: Padding(
+                padding: const EdgeInsets.only(left: 8, top: 2, bottom: 2),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.info_outline_rounded, size: 12, color: _fg(context, _kMute)),
+                    const SizedBox(width: 2),
+                    Text('口径', style: _sans(context, size: 10.5, color: _kMute)),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _defBox(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+      decoration: BoxDecoration(color: _bg(context, _kPanel), borderRadius: BorderRadius.circular(10)),
+      child: Text(
+        '阶梯：本期有计算记录的阶梯计费规则。资管只保留最新一次计算，所以爬坡线只连真实锚点：期初、各档到档时间（取门槛）、最近一次计算的基数。'
+        '预测按本期日均（基数 ÷ 已过天数）外推，区间按日均 ±30%；到期末也到不了下一档的记为「本期难达」。长按图可读任一天的数。\n'
+        '跨档进度：一段 = 一档，填充长度表示当前进度；按最快到下一档排序。「本周」到本周日 24 点。\n'
+        '推送：今日每条产品推送（最多取最新 600 条），针高 = 耗时，颜色 = 推送类型，珊瑚色 = 失败；下方是每 10 分钟的结算回传批次，珊瑚色 = 有异常批次。\n'
+        '到期：渠道、供应商两侧结算明细的失效时间落在未来 30 天内的条数，每列一天；与结算列表「30 天内到期」同口径。',
+        style: _sans(context, size: 10.5, color: _kInk2, height: 1.6),
+      ),
+    );
+  }
+
+  // ── 读数行 ──
+
+  TextSpan _b(BuildContext context, String t, {Color color = _kInk}) =>
+      TextSpan(text: t, style: LhTypography.mono(context: context, size: 10.5, weight: FontWeight.w600, color: _fg(context, color)));
+
+  Widget _kpi(BuildContext context, String big, String unit, List<InlineSpan> line1, List<InlineSpan> line2) {
+    final style = _sans(context, size: 10.5, color: _kInk2, height: 1.4);
+    return SizedBox(
+      height: 36,
+      child: Row(
+        children: [
+          Text.rich(
+            TextSpan(
+              children: [
+                TextSpan(text: big, style: LhTypography.number(context: context, size: 24, color: _fg(context, _kHeroNum))),
+                TextSpan(text: unit, style: _sans(context, size: 11.5, weight: FontWeight.w500, color: _kInk2)),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text.rich(TextSpan(children: line1), maxLines: 1, overflow: TextOverflow.ellipsis, style: style),
+                if (line2.isNotEmpty) Text.rich(TextSpan(children: line2), maxLines: 1, overflow: TextOverflow.ellipsis, style: style),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _skeleton(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      _kpi(context, '—', '', [const TextSpan(text: '加载中…')], const []),
+      const SizedBox(height: 8),
+      Expanded(
+        child: DecoratedBox(decoration: BoxDecoration(color: _bg(context, _kPanel), borderRadius: BorderRadius.circular(10))),
+      ),
+    ],
+  );
+
+  Widget _empty(BuildContext context, String text) => Center(
+    child: Text(text, textAlign: TextAlign.center, style: _sans(context, size: 11, color: _kMute, height: 1.5)),
+  );
+
+  // ── 1. 阶梯 ──
+
+  void _scrubAt(_TierRule r, double dx, double width) {
+    final w = width - _tierPad.left - _tierPad.right;
+    if (w <= 0) return;
+    setState(() => _scrub = ((dx - _tierPad.left) / w).clamp(0.0, 1.0).toDouble());
+  }
+
+  /// 选中某条规则看阶梯走势（不在阶梯页时滑过去）。
+  void _pickRule(_TierRule r) {
+    setState(() {
+      _ruleId = r.id;
+      _scrub = null;
+    });
+    if (_page != 1) _go(1);
+  }
+
+  /// 阶梯页顶部：‹ 当前规则（第 i / N 条，点开可选全部）› + 档位明细。
+  Widget _ruleSwitcher(BuildContext context, _HeroInk ink, List<_TierRule> rules, _TierRule r) {
+    final idx = rules.indexOf(r);
+    final many = rules.length > 1;
+    void step(int d) {
+      if (!many) return;
+      final n = rules[(idx + d + rules.length) % rules.length];
+      setState(() {
+        _ruleId = n.id;
+        _scrub = null;
+      });
+    }
+
+    Widget square(IconData icon, String label, VoidCallback? onTap) => Semantics(
+      button: true,
+      label: label,
+      excludeSemantics: true,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: Container(
+          width: 28,
+          height: 28,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(color: _bg(context, _kPanel), borderRadius: BorderRadius.circular(8)),
+          child: Icon(icon, size: 17, color: _fg(context, onTap == null ? _kMute : _kDeep)),
+        ),
+      ),
+    );
+
+    return SizedBox(
+      height: 28,
+      child: Row(
+        children: [
+          square(Icons.chevron_left_rounded, '上一条规则', many ? () => step(-1) : null),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Semantics(
+              button: true,
+              label: '当前规则 ${r.name}，第 ${idx + 1} 条，共 ${rules.length} 条，点按切换',
+              excludeSemantics: true,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => _openRulePicker(context, ink, rules, r),
+                child: Container(
+                  height: 28,
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  decoration: BoxDecoration(
+                    color: ink.purple.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: ink.purple.withValues(alpha: 0.18), width: 0.8),
+                  ),
+                  child: Row(
+                    children: [
+                      Text(
+                        '${idx + 1}/${rules.length}',
+                        style: LhTypography.mono(context: context, size: 10, weight: FontWeight.w600, color: _fg(context, _kDeep)),
+                      ),
+                      const SizedBox(width: 7),
+                      Expanded(
+                        child: Text(r.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: _sans(context, size: 11.5, weight: FontWeight.w600)),
+                      ),
+                      const SizedBox(width: 4),
+                      Icon(Icons.unfold_more_rounded, size: 15, color: _fg(context, _kDeep)),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 6),
+          square(Icons.chevron_right_rounded, '下一条规则', many ? () => step(1) : null),
+          const SizedBox(width: 6),
+          square(Icons.table_rows_outlined, '档位明细', () => _showRuleDetail(context, r)),
+        ],
+      ),
+    );
+  }
+
+  /// 全部阶梯规则的选择面板：可搜索，点一条即切到它的阶梯走势。
+  void _openRulePicker(BuildContext context, _HeroInk ink, List<_TierRule> rules, _TierRule current) {
+    var q = '';
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: _bg(context, Colors.white),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheet) {
+          final shown = q.isEmpty ? rules : [for (final r in rules) if (r.name.contains(q) || r.code.contains(q)) r];
+          return Padding(
+            padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(ctx).bottom),
+            child: SafeArea(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(ctx).height * 0.8),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 12, 8, 2),
+                      child: Row(
+                        children: [
+                          Expanded(child: Text('切换阶梯规则 · ${rules.length} 条', style: _sans(ctx, size: 15, weight: FontWeight.w700))),
+                          IconButton(onPressed: () => Navigator.of(ctx).pop(), icon: const Icon(Icons.close), tooltip: '关闭'),
+                        ],
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+                      child: Text('按预计跨档时间排序；点一条看它的阶梯走势。', style: _sans(ctx, size: 11, color: _kMute)),
+                    ),
+                    if (rules.length > 6)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                        child: TextField(
+                          onChanged: (v) => setSheet(() => q = v.trim()),
+                          style: _sans(ctx, size: 13),
+                          decoration: InputDecoration(
+                            isDense: true,
+                            hintText: '搜索规则名称',
+                            prefixIcon: const Icon(Icons.search_rounded, size: 18),
+                            filled: true,
+                            fillColor: _bg(ctx, _kPanel),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+                          ),
+                        ),
+                      ),
+                    if (shown.isEmpty)
+                      Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Center(child: Text('没有匹配的规则', style: _sans(ctx, size: 12, color: _kMute))),
+                      )
+                    else
+                      Flexible(
+                        child: ListView.builder(
+                          shrinkWrap: true,
+                          padding: const EdgeInsets.fromLTRB(14, 0, 14, 16),
+                          itemCount: shown.length,
+                          itemBuilder: (_, i) {
+                            final r = shown[i];
+                            return Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 3),
+                              child: _raceRow(
+                                ctx,
+                                ink,
+                                r,
+                                hot: r.reachable && _withinWeek(r),
+                                selected: r.id == current.id,
+                                onTap: () {
+                                  Navigator.of(ctx).pop();
+                                  _pickRule(r);
+                                },
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _tierSlide(BuildContext context, _HeroInk ink, List<_TierRule> rules, _TierRule? r) {
+    if (widget.loading) return _skeleton(context);
+    if (r == null) {
+      return _empty(context, widget.overview['tierBoard'] == null ? '阶梯数据暂不可用' : '本期还没有阶梯规则的计算记录');
+    }
+    final nextLv = r.level + 1;
+    final line1 = <InlineSpan>[
+      if (r.full)
+        TextSpan(text: '已到最高档 · 折扣 ${r.discount}')
+      else if (r.gap != null) ...[TextSpan(text: '距 $nextLv 档 '), _b(context, '¥${_wan(r.gap)}'), TextSpan(text: ' · 当前折扣 ${r.discount}')],
+    ];
+    var line2 = <InlineSpan>[];
+    final scrub = _scrub;
+    final start = r.start, end = r.end;
+    if (scrub != null && start != null && end != null) {
+      final t = start.add(Duration(minutes: (end.difference(start).inMinutes * scrub).round()));
+      final (v, lo, hi, forecast) = r.valueAt(t);
+      line2 = forecast
+          ? [
+              _b(context, _hMd(t)),
+              const TextSpan(text: ' 预测 '),
+              _b(context, '¥${_wan(v)}'),
+              TextSpan(text: '（${_wan(lo)}–${_wan(hi)}）· ${r.levelOf(v)} 档'),
+            ]
+          : [
+              _b(context, _hMd(t)),
+              const TextSpan(text: ' 累计 '),
+              _b(context, '¥${_wan(v)}'),
+              TextSpan(text: ' · ${r.levelOf(v)} 档'),
+            ];
+    } else if (r.full) {
+      line2 = [const TextSpan(text: '当前折扣 '), _b(context, r.discount), const TextSpan(text: ' · 本期基数 '), _b(context, '¥${_wan(r.stat)}')];
+    } else if (r.reachable && r.eta != null) {
+      line2 = [
+        const TextSpan(text: '本期日均 '),
+        _b(context, '¥${_wan(r.rate)}'),
+        const TextSpan(text: '，预计 '),
+        _b(context, '${_hMd(r.eta!)} 到达下一档', color: _kDeep),
+        if (r.etaEarly != null && r.etaLate != null) TextSpan(text: '（${_hMd(r.etaEarly!)}–${_hMd(r.etaLate!)}）'),
+      ];
+    } else {
+      line2 = [const TextSpan(text: '本期日均 '), _b(context, '¥${_wan(r.rate)}'), TextSpan(text: '，到期末也到不了 $nextLv 档')];
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _ruleSwitcher(context, ink, rules, r),
+        const SizedBox(height: 6),
+        _kpi(context, '${r.level}', '档', line1, line2),
+        const SizedBox(height: 2),
+        Expanded(
+          child: LayoutBuilder(
+            builder: (context, box) => GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTapDown: (d) => _scrubAt(r, d.localPosition.dx, box.maxWidth),
+              onLongPressStart: (d) => _scrubAt(r, d.localPosition.dx, box.maxWidth),
+              onLongPressMoveUpdate: (d) => _scrubAt(r, d.localPosition.dx, box.maxWidth),
+              onLongPressEnd: (_) => setState(() => _scrub = null),
+              child: CustomPaint(
+                size: Size(box.maxWidth, box.maxHeight),
+                painter: _TierClimbPainter(rule: r, ink: ink, pad: _tierPad, scrub: _scrub),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ── 2. 跨档进度 ──
+
+  Widget _raceSlide(BuildContext context, _HeroInk ink, List<_TierRule> rules, _TierRule? pick) {
+    if (widget.loading) return _skeleton(context);
+    if (rules.isEmpty) {
+      return _empty(context, widget.overview['tierBoard'] == null ? '阶梯数据暂不可用' : '本期还没有阶梯规则的计算记录');
+    }
+    final board = _map(widget.overview['tierBoard']);
+    final total = _i(board['total']) ?? rules.length;
+    final week = _i(board['weekCross']) ?? 0;
+    final period = _i(board['periodCross']) ?? 0;
+    _TierRule? first;
+    for (final r in rules) {
+      if (r.reachable && first == null) first = r;
+    }
+    final groups = <(String, String, List<_TierRule>)>[
+      ('all', '全部', rules),
+      ('reach', '本期可跨档', [for (final r in rules) if (r.reachable) r]),
+      ('hard', '本期难达', [for (final r in rules) if (!r.reachable && !r.full) r]),
+      ('full', '已满档', [for (final r in rules) if (r.full) r]),
+    ];
+    var shown = rules;
+    for (final g in groups) {
+      if (g.$1 == _raceFilter) shown = g.$3;
+    }
+    final line2 = <InlineSpan>[
+      TextSpan(text: rules.length < total ? '按预计跨档时间排序 · 显示前 ${rules.length} 条' : '按预计跨档时间排序 · 点一条看阶梯走势'),
+    ];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _kpi(context, '$week', '条', [
+          const TextSpan(text: '本周可能跨档 · 本期 '),
+          _b(context, '$period'),
+          TextSpan(text: ' / $total 条阶梯规则'),
+        ], line2),
+        const SizedBox(height: 6),
+        SizedBox(
+          height: 22,
+          child: Row(
+            children: [
+              for (final (key, label, list) in groups)
+                if (key == 'all' || list.isNotEmpty) ...[
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => setState(() => _raceFilter = key),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 150),
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: key == _raceFilter ? ink.purple.withValues(alpha: 0.12) : _bg(context, _kPanel),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text.rich(
+                        TextSpan(
+                          children: [
+                            TextSpan(text: '$label '),
+                            TextSpan(
+                              text: '${list.length}',
+                              style: LhTypography.mono(context: context, size: 10, weight: FontWeight.w600, color: _fg(context, key == _raceFilter ? _kDeep : _kInk2)),
+                            ),
+                          ],
+                        ),
+                        style: _sans(context, size: 10.5, weight: key == _raceFilter ? FontWeight.w600 : FontWeight.w400, color: key == _raceFilter ? _kDeep : _kInk2),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                ],
+            ],
+          ),
+        ),
+        const SizedBox(height: 6),
+        Expanded(
+          child: shown.isEmpty
+              ? _empty(context, '这一类没有规则')
+              : ShaderMask(
+                  // 底部渐隐，提示还能往下滑。
+                  blendMode: BlendMode.dstIn,
+                  shaderCallback: (rect) => LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: const [Colors.white, Colors.white, Colors.transparent],
+                    stops: [0, rect.height <= 0 ? 1 : (1 - 14 / rect.height).clamp(0.0, 1.0).toDouble(), 1],
+                  ).createShader(rect),
+                  child: ListView.builder(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    physics: const ClampingScrollPhysics(),
+                    itemCount: shown.length,
+                    itemBuilder: (_, i) {
+                      final r = shown[i];
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 2),
+                        child: _raceRow(
+                          context,
+                          ink,
+                          r,
+                          hot: r == first || (r.reachable && _withinWeek(r)),
+                          selected: r == pick,
+                          onTap: () => _pickRule(r),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+        ),
+      ],
+    );
+  }
+
+  bool _withinWeek(_TierRule r) {
+    final e = r.eta, a = r.asOf;
+    if (e == null || a == null) return false;
+    final day = DateTime(a.year, a.month, a.day);
+    return e.isBefore(day.add(Duration(days: 8 - a.weekday)));
+  }
+
+  void _showRuleDetail(BuildContext context, _TierRule r) {
+    showModalBottomSheet<void>(
+      context: context,
+      useRootNavigator: true,
+      isScrollControlled: true,
+      backgroundColor: _bg(context, Colors.white),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => SafeArea(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(ctx).height * 0.8),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(20),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              Row(children: [
+                Expanded(child: Text('规则明细', style: _sans(ctx, size: 15, weight: FontWeight.w700))),
+                IconButton(onPressed: () => Navigator.of(ctx).pop(), icon: const Icon(Icons.close), tooltip: '关闭'),
+              ]),
+              Text(r.name, style: _sans(ctx, size: 14, weight: FontWeight.w600)),
+              const SizedBox(height: 10),
+              FilledButton.icon(onPressed: () { Navigator.of(ctx).pop(); Navigator.of(context, rootNavigator: true).push(MaterialPageRoute<void>(builder: (_) => LighthouseRuleLedgerPage(service: widget.service, rule: r.m))); }, icon: const Icon(Icons.table_chart_outlined, size: 18), label: const Text('查看关联日月年表')),
+              const SizedBox(height: 8),
+              OutlinedButton.icon(onPressed: () { Navigator.of(ctx).pop(); Navigator.of(context).pushNamed('/tier', arguments: {'ruleId': r.id}); }, icon: const Icon(Icons.insights_outlined, size: 18), label: const Text('阶梯详情与灯塔经营')),
+              const SizedBox(height: 10),
+              SelectableText('规则编码：${r.code.isEmpty ? '—' : r.code}', style: _sans(ctx, size: 12, color: _kInk2)),
+              const SizedBox(height: 6),
+              Text('本期周期：${_date(r.m['periodStart'])} 至 ${_date(r.m['periodEnd'])}', style: _sans(ctx, size: 12, color: _kInk2)),
+              const SizedBox(height: 6),
+              Text('当前第 ${r.level} 档 · 本期基数 ¥${_wan(r.stat)}', style: _sans(ctx, size: 12)),
+              const SizedBox(height: 6),
+              Text(r.full ? '已到最高档' : '距下一档：¥${_wan(r.gap)} · ${r.reachable && r.eta != null ? '预计 ${_hMd(r.eta!)} 跨档' : '本期预计难达'}', style: _sans(ctx, size: 12, color: _kDeep)),
+              const SizedBox(height: 12),
+              _miniTable(ctx, const ['档位', '起始基数（元）', '比例'], [for (var i = 0; i < r.tiers.length; i++) ['${i + 1} 档', _wan(r.tiers[i].$1), r.tiers[i].$2]], hit: r.level > 0 ? r.level - 1 : null),
+              const SizedBox(height: 10),
+              Text('预测依据：本期基数 ÷ 已过天数，按本期日均外推；预计日期会随实际业务量变化。', style: _sans(ctx, size: 11, color: _kMute, height: 1.5)),
+              const SizedBox(height: 12),
+              TextButton(onPressed: () { Navigator.of(ctx).pop(); _pickRule(r); }, child: const Text('查看阶梯走势')),
+            ]),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _raceRow(BuildContext context, _HeroInk ink, _TierRule r, {required bool hot, required bool selected, VoidCallback? onTap}) {
+    final right = r.full
+        ? '满档 · ${r.discount}'
+        : r.reachable && r.eta != null
+        ? '差 ¥${_wan(r.gap)}  预计 ${_hMd(r.eta!)} 到达下一档'
+        : '差 ¥${_wan(r.gap)} · 本期难达';
+    return Semantics(
+      button: true,
+      label: '${r.name}，当前 ${r.level} 档，$right，查看阶梯走势',
+      excludeSemantics: true,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap ?? () => _pickRule(r),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+          decoration: BoxDecoration(
+            color: selected ? ink.purple.withValues(alpha: 0.07) : Colors.transparent,
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      '${r.name} · 第 ${r.level} 档',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: _sans(context, size: 10.5, weight: hot ? FontWeight.w600 : FontWeight.w400, color: hot ? _kInk : _kInk2),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    right,
+                    style: LhTypography.mono(context: context, size: 9.5, color: _fg(context, _kMute)),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              // 2026-11-10 · 淡化：2px 细线、浅紫，快过档（本周可跨）稍深，满档更淡。
+              SizedBox(
+                height: 4,
+                child: CustomPaint(
+                  painter: _RaceTrackPainter(
+                    segments: math.max(1, r.tiers.length),
+                    level: r.level,
+                    frac: r.frac,
+                    full: r.full,
+                    fill: _fg(context, r.full ? _kThinCapped : (hot ? _kThinNear : _kThinFill)),
+                    track: _fg(context, const Color(0xFFEFEBF6)),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ── 3. 推送 ──
+
+  Widget _pushSlide(BuildContext context, _HeroInk ink) {
+    if (widget.loading) return _skeleton(context);
+    final o = widget.overview;
+    final pulse = _map(o['pulse']);
+    var events = [
+      for (final e in _list(pulse['events'])) (_hNum(e['minute']) ?? 0.0, _s(e['type']), _s(e['status']).toUpperCase(), _i(e['costMs'])),
+    ];
+    if (events.isEmpty) {
+      // 老版本服务端只给 10 分钟分档：每条按档位中点画，不带耗时。
+      events = [
+        for (final p in _list(pulse['pushes']))
+          for (var k = 0; k < (_i(p['count']) ?? 0); k++)
+            ((_i(p['minute']) ?? 0) + 5.0, '', k < (_i(p['failed']) ?? 0) ? 'FAILED' : 'SUCCESS', null),
+      ];
+    }
+    final returns = [for (final e in _list(pulse['returns'])) (_i(e['minute']) ?? 0, e['abnormal'] == true)];
+    final total = _i(o['todayPushes']) ?? events.length;
+    final failed = _i(o['todayPushFailed']) ?? events.where((e) => e.$3 == 'FAILED').length;
+    final retTotal = _i(o['todayReturnBatches']) ?? returns.length;
+    final retAbnormal = _i(o['todayReturnAbnormal']) ?? 0;
+    final p50 = _i(pulse['costP50']), p95 = _i(pulse['costP95']);
+    final last = _s(pulse['lastPushAt']);
+    final gen = _s(o['generatedAt']);
+    final nowMin = gen.length >= 16 ? (_i(gen.substring(11, 13)) ?? 0) * 60 + (_i(gen.substring(14, 16)) ?? 0) : 1440;
+    final counts = <String, int>{};
+    for (final e in events) {
+      final name = _pushTypeTone(e.$2).$1;
+      counts[name] = (counts[name] ?? 0) + 1;
+    }
+    final typeOrder = ['产品结算配置', '价格规则', '账单配置'];
+    final legend = [
+      for (final n in typeOrder)
+        if (counts.containsKey(n)) (n, counts[n]!),
+      for (final n in counts.keys)
+        if (!typeOrder.contains(n)) (n, counts[n]!),
+    ];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _kpi(
+          context,
+          _count(total),
+          '次',
+          [
+            const TextSpan(text: '失败 '),
+            _b(context, _count(failed), color: failed > 0 ? _kCoral : _kInk),
+            if (p50 != null) ...[const TextSpan(text: ' · 耗时 p50 '), _b(context, '${p50}ms')],
+            if (p95 != null) ...[const TextSpan(text: ' · p95 '), _b(context, '${p95}ms')],
+          ],
+          [
+            const TextSpan(text: '结算回传 '),
+            _b(context, '${_count(retTotal)}${o['returnBatchesCapped'] == true ? '+' : ''}'),
+            const TextSpan(text: ' 批 · 异常 '),
+            _b(context, _count(retAbnormal), color: retAbnormal > 0 ? _kCoral : _kInk),
+            if (last.length >= 16) ...[const TextSpan(text: ' · 最近推送 '), _b(context, last.substring(11, 16))],
+          ],
+        ),
+        const SizedBox(height: 6),
+        Expanded(
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: widget.onOpenPush,
+            child: events.isEmpty && returns.isEmpty
+                ? _empty(context, '今天还没有推送和结算回传')
+                : CustomPaint(
+                    size: Size.infinite,
+                    painter: _PushScopePainter(
+                      events: [for (final e in events) (e.$1, _fg(context, e.$3 == 'FAILED' ? _kCoral : _pushTypeTone(e.$2).$2), e.$4)],
+                      returns: returns,
+                      nowMinute: nowMin.toDouble(),
+                      ink: ink,
+                    ),
+                  ),
+          ),
+        ),
+        const SizedBox(height: 4),
+        SizedBox(
+          height: 14,
+          child: ClipRect(
+            child: OverflowBox(
+              alignment: Alignment.centerLeft,
+              maxWidth: double.infinity,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (final (name, n) in legend) ...[
+                    _legendDot(context, _fg(context, _pushTypeTone(_typeKey(name)).$2)),
+                    Text(' $name ', style: _sans(context, size: 10, color: _kInk2)),
+                    Text('$n', style: LhTypography.mono(context: context, size: 10, weight: FontWeight.w600, color: _fg(context, _kInk))),
+                    const SizedBox(width: 10),
+                  ],
+                  _legendDot(context, ink.purple.withValues(alpha: 0.28)),
+                  Text(' 结算回传', style: _sans(context, size: 10, color: _kInk2)),
+                  if (failed > 0) ...[
+                    const SizedBox(width: 10),
+                    _legendDot(context, ink.coral),
+                    Text(' 失败', style: _sans(context, size: 10, color: _kInk2)),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  String _typeKey(String name) => switch (name) {
+    '产品结算配置' => 'PRODUCT_SETTLEMENT',
+    '价格规则' => 'PRICE_RULE',
+    '账单配置' => 'BILL_CONFIG',
+    _ => name,
+  };
+
+  Widget _legendDot(BuildContext context, Color c) => Container(
+    width: 7,
+    height: 7,
+    decoration: BoxDecoration(color: c, borderRadius: BorderRadius.circular(2)),
+  );
+
+  // ── 4. 到期 ──
+
+  Widget _expirySlide(BuildContext context, _HeroInk ink) {
+    if (widget.loading) return _skeleton(context);
+    final ex = widget.overview['settleExpiry'];
+    if (ex is! Map) return _empty(context, '结算到期数据暂不可用');
+    final days = [for (final v in (ex['days'] is List ? ex['days'] as List : const [])) _i(v) ?? 0];
+    final week = _i(ex['week']) ?? 0;
+    final total = _i(ex['total']) ?? 0;
+    final today = _hDt(widget.overview['today']) ?? DateTime.now();
+    var peak = 0;
+    for (var i = 1; i < days.length; i++) {
+      if (days[i] > days[peak]) peak = i;
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _kpi(
+          context,
+          _count(week),
+          '条',
+          [
+            const TextSpan(text: '结算明细 7 天内到期 '),
+            if (week > 0)
+              WidgetSpan(
+                alignment: PlaceholderAlignment.middle,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                  decoration: BoxDecoration(color: ink.warnSoft, borderRadius: BorderRadius.circular(4)),
+                  child: Text('临期', style: _sans(context, size: 9.5, color: _kCopper)),
+                ),
+              ),
+          ],
+          total == 0
+              ? [const TextSpan(text: '未来 30 天没有到期的结算明细')]
+              : [
+                  const TextSpan(text: '未来 30 天共 '),
+                  _b(context, _count(total)),
+                  const TextSpan(text: ' 条'),
+                  if (days.isNotEmpty && days[peak] >= 3) ...[
+                    TextSpan(text: ' · ${_hMd(today.add(Duration(days: peak)))} 集中 '),
+                    _b(context, '${days[peak]}'),
+                    const TextSpan(text: ' 条'),
+                  ],
+                ],
+        ),
+        const SizedBox(height: 6),
+        Expanded(
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: widget.onOpenExpiring,
+            child: CustomPaint(
+              size: Size.infinite,
+              painter: _ExpiryDotsPainter(days: days, week: week, today: today, ink: ink),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ── 画法 ──
+
+/// 阶梯爬坡：档位台阶底色 + 门槛线、真实锚点折线、跨档点、预测锥与到档区间、今天竖线。
+class _TierClimbPainter extends CustomPainter {
+  _TierClimbPainter({required this.rule, required this.ink, required this.pad, this.scrub});
+
+  final _TierRule rule;
+  final _HeroInk ink;
+  final EdgeInsets pad;
+  final double? scrub;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final r = rule;
+    final start = r.start, end = r.end, asOf = r.asOf;
+    final plot = Rect.fromLTRB(pad.left, pad.top, size.width - pad.right, size.height - pad.bottom);
+    if (start == null || end == null || asOf == null || plot.width <= 0 || plot.height <= 0) return;
+    final span = math.max(1, end.difference(start).inMinutes).toDouble();
+    double fx(DateTime t) => plot.left + (t.difference(start).inMinutes / span).clamp(0.0, 1.0) * plot.width;
+    // 纵轴只放到「下一档」（下下档离得近就一并画），不被最高档压扁；更高的档在右上角注明。
+    final top = r.tiers.isEmpty ? 0.0 : r.tiers.last.$1;
+    var ymax = math.max(r.stat * 1.15, (r.next ?? 0) * 1.18);
+    if (r.next != null && r.level + 1 < r.tiers.length) {
+      final above = r.tiers[r.level + 1].$1;
+      if (above <= r.next! * 1.6) ymax = math.max(ymax, above * 1.08);
+    }
+    // 预测期末的上界也纳入纵轴，让预测线和区间完整显示在图内。
+    final forecastDays = math.max(0, end.difference(asOf).inMinutes) / 1440;
+    if (!r.full && r.rate > 0 && forecastDays > 0) {
+      ymax = math.max(ymax, (r.stat + forecastDays * r.rate * 1.3) * 1.08);
+    }
+    if (r.full) ymax = math.max(ymax, top * 1.12);
+    if (ymax <= 0) ymax = 1;
+    double fy(double v) => plot.bottom - v / ymax * plot.height;
+
+    // 台阶底色：越高的档越深。
+    for (var i = 0; i < r.tiers.length; i++) {
+      final from = r.tiers[i].$1;
+      final to = i + 1 < r.tiers.length ? r.tiers[i + 1].$1 : ymax;
+      if (from >= ymax) break;
+      if (i == 0) continue;
+      canvas.drawRect(
+        Rect.fromLTRB(plot.left, fy(math.min(to, ymax)), plot.right, fy(from)),
+        Paint()..color = ink.purple.withValues(alpha: 0.03 * i),
+      );
+    }
+    // 门槛线与档位标签（右侧）。
+    final edge = Paint()
+      ..color = ink.edge
+      ..strokeWidth = 0.8;
+    final labelStyle = ink.sans.copyWith(fontSize: 8.5);
+    var lastLabelY = double.infinity;
+    for (var i = 0; i < r.tiers.length; i++) {
+      final (min, rate) = r.tiers[i];
+      if (min > ymax) break;
+      final y = fy(min);
+      if (min > 0) canvas.drawLine(Offset(plot.left, y), Offset(plot.right, y), edge);
+      final ly = math.min(y - 5.5, plot.bottom - 11);
+      if (lastLabelY - ly < 10) continue;
+      lastLabelY = ly;
+      final cur = i + 1 == r.level;
+      _paintText(
+        canvas,
+        '${i + 1}档 $rate',
+        labelStyle.copyWith(color: cur ? ink.deep : (i < r.level ? ink.ink2 : ink.mute), fontWeight: cur ? FontWeight.w600 : FontWeight.w400),
+        Offset(plot.right + 5, ly),
+      );
+    }
+
+    final hidden = r.tiers.where((t) => t.$1 > ymax).length;
+    if (hidden > 0) {
+      _paintText(canvas, '↑ 更高 $hidden 档', labelStyle.copyWith(color: ink.mute), Offset(plot.right + 5, plot.top - 12));
+    }
+
+    // 未来区间淡一层。
+    final xNow = fx(asOf);
+    canvas.drawRect(Rect.fromLTRB(xNow, plot.top, plot.right, plot.bottom), Paint()..color = ink.card.withValues(alpha: 0.35));
+
+    // 预测锥（裁到绘图区内）。
+    final daysLeft = math.max(0, end.difference(asOf).inMinutes) / 1440;
+    if (!r.full && r.rate > 0 && daysLeft > 0) {
+      canvas.save();
+      canvas.clipRect(plot);
+      final y0 = fy(r.stat);
+      final cone = Path()
+        ..moveTo(xNow, y0)
+        ..lineTo(plot.right, fy(r.stat + daysLeft * r.rate * 1.3))
+        ..lineTo(plot.right, fy(r.stat + daysLeft * r.rate * 0.7))
+        ..close();
+      canvas.drawPath(cone, Paint()..color = ink.purple.withValues(alpha: 0.12));
+      _dashLine(
+        canvas,
+        Offset(xNow, y0),
+        Offset(plot.right, fy(r.stat + daysLeft * r.rate)),
+        Paint()
+          ..color = ink.purple
+          ..strokeWidth = 1.4,
+      );
+      canvas.restore();
+    }
+
+    // 实际爬坡：锚点折线 + 渐变面积。
+    final pts = [for (final (t, v) in r.anchors) Offset(fx(t), fy(v))];
+    if (pts.length >= 2) {
+      final line = Path()..moveTo(pts.first.dx, pts.first.dy);
+      for (final p in pts.skip(1)) {
+        line.lineTo(p.dx, p.dy);
+      }
+      final area = Path.from(line)
+        ..lineTo(pts.last.dx, plot.bottom)
+        ..lineTo(pts.first.dx, plot.bottom)
+        ..close();
+      canvas.drawPath(
+        area,
+        Paint()
+          ..shader = LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [ink.purple.withValues(alpha: 0.26), ink.purple.withValues(alpha: 0)],
+          ).createShader(plot),
+      );
+      canvas.drawPath(
+        line,
+        Paint()
+          ..color = ink.purple
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2
+          ..strokeJoin = StrokeJoin.round
+          ..strokeCap = StrokeCap.round,
+      );
+      // 跨档点：两端以外的锚点；最近一次跨档写日期。
+      for (var i = 1; i < pts.length - 1; i++) {
+        canvas.drawCircle(pts[i], 5, Paint()..color = ink.card);
+        canvas.drawCircle(pts[i], 3.5, Paint()..color = ink.purple);
+        if (i == pts.length - 2) {
+          final text = '${_hMd(r.anchors[i].$1)} 跨档';
+          final w = _textWidth(text, labelStyle);
+          final left = pts[i].dx - 6 - w >= plot.left;
+          _paintText(canvas, text, labelStyle, Offset(left ? pts[i].dx - 6 : pts[i].dx + 6, pts[i].dy - 15),
+              align: left ? TextAlign.right : TextAlign.left, halo: ink.card);
+        }
+      }
+    }
+
+    // 到档日期：区间粗线 + 空心点 + 「预计 MM/dd」；到不了写明。
+    final next = r.next;
+    if (!r.full && next != null && next <= ymax) {
+      final yn = fy(next);
+      final eta = r.eta;
+      if (r.reachable && eta != null) {
+        final early = r.etaEarly ?? eta, late = r.etaLate ?? eta;
+        canvas.drawLine(
+          Offset(fx(early), yn),
+          Offset(fx(late.isAfter(end) ? end : late), yn),
+          Paint()
+            ..color = ink.purple.withValues(alpha: 0.25)
+            ..strokeWidth = 4
+            ..strokeCap = StrokeCap.round,
+        );
+        final xe = fx(eta);
+        canvas.drawCircle(Offset(xe, yn), 3.6, Paint()..color = ink.card);
+        canvas.drawCircle(
+          Offset(xe, yn),
+          3.6,
+          Paint()
+            ..color = ink.purple
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 2,
+        );
+        final text = '预计 ${_hMd(eta)} 到达下一档';
+        final w = _textWidth(text, labelStyle);
+        final cx = plot.width <= w ? xe : math.min(math.max(xe, plot.left + w / 2), plot.right - w / 2);
+        _paintText(canvas, text, labelStyle.copyWith(color: ink.deep, fontWeight: FontWeight.w600), Offset(cx, yn - 16),
+            align: TextAlign.center, halo: ink.card);
+      } else {
+        _paintText(canvas, '本期到不了下一档', labelStyle.copyWith(color: ink.mute), Offset(plot.right - 4, yn - 14),
+            align: TextAlign.right, halo: ink.card);
+      }
+    }
+
+    // 今天：竖线 + 当前点。
+    canvas.drawLine(
+      Offset(xNow, plot.top),
+      Offset(xNow, plot.bottom),
+      Paint()
+        ..color = ink.ink2.withValues(alpha: 0.35)
+        ..strokeWidth = 0.8,
+    );
+    canvas.drawCircle(Offset(xNow, fy(r.stat)), 3, Paint()..color = ink.purple);
+
+    // 横轴。
+    canvas.drawLine(Offset(plot.left, plot.bottom), Offset(plot.right, plot.bottom), edge);
+    final ay = plot.bottom + 3;
+    _paintText(canvas, _hMd(start), ink.mono, Offset(plot.left, ay));
+    _paintText(canvas, _hMd(end), ink.mono, Offset(plot.right, ay), align: TextAlign.right);
+    if (xNow - plot.left > 40 && plot.right - xNow > 40) {
+      _paintText(canvas, '今天', ink.sans.copyWith(color: ink.ink2), Offset(xNow, ay), align: TextAlign.center);
+    }
+
+    // 长按读数。
+    final s = scrub;
+    if (s != null) {
+      final t = start.add(Duration(minutes: (span * s).round()));
+      final x = fx(t);
+      canvas.drawLine(
+        Offset(x, plot.top),
+        Offset(x, plot.bottom),
+        Paint()
+          ..color = ink.ink.withValues(alpha: 0.28)
+          ..strokeWidth = 1,
+      );
+      final v = r.valueAt(t).$1;
+      if (v <= ymax) {
+        canvas.drawCircle(Offset(x, fy(v)), 3.6, Paint()..color = ink.card);
+        canvas.drawCircle(
+          Offset(x, fy(v)),
+          3.6,
+          Paint()
+            ..color = ink.purple
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 2,
+        );
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_TierClimbPainter old) => old.rule.m != rule.m || old.scrub != scrub || old.ink.purple != ink.purple || old.ink.card != ink.card;
+}
+
+/// 跨档进度的一条：一段 = 一档，已到的段填满，正在爬的段按进度填，点 = 当前位置。
+class _RaceTrackPainter extends CustomPainter {
+  _RaceTrackPainter({
+    required this.segments,
+    required this.level,
+    required this.frac,
+    required this.full,
+    required this.fill,
+    required this.track,
+  });
+
+  final int segments;
+  final int level;
+  final double frac;
+  final bool full;
+  final Color fill, track;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const gap = 3.0, th = 2.0;
+    final y = (size.height - th) / 2;
+    final segW = (size.width - gap * (segments - 1)) / segments;
+    if (segW <= 0) return;
+    for (var j = 0; j < segments; j++) {
+      final x = j * (segW + gap);
+      final rr = Radius.circular(th / 2);
+      canvas.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(x, y, segW, th), rr), Paint()..color = track);
+      final f = full || j < level ? 1.0 : (j == level ? frac : 0.0);
+      if (f > 0) {
+        canvas.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(x, y, math.max(th, segW * f), th), rr), Paint()..color = fill);
+      }
+    }
+
+  }
+
+  @override
+  bool shouldRepaint(_RaceTrackPainter old) =>
+      old.level != level || old.frac != frac || old.full != full || old.fill != fill || old.segments != segments || old.track != track;
+}
+
+/// 推送示波器：上方每根针 = 一次推送（高 = 耗时，色 = 类型 / 失败），下方镜像 = 每 10 分钟结算回传批次。
+class _PushScopePainter extends CustomPainter {
+  _PushScopePainter({required this.events, required this.returns, required this.nowMinute, required this.ink});
+
+  final List<(double, Color, int?)> events; // (分钟, 颜色, 耗时 ms)
+  final List<(int, bool)> returns; // (分钟, 是否异常)
+  final double nowMinute;
+  final _HeroInk ink;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const mt = 4.0, mb = 14.0;
+    final plot = Rect.fromLTRB(1, mt, size.width - 1, size.height - mb);
+    if (plot.width <= 0 || plot.height <= 0) return;
+    double fx(double m) => plot.left + (m / 1440).clamp(0.0, 1.0) * plot.width;
+    final base = plot.top + plot.height * 0.62;
+    final upH = base - plot.top - 4;
+    final downH = plot.bottom - base - 3;
+    final xNow = fx(nowMinute);
+
+    final grid = Paint()
+      ..color = ink.line
+      ..strokeWidth = 0.8;
+    for (final h in [6, 12, 18]) {
+      canvas.drawLine(Offset(fx(h * 60.0), plot.top), Offset(fx(h * 60.0), plot.bottom), grid);
+    }
+    _hatch(canvas, Rect.fromLTRB(xNow, plot.top, plot.right, plot.bottom), ink.edge);
+
+    // 回传：每 10 分钟一档，向下。
+    final bins = List<int>.filled(144, 0);
+    final bad = List<bool>.filled(144, false);
+    for (final (m, abnormal) in returns) {
+      final i = math.min(143, math.max(0, m ~/ 10));
+      bins[i]++;
+      if (abnormal) bad[i] = true;
+    }
+    final maxBin = bins.fold<int>(0, math.max);
+    if (maxBin > 0) {
+      final bw = math.max(1.2, plot.width / 144 - 0.6);
+      for (var i = 0; i < 144; i++) {
+        if (bins[i] == 0) continue;
+        final h = math.max(1.0, bins[i] / maxBin * downH);
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(Rect.fromLTWH(fx(i * 10.0), base + 2, bw, h), const Radius.circular(0.6)),
+          Paint()..color = bad[i] ? ink.coral.withValues(alpha: 0.75) : ink.purple.withValues(alpha: 0.28),
+        );
+      }
+    }
+    canvas.drawLine(
+      Offset(plot.left, base + 1),
+      Offset(xNow, base + 1),
+      Paint()
+        ..color = ink.ink2.withValues(alpha: 0.3)
+        ..strokeWidth = 0.8,
+    );
+
+    // 推送针。
+    var maxCost = 1;
+    for (final e in events) {
+      if (e.$3 != null && e.$3! > maxCost) maxCost = e.$3!;
+    }
+    for (final (m, color, cost) in events) {
+      final x = fx(m);
+      final h = cost == null ? upH * 0.45 : (cost / maxCost).clamp(0.08, 1.0) * upH;
+      canvas.drawLine(
+        Offset(x, base),
+        Offset(x, base - h),
+        Paint()
+          ..color = color
+          ..strokeWidth = 2.2
+          ..strokeCap = StrokeCap.round,
+      );
+      canvas.drawCircle(Offset(x, base - h), 3.8, Paint()..color = ink.card);
+      canvas.drawCircle(Offset(x, base - h), 2.6, Paint()..color = color);
+    }
+
+    // 现在。
+    canvas.drawLine(
+      Offset(xNow, plot.top),
+      Offset(xNow, plot.bottom),
+      Paint()
+        ..color = ink.purple
+        ..strokeWidth = 1.2,
+    );
+    canvas.drawCircle(Offset(xNow, base + 1), 3, Paint()..color = ink.purple);
+
+    final ay = plot.bottom + 2;
+    for (final h in [0, 6, 12, 18, 24]) {
+      _paintText(canvas, h.toString().padLeft(2, '0'), ink.mono, Offset(fx(h * 60.0), ay),
+          align: h == 0 ? TextAlign.left : (h == 24 ? TextAlign.right : TextAlign.center));
+    }
+    if (plot.right - xNow > 64) {
+      _paintText(canvas, '推送耗时 ↑', ink.sans.copyWith(color: ink.mute), Offset(plot.right - 2, plot.top + 1), align: TextAlign.right);
+      _paintText(canvas, '回传批次 ↓', ink.sans.copyWith(color: ink.mute), Offset(plot.right - 2, plot.bottom - 13), align: TextAlign.right);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_PushScopePainter old) =>
+      old.events.length != events.length || old.returns.length != returns.length || old.nowMinute != nowMinute || old.ink.purple != ink.purple || old.ink.card != ink.card;
+}
+
+/// 到期点阵：一列 = 一天，一个点 = 一条（太多时一点代表多条），前 7 天用临期色。
+class _ExpiryDotsPainter extends CustomPainter {
+  _ExpiryDotsPainter({required this.days, required this.week, required this.today, required this.ink});
+
+  final List<int> days;
+  final int week;
+  final DateTime today;
+  final _HeroInk ink;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (days.isEmpty) return;
+    const mt = 15.0, mb = 14.0;
+    final plot = Rect.fromLTRB(1, mt, size.width - 1, size.height - mb);
+    final n = days.length;
+    final cw = plot.width / n;
+    final r = math.min(3.2, cw / 2 - 1).clamp(1.2, 3.2).toDouble();
+    final step = r * 2 + 2;
+    final capacity = math.max(1, ((plot.height - 2) / step).floor());
+    final maxV = days.fold<int>(0, math.max);
+    final per = math.max(1, (maxV / capacity).ceil());
+
+    final band = Rect.fromLTRB(plot.left - 1, 0, plot.left + cw * math.min(7, n), plot.bottom + 2);
+    canvas.drawRRect(RRect.fromRectAndRadius(band, const Radius.circular(6)), Paint()..color = ink.warnSoft);
+    _paintText(canvas, '7 天内 $week 条', ink.sans.copyWith(color: ink.warnInk, fontWeight: FontWeight.w600), Offset(band.left + 5, 2));
+    if (per > 1) {
+      _paintText(canvas, '每点 $per 条', ink.sans.copyWith(color: ink.mute), Offset(plot.right, 2), align: TextAlign.right);
+    }
+
+    final baseY = plot.bottom - r;
+    canvas.drawLine(
+      Offset(plot.left, plot.bottom + 1),
+      Offset(plot.right, plot.bottom + 1),
+      Paint()
+        ..color = ink.edge
+        ..strokeWidth = 0.8,
+    );
+    for (var i = 0; i < n; i++) {
+      final cx = plot.left + cw * i + cw / 2;
+      final v = days[i];
+      if (v == 0) {
+        canvas.drawCircle(Offset(cx, baseY), 1, Paint()..color = ink.edge);
+        continue;
+      }
+      final dots = (v / per).ceil();
+      final color = i < 7 ? ink.warn : ink.purple.withValues(alpha: 0.45);
+      for (var j = 0; j < dots; j++) {
+        canvas.drawCircle(Offset(cx, baseY - j * step), r, Paint()..color = color);
+      }
+    }
+    final ay = plot.bottom + 3;
+    for (final i in [0, 7, 14, 21, 28]) {
+      if (i >= n) break;
+      _paintText(canvas, _hMd(today.add(Duration(days: i))), ink.mono, Offset(plot.left + cw * i + cw / 2, ay),
+          align: i == 0 ? TextAlign.left : TextAlign.center);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_ExpiryDotsPainter old) =>
+      old.week != week || old.today != today || old.ink.purple != ink.purple || !_sameInts(old.days, days);
+}
+
+bool _sameInts(List<int> a, List<int> b) {
+  if (a.length != b.length) return false;
+  for (var i = 0; i < a.length; i++) {
+    if (a[i] != b[i]) return false;
+  }
+  return true;
 }
 
 // ═════════════════════════════ 关联：关系链与互链 ═════════════════════════════
@@ -4177,6 +4905,348 @@ Widget _chainHint(BuildContext context, String text, Color color) => Padding(
   ),
 );
 
+// ═════════════════════════════ 阶梯 / 价格规则 ═════════════════════════════
+//   资管的「阶梯价格」不在结算明细上：明细只记结算方式 3（按阶梯价格）和公式，比如「核销面值-门槛金额*阶梯价格」；
+//   档位在价格规则里，经关联表挂到产品上（数据来自 business-go mobile.TierRules）：
+//     · 折扣取值（rel 1）：公式里的「阶梯价格」就取这条规则当期命中档的比例；
+//     · 参与核算（rel 2）：本产品的量计入这条规则的阶梯基数，但比例不从它取；
+//     · 渠道产品还会带上货源供应商产品挂的规则（采购侧阶梯），以及推广商规则。
+
+String _billingModelLabel(String v) => switch (v) {
+  '1' => '阶梯计费',
+  '2' => '时间区间折扣',
+  '3' => '推广商分润',
+  _ => '价格规则',
+};
+
+String _dimensionLabel(String v) => switch (v) {
+  '1' => '按销售额',
+  '2' => '按核销额',
+  '3' => '按门槛金额',
+  '4' => '按引流金额',
+  _ => '',
+};
+
+String _calcModeLabel(String v) => switch (v) {
+  '1' => '超额累进',
+  '2' => '全额累进',
+  _ => '',
+};
+
+String _calcModeNote(String v) => switch (v) {
+  '1' => '超额累进：本期基数按档位切段，每一段只按所在档的比例算，再加总。',
+  '2' => '全额累进：本期基数到了哪一档，整期基数全部按那一档的比例算。',
+  _ => '',
+};
+
+String _relTypeLabel(String v) => switch (v) {
+  '1' => '折扣取值',
+  '2' => '参与核算',
+  _ => '',
+};
+
+/// 账期：按月 / 按年，自然月 / 自定义区间（每月 N 日–M 日）/ 跨月。
+String _cycleLabel(Map<String, dynamic> r) {
+  final type = switch (_s(r['cycleType'])) {
+    '1' => '按月',
+    '2' => '按年',
+    _ => '',
+  };
+  final start = _s(r['cycleStartDay']), end = _s(r['cycleEndDay']);
+  final calc = switch (_s(r['cycleCalcType'])) {
+    '1' => '自然月',
+    '2' => start.isEmpty ? '自定义区间' : '每期 $start 日–$end 日',
+    '3' => '跨月',
+    _ => '',
+  };
+  return [type, calc].where((e) => e.isNotEmpty).join(' · ');
+}
+
+/// 金额（元）：≥1 万写「3,000万」「12.5万」，否则千分位到元。
+String _wan(Object? v) {
+  final d = double.tryParse(_s(v));
+  if (d == null) return '—';
+  if (d.abs() >= 10000) {
+    final w = d / 10000;
+    final t = w == w.roundToDouble() ? _count(w.round()) : w.toStringAsFixed(w.abs() >= 100 ? 0 : 2).replaceFirst(RegExp(r'\.?0+$'), '');
+    return '$t万';
+  }
+  if (d == d.roundToDouble()) return _count(d.round());
+  return d.toStringAsFixed(2);
+}
+
+/// 「2026-03-29 00:00:00」→「03-29」；取不到 →「—」。
+String _md(Object? v) {
+  final s = _s(v);
+  return s.length >= 10 ? s.substring(5, 10) : '—';
+}
+
+/// 比例：资管存小数（0.0150 = 1.5%）。
+String _rate(Object? v) {
+  final d = double.tryParse(_s(v));
+  if (d == null) return '—';
+  final p = d * 100;
+  var t = p.toStringAsFixed(3).replaceFirst(RegExp(r'0+$'), '').replaceFirst(RegExp(r'\.$'), '');
+  return '$t%';
+}
+
+/// 档位区间：「0 ≤ 基数 < 3,000万」/「≥ 5,000万」。
+String _tierRange(Map<String, dynamic> t, String unit) {
+  final hasMin = _s(t['minValue']).isNotEmpty;
+  final hasMax = _s(t['maxValue']).isNotEmpty;
+  final lo = _s(t['isMinInclusive']) == '0' ? '<' : '≤';
+  final hi = _s(t['isMaxInclusive']) == '1' ? '≤' : '<';
+  final fmt = unit == '人' ? (Object? v) => '${_count(_i(v))}人' : _wan;
+  if (hasMin && hasMax) return '${fmt(t['minValue'])} $lo 基数 $hi ${fmt(t['maxValue'])}';
+  if (hasMin) return '${lo == '≤' ? '≥' : '>'} ${fmt(t['minValue'])}';
+  if (hasMax) return '$hi ${fmt(t['maxValue'])}';
+  return '不限';
+}
+
+/// 一张三列小表：表头 + 行；[hit] 为高亮行下标。
+Widget _miniTable(BuildContext context, List<String> head, List<List<String>> rows, {int? hit, String hitTag = ''}) {
+  Widget cell(String text, {bool headRow = false, bool on = false, TextAlign align = TextAlign.left, int flex = 1}) => Expanded(
+    flex: flex,
+    child: Text(
+      text,
+      textAlign: align,
+      style: headRow
+          ? _sans(context, size: 10, color: _kMute)
+          : LhTypography.mono(context: context, size: 11, weight: on ? FontWeight.w700 : FontWeight.w500, color: _fg(context, on ? _kDeep : _kInk)),
+    ),
+  );
+  return Container(
+    decoration: BoxDecoration(color: _bg(context, _kPanel), borderRadius: BorderRadius.circular(10)),
+    padding: const EdgeInsets.fromLTRB(10, 7, 10, 7),
+    child: Column(
+      children: [
+        Row(children: [
+          cell(head[0], headRow: true),
+          cell(head[1], headRow: true, flex: 4),
+          cell(head[2], headRow: true, align: TextAlign.right, flex: 2),
+        ]),
+        const SizedBox(height: 4),
+        for (var i = 0; i < rows.length; i++)
+          Container(
+            margin: const EdgeInsets.only(top: 2),
+            padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
+            decoration: i == hit ? BoxDecoration(color: _bg(context, _kLavender), borderRadius: BorderRadius.circular(6)) : null,
+            child: Row(children: [
+              cell(rows[i][0], on: i == hit),
+              cell(rows[i][1], on: i == hit, flex: 4),
+              cell(i == hit && hitTag.isNotEmpty ? '${rows[i][2]} ◂' : rows[i][2], on: i == hit, align: TextAlign.right, flex: 2),
+            ]),
+          ),
+        if (hit != null && hitTag.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 5),
+            child: Align(alignment: Alignment.centerLeft, child: Text('◂ $hitTag', style: _sans(context, size: 10, color: _kDeep))),
+          ),
+      ],
+    ),
+  );
+}
+
+/// 规则挂在哪：本产品 / 本渠道产品 / 货源供应商产品（采购侧）。
+String _ruleVia(Map<String, dynamic> r) {
+  final raw = r['relTypes'] is List ? (r['relTypes'] as List) : const <Object?>[];
+  final types = raw.map((t) => _relTypeLabel(_s(t))).where((e) => e.isNotEmpty).toSet().join('、');
+  final rel = types.isEmpty ? '' : ' · $types';
+  switch (_s(r['via'])) {
+    case 'source':
+      final ps = _list(r['products']);
+      final names = ps.map((p) => [_s(p['supplier']), _s(p['name'])].where((e) => e.isNotEmpty).join(' · ')).toSet().toList();
+      return '采购侧 · 货源 ${names.isEmpty ? '供应商产品' : names.first}${names.length > 1 ? ' 等 ${names.length} 个' : ''}$rel';
+    case 'channel':
+      return '挂在本渠道产品$rel';
+    default:
+      return '挂在本产品$rel';
+  }
+}
+
+/// 一条价格规则的完整展示：类型 / 维度 / 累进方式 / 账期 / 门槛 / 档位表（命中档高亮）/ 最近一期 / 有效期。
+Widget _tierRuleCard(BuildContext context, Map<String, dynamic> r) {
+  final model = _s(r['billingModelType']);
+  final status = _s(r['status']);
+  final tiers = _list(r['tiers']);
+  final segments = _list(r['timeDiscounts']);
+  final promoters = _list(r['promoterDetails']);
+  final latest = _map(r['latest']);
+  final hitLevel = _s(latest['tierLevel']);
+  final threshold = double.tryParse(_s(r['tierThresholdAmount'])) ?? 0;
+  final tags = [_billingModelLabel(model), _dimensionLabel(_s(r['dimensionType'])), _calcModeLabel(_s(r['calcMode'])), _cycleLabel(r)]
+      .where((e) => e.isNotEmpty)
+      .join(' · ');
+  final start = _s(r['effectiveStartTime']), end = _s(r['effectiveEndTime']);
+  int? hit;
+  for (var i = 0; i < tiers.length; i++) {
+    if (hitLevel.isNotEmpty && _s(tiers[i]['tierLevel']) == hitLevel) hit = i;
+  }
+  final latestText = latest.isEmpty
+      ? ''
+      : [
+          '最近一期${_s(latest['periodNo']).isEmpty ? '' : '（第 ${_s(latest['periodNo'])} 期）'} ${_md(latest['periodStart'])}–${_md(latest['periodEnd'])}',
+          '基数 ${_wan(latest['statAmount'])}',
+          if (hitLevel.isNotEmpty) '命中第 $hitLevel 档 ${_rate(latest['discountRate'])}',
+          if (_s(latest['rebateAmount']).isNotEmpty) '返利 ${_wan(latest['rebateAmount'])}',
+        ].join(' · ');
+  return Container(
+    padding: const EdgeInsets.all(12),
+    decoration: BoxDecoration(
+      color: _bg(context, Colors.white),
+      borderRadius: BorderRadius.circular(16),
+      border: Border.all(color: _ln(context, _kEdge), width: 0.9),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(child: Text(_s(r['ruleName']).isEmpty ? '价格规则' : _s(r['ruleName']), style: _sans(context, size: 13, weight: FontWeight.w700, height: 1.35))),
+            const SizedBox(width: 6),
+            _tag(context, status == '1' ? '启用' : (status == '0' ? '停用' : (status.isEmpty ? '—' : status)), status == '1' ? _Tone.purple : _Tone.grey),
+          ],
+        ),
+        const SizedBox(height: 3),
+        Text(tags, style: _sans(context, size: 11, weight: FontWeight.w600, color: _kDeep)),
+        const SizedBox(height: 2),
+        Text(_ruleVia(r), style: _sans(context, size: 10.5, color: _kMute)),
+        if (threshold > 0) ...[
+          const SizedBox(height: 2),
+          Text('阶梯门槛 ${_wan(threshold)}：基数达到门槛才开始计', style: _sans(context, size: 10.5, color: _kInk2)),
+        ],
+        if (tiers.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          _miniTable(
+            context,
+            const ['档位', '本期基数（元）', '比例'],
+            [for (final t in tiers) ['${_s(t['tierLevel'])} 档', _tierRange(t, '元'), _rate(t['discountRate'])]],
+            hit: hit,
+            hitTag: hit == null ? '' : '最近一期命中',
+          ),
+          if (_calcModeNote(_s(r['calcMode'])).isNotEmpty) ...[
+            const SizedBox(height: 5),
+            Text(_calcModeNote(_s(r['calcMode'])), style: _sans(context, size: 10.5, color: _kMute, height: 1.5)),
+          ],
+        ] else if (model == '1') ...[
+          const SizedBox(height: 6),
+          Text('这条阶梯规则没有配置档位', style: _sans(context, size: 11, color: _kCoral)),
+        ],
+        if (segments.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          _miniTable(
+            context,
+            const ['#', '时间段', '折扣'],
+            [
+              for (final t in segments)
+                [
+                  _s(t['sortNo']).isEmpty ? '·' : _s(t['sortNo']),
+                  [_s(t['segmentName']), '${_date(t['startTime'])}–${_date(t['endTime'])}'].where((e) => e.isNotEmpty).join(' '),
+                  _rate(t['discountRate']),
+                ],
+            ],
+          ),
+        ],
+        for (final d in promoters) ..._promoterRows(context, d),
+        if (latestText.isNotEmpty) ...[
+          const SizedBox(height: 6),
+          Text(latestText, style: LhTypography.mono(context: context, size: 10.5, color: _fg(context, _kInk2))),
+        ],
+        const SizedBox(height: 4),
+        Text(
+          '有效期 ${start.isEmpty ? '—' : _date(start)} → ${end.isEmpty ? '长期' : _date(end)}${_s(r['ruleCode']).isEmpty ? '' : ' · ${_s(r['ruleCode'])}'}',
+          style: LhTypography.mono(context: context, size: 10, color: _fg(context, _kMute)),
+        ),
+      ],
+    ),
+  );
+}
+
+/// 推广商分润明细：连续月策略按月序写，新客阶梯比例成表。
+List<Widget> _promoterRows(BuildContext context, Map<String, dynamic> d) {
+  final policy = _s(d['policyType']);
+  final from = _s(d['streakMonth']), to = _s(d['monthEnd']);
+  final months = from.isEmpty ? '' : (to.isEmpty ? '第 $from 月起' : '第 $from–$to 月');
+  final value = switch (policy) {
+    'FIXED_AMOUNT' => '固定 ${_yuan(d['fixedAmount'])}',
+    'FIXED_PERCENTAGE' => '固定 ${_plain(d['fixedPercentage'])}%',
+    _ => switch (_s(d['calcType'])) {
+      'amount' => '每户 ${_yuan(d['calcValue'])}',
+      'percentage' => '分润 ${_plain(d['calcValue'])}%',
+      'tier_ratio' => '按新客阶梯比例',
+      _ => _s(d['calcType']),
+    },
+  };
+  final tiers = _list(d['tiers']);
+  return [
+    const SizedBox(height: 6),
+    Text(
+      [months.isEmpty ? '推广商分润' : months, value, if (_s(d['stopProfitMonth']).isNotEmpty) '第 ${_s(d['stopProfitMonth'])} 月停止'].join(' · '),
+      style: _sans(context, size: 11, weight: FontWeight.w600, color: _kInk2),
+    ),
+    if (tiers.isNotEmpty) ...[
+      const SizedBox(height: 4),
+      _miniTable(
+        context,
+        const ['档位', '本月新客数', '分润比例'],
+        [
+          for (var i = 0; i < tiers.length; i++)
+            [
+              '${i + 1} 档',
+              _s(tiers[i]['maxNewCustomers']).isEmpty
+                  ? '≥ ${_count(_i(tiers[i]['minNewCustomers']))} 人'
+                  : '${_count(_i(tiers[i]['minNewCustomers']))}–${_count(_i(tiers[i]['maxNewCustomers']))} 人',
+              '${_plain(tiers[i]['profitRatio'])}%',
+            ],
+        ],
+      ),
+    ],
+  ];
+}
+
+/// 结算方式 3（按阶梯价格）的规则卡里，直接把「阶梯价格」取自哪条规则、各档比例摆出来。
+/// [tierRules] 里优先取挂在本产品 / 本渠道产品、关联类型含「折扣取值」的规则。
+bool _isSettlementPriceSource(Map<String, dynamic> r) =>
+    _s(r['via']) != 'source' && _list(r['tiers']).isNotEmpty &&
+    r['relTypes'] is List && (r['relTypes'] as List).map((e) => _s(e)).contains('1');
+
+Widget _tierPriceInline(BuildContext context, Map<String, dynamic> item, List<Map<String, dynamic>> tierRules) {
+  final own = tierRules.where(_isSettlementPriceSource).toList();
+  return Padding(
+    padding: const EdgeInsets.only(top: 10),
+    child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      Text(own.length > 1 ? '本产品关联了多条折扣取值规则，需按资管配置核对适用规则' : '阶梯价格 · 折扣取值规则',
+        style: _sans(context, size: 12, weight: FontWeight.w600, color: _kDeep)),
+      const SizedBox(height: 6),
+      if (own.isEmpty)
+        Text('未找到本产品用于折扣取值的阶梯档位，请核对资管价格规则配置。', style: _sans(context, size: 11, color: _kCoral, height: 1.5))
+      else
+        _bizSpaced([for (final r in own) _tierRuleCard(context, r)]),
+    ]),
+  );
+}
+
+/// 「阶梯与价格规则」一节开头的说明：这个产品的阶梯在哪一侧、为什么渠道侧可能没有阶梯。
+String _tierIntro(String side, List<Map<String, dynamic>> items, List<Map<String, dynamic>> tierRules) {
+  final tierItems = items.where((e) => _s(e['settleMethod']) == '3').length;
+  final source = tierRules.where((r) => _s(r['via']) == 'source').length;
+  final own = tierRules.length - source;
+  if (side == 'supplier') {
+    if (tierRules.isEmpty) {
+      return tierItems > 0 ? '有 $tierItems 条结算按阶梯价格，但本产品没有挂价格规则，阶梯价格取不到。' : '本产品按固定比例 / 单价结算，没有挂阶梯规则。';
+    }
+    return '本产品挂了 ${tierRules.length} 条价格规则。「折扣取值」= 结算公式里的阶梯价格取它；「参与核算」= 本产品的量计入它的阶梯基数。';
+  }
+  final parts = <String>[
+    tierItems > 0 ? '渠道侧有 $tierItems 条结算按阶梯价格。' : '渠道侧结算是固定比例 / 单价，没有阶梯。',
+    if (source > 0) '阶梯在采购侧：货源供应商产品挂了 $source 条价格规则（供应商按量返利，影响成本，不改变渠道侧结算）。',
+    if (own > 0) '本渠道产品另挂了 $own 条规则（推广商分润等）。',
+    if (tierRules.isEmpty) '货源供应商产品也没有挂阶梯规则。',
+  ];
+  return parts.join('');
+}
+
 // ── 跳转 ──
 
 void _openBizProduct(BuildContext context, String side, String id, String name) {
@@ -4222,11 +5292,12 @@ String _ruleShort(String code, Object? ratio, Object? unitPrice, String label) =
   '1' => '比例 ${_plain(ratio)}',
   '2' => '单价 ${_yuan(unitPrice)}',
   '5' => '${_yuan(unitPrice)} × ${_plain(ratio)}',
+  '3' => '阶梯价格',
   _ => label,
 };
 
 String _spStateLabel(String v) => switch (v) {
-  'effective' => '供应商产品 生效',
+  'effective' => '供应商产品 可供货',
   'pending' => '供应商产品 待审核',
   'disabled' => '供应商产品 已停用',
   _ => '',
@@ -4235,14 +5306,15 @@ String _spStateLabel(String v) => switch (v) {
 /// 结算段：条数 + 方式 + 到期；30 天内到期标铜色。
 _ChainSeg _settleSeg(BuildContext context, Map<String, dynamic> p, String side, {bool usable = true}) {
   final n = _i(p['settlementCount']) ?? 0;
+  final supplierMissing = side == 'channel' && _s(p['chainReason']) == 'supplierNoSettlement';
   final days = _daysUntil(p['settlementExpire']);
   final soon = days != null && days <= 30;
   final rule = _ruleShort(_s(p['settleMethodCode']), p['settlementRatio'], p['settlementUnitPrice'], _s(p['settleMethod']));
   return _ChainSeg(
     '结算',
     n > 0 ? '$n 条' : '未配置',
-    sub: n > 0 ? [if (rule.isNotEmpty) rule, soon ? '$days 天到期' : _expireShort(p['settlementExpire'])].join(' · ') : (usable ? '双端已生效' : ''),
-    tone: n > 0 ? (soon ? _SegTone.warn : _SegTone.normal) : (usable ? _SegTone.bad : _SegTone.none),
+    sub: supplierMissing ? '供给侧结算待配置' : n > 0 ? [if (rule.isNotEmpty) rule, soon ? '$days 天到期' : _expireShort(p['settlementExpire'])].join(' · ') : (usable ? '审核生效且启用' : ''),
+    tone: supplierMissing ? _SegTone.warn : n > 0 ? (soon ? _SegTone.warn : _SegTone.normal) : (usable ? _SegTone.bad : _SegTone.none),
     onTap: () => _openBizSettlement(context, side, _s(p['id']), _s(p['name'])),
   );
 }
@@ -4263,6 +5335,7 @@ Widget _bizPartnerCard(BuildContext context, Map<String, dynamic> p) {
   final id = _s(p['id']);
   Widget body;
   String? hint;
+  var hintColor = _kCopper;
   if (kind == 'promoter') {
     final total = _i(p['ruleCount']) ?? 0;
     final active = _i(p['activeRuleCount']) ?? 0;
@@ -4285,18 +5358,24 @@ Widget _bizPartnerCard(BuildContext context, Map<String, dynamic> p) {
     final extra = kind == 'channel'
         ? (p['throughProducts'] == null ? '' : ' · 贯通 ${_count(_i(p['throughProducts']))}')
         : (p['usedProducts'] == null ? '' : ' · 被采用 ${_count(_i(p['usedProducts']))}');
+    final suggested = _suggestedSubjects(p['counterparties']);
     body = _miniChain(context, [
       _ChainSeg(
-        '法人主体',
-        linked ? (_s(p['subjectName']).isEmpty ? '主体档案不可用' : _subjectDisplay(p['subjectName'])) : '未关联',
-        sub: kind == 'channel' && _s(p['entityName']).isNotEmpty ? '签约 ${_s(p['entityName'])}' : '',
-        tone: linked ? _SegTone.normal : _SegTone.bad,
-        onTap: linked ? () => _openBizSubject(context, _s(p['subjectId']), _s(p['subjectName'])) : null,
+        _legalLabel(kind),
+        linked ? (_s(p['subjectName']).isEmpty ? '主体档案不可用' : _subjectDisplay(p['subjectName'])) : _unlinkedValue(p['counterparties']),
+        // 渠道档案的 entity_name 是我方签约主体，不是渠道的主体，单独写清。
+        sub: kind == 'channel' && _s(p['entityName']).isNotEmpty
+            ? '我方签约 ${_s(p['entityName'])}'
+            : (!linked && suggested.isNotEmpty ? '建议 ${_subjectDisplay(suggested.first['subjectName'])}' : ''),
+        tone: linked ? _SegTone.normal : _SegTone.warn,
+        onTap: linked
+            ? () => _openBizSubject(context, _s(p['subjectId']), _s(p['subjectName']))
+            : (suggested.isEmpty ? null : () => _openBizSubject(context, _s(suggested.first['subjectId']), _s(suggested.first['subjectName']))),
       ),
       _ChainSeg(
         '产品',
         '${_count(products)} 个',
-        sub: '生效 ${_count(effective)}$extra',
+        sub: '已审核 ${_count(effective)}$extra',
         onTap: () => _openBizPartner(context, kind, id, name: name, data: p, tab: 'product'),
       ),
       _ChainSeg(
@@ -4309,7 +5388,10 @@ Widget _bizPartnerCard(BuildContext context, Map<String, dynamic> p) {
         onTap: () => _openBizPartner(context, kind, id, name: name, data: p, tab: 'settle'),
       ),
     ]);
-    if (!linked) hint = '$kindLabel未关联法人主体，结算规则无法核对对方是否同一法人';
+    if (!linked) {
+      hint = _unlinkedHint(_legalLabel(kind), p['counterparties']);
+      hintColor = suggested.isNotEmpty ? _kCopper : _kChainGrey;
+    }
   }
   return _tapCard(
     context,
@@ -4349,13 +5431,13 @@ Widget _bizPartnerCard(BuildContext context, Map<String, dynamic> p) {
           ],
         ),
         body,
-        if (hint != null) _chainHint(context, hint, _kCoral),
+        if (hint != null) _chainHint(context, hint, hintColor),
       ],
     ),
   );
 }
 
-/// 结算卡：产品名 / 首条规则 + 迷你链（合作主体 › 渠道或供应商 › 产品）；点卡片进结算详情。
+/// 结算卡：产品名 / 首条规则 / 签约双方 + 迷你链（渠道或供应商主体 › 渠道或供应商 › 产品）；点卡片进结算详情。
 Widget _bizSettlementCard(BuildContext context, Map<String, dynamic> p, int index, {required String fallbackSide}) {
   final side = _s(p['side']).isEmpty ? fallbackSide : _s(p['side']);
   final name = _s(p['name']).isEmpty ? '—' : _s(p['name']);
@@ -4371,10 +5453,11 @@ Widget _bizSettlementCard(BuildContext context, Map<String, dynamic> p, int inde
   final partnerLabel = side == 'supplier' ? '供应商' : '渠道';
   final subjectName = _s(p['partnerSubjectName']);
   final our = _s(p['settlementOurEntity']);
+  final counterparty = _s(p['settlementCounterparty']);
   final (matchText, matchTone) = switch (match) {
-    'match' => ('主体一致', _SegTone.normal),
-    'mismatch' => ('对方主体不一致', _SegTone.bad),
-    'unlinked' => ('未关联主体', _SegTone.warn),
+    'match' => ('对方一致', _SegTone.normal),
+    'mismatch' => ('对方不一致', _SegTone.bad),
+    'unlinked' => ('$partnerLabel主体待补', _SegTone.warn),
     _ => ('', _SegTone.normal),
   };
   final _ChainSeg productSeg;
@@ -4401,7 +5484,7 @@ Widget _bizSettlementCard(BuildContext context, Map<String, dynamic> p, int inde
   String? hint;
   Color hintColor = _kCopper;
   if (match == 'mismatch') {
-    hint = '规则对方主体「${_s(p['settlementCounterparty'])}」与法人主体「$subjectName」不一致';
+    hint = '规则对方「$counterparty」与$partnerLabel主体「$subjectName」不是同一家';
     hintColor = _kCoral;
   } else if (soon) {
     hint = (days ?? 0) <= 0 ? '今天到期，续签前请确认新规则' : '$days 天后到期，续签前请确认新规则';
@@ -4428,6 +5511,15 @@ Widget _bizSettlementCard(BuildContext context, Map<String, dynamic> p, int inde
                   Text(name, style: _sans(context, size: 13.5, weight: FontWeight.w700, height: 1.3)),
                   const SizedBox(height: 2),
                   Text(sub, maxLines: 1, overflow: TextOverflow.ellipsis, style: _sans(context, size: 10.5, color: _kMute)),
+                  if (our.isNotEmpty || counterparty.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      '签约双方 · 我方 ${our.isEmpty ? '—' : _subjectDisplay(our)} ⇄ 对方 ${counterparty.isEmpty ? '—' : _subjectDisplay(counterparty)}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: _sans(context, size: 10.5, color: _kInk2),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -4439,16 +5531,17 @@ Widget _bizSettlementCard(BuildContext context, Map<String, dynamic> p, int inde
                 const SizedBox(height: 4),
                 n == 0
                     ? _tag(context, '未配置', _Tone.grey)
-                    : (soon ? _tag(context, (days ?? 0) <= 0 ? '今天到期' : '$days 天到期', _Tone.copper) : _tag(context, '生效中', _Tone.purple)),
+                    : (soon ? _tag(context, (days ?? 0) <= 0 ? '今天到期' : '$days 天到期', _Tone.copper) : _tag(context, '执行中', _Tone.purple)),
               ],
             ),
           ],
         ),
         _miniChain(context, [
+          // 这一格是渠道 / 供应商档案上的主体（应与规则「对方」是同一家），不是我方。
           _ChainSeg(
-            '法人主体',
-            subjectName.isEmpty ? '未关联' : _subjectDisplay(subjectName),
-            sub: our.isEmpty ? '' : '我方 ${_subjectDisplay(our)}',
+            '$partnerLabel主体',
+            subjectName.isEmpty ? '待补' : _subjectDisplay(subjectName),
+            sub: subjectName.isEmpty && counterparty.isNotEmpty ? '规则对方 ${_subjectDisplay(counterparty)}' : '',
             tone: subjectName.isEmpty ? _SegTone.warn : _SegTone.normal,
             onTap: _s(p['partnerSubjectId']).isEmpty ? null : () => _openBizSubject(context, _s(p['partnerSubjectId']), subjectName),
           ),
@@ -4467,7 +5560,7 @@ Widget _bizSettlementCard(BuildContext context, Map<String, dynamic> p, int inde
   );
 }
 
-/// 产品卡的迷你链（渠道产品：合作主体 › 供应商 › 结算；供应商产品：合作主体 › 供应商 › 结算）与问题提示。
+/// 产品卡的迷你链（供应商主体 › 供应商 › 结算，渠道产品看首选货源的供应商）与问题提示。
 (List<_ChainSeg>, String?, Color) _productChain(BuildContext context, Map<String, dynamic> p, String side) {
   final subject = _s(p['chainSubject']);
   final subjectId = _s(p['chainSubjectId']);
@@ -4480,8 +5573,8 @@ Widget _bizSettlementCard(BuildContext context, Map<String, dynamic> p, int inde
     final days = _daysUntil(p['settlementExpire']);
     final segs = [
       _ChainSeg(
-        '法人主体',
-        subject.isEmpty ? '未关联' : _subjectDisplay(subject),
+        '供应商主体',
+        subject.isEmpty ? '待补' : _subjectDisplay(subject),
         tone: subject.isEmpty ? _SegTone.warn : _SegTone.normal,
         onTap: subjectId.isEmpty ? null : () => _openBizSubject(context, subjectId, subject),
       ),
@@ -4508,7 +5601,7 @@ Widget _bizSettlementCard(BuildContext context, Map<String, dynamic> p, int inde
     // 链路没算出来（接口降级）时三格都写「—」，不能默认成已贯通。
     return (
       [
-        const _ChainSeg('法人主体', '—', tone: _SegTone.none),
+        const _ChainSeg('供应商主体', '—', tone: _SegTone.none),
         const _ChainSeg('供应商', '—', tone: _SegTone.none),
         _settleSeg(context, p, 'channel', usable: false),
       ],
@@ -4521,8 +5614,8 @@ Widget _bizSettlementCard(BuildContext context, Map<String, dynamic> p, int inde
   final reason = _s(p['chainReason']);
   final segs = [
     _ChainSeg(
-      '法人主体',
-      brk == 0 ? '—' : (subject.isEmpty ? '未关联' : _subjectDisplay(subject)),
+      '供应商主体',
+      brk == 0 ? '—' : (subject.isEmpty ? '待补' : _subjectDisplay(subject)),
       tone: brk == 0 ? _SegTone.none : (subject.isEmpty ? _SegTone.warn : _SegTone.normal),
       onTap: subjectId.isEmpty ? null : () => _openBizSubject(context, subjectId, subject),
     ),
@@ -4536,14 +5629,15 @@ Widget _bizSettlementCard(BuildContext context, Map<String, dynamic> p, int inde
     _settleSeg(context, p, 'channel', usable: brk < 0 || brk == 3),
   ];
   final (segName, _, _) = _chainSeg(_chainSegOfBreak(brk));
-  // 直接说卡在哪一侧、差什么，不用「一端未生效」这类内部说法。
+  // 直接说卡在哪一侧、差什么，不用「一端未可售」这类内部说法。
   final why = switch (reason) {
     'noSource' => '未连接货源：还没有配置供应商产品',
     'sourceBroken' => '货源失效：指向的供应商产品已删除',
     'channelPending' => '卡在渠道侧：渠道产品${_submitStatus(_s(p['submitStatus'])).$1}',
     'channelDisabled' => '卡在渠道侧：渠道产品${_productStatus('channel', _s(p['status']))}',
     'supplierNotEffective' => spState == 'disabled' ? '卡在供应商侧：供应商产品已停用' : '卡在供应商侧：供应商产品待审核',
-    'noSettlement' => '未配结算：两端都已生效，还差结算规则',
+    'noSettlement' => '渠道侧未配结算：还没有渠道侧结算规则',
+    'supplierNoSettlement' => '供给侧未配结算：没有审核生效且启用的关联货源配置供应商侧结算规则',
     _ => segName,
   };
   if (brk >= 0) {
@@ -4553,7 +5647,7 @@ Widget _bizSettlementCard(BuildContext context, Map<String, dynamic> p, int inde
     if (pending) return (segs, null, _kInk);
     final color = switch (reason) {
       'sourceBroken' => _kCoral,
-      'noSettlement' => _kCopper,
+      'noSettlement' || 'supplierNoSettlement' => _kCopper,
       _ => _kChainGrey,
     };
     return (segs, why, color);
@@ -4561,4 +5655,154 @@ Widget _bizSettlementCard(BuildContext context, Map<String, dynamic> p, int inde
   final days = _daysUntil(p['settlementExpire']);
   if (days != null && days <= 30) return (segs, '已贯通，结算规则 $days 天后到期', _kCopper);
   return (segs, null, _kInk);
+}
+
+/// Decimal-string IDs supplied by Lighthouse, never approximate a large numeric ID.
+List<String> lighthouseLinkedRuleKeys(Object? discount) {
+  final d = _map(discount);
+  final keys = d['ruleKeys'];
+  if (keys is List) return keys.map(_s).where((k) => k.isNotEmpty).toSet().toList();
+  final id = _i(d['ruleId']);
+  return id != null && id > 0 && id <= 9007199254740991 ? ['$id'] : const [];
+}
+
+List<String> lighthouseRuleKeysForRow(Map<String, dynamic> row) {
+  final keys = row['linkedRuleKeys'];
+  return keys is List ? keys.map(_s).where((k) => k.isNotEmpty).toSet().toList() : lighthouseLinkedRuleKeys(row['discount']);
+}
+
+/// A pushed route keeps the originating ledger's filters and scroll position intact.
+class LighthouseLinkedRulesPage extends StatefulWidget {
+  const LighthouseLinkedRulesPage({super.key, required this.service, required this.ruleKeys});
+  final LighthouseService service;
+  final List<String> ruleKeys;
+  @override
+  State<LighthouseLinkedRulesPage> createState() => _LighthouseLinkedRulesState();
+}
+
+class _LighthouseLinkedRulesState extends State<LighthouseLinkedRulesPage> {
+  late final Future<Map<String, dynamic>> _overview = widget.service.fetchBizOverview();
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(title: const Text('关联阶梯规则')),
+    body: FutureBuilder<Map<String, dynamic>>(
+      future: _overview,
+      builder: (context, snapshot) {
+        if (snapshot.hasError) return Center(child: Text(_errText(snapshot.error!)));
+        if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+        final rules = _list(_map(snapshot.data!['tierBoard'])['rules'])
+            .where((r) => widget.ruleKeys.contains(_s(r['ruleId']))).toList();
+        if (rules.isEmpty) return const Center(child: Text('该规则暂无本期阶梯计算记录，无法展示本期走势。'));
+        return ListView(padding: const EdgeInsets.all(16), children: [
+          Text('显示账表记录明确关联的规则；规则周期独立于账表日期。', style: _sans(context, size: 12, color: _kMute)),
+          const SizedBox(height: 12),
+          _BizPulseHero(service: widget.service, ruleOnly: true, initialPage: 1, overview: {'tierBoard': {'rules': rules, 'total': rules.length, 'periodCross': rules.where((r) => r['reachable'] == true).length, 'weekCross': rules.where((m) { final r = _TierRule(m); final a = r.asOf; final e = r.eta; return r.reachable && a != null && e != null && e.isBefore(DateTime(a.year, a.month, a.day).add(Duration(days: 8 - a.weekday))); }).length}},
+            loading: false, onOpenPush: () {}, onOpenExpiring: () {}),
+        ]);
+      },
+    ),
+  );
+}
+
+class LighthouseRuleLedgerPage extends StatefulWidget {
+  const LighthouseRuleLedgerPage({super.key, required this.service, required this.rule});
+  final LighthouseService service;
+  final Map<String, dynamic> rule;
+  @override
+  State<LighthouseRuleLedgerPage> createState() => _LighthouseRuleLedgerState();
+}
+
+class _LighthouseRuleLedgerState extends State<LighthouseRuleLedgerPage> {
+  String _period = 'rule';
+  late DateTime _anchor = _hDt(widget.rule['asOf']) ?? DateTime.now();
+  List<Map<String, dynamic>> _scopes = [];
+  final Map<String, Map<String, dynamic>> _details = {};
+  bool _loading = true;
+  String? _error;
+  int _seq = 0;
+  @override
+  void initState() { super.initState(); _load(resolve: true); }
+
+  Future<void> _load({bool resolve = false}) async {
+    final seq = ++_seq;
+    setState(() { _loading = true; _error = null; });
+    try {
+      final start = _hDt(widget.rule['periodStart']);
+      final end = _hDt(widget.rule['periodEnd']);
+      final asOf = _hDt(widget.rule['asOf']);
+      if (start == null || end == null || asOf == null) throw Exception('规则缺少统计周期或数据日期，暂不能关联账表。');
+      final cutoff = asOf.isBefore(end) ? asOf : end;
+      if (resolve) {
+        final data = await widget.service.fetchDimension(tab: 'supply', period: 'day', startDate: start, endDate: cutoff);
+        if (!mounted || seq != _seq) return;
+        _scopes = _list(data['rows']).where((r) => lighthouseRuleKeysForRow(r).contains(_s(widget.rule['ruleId']))).toList();
+      }
+      final details = <String, Map<String, dynamic>>{};
+      for (final scope in _scopes) {
+        final name = _s(scope['name']);
+        final group = _s(scope['group']);
+        final key = group.isEmpty ? name : '$name::$group';
+        final data = await widget.service.fetchDetail(tab: 'supply', key: key,
+          period: _period == 'rule' ? 'day' : _period,
+          date: _period == 'rule' ? null : _date(_anchor.toIso8601String()),
+          startDate: _period == 'rule' ? start : null, endDate: _period == 'rule' ? cutoff : null);
+        if (!mounted || seq != _seq) return;
+        details[key] = _map(data['detail']);
+      }
+      if (!mounted || seq != _seq) return;
+      setState(() { _details..clear()..addAll(details); _loading = false; });
+    } catch (e) {
+      if (!mounted || seq != _seq) return;
+      setState(() { _error = _errText(e); _loading = false; });
+    }
+  }
+
+  Widget _ledger(BuildContext context, String key, Map<String, dynamic> data) {
+    final rows = _list(data['supplierCode']);
+    final products = rows.isEmpty ? _list(data['productName']) : rows;
+    return Container(margin: const EdgeInsets.only(top: 12), padding: const EdgeInsets.all(14), decoration: _cardDeco(context),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Text(key.replaceAll('::', ' · '), style: _sans(context, size: 14, weight: FontWeight.w600)),
+        const SizedBox(height: 8),
+        for (final (field, label) in const [('sales', '销售额'), ('revenue', '收入'), ('totalCost', '成本合计'), ('profit', '利润')])
+          Padding(padding: const EdgeInsets.symmetric(vertical: 3), child: Row(children: [
+            Expanded(child: Text(label, style: _sans(context, size: 12, color: _kInk2))), Text(_yuan(data[field]), style: _num(context, size: 14)),
+          ])),
+        const SizedBox(height: 8),
+        Text('供给下的产品明细（供给全量范围）', style: _sans(context, size: 12, weight: FontWeight.w600)),
+        if (products.isEmpty) Text('所选期间没有产品明细', style: _sans(context, size: 12, color: _kMute)),
+        for (final p in products) ListTile(contentPadding: EdgeInsets.zero,
+          title: Text(_s(p['name']), style: _sans(context, size: 12)),
+          subtitle: Text('销售 ${_yuan(p['sales'])} · 利润 ${_yuan(p['profit'])}', style: _sans(context, size: 11, color: _kMute))),
+        TextButton(onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => LighthouseLinkedRulesPage(
+          service: widget.service, ruleKeys: [_s(widget.rule['ruleId'])]))), child: const Text('查看关联阶梯规则')),
+      ]));
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(title: const Text('关联日月年表')),
+    body: RefreshIndicator(onRefresh: () => _load(resolve: true), child: ListView(
+      physics: const AlwaysScrollableScrollPhysics(), padding: const EdgeInsets.all(16), children: [
+        Text(_s(widget.rule['name']), style: _sans(context, size: 15, weight: FontWeight.w600)),
+        const SizedBox(height: 6),
+        Text('规则周期：${_date(widget.rule['periodStart'])} 至 ${_date(widget.rule['periodEnd'])}\n规则数据截至：${_date(widget.rule['asOf'])}', style: _sans(context, size: 12, color: _kInk2)),
+        const SizedBox(height: 8),
+        Text('按账表计算记录中的规则ID关联供给。下方为关联供给的业务汇总及产品明细，并非本规则参与产品合计，不能直接作为跨档基数。', style: _sans(context, size: 11, color: _kCopper, height: 1.5)),
+        const SizedBox(height: 12),
+        Wrap(spacing: 6, runSpacing: 6, children: [for (final (value, label) in const [('rule', '规则本期'), ('day', '日表'), ('month', '月表'), ('year', '年表')])
+          ChoiceChip(label: Text(label), selected: _period == value, onSelected: (_) { setState(() => _period = value); _load(); })]),
+        if (_period == 'rule') Text('账表查询至规则数据截至日，不查询未来日期。', style: _sans(context, size: 11, color: _kMute))
+        else TextButton(onPressed: () async {
+          final picked = await showDatePicker(context: context, initialDate: _anchor, firstDate: DateTime(2000), lastDate: DateTime.now());
+          if (picked == null || !mounted) return;
+          setState(() => _anchor = picked); _load();
+        }, child: Text(_period == 'year' ? '${_anchor.year} 年 · 选择日期' : _period == 'month' ? '${_anchor.year}-${_anchor.month} · 选择日期' : '${_date(_anchor.toIso8601String())} · 选择日期')),
+        if (_loading) const Padding(padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator()))
+        else if (_error != null) _inlineError(context, _error!, () => _load(resolve: true))
+        else if (_scopes.isEmpty) Text('暂无明确的规则ID关联。可能是所选周期没有计算记录或映射尚未建立；不会按名称猜测匹配。', style: _sans(context, size: 12, color: _kMute))
+        else ...[for (final entry in _details.entries) _ledger(context, entry.key, entry.value)],
+      ],
+    )),
+  );
 }

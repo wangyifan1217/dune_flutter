@@ -65,11 +65,11 @@ Position? betterAttendancePosition(
 
 /// The first iOS sample is often a cell fix of one or two kilometres.
 /// Keep listening until the error radius tightens, or until a moderate
-/// indoor fix has had time to replace that first sample.
+/// indoor fix has had a few seconds to replace that first sample.
 bool attendanceFixIsReady(Position position, Duration waited) {
   if (position.accuracy <= attendancePreciseAccuracyMeters) return true;
   return position.accuracy <= attendanceSettledAccuracyMeters &&
-      waited >= const Duration(seconds: 6);
+      waited >= const Duration(seconds: 3);
 }
 
 /// Text for the accuracy row. A cached point is labeled so it is not mistaken
@@ -94,8 +94,9 @@ String? attendanceAccuracyLabel(
   return '约 $rounded 米（仅供参考）';
 }
 
-/// A live precise fix stops the wait immediately. A precise cached fix stops
-/// after a short grace. A coarse point never stops the wait by itself.
+/// A live precise fix stops the wait immediately. A cached or indoor fix
+/// stops after a short grace, so a tighter sample can still replace it.
+/// A kilometre-scale cell point never stops the wait by itself.
 bool attendanceShouldStopWaiting({
   required Position position,
   required DateTime now,
@@ -105,6 +106,6 @@ bool attendanceShouldStopWaiting({
   if (attendanceSampleIsLive(position, now)) {
     return attendanceFixIsReady(position, waited);
   }
-  return position.accuracy <= attendancePreciseAccuracyMeters &&
-      waited >= attendanceCachedPreciseGrace;
+  return waited >= attendanceCachedPreciseGrace &&
+      position.accuracy <= attendanceSettledAccuracyMeters;
 }

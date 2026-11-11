@@ -3814,13 +3814,15 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
 
   bool get _isSubmitter => _me > 0 && _row.createdBy == _me;
 
-  /// 复核中还能改内容的人：提交人（未复核的部分）、财务部负责人二（财务未整板块通过前）、
-  /// 市场部负责人一（业务成本）。规则和原来完整表单一样，这里只决定给不给「修改内容」入口。
+  /// 复核中还能改内容的人：提交人（未复核的部分）、财务部负责人二（财务未整板块通过前，
+  /// 或科技单条驳回了财务技术接口）、市场部负责人一（业务成本）。
+  /// 规则和原来完整表单一样，这里只决定给不给「修改内容」入口。
   bool get _canEditDuringReview =>
       _canEditAsSubmitter ||
       _canEditUnreviewedFinance ||
       _canEditBusinessCost ||
-      _hunEditableBeforeSubmit;
+      _hunEditableBeforeSubmit ||
+      _canEditRejectedFinanceInterface;
 
   bool _isOwner(String key) => _me > 0 && _ownerId(key) == _me;
 
@@ -3922,10 +3924,29 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     return !_moduleReviewed('technologyCompleted');
   }
 
+  /// 科技单条驳回了财务技术接口。复核中默认是只读简单行，这个入口单独判断，
+  /// 负责人才看得到「修改内容」。
+  bool get _canEditRejectedFinanceInterface {
+    if (_isLocked || !_isOwner('financeOwner2') || _row.isTechRevising) {
+      return false;
+    }
+    const section = 'technologyItem:financeInterfaces';
+    if (_reviewLocksField(
+      resetReview: 'technologyCompleted',
+      reviewSection: section,
+    )) {
+      return false;
+    }
+    return !_itemReviewed(section) && _itemRejectComment(section).isNotEmpty;
+  }
+
   /// 填写人在科技部填写时可以勾选；财务部负责人二在待填写阶段同样可以勾选。
+  /// 科技单条驳回后提案仍在复核，负责人二要能改这一条并保存。
   bool get _canEditFinanceInterface =>
       _canEditTech ||
-      (_isOwner('financeOwner2') && (!_isContentFrozen || _row.isTechRevising));
+      (_isOwner('financeOwner2') &&
+          (!_isContentFrozen || _row.isTechRevising)) ||
+      _canEditRejectedFinanceInterface;
 
   bool get _canEditProductFiles =>
       _canEditMarket ||

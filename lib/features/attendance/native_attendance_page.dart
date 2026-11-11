@@ -308,7 +308,7 @@ class _NativeAttendancePageState extends State<NativeAttendancePage>
         return;
       }
       final position = await _awaitRefinedPosition(
-        const Duration(seconds: 12),
+        const Duration(seconds: 8),
       );
       if (mounted && !_submitting && !_locating) {
         final chosen = betterAttendancePosition(
@@ -397,7 +397,7 @@ class _NativeAttendancePageState extends State<NativeAttendancePage>
       if (permission == LocationPermission.deniedForever) {
         throw Exception('位置权限已关闭，请前往系统设置开启');
       }
-      final pos = await _awaitRefinedPosition(const Duration(seconds: 18));
+      final pos = await _awaitRefinedPosition(const Duration(seconds: 8));
       if (!mounted) return;
       setState(() {
         _position = pos;
@@ -448,12 +448,14 @@ class _NativeAttendancePageState extends State<NativeAttendancePage>
     Position? best;
     StreamSubscription<Position>? subscription;
     Timer? timer;
+    Timer? graceTimer;
     var settled = false;
 
     void succeed(Position position) {
       if (settled) return;
       settled = true;
       timer?.cancel();
+      graceTimer?.cancel();
       unawaited(subscription?.cancel());
       completer.complete(position);
     }
@@ -462,22 +464,50 @@ class _NativeAttendancePageState extends State<NativeAttendancePage>
       if (settled) return;
       settled = true;
       timer?.cancel();
+      graceTimer?.cancel();
       unawaited(subscription?.cancel());
       completer.completeError(error, stack);
     }
 
     Future<void> finishWithoutNewFix(Object error, [StackTrace? stack]) async {
-      final found = best;
+      var found = best;
+      final cached = await _recentCachedPosition();
+      if (cached != null) {
+        found = betterAttendancePosition(found, cached, DateTime.now());
+      }
       if (found != null) {
         succeed(found);
         return;
       }
-      final cached = await _recentCachedPosition();
-      if (cached != null) {
-        succeed(cached);
+      fail(error, stack);
+    }
+
+    void accept(Position position) {
+      final now = DateTime.now();
+      final chosen = betterAttendancePosition(best, position, now);
+      if (chosen == null) return;
+      if (!identical(chosen, best)) best = chosen;
+      if (attendanceShouldStopWaiting(
+        position: best!,
+        now: now,
+        waited: now.difference(started),
+      )) {
+        succeed(best!);
         return;
       }
-      fail(error, stack);
+      // 室内点或缓存要等几秒，看有没有更准的实时点。到点后再判一次。
+      graceTimer ??= Timer(attendanceCachedPreciseGrace, () {
+        final current = best;
+        if (current == null || settled) return;
+        final at = DateTime.now();
+        if (attendanceShouldStopWaiting(
+          position: current,
+          now: at,
+          waited: at.difference(started),
+        )) {
+          succeed(current);
+        }
+      });
     }
 
     timer = Timer(timeout, () {
@@ -485,23 +515,15 @@ class _NativeAttendancePageState extends State<NativeAttendancePage>
         finishWithoutNewFix(Exception('定位超时，请到窗边或室外重试')),
       );
     });
+    unawaited(() async {
+      final cached = await _recentCachedPosition();
+      if (!settled && cached != null) accept(cached);
+    }());
 
     subscription = Geolocator.getPositionStream(
       locationSettings: _attendanceLocationSettings(),
     ).listen(
-      (position) {
-        final now = DateTime.now();
-        final chosen = betterAttendancePosition(best, position, now);
-        if (chosen == null || identical(chosen, best)) return;
-        best = chosen;
-        if (attendanceShouldStopWaiting(
-          position: chosen,
-          now: now,
-          waited: now.difference(started),
-        )) {
-          succeed(chosen);
-        }
-      },
+      accept,
       onError: (Object error, StackTrace stack) {
         unawaited(finishWithoutNewFix(error, stack));
       },
@@ -579,6 +601,13 @@ class _NativeAttendancePageState extends State<NativeAttendancePage>
       }
     }
     return match;
+  }
+
+  /// 打卡按钮能点时，这份位置就是刚确认过的。两分钟内直接提交，不再重开 GPS。
+  bool get _hasFreshPunchPosition {
+    final position = _position;
+    if (position == null) return false;
+    return attendanceSampleIsRecent(position, DateTime.now());
   }
 
   bool get _canPunch {
@@ -707,8 +736,13 @@ class _NativeAttendancePageState extends State<NativeAttendancePage>
           if (mounted) setState(() => _punchPhase = phase);
         },
         locate: () async {
-          // Camera may take time; use a new GPS reading after face verification.
-          await _locate();
+          // 进页时已经确认过位置。拍照只有几十秒，沿用这份定位，不再重开一轮 GPS。
+          if (!_hasFreshPunchPosition) {
+            if (mounted) {
+              setState(() => _punchPhase = AttendancePunchPhase.locating);
+            }
+            await _locate();
+          }
           if (!_attemptActive || _position == null) return null;
           if (!_insideFence) {
             _showMessage('当前位置不在可打卡范围内', error: true);
@@ -914,7 +948,7 @@ class _NativeAttendancePageState extends State<NativeAttendancePage>
                                 : allDone
                                 ? '上下班记录已保存，仍可补充打卡'
                                 : today?.faceRequired == true
-                                ? '拍照核验本人并确认位置后完成$nextLabel'
+                                ? '先确认位置，再拍照核验本人即可完成$nextLabel'
                                 : '定位确认后即可完成$nextLabel',
                             complete: allDone,
                           ),

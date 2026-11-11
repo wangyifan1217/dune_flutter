@@ -457,7 +457,7 @@ class GlobalSearchFacade {
           kind: kind,
           limit: tab == GlobalSearchCategory.messages ? 80 : 40,
         ),
-        duration: const Duration(milliseconds: 6000),
+        duration: const Duration(seconds: 8),
       );
       final seeded = _latest.group(GlobalSearchCategory.messages).items;
       final merged = _mergeMessageRows(rows, seeded);

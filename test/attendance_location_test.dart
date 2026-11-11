@@ -159,6 +159,26 @@ void main() {
       ),
       isFalse,
     );
+    final indoorCache = _position(
+      accuracy: 90,
+      timestamp: now.subtract(const Duration(seconds: 40)),
+    );
+    expect(
+      attendanceShouldStopWaiting(
+        position: indoorCache,
+        now: now,
+        waited: const Duration(seconds: 2),
+      ),
+      isFalse,
+    );
+    expect(
+      attendanceShouldStopWaiting(
+        position: indoorCache,
+        now: now,
+        waited: attendanceCachedPreciseGrace,
+      ),
+      isTrue,
+    );
   });
 
   test('the first kilometre-scale sample is not ready to use', () {
@@ -176,14 +196,14 @@ void main() {
     expect(
       attendanceFixIsReady(
         _position(accuracy: 90, timestamp: now),
-        const Duration(seconds: 6),
+        const Duration(seconds: 3),
       ),
       isTrue,
     );
     expect(
       attendanceFixIsReady(
         _position(accuracy: 90, timestamp: now),
-        const Duration(seconds: 5),
+        const Duration(seconds: 2),
       ),
       isFalse,
     );

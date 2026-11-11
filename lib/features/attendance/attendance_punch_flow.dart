@@ -61,7 +61,6 @@ class AttendancePunchFlow {
       }
       token = verification.token;
     }
-    onPhase(AttendancePunchPhase.locating);
     final location = await locate();
     if (location == null || !isActive()) return null;
     if (verification != null &&

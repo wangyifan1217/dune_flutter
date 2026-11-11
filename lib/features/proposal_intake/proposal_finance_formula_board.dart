@@ -1876,7 +1876,7 @@ class _CostLine extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.only(top: 6, right: 4),
               child: Text(
-                '暂未获取到按收入计算的公式，请重新进入提案刷新。',
+                '暂未获取到按收入加成本计算的公式，请重新进入提案刷新。',
                 style: _sans(context, size: 11, color: _K.grey),
               ),
             ),

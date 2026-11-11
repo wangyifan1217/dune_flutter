@@ -1781,7 +1781,8 @@ class ConversationService {
     return NativeSearchMessagePage(items: items, hasMore: hasMore);
   }
 
-  /// 跨会话消息搜索。接口命中与会话扇出合并；链接/文件名在 payload 里也会匹配。
+  /// 跨会话消息搜索。服务端一条查询覆盖当前用户能看到的正文；
+  /// 旧服务或单字查询才退回有限的会话扇出。
   Future<List<GlobalMessageHit>> searchMessagesGlobal({
     required String query,
     String kind = '',
@@ -1789,36 +1790,50 @@ class ConversationService {
   }) async {
     final q = query.trim();
     if (q.isEmpty) return const <GlobalMessageHit>[];
-    final api = <GlobalMessageHit>[];
+    final params = <String, String>{
+      'q': q,
+      'page': '1',
+      'size': '$limit',
+      if (kind.trim().isNotEmpty) 'kind': kind.trim(),
+    };
     try {
-      final params = <String, String>{
-        'q': q,
-        'page': '1',
-        'size': '$limit',
-        if (kind.trim().isNotEmpty) 'kind': kind.trim(),
-      };
-      final resp = await _client.get(
-        _uri('/chat/messages/search?${Uri(queryParameters: params).query}'),
-        headers: _headers,
-      );
+      final resp = await _client
+          .get(
+            _uri(
+              '/conversations/messages/search?${Uri(queryParameters: params).query}',
+            ),
+            headers: _headers,
+          )
+          .timeout(const Duration(seconds: 5));
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
         final body = _decode(resp.body);
-        if (body['success'] != false) {
-          api.addAll(
-            _rowsFromData(body['data'])
-                .whereType<Map>()
-                .map((row) => _mapGlobalMessage(Map<String, dynamic>.from(row)))
-                .where((hit) => hit.messageId > 0 && hit.conversationId > 0),
-          );
+        if (body['success'] == false) {
+          throw Exception((body['message'] ?? '搜索失败').toString());
         }
+        final data = body['data'];
+        if (data is Map && data['tooShort'] == true) {
+          return _searchMessagesFanout(query: q, kind: kind, limit: limit);
+        }
+        return _rowsFromData(data)
+            .whereType<Map>()
+            .map((row) => _mapGlobalMessage(Map<String, dynamic>.from(row)))
+            .where((hit) => hit.messageId > 0 && hit.conversationId > 0)
+            .toList(growable: false);
       }
-    } catch (_) {}
-    final fanout = await _searchMessagesFanout(
-      query: q,
-      kind: kind,
-      limit: limit,
-    );
-    return _dedupeMessageHits([...api, ...fanout]);
+      // 未升级的 im-go 会把 messages 解析成会话 id，返回 400。
+      if (resp.statusCode == 400 || resp.statusCode == 404) {
+        return _searchMessagesFanout(query: q, kind: kind, limit: limit);
+      }
+      if (resp.statusCode == 503) {
+        throw TimeoutException('搜索超时');
+      }
+      throw Exception('搜索失败: HTTP ${resp.statusCode}');
+    } on TimeoutException {
+      rethrow;
+    } catch (e) {
+      if (e is Exception && '$e'.contains('搜索失败')) rethrow;
+      return _searchMessagesFanout(query: q, kind: kind, limit: limit);
+    }
   }
 
   Future<List<GlobalMessageHit>> _searchMessagesFanout({

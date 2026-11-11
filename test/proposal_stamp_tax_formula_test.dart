@@ -89,20 +89,37 @@ void main() {
     final stamp = evaluation.bucket(kProposalCostCategoryTax)!.lines.single;
     expect(evaluation.revenue.amount, 2000);
     expect(stamp.formula?.code, 'TAX_STAMP_REVENUE');
-    expect(stamp.amount, 1.2);
-    expect(saved['taxCost'], 1.2);
-    expect(evaluation.profit, closeTo(original.profit + 10.8, 0.001));
+    expect(stamp.amount, 0.6);
+    expect(saved['taxCost'], 0.6);
+    expect(evaluation.profit, closeTo(original.profit + 11.4, 0.001));
     expect(
       proposalEvaluateFinance(
         _form(formula: 'TAX_STAMP_REVENUE', ratio: '0.2'),
       ).total(kProposalCostCategoryTax),
-      2.4,
+      1.2,
     );
     expect(
       proposalEvaluateFinance(
         _form(formula: 'TAX_STAMP_REVENUE', ratio: '0'),
       ).total(kProposalCostCategoryTax),
       0,
+    );
+  });
+
+  test('revenue choice adds project and business cost into the stamp base', () {
+    final form = {
+      ..._form(formula: 'TAX_STAMP_REVENUE'),
+      'businessCostItems': ['渠道侧N'],
+      'businessCostItemRatios': {'渠道侧N': '0.1'},
+      'businessCostItemFormulas': {'渠道侧N': 'BIZ_NET'},
+      'financeFormulaTouched': {'project': true, 'tax': true, 'business': true},
+    };
+    final evaluation = proposalEvaluateFinance(form);
+    final business = evaluation.total(kProposalCostCategoryBusiness);
+    expect(business, closeTo(200, 0.01));
+    expect(
+      evaluation.total(kProposalCostCategoryTax),
+      closeTo((2000 + business) * 0.0003, 0.001),
     );
   });
 
@@ -152,10 +169,10 @@ void main() {
     await tester.ensureVisible(picker);
     await tester.tap(picker);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('收入 × 0.06%').last);
+    await tester.tap(find.text('(收入 + 成本) × 0.03%').last);
     await tester.pumpAndSettle();
     expect((form['taxCostItemFormulas'] as Map)['印花税'], 'TAX_STAMP_REVENUE');
-    expect(proposalEvaluateFinance(form).total(kProposalCostCategoryTax), 1.2);
+    expect(proposalEvaluateFinance(form).total(kProposalCostCategoryTax), 0.6);
     expect(
       tester.widget<ProposalSelectField<String>>(picker).value,
       'TAX_STAMP_REVENUE',
@@ -209,7 +226,7 @@ void main() {
               : ['TAX_STAMP_SCALE'],
         );
         expect(
-          find.textContaining('暂未获取到按收入计算的公式'),
+          find.textContaining('暂未获取到按收入加成本计算的公式'),
           updatedEstimate ? findsNothing : findsOneWidget,
         );
       },

@@ -93,6 +93,7 @@ abstract final class ProposalFinanceFormulaKind {
   static const settleRevenue = 'SETTLE_REVENUE';
   static const scaleRate = 'SCALE_RATE';
   static const revenueRate = 'REVENUE_RATE';
+  static const stampBase = 'STAMP_BASE';
   static const grossRate = 'GROSS_RATE';
   static const netOpRate = 'NET_OP_RATE';
   static const pretaxRate = 'PRETAX_RATE';
@@ -103,6 +104,11 @@ abstract final class ProposalFinanceFormulaKind {
 }
 
 String _str(Object? raw) => raw == null ? '' : '$raw'.trim();
+
+/// 所得税和印花税「收入 + 成本」都用到业务成本。业务成本被加密时不能算出金额。
+bool _taxFormulaUsesBusinessCost(String? kind) =>
+    kind == ProposalFinanceFormulaKind.pretaxRate ||
+    kind == ProposalFinanceFormulaKind.stampBase;
 
 List<dynamic> _listOf(Object? raw) => raw is List ? raw : const [];
 
@@ -494,10 +500,10 @@ const _kStampFormulas = <ProposalFinanceFormula>[
   ),
   ProposalFinanceFormula(
     code: 'TAX_STAMP_REVENUE',
-    name: '收入 × 0.06%',
-    expression: '收入 × 0.0006',
-    kind: ProposalFinanceFormulaKind.revenueRate,
-    rate: 0.0006,
+    name: '(收入 + 成本) × 0.03%',
+    expression: '(收入 + 项目成本 + 业务成本) × 0.0003',
+    kind: ProposalFinanceFormulaKind.stampBase,
+    rate: 0.0003,
   ),
 ];
 
@@ -2231,8 +2237,9 @@ ProposalFinanceEvaluation _aggregateFinance({
         lines: [
           for (final name in names)
             if (proposalForm['businessCostRedacted'] == true &&
-                proposalFinanceItemFormula(taxForm, category, name)?.kind ==
-                    ProposalFinanceFormulaKind.pretaxRate)
+                _taxFormulaUsesBusinessCost(
+                  proposalFinanceItemFormula(taxForm, category, name)?.kind,
+                ))
               ProposalFinanceLine(
                 name: name,
                 formula: proposalFinanceItemFormula(taxForm, category, name),
@@ -2511,8 +2518,9 @@ ProposalFinanceEvaluation _evaluateFinanceScope(
       }
       if (key == kProposalCostCategoryTax &&
           form['businessCostRedacted'] == true &&
-          proposalFinanceItemFormula(form, category, name)?.kind ==
-              ProposalFinanceFormulaKind.pretaxRate) {
+          _taxFormulaUsesBusinessCost(
+            proposalFinanceItemFormula(form, category, name)?.kind,
+          )) {
         lines.add(
           ProposalFinanceLine(
             name: name,
@@ -2812,6 +2820,14 @@ ProposalFinanceLine _evaluateCostLine(
         return line(
           amount,
           '${_wan(revenue)} × ${_pct(rate)} = ${_wan(amount)} 万元',
+        );
+      }
+    case ProposalFinanceFormulaKind.stampBase:
+      {
+        final amount = (revenue + project + business) * rate;
+        return line(
+          amount,
+          '(${_wan(revenue)} + ${_wan(project)} + ${_wan(business)}) × ${_pct(rate)} = ${_wan(amount)} 万元',
         );
       }
     case ProposalFinanceFormulaKind.grossRate:

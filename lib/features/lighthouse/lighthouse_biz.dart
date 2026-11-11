@@ -345,6 +345,7 @@ class LighthouseBizHost extends StatelessWidget {
     required this.service,
     required this.session,
     this.onOpenLighthouseSupply,
+    this.onBack,
   });
 
   final GlobalKey<NavigatorState> navigatorKey;
@@ -355,10 +356,14 @@ class LighthouseBizHost extends StatelessWidget {
   /// 业务 → 灯塔：打开灯塔供给方（行名 + 中石油 / 中石化）。宿主不给就不出现跳转入口。
   final void Function(String province, String group)? onOpenLighthouseSupply;
 
+  /// 子页「返回」先交给宿主；返回 true 表示宿主已处理（例如从灯塔跳进来的阶梯详情直接回灯塔）。
+  final bool Function()? onBack;
+
   @override
   Widget build(BuildContext context) {
     return LhBizLinks(
       openSupply: onOpenLighthouseSupply,
+      back: onBack,
       child: Navigator(
       key: navigatorKey,
       observers: [observer],
@@ -382,7 +387,11 @@ class LighthouseBizHost extends StatelessWidget {
         if (settings.name == '/tier') {
           return CupertinoPageRoute<void>(
             settings: settings,
-            builder: (_) => LighthouseBizTierPage(service: service, ruleId: _s(args['ruleId'])),
+            builder: (_) => LighthouseBizTierPage(
+              service: service,
+              ruleId: _s(args['ruleId']),
+              fromLighthouse: _s(args['from']) == 'lighthouse',
+            ),
           );
         }
         if (settings.name == '/settlement') {
@@ -660,8 +669,8 @@ class _BizHubState extends State<LighthouseBizHubPage> {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      _LiveDot(color: _fg(context, _kPurple)),
-                      const SizedBox(width: 5),
+                _LiveDot(color: _fg(context, _kPurple)),
+                const SizedBox(width: 5),
                       Text('同步于 ${synced.substring(11, 16)}', style: LhTypography.mono(context: context, size: 10.5, color: _fg(context, _kDeep))),
                     ],
                   ),
@@ -2015,14 +2024,14 @@ class _BizProductState extends State<LighthouseBizProductPage> {
             ),
           ),
           if (showValue) ...[
-            const SizedBox(width: 8),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(value, style: _num(context, size: 14)),
-                Text(valueLabel, style: _sans(context, size: 10, color: _kMute)),
-              ],
-            ),
+          const SizedBox(width: 8),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(value, style: _num(context, size: 14)),
+              Text(valueLabel, style: _sans(context, size: 10, color: _kMute)),
+            ],
+          ),
           ],
         ],
       ),
@@ -2181,7 +2190,7 @@ Widget _bizProductCard(BuildContext context, Map<String, dynamic> p, int index, 
 // ═════════════════════════════ 二级页面：合作主体详情 / 结算详情 / 主体页 ═════════════════════════════
 
 /// 二级页面共用的顶栏：左「‹ 业务」返回，中间标题。
-Widget _bizSubHeader(BuildContext context, String title) {
+Widget _bizSubHeader(BuildContext context, String title, {String backLabel = '返回'}) {
   return Padding(
     padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
     child: Row(
@@ -2192,7 +2201,10 @@ Widget _bizSubHeader(BuildContext context, String title) {
           excludeSemantics: true,
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
-            onTap: () => Navigator.of(context).maybePop(),
+            onTap: () {
+              if (LhBizLinks.maybeOf(context)?.back?.call() ?? false) return;
+              Navigator.of(context).maybePop();
+            },
             child: Container(
               height: 34,
               padding: const EdgeInsets.fromLTRB(4, 0, 11, 0),
@@ -2205,7 +2217,7 @@ Widget _bizSubHeader(BuildContext context, String title) {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(Icons.chevron_left_rounded, size: 21, color: _fg(context, _kInk2)),
-                  Text('返回', style: _sans(context, size: 13, weight: FontWeight.w600, color: _kInk2)),
+                  Text(backLabel, style: _sans(context, size: 13, weight: FontWeight.w600, color: _kInk2)),
                 ],
               ),
             ),
@@ -2218,13 +2230,19 @@ Widget _bizSubHeader(BuildContext context, String title) {
   );
 }
 
-Widget _bizSubPage(BuildContext context, {required String title, required Future<void> Function() onRefresh, required List<Widget> children}) {
+Widget _bizSubPage(
+  BuildContext context, {
+  required String title,
+  required Future<void> Function() onRefresh,
+  required List<Widget> children,
+  String backLabel = '返回',
+}) {
   final bottom = dunesAppBottomNavContentPadding(context, fallback: 16) + 12;
   return Material(
     color: DunesColors.resolve(context, const Color(0xFFF6F5FA), role: DunesColorRole.surface),
     child: Column(
       children: [
-        _bizSubHeader(context, title),
+        _bizSubHeader(context, title, backLabel: backLabel),
         Expanded(
           child: RefreshIndicator(
             color: _kPurple,
@@ -2960,7 +2978,7 @@ Widget _settlementCounterpartyCheck(BuildContext context, List<Map<String, dynam
         ),
       ),
     );
-  }
+}
 
 // ── 主体页（合作主体主体档案）──
 
@@ -3150,8 +3168,8 @@ DateTime? _hDt(Object? v) {
   final s = _s(v);
   if (s.length >= 19) return DateTime.tryParse(s.substring(0, 19).replaceFirst(' ', 'T'));
   if (s.length >= 10) return DateTime.tryParse(s.substring(0, 10));
-  return null;
-}
+    return null;
+  }
 
 String _hMd(DateTime d) => '${d.month.toString().padLeft(2, '0')}/${d.day.toString().padLeft(2, '0')}';
 
@@ -3443,8 +3461,8 @@ class _BizPulseHeroState extends State<_BizPulseHero> {
               button: true,
               label: '${groups[g].$1}：${[for (final r in groups[g].$4) '${r.$1} ${r.$2}${r.$3}'].join('，')}',
               excludeSemantics: true,
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
                 onTap: groups[g].$3,
                 child: Container(
                   padding: const EdgeInsets.fromLTRB(10, 8, 10, 4),
@@ -3469,7 +3487,7 @@ class _BizPulseHeroState extends State<_BizPulseHero> {
                           width: double.infinity,
                           padding: const EdgeInsets.symmetric(vertical: 5),
                           decoration: BoxDecoration(border: Border(top: BorderSide(color: _ln(context, _kLine), width: 0.8))),
-                          child: Column(
+                  child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(r.$1, style: _sans(context, size: 10, color: _kInk2)),
@@ -4076,12 +4094,12 @@ class _BizPulseHeroState extends State<_BizPulseHero> {
         : r.reachable && r.eta != null
         ? '差 ¥${_wan(r.gap)}  预计 ${_hMd(r.eta!)} 到达下一档'
         : '差 ¥${_wan(r.gap)} · 本期难达';
-    return Semantics(
-      button: true,
+        return Semantics(
+          button: true,
       label: '${r.name}，当前 ${r.level} 档，$right，查看阶梯走势',
-      excludeSemantics: true,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
+          excludeSemantics: true,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
         onTap: onTap ?? () => _pickRule(r),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
@@ -4091,7 +4109,7 @@ class _BizPulseHeroState extends State<_BizPulseHero> {
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
+              children: [
               Row(
                 children: [
                   Expanded(
@@ -4121,9 +4139,9 @@ class _BizPulseHeroState extends State<_BizPulseHero> {
                     full: r.full,
                     fill: _fg(context, r.full ? _kThinCapped : (hot ? _kThinNear : _kThinFill)),
                     track: _fg(context, const Color(0xFFEFEBF6)),
+                      ),
+                    ),
                   ),
-                ),
-              ),
             ],
           ),
         ),
@@ -4171,7 +4189,7 @@ class _BizPulseHeroState extends State<_BizPulseHero> {
     ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
+                      children: [
         _kpi(
           context,
           _count(total),
@@ -4231,9 +4249,9 @@ class _BizPulseHeroState extends State<_BizPulseHero> {
                     _legendDot(context, ink.coral),
                     Text(' 失败', style: _sans(context, size: 10, color: _kInk2)),
                   ],
-                ],
-              ),
+              ],
             ),
+          ),
           ),
         ),
       ],
@@ -4427,22 +4445,22 @@ class _TierClimbPainter extends CustomPainter {
         ..lineTo(pts.last.dx, plot.bottom)
         ..lineTo(pts.first.dx, plot.bottom)
         ..close();
-      canvas.drawPath(
+    canvas.drawPath(
         area,
-        Paint()
+      Paint()
           ..shader = LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [ink.purple.withValues(alpha: 0.26), ink.purple.withValues(alpha: 0)],
           ).createShader(plot),
-      );
-      canvas.drawPath(
+    );
+    canvas.drawPath(
         line,
-        Paint()
+      Paint()
           ..color = ink.purple
-          ..style = PaintingStyle.stroke
+        ..style = PaintingStyle.stroke
           ..strokeWidth = 2
-          ..strokeJoin = StrokeJoin.round
+        ..strokeJoin = StrokeJoin.round
           ..strokeCap = StrokeCap.round,
       );
       // 跨档点：两端以外的锚点；最近一次跨档写日期。
@@ -4489,7 +4507,7 @@ class _TierClimbPainter extends CustomPainter {
         final cx = plot.width <= w ? xe : math.min(math.max(xe, plot.left + w / 2), plot.right - w / 2);
         _paintText(canvas, text, labelStyle.copyWith(color: ink.deep, fontWeight: FontWeight.w600), Offset(cx, yn - 16),
             align: TextAlign.center, halo: ink.card);
-      } else {
+        } else {
         _paintText(canvas, '本期到不了下一档', labelStyle.copyWith(color: ink.mute), Offset(plot.right - 4, yn - 14),
             align: TextAlign.right, halo: ink.card);
       }
@@ -4499,7 +4517,7 @@ class _TierClimbPainter extends CustomPainter {
     canvas.drawLine(
       Offset(xNow, plot.top),
       Offset(xNow, plot.bottom),
-      Paint()
+        Paint()
         ..color = ink.ink2.withValues(alpha: 0.35)
         ..strokeWidth = 0.8,
     );
@@ -4534,9 +4552,9 @@ class _TierClimbPainter extends CustomPainter {
           3.6,
           Paint()
             ..color = ink.purple
-            ..style = PaintingStyle.stroke
+          ..style = PaintingStyle.stroke
             ..strokeWidth = 2,
-        );
+      );
       }
     }
   }

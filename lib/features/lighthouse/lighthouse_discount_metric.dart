@@ -293,6 +293,216 @@ LighthouseDiscountPace? lighthouseDiscountPace({
   return LighthouseDiscountPace(elapsedDays: elapsed, totalDays: total);
 }
 
+// ── 阶梯冲刺节奏（2026-11-11）──────────────────────────────────────────
+//   以前三处各算各的：冻结列 / 「本期可跨档」筛选按「今天」外推，展开规则卡按
+//   calcTime 的毫秒外推（至少 6 小时）。月初同一条规则会一边说可跨档、一边说难达。
+//   现在只有一套：后端 discount_pace.go 算好下发（/discounts 的 elapsedDays、
+//   recentDailyAvg、tierVerdict…），前端只读；老后端没有这些字段时，本地按
+//   同一口径退化计算（只有期间日均，没有近 7 日形状、日波动和达成率）。
+//
+//   口径（与后端一致）：
+//     截至日 = calcTime 的日期，没有就今天；日期一律取字符串里的年月日，不做时区换算。
+//     已过天数 = 起始日 … 截至日，含两端；剩余天数 = 总天数 − 已过天数。
+//     需日均 = 还差 ÷ 剩余天数；冲刺倍数 = 需日均 ÷ 近 7 日日均。
+//     ≤1 守住 / ≤1.5 发力 / 其余本期放弃 / 最高档 = 已封顶。
+
+const String lighthouseTierHold = 'hold';
+const String lighthouseTierPush = 'push';
+const String lighthouseTierDrop = 'drop';
+const String lighthouseTierCapped = 'capped';
+
+/// 冲刺倍数超过它就算本期放弃。与后端 tierPushMaxMultiple 同值。
+const double lighthouseTierPushMaxMultiple = 1.5;
+
+class LighthouseTierPace {
+  const LighthouseTierPace({
+    required this.elapsedDays,
+    required this.totalDays,
+    required this.remainingDays,
+    required this.cum,
+    required this.periodDailyAvg,
+    required this.recentDailyAvg,
+    required this.projectedCum,
+    required this.asOf,
+    required this.periodEnd,
+    required this.verdict,
+    required this.fromRecent,
+    required this.fromApi,
+    this.gap,
+    this.requiredDaily,
+    this.dailyStd,
+    this.paceMultiple,
+    this.reachProb,
+    this.marginalReturn,
+  });
+
+  final int elapsedDays;
+  final int totalDays;
+  final int remainingDays;
+  final double cum;
+  final double periodDailyAvg;
+
+  /// 近 7 日日均；没有日表形状时等于期间日均（[fromRecent] = false）。
+  final double recentDailyAvg;
+
+  /// 按 [recentDailyAvg] 到期末的累计。
+  final double projectedCum;
+  final DateTime asOf;
+  final DateTime periodEnd;
+
+  /// hold / push / drop / capped；空串 = 说不出（没有门槛）。
+  final String verdict;
+  final bool fromRecent;
+
+  /// true = 数字来自后端；false = 老后端，本地退化计算。
+  final bool fromApi;
+  final double? gap;
+  final double? requiredDaily;
+  final double? dailyStd;
+  final double? paceMultiple;
+
+  /// 0.01–0.99；没有日波动时为 null（不编一个概率出来）。
+  final double? reachProb;
+
+  /// 过档多赚 ÷ 还差（仅全额累进）。
+  final double? marginalReturn;
+
+  LighthouseDiscountPace get pace =>
+      LighthouseDiscountPace(elapsedDays: elapsedDays, totalDays: totalDays);
+
+  /// 按近 7 日日均哪天到档；周期内到不了或说不出为 null。
+  DateTime? get eta {
+    final g = gap;
+    if (g == null || g <= 0 || recentDailyAvg <= 0) return null;
+    final t = asOf.add(Duration(days: (g / recentDailyAvg).ceil()));
+    return t.isAfter(periodEnd) ? null : t;
+  }
+
+  bool get isHold => verdict == lighthouseTierHold;
+  bool get isPush => verdict == lighthouseTierPush;
+  bool get isDrop => verdict == lighthouseTierDrop;
+  bool get isCapped => verdict == lighthouseTierCapped;
+}
+
+double? _lhTierNum(Object? v) {
+  if (v is num) return v.toDouble();
+  if (v is String) return double.tryParse(v.trim());
+  return null;
+}
+
+/// 读一条 /discounts 规则（主规则或 otherRules 里的一条）的节奏。
+/// null = 连周期都没有，什么都说不出。
+LighthouseTierPace? lighthouseTierPaceOf(
+  Map<String, dynamic> d, {
+  DateTime? now,
+}) {
+  final start = _lhParseDay(d['periodStartTime']?.toString());
+  final end = _lhParseDay(d['periodEndTime']?.toString());
+  if (start == null || end == null) return null;
+  final total = end.difference(start).inDays + 1;
+  if (total <= 0) return null;
+  final ref = now ?? DateTime.now();
+  var asOf =
+      _lhParseDay(d['calcTime']?.toString()) ??
+      DateTime(ref.year, ref.month, ref.day);
+  if (asOf.isBefore(start)) asOf = start;
+  if (asOf.isAfter(end)) asOf = end;
+
+  final cum =
+      _lhTierNum(d['currentCumSales']) ??
+      _lhTierNum(d['statAmount']) ??
+      _lhTierNum(d['cur']) ??
+      0.0;
+  final next =
+      _lhTierNum(d['next_threshold']) ??
+      _lhTierNum(d['nextThreshold']) ??
+      _lhTierNum(d['target']);
+  final rawGap =
+      _lhTierNum(d['salesToNextTier']) ?? _lhTierNum(d['gap_to_next']);
+  final double? gap = next == null
+      ? null
+      : (rawGap ?? (next - cum)).clamp(0.0, double.infinity).toDouble();
+  final capped = d['status']?.toString() == 'capped';
+
+  final apiTotal = _lhTierNum(d['totalDays'])?.toInt();
+  if (apiTotal != null && apiTotal > 0) {
+    final elapsed = _lhTierNum(d['elapsedDays'])?.toInt() ?? 1;
+    final periodAvg = _lhTierNum(d['periodDailyAvg']) ?? cum / elapsed;
+    final recent = _lhTierNum(d['recentDailyAvg']) ?? periodAvg;
+    final remaining = _lhTierNum(d['remainingDays'])?.toInt() ?? 0;
+    return LighthouseTierPace(
+      elapsedDays: elapsed,
+      totalDays: apiTotal,
+      remainingDays: remaining,
+      cum: cum,
+      periodDailyAvg: periodAvg,
+      recentDailyAvg: recent,
+      projectedCum: _lhTierNum(d['projectedCum']) ?? cum + recent * remaining,
+      asOf: asOf,
+      periodEnd: end,
+      verdict: d['tierVerdict']?.toString() ??
+          (capped ? lighthouseTierCapped : ''),
+      fromRecent: d['paceSource']?.toString() == 'recent7',
+      fromApi: true,
+      gap: gap,
+      requiredDaily: _lhTierNum(d['requiredDaily']),
+      dailyStd: _lhTierNum(d['dailyStd']),
+      paceMultiple: _lhTierNum(d['paceMultiple']),
+      reachProb: _lhTierNum(d['reachProb']),
+      marginalReturn: _lhTierNum(d['marginalReturn']),
+    );
+  }
+
+  // 老后端：同一口径，只有期间日均。
+  final elapsed = asOf.difference(start).inDays + 1;
+  final remaining = total - elapsed;
+  final avg = cum / elapsed;
+  String verdict = capped ? lighthouseTierCapped : '';
+  double? needDaily;
+  double? multiple;
+  double? marginal;
+  if (!capped && gap != null) {
+    if (gap <= 0) {
+      verdict = lighthouseTierHold;
+    } else if (remaining <= 0 || avg <= 0) {
+      verdict = lighthouseTierDrop;
+    } else {
+      needDaily = gap / remaining;
+      multiple = needDaily / avg;
+      verdict = multiple <= 1
+          ? lighthouseTierHold
+          : (multiple <= lighthouseTierPushMaxMultiple
+                ? lighthouseTierPush
+                : lighthouseTierDrop);
+    }
+    final gain = _lhTierNum(d['profitGainAtNextTier']);
+    if (_lhTierNum(d['calcMode'])?.toInt() == 2 &&
+        gain != null &&
+        gain > 0 &&
+        gap > 0) {
+      marginal = gain / gap;
+    }
+  }
+  return LighthouseTierPace(
+    elapsedDays: elapsed,
+    totalDays: total,
+    remainingDays: remaining,
+    cum: cum,
+    periodDailyAvg: avg,
+    recentDailyAvg: avg,
+    projectedCum: cum + avg * remaining,
+    asOf: asOf,
+    periodEnd: end,
+    verdict: verdict,
+    fromRecent: false,
+    fromApi: false,
+    gap: gap,
+    requiredDaily: needDaily,
+    paceMultiple: multiple,
+    marginalReturn: marginal,
+  );
+}
+
 // ── 过档多赚 ────────────────────────────────────────────────────────────
 //   「到了 X 能多赚 Y」的 Y。两种计费模式的 Y 完全不是一回事，不能共用一个公式：
 //
@@ -391,15 +601,20 @@ LighthouseDiscountStrip lighthouseDiscountStripFor({
   double? nextPermille,
   double? gainFromApi,
   bool preferGain = false,
+  LighthouseTierPace? tierPace,
 }) {
   final tier = (tierLabel != null && tierLabel.trim().isNotEmpty)
       ? tierLabel.trim()
       : '第${(tierLevel == null || tierLevel < 1) ? 1 : tierLevel}档';
-  final pace = lighthouseDiscountPace(
-    startRaw: periodStart,
-    endRaw: periodEnd,
-    now: now,
-  );
+  // 有 [tierPace]（lighthouseTierPaceOf）就用它的天数：截至日是 calcTime，
+  // 和展开卡、阶梯看板、筛选同一套。没有才按 [now] 退化。
+  final pace =
+      tierPace?.pace ??
+      lighthouseDiscountPace(
+        startRaw: periodStart,
+        endRaw: periodEnd,
+        now: now,
+      );
 
   if (isCapped) {
     return LighthouseDiscountStrip(line: '$tier 已封顶', fill: 1, pace: pace);
@@ -428,7 +643,14 @@ LighthouseDiscountStrip lighthouseDiscountStripFor({
     double? forecast;
     bool? reachable;
     double? projected;
-    if (pace != null && cur > 0) {
+    if (tierPace != null && cur > 0) {
+      projected = tierPace.projectedCum;
+      forecast = (projected / target).clamp(0.0, 1.0).toDouble();
+      // 能不能到听冲刺判断的：只有「守住」算能到，发力 / 放弃都不算。
+      reachable = tierPace.verdict.isEmpty
+          ? projected >= target
+          : tierPace.isHold;
+    } else if (pace != null && cur > 0) {
       projected = cur / pace.elapsedDays * pace.totalDays;
       forecast = (projected / target).clamp(0.0, 1.0).toDouble();
       reachable = projected >= target;

@@ -471,27 +471,18 @@ String _lhMd(DateTime d) =>
 String _lhHm(DateTime d) =>
     '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
 
-/// 按日均外推：本期已过天数、总天数、到月底的预测累计、到下一档的日期（周期内到不了为 null）。
+/// 本期已过天数、总天数、到期末的预测累计、到下一档的日期（周期内到不了为 null）。
+/// 2026-11-11 起不再自己按毫秒外推，统一读 [lighthouseTierPaceOf]（后端 discount_pace.go
+/// 下发的近 7 日节奏；老后端时本地同口径退化），和冻结列、筛选、阶梯看板是同一个数。
 ({int day, int days, double projected, DateTime? eta}) _lhTierPace(Map<String, dynamic> d, double cum, double? next) {
-  final start = DateTime.tryParse(d['periodStartTime']?.toString() ?? '')?.toLocal();
-  final end = DateTime.tryParse(d['periodEndTime']?.toString() ?? '')?.toLocal();
-  final asOf = DateTime.tryParse(d['calcTime']?.toString() ?? '')?.toLocal() ?? DateTime.now();
-  if (start == null || end == null || !end.isAfter(start)) {
-    return (day: 0, days: 0, projected: cum, eta: null);
-  }
-  final at = asOf.isAfter(end) ? end : (asOf.isBefore(start) ? start : asOf);
-  final totalMs = end.difference(start).inMilliseconds;
-  final elapsedMs = math.max(at.difference(start).inMilliseconds, const Duration(hours: 6).inMilliseconds);
-  final perMs = cum / elapsedMs;
-  final projected = perMs * totalMs;
-  DateTime? eta;
-  if (next != null && next > cum && perMs > 0) {
-    final t = at.add(Duration(milliseconds: ((next - cum) / perMs).round()));
-    if (!t.isAfter(end)) eta = t;
-  }
-  final days = (totalMs / Duration.millisecondsPerDay).round();
-  final day = math.min(days, (at.difference(start).inMilliseconds / Duration.millisecondsPerDay).floor() + 1);
-  return (day: day, days: days, projected: projected, eta: eta);
+  final p = lighthouseTierPaceOf(d);
+  if (p == null) return (day: 0, days: 0, projected: cum, eta: null);
+  return (
+    day: p.elapsedDays,
+    days: p.totalDays,
+    projected: p.projectedCum,
+    eta: next == null ? null : p.eta,
+  );
 }
 
 /// 展开区的一张规则卡（方案 A · 刻度尺）：进度条按金额等比例，实色 = 已发生，虚线 = 按日均到月底。

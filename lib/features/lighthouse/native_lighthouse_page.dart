@@ -32,6 +32,7 @@ import 'lighthouse_product_rules.dart';
 import 'lighthouse_gross_margin_label.dart';
 import 'lighthouse_discount_metric.dart';
 import 'lighthouse_discount_strip.dart';
+import 'lighthouse_tier_board.dart';
 import 'lighthouse_equity_link.dart';
 import 'lighthouse_equity_popover.dart';
 import 'lighthouse_forecast.dart';
@@ -1125,6 +1126,7 @@ class _DiscountRow {
     this.reachTime,
     this.profitGain,
     this.tiersRaw,
+    this.tierPace,
   });
 
   final String province;
@@ -1161,6 +1163,10 @@ class _DiscountRow {
   /// `/lighthouse/discounts` 下发的完整阶梯（tiers）。老后端没有这个字段，
   /// 那时 [ladder] 会退成占位阶梯 —— 格子数按 tierCount 画，门槛费率画「—」。
   final Object? tiersRaw;
+
+  /// 阶梯冲刺节奏（截至 calcTime、近 7 日日均、守住 / 发力 / 放弃）。
+  /// 冻结列、折扣档位卡、筛选、阶梯看板都读这一份，不再各自外推。
+  final LighthouseTierPace? tierPace;
 
   /// 展开区「折扣档位」卡用的阶梯。固定折扣没有档位这回事，返回 null。
   LighthouseDiscountLadder? get ladder {
@@ -1294,6 +1300,7 @@ class _DiscountRow {
       segmentEndTime: d['segmentEndTime']?.toString(),
       reachTime: d['reachTime']?.toString(),
       profitGain: (d['profitGainAtNextTier'] as num?)?.toDouble(),
+      tierPace: lighthouseTierPaceOf(d),
     );
   }
 }
@@ -15101,6 +15108,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
   /// tab → (rowKey → trend)。不依赖该维列表是否已加载；二级/三级展开靠它回填。
   final Map<String, Map<String, Map<String, dynamic>>> _trendCache = {};
   bool _discountsLoading = false;
+  /// 默认全部省份；点阶梯条上的「可达 / 难达 / 发力」再筛。
   String _supplyTierFilter = 'all';
   Map<String, dynamic> _discountsByName = const {};
   bool _fundPoolLoading = false;
@@ -16669,6 +16677,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
 
   bool _handleInternalBack() {
     if (_bizOpen) {
+      if (_bizBackToLighthouse()) return true;
       final nav = _bizNav.currentState;
       if (nav != null && nav.canPop()) {
         nav.pop();
@@ -20431,6 +20440,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
                                   session: widget.session,
                                   onOpenLighthouseSupply:
                                       _openLighthouseSupplyFromBiz,
+                                  onBack: _bizBackToLighthouse,
                                 ),
                               ),
                             ),
@@ -21246,11 +21256,34 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
       nav.popUntil((route) => route.isFirst);
       nav.pushNamed(
         '/tier',
-        arguments: {'ruleId': ruleId, 'supplierKey': supplierKey},
+        // from=lighthouse：这页返回直接回灯塔（见 _bizBackToLighthouse），不落到业务首页。
+        arguments: {'ruleId': ruleId, 'supplierKey': supplierKey, 'from': 'lighthouse'},
       );
     }
 
     WidgetsBinding.instance.addPostFrameCallback((_) => push());
+  }
+
+  /// 业务里当前最上面那页是从灯塔直接跳进来的（[_openBizTier]）时，返回 = 关掉业务回灯塔。
+  /// 处理了返回 true；从这页再往里点进去的页照常一层层退。
+  bool _bizBackToLighthouse() {
+    if (!_bizOpen) return false;
+    final nav = _bizNav.currentState;
+    if (nav == null) return false;
+    Route<dynamic>? top;
+    nav.popUntil((route) {
+      top = route;
+      return true; // 不弹，只是拿到栈顶
+    });
+    final args = top?.settings.arguments;
+    if (args is! Map || args['from'] != 'lighthouse') return false;
+    LighthouseFeedback.instance.play(LighthouseFeedbackKind.navigate);
+    _closeBizPage();
+    // 业务下次打开从首页开始，不残留这页。
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _bizNav.currentState?.popUntil((route) => route.isFirst);
+    });
+    return true;
   }
 
   /// 业务 → 灯塔：关掉业务页，切到供给方并打开「省份 × 分类」详情。
@@ -21274,6 +21307,58 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
       _resetDetailDrill();
       _detailDrillReloadAttempted = false;
     });
+  }
+
+  /// 供给方「阶梯冲刺看板」（lighthouse_tier_board.dart）。只在一级供给方列表上出现；
+  /// [rows] 是当前分类 / 查找下的省份行，每家（省 × 中石油 / 中石化）的每条规则一行。
+  Widget? _buildSupplyTierBoard(List<Map<String, dynamic>> rows) {
+    if (!lighthouseSupplyTierBoardEnabled ||
+        !lighthouseSupplyDiscountStripEnabled ||
+        _tab != 'supply' ||
+        _detailKey != null ||
+        widget.sharedCard != null ||
+        _inTopic) {
+      return null;
+    }
+    final entries = <LhTierBoardEntry>[];
+    final seen = <String>{};
+    for (final row in rows) {
+      final name = row['name']?.toString() ?? '';
+      final rules = lighthouseSupplyTierRules(
+        discountsByName: _discountsByName,
+        rowName: name,
+        rowGroup: row['group']?.toString() ?? '',
+        supplyGroups: row['supplyGroups'],
+      );
+      if (rules.isEmpty) continue;
+      final margin = _rowGrossMarginPct(row);
+      for (final rule in rules) {
+        if (!seen.add('${rule.supplierKey}::${rule.ruleId}')) continue;
+        final pace = lighthouseTierPaceOf(rule.data);
+        if (pace == null) continue;
+        entries.add(
+          LhTierBoardEntry(
+            province: name,
+            group: rule.group,
+            supplierKey: rule.supplierKey,
+            data: rule.data,
+            pace: pace,
+            marginPct: margin > 0 ? margin : null,
+          ),
+        );
+      }
+    }
+    if (entries.isEmpty) return null;
+    return LhSupplyTierBoard(
+      entries: entries,
+      filter: _supplyTierFilter,
+      scale: _ledgerScale,
+      onFilter: (v) => setState(() {
+        _supplyTierFilter = v;
+        _listLimit = _listPageSize;
+      }),
+      onOpenRule: (e) => _openBizTier(e.ruleId, supplierKey: e.supplierKey),
+    );
   }
 
   /// 供给方「阶梯」展开区：每条规则一张卡，左侧引导线挂在父卡片下（同产品三级）。
@@ -40400,12 +40485,16 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
                   )
                   .toList(),
             ),
-          if (_tab == 'supply' && _detailKey == null && widget.sharedCard == null)
+          // 开了阶梯冲刺看板，这一排筛选就由看板的三格代替（看板在列表上方，不吸顶）。
+          if (!lighthouseSupplyTierBoardEnabled &&
+              _tab == 'supply' &&
+              _detailKey == null &&
+              widget.sharedCard == null)
             filterRow(
               kicker: '阶梯',
               divider: true,
               cells: [
-                for (final option in const [('all', '全部'), ('reach', '本期可跨档'), ('hard', '本期难达')])
+                for (final option in const [('all', '全部'), ('reach', '照现速能到'), ('push', '使劲能到'), ('hard', '本期难达')])
                   _filterPill(
                     label: option.$2,
                     isOn: _supplyTierFilter == option.$1,
@@ -42909,6 +42998,8 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
     }
     final baseRows = _ledgerSearchFiltered(_currentRows);
     final pointRows = _rowsAtSelectedHeroPoint(baseRows);
+    // 阶梯冲刺看板：跟分类 / 查找走，不跟阶梯筛选走 —— 它自己的三格就是那个筛选。
+    final tierBoard = _buildSupplyTierBoard(pointRows);
     final rows = _tab == 'supply' && _detailKey == null && _supplyTierFilter != 'all'
         ? pointRows.where((row) {
             final rules = lighthouseSupplyTierRules(
@@ -42917,17 +43008,21 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
               rowGroup: row['group']?.toString() ?? '',
               supplyGroups: row['supplyGroups'],
             );
-            return rules.any((rule) {
-              final discount = _DiscountRow.fromApi(rule.data, rule.supplierKey);
-              if (discount == null) return false;
-              final reachable = _discountStripOf(discount).reachable;
-              return reachable != null && reachable == (_supplyTierFilter == 'reach');
-            });
+            // 2026-11-11 · 按冲刺判断筛（与阶梯看板同一套）：
+            //   reach = 守住（照近 7 日速度能到），push = 发力，hard = 本期放弃。
+            final want = switch (_supplyTierFilter) {
+              'reach' => lighthouseTierHold,
+              'push' => lighthouseTierPush,
+              _ => lighthouseTierDrop,
+            };
+            return rules.any(
+              (rule) => lighthouseTierPaceOf(rule.data)?.verdict == want,
+            );
           }).toList()
         : pointRows;
     if (rows.isEmpty) {
       // 空列表要说清楚是「没有数据」还是「筛没了」—— 后者用户自己能修。
-      return Padding(
+      final empty = Padding(
         padding: const EdgeInsets.symmetric(vertical: 40),
         child: Center(
           child: _ledgerSearchActive
@@ -42959,7 +43054,9 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
                   ],
                 )
               : Text(
-                  '暂无数据',
+                  tierBoard != null && _supplyTierFilter != 'all'
+                      ? '这一组没有规则 · 再点一下上面那格取消筛选'
+                      : '暂无数据',
                   style: LhTypography.sans(
                     size: 12,
                     color: DunesColors.resolve(context, LhColors.mute),
@@ -42967,6 +43064,23 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
                   ),
                 ),
         ),
+      );
+      if (tierBoard == null) return empty;
+      return Column(
+        children: [
+          Padding(
+            padding: embedded
+                ? const EdgeInsets.symmetric(horizontal: 12)
+                : const EdgeInsets.fromLTRB(
+                    lighthouseHeroShellMarginH,
+                    4,
+                    lighthouseHeroShellMarginH,
+                    0,
+                  ),
+            child: tierBoard,
+          ),
+          empty,
+        ],
       );
     }
     final limit = _listLimit.clamp(0, rows.length);
@@ -43024,6 +43138,13 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
     if (embedded) {
       return Column(
         children: [
+          if (tierBoard != null) ...[
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: tierBoard,
+            ),
+            const SizedBox(height: 10),
+          ],
           if (assetOverview != null) ...[
             assetOverview,
             const SizedBox(height: 20),
@@ -43043,6 +43164,10 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
       ),
       child: Column(
         children: [
+          if (tierBoard != null) ...[
+            tierBoard,
+            const SizedBox(height: 10),
+          ],
           if (assetOverview != null) ...[
             assetOverview,
             // 总览是雾紫纸，省份列表是白卡：中间留足呼吸，不像被塞进同一张卡。
@@ -48019,6 +48144,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
       nextPermille: d.nextRate,
       gainFromApi: d.profitGain,
       preferGain: preferGain,
+      tierPace: d.tierPace,
     );
   }
 
@@ -48130,11 +48256,15 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
 
     final color = _discountTypeColor(d);
     final focused = _discountFocusKey == trendKey;
-    final pace = lighthouseDiscountPace(
-      startRaw: d.periodStartTime ?? d.segmentStartTime,
-      endRaw: d.periodEndTime ?? d.segmentEndTime,
-    );
-    final projected = lighthouseDiscountProjected(cur: d.cur, pace: pace);
+    final pace =
+        d.tierPace?.pace ??
+        lighthouseDiscountPace(
+          startRaw: d.periodStartTime ?? d.segmentStartTime,
+          endRaw: d.periodEndTime ?? d.segmentEndTime,
+        );
+    final projected =
+        d.tierPace?.projectedCum ??
+        lighthouseDiscountProjected(cur: d.cur, pace: pace);
     final next = ladder.next;
     final isFull = d.calcMode == 2;
 
@@ -54960,6 +55090,17 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
           )
         : const <LhSupplyTierRule>[];
     final tierKey = 'tier::$prefix::$name::$group';
+    // 阶梯条跟品牌色走：省份卡是按省合并出来的，合并后 group 一律为空
+    // （见 lighthouse_asset_board.dart 的 _mergeSupplyRows），直接用 groupColor
+    // 会退成中性灰，和名字旁边那枚红/蓝的品牌小章对不上。只挂一家时按那一家取色
+    // （中石油红 / 中石化蓝），「全部」下两家合并的卡仍然用中性灰，不偏袒任何一家。
+    final tierRowGroups = r['supplyGroups'];
+    final tierBrand = group.isNotEmpty
+        ? group
+        : (tierRowGroups is List && tierRowGroups.length == 1
+              ? '${tierRowGroups.first ?? ''}'.trim()
+              : '');
+    final tierColor = tierBrand.isEmpty ? groupColor : lhGroupColor(tierBrand);
     final tierOpen =
         tierRules.isNotEmpty && _expandedSupplyTier.contains(tierKey);
     final l3SearchHit =
@@ -55256,7 +55397,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
                       _buildProductL3Bar(
                         children: const [],
                         open: tierOpen,
-                        groupColor: groupColor,
+                        groupColor: tierColor,
                         kicker: '阶梯',
                         chipText: '阶梯 ${tierRules.length}',
                         previewText: lighthouseSupplyTierPreview(tierRules),
@@ -55356,7 +55497,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
           ),
         ),
       ),
-      if (tierOpen) _buildSupplyTierCards(tierRules, groupColor),
+      if (tierOpen) _buildSupplyTierCards(tierRules, tierColor),
       if (l3Open)
         _buildProductL3ChildList(
           parent: r,

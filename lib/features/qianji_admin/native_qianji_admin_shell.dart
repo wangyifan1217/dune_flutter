@@ -19,6 +19,8 @@ import '../proposal_intake/native_proposal_intake_page.dart';
 import '../proposal_intake/proposal_intake_service.dart';
 import '../kpi/native_workbench_kpi_page.dart';
 import '../kpi/workbench_kpi_service.dart';
+import '../hr_performance/hr_performance_service.dart';
+import '../hr_performance/native_hr_performance_page.dart';
 import '../payment_invoice/native_payment_invoice_page.dart';
 import '../payment_invoice/payment_invoice_preview.dart';
 import '../payroll/native_payroll_report_page.dart';
@@ -99,6 +101,7 @@ enum _WorkbenchView {
   fundingProposal,
   travelImport,
   kpiPerformance,
+  hrPerformance,
   payrollReports,
   paymentInvoice,
   reimbursementSummary,
@@ -121,6 +124,7 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
   bool? _canSeeContracts;
   bool? _canSeeProposalIntake;
   bool? _canSeeKpiPerformance;
+  HrPerformanceAccess _hrPerformanceAccess = const HrPerformanceAccess();
   bool? _canSeePayrollReports;
   bool? _canSeePaymentInvoice;
   bool? _canSeeReimbursementSummary;
@@ -143,6 +147,7 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
     _WorkbenchView.fundingProposal: '资金提案',
     _WorkbenchView.travelImport: '差旅导入',
     _WorkbenchView.kpiPerformance: '月度绩效考评',
+    _WorkbenchView.hrPerformance: '人事绩效',
     _WorkbenchView.payrollReports: '工资报表',
     _WorkbenchView.paymentInvoice: '付款发票审批',
     _WorkbenchView.reimbursementSummary: '报销汇总',
@@ -153,6 +158,7 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
   @override
   void initState() {
     super.initState();
+    ensureFundingProposalOpener();
     _session = AuthSessionCoordinator.instance.resolve(widget.session);
     _seedAccessFromSession();
     // 权限先按当前登录态查，不等刷新令牌。刷新卡住时下面的板块也不会一直空着。
@@ -217,6 +223,9 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
 
   bool _sessionAccessChanged(AuthSession a, AuthSession b) {
     return a.isExternalUser != b.isExternalUser ||
+        a.hrPerformanceHrAccess != b.hrPerformanceHrAccess ||
+        a.hrPerformanceFinalAccess != b.hrPerformanceFinalAccess ||
+        a.hrPerformanceFollowupAccess != b.hrPerformanceFollowupAccess ||
         a.roles.join('|') != b.roles.join('|') ||
         a.effectiveAdministrativeNoticeAccess !=
             b.effectiveAdministrativeNoticeAccess ||
@@ -241,7 +250,10 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
   }
 
   Future<bool> _probeBool(Future<bool> request, bool fallback) {
-    return request.timeout(const Duration(seconds: 8), onTimeout: () => fallback);
+    return request.timeout(
+      const Duration(seconds: 8),
+      onTimeout: () => fallback,
+    );
   }
 
   Future<List<WorkbenchSsoApp>> _probeAppList(
@@ -253,9 +265,32 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
     );
   }
 
+  Future<HrPerformanceAccess> _probeHrPerformance(AuthSession session) async {
+    try {
+      return await HrPerformanceService(
+        session,
+      ).access().timeout(const Duration(seconds: 8));
+    } catch (_) {
+      return const HrPerformanceAccess();
+    }
+  }
+
+  Future<void> _loadHrPerformanceAccess(int epoch, AuthSession session) async {
+    final access = session.isExternalUser
+        ? const HrPerformanceAccess()
+        : await _probeHrPerformance(session);
+    if (!mounted || epoch != _accessEpoch) return;
+    if (_hrPerformanceAccess.allowed == access.allowed &&
+        _hrPerformanceAccess.pendingCount == access.pendingCount) {
+      return;
+    }
+    setState(() => _hrPerformanceAccess = access);
+  }
+
   Future<void> _loadWorkbenchAccess() async {
     final epoch = ++_accessEpoch;
     final session = _session;
+    unawaited(_loadHrPerformanceAccess(epoch, session));
     if (session.isExternalUser) {
       _publishWorkbenchAccess(
         epoch: epoch,
@@ -954,6 +989,11 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
           session: _session,
           onChromeChanged: _onTaskChrome,
         );
+      case _WorkbenchView.hrPerformance:
+        return NativeHrPerformancePage(
+          key: const ValueKey<String>('workbench-hr-performance'),
+          session: _session,
+        );
       case _WorkbenchView.kpiPerformance:
         return NativeWorkbenchKpiPage(
           key: const ValueKey<String>('workbench-kpi-performance'),
@@ -1124,6 +1164,17 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
           enabled: true,
           onTap: () => _open(_WorkbenchView.kpiPerformance),
         ),
+      if (!_session.isExternalUser && _hrPerformanceAccess.allowed)
+        _WorkbenchTile(
+          title: '人事绩效',
+          subtitle: _hrPerformanceAccess.pendingCount > 0
+              ? '进度与证据 · ${_hrPerformanceAccess.pendingCount} 项待办'
+              : '考核进度 · 任务证据',
+          icon: Icons.fact_check_outlined,
+          color: DunesColors.resolve(context, _themePurple),
+          enabled: true,
+          onTap: () => _open(_WorkbenchView.hrPerformance),
+        ),
       if (!_session.isExternalUser && _canSeePayrollReports == true)
         _WorkbenchTile(
           title: '工资报表',
@@ -1195,47 +1246,47 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
             40,
           ),
           children: [
-        _buildSuperHeroCard(
-          collaborationCount: collabTiles.length,
-          toolCount: toolTiles.length,
-          adminCount: businessTiles.length + peopleTiles.length,
-        ),
-        const SizedBox(height: 16),
-        if (collabTiles.isNotEmpty) ...[
-          _WorkbenchSection(
-            title: '协同办公',
-            subtitle: '任务流转 · 文件共享',
-            accent: _themePurple,
-            children: collabTiles,
-          ),
-          const SizedBox(height: 14),
-        ],
-        if (businessTiles.isNotEmpty) ...[
-          _WorkbenchSection(
-            title: '业务与财务',
-            subtitle: '提案 · 合同 · 发票 · 对账',
-            accent: DunesColors.resolve(context, const Color(0xFF0F766E)),
-            children: businessTiles,
-          ),
-          const SizedBox(height: 14),
-        ],
-        if (peopleTiles.isNotEmpty) ...[
-          _WorkbenchSection(
-            title: '行政人事',
-            subtitle: '通告 · 绩效 · 薪酬 · 差旅',
-            accent: DunesColors.resolve(context, const Color(0xFF3D7A8C)),
-            children: peopleTiles,
-          ),
-          const SizedBox(height: 14),
-        ],
-        if (toolTiles.isNotEmpty) ...[
-          _WorkbenchSection(
-            title: '企业应用',
-            subtitle: '高频直达 · 单点免登',
-            accent: DunesColors.resolve(context, const Color(0xFF3880FF)),
-            children: toolTiles,
-          ),
-        ],
+            _buildSuperHeroCard(
+              collaborationCount: collabTiles.length,
+              toolCount: toolTiles.length,
+              adminCount: businessTiles.length + peopleTiles.length,
+            ),
+            const SizedBox(height: 16),
+            if (collabTiles.isNotEmpty) ...[
+              _WorkbenchSection(
+                title: '协同办公',
+                subtitle: '任务流转 · 文件共享',
+                accent: _themePurple,
+                children: collabTiles,
+              ),
+              const SizedBox(height: 14),
+            ],
+            if (businessTiles.isNotEmpty) ...[
+              _WorkbenchSection(
+                title: '业务与财务',
+                subtitle: '提案 · 合同 · 发票 · 对账',
+                accent: DunesColors.resolve(context, const Color(0xFF0F766E)),
+                children: businessTiles,
+              ),
+              const SizedBox(height: 14),
+            ],
+            if (peopleTiles.isNotEmpty) ...[
+              _WorkbenchSection(
+                title: '行政人事',
+                subtitle: '通告 · 绩效 · 薪酬 · 差旅',
+                accent: DunesColors.resolve(context, const Color(0xFF3D7A8C)),
+                children: peopleTiles,
+              ),
+              const SizedBox(height: 14),
+            ],
+            if (toolTiles.isNotEmpty) ...[
+              _WorkbenchSection(
+                title: '企业应用',
+                subtitle: '高频直达 · 单点免登',
+                accent: DunesColors.resolve(context, const Color(0xFF3880FF)),
+                children: toolTiles,
+              ),
+            ],
           ],
         ),
       ),

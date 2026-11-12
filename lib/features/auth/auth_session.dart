@@ -52,6 +52,9 @@ class AuthSession {
     this.appUsageViewAll = false,
     this.kpiPerformanceAccess = false,
     this.kpiFollowupAccess = false,
+    this.hrPerformanceHrAccess = false,
+    this.hrPerformanceFinalAccess = false,
+    this.hrPerformanceFollowupAccess = false,
     this.payrollReportAccess = false,
     this.paymentInvoiceAccess = false,
   });
@@ -150,6 +153,9 @@ class AuthSession {
 
   /// 月度绩效考评里的「催办」页签。
   final bool kpiFollowupAccess;
+  final bool hrPerformanceHrAccess;
+  final bool hrPerformanceFinalAccess;
+  final bool hrPerformanceFollowupAccess;
 
   /// 工作台行政「工资报表」。
   final bool payrollReportAccess;
@@ -365,6 +371,9 @@ class AuthSession {
     bool? appUsageViewAll,
     bool? kpiPerformanceAccess,
     bool? kpiFollowupAccess,
+    bool? hrPerformanceHrAccess,
+    bool? hrPerformanceFinalAccess,
+    bool? hrPerformanceFollowupAccess,
     bool? payrollReportAccess,
     bool? paymentInvoiceAccess,
   }) {
@@ -425,6 +434,12 @@ class AuthSession {
       appUsageViewAll: appUsageViewAll ?? this.appUsageViewAll,
       kpiPerformanceAccess: kpiPerformanceAccess ?? this.kpiPerformanceAccess,
       kpiFollowupAccess: kpiFollowupAccess ?? this.kpiFollowupAccess,
+      hrPerformanceHrAccess:
+          hrPerformanceHrAccess ?? this.hrPerformanceHrAccess,
+      hrPerformanceFinalAccess:
+          hrPerformanceFinalAccess ?? this.hrPerformanceFinalAccess,
+      hrPerformanceFollowupAccess:
+          hrPerformanceFollowupAccess ?? this.hrPerformanceFollowupAccess,
       payrollReportAccess: payrollReportAccess ?? this.payrollReportAccess,
       paymentInvoiceAccess: paymentInvoiceAccess ?? this.paymentInvoiceAccess,
     );
@@ -519,6 +534,9 @@ class AuthSession {
       appUsageViewAll: data['appUsageViewAll'] == true,
       kpiPerformanceAccess: data['kpiPerformanceAccess'] == true,
       kpiFollowupAccess: data['kpiFollowupAccess'] == true,
+      hrPerformanceHrAccess: data['hrPerformanceHrAccess'] == true,
+      hrPerformanceFinalAccess: data['hrPerformanceFinalAccess'] == true,
+      hrPerformanceFollowupAccess: data['hrPerformanceFollowupAccess'] == true,
       payrollReportAccess: data['payrollReportAccess'] == true,
       paymentInvoiceAccess: data['paymentInvoiceAccess'] == true,
     );
@@ -585,6 +603,10 @@ class AuthSession {
       appUsageViewAll: claims['appUsageViewAll'] == true,
       kpiPerformanceAccess: claims['kpiPerformanceAccess'] == true,
       kpiFollowupAccess: claims['kpiFollowupAccess'] == true,
+      hrPerformanceHrAccess: claims['hrPerformanceHrAccess'] == true,
+      hrPerformanceFinalAccess: claims['hrPerformanceFinalAccess'] == true,
+      hrPerformanceFollowupAccess:
+          claims['hrPerformanceFollowupAccess'] == true,
       payrollReportAccess: claims['payrollReportAccess'] == true,
       paymentInvoiceAccess: claims['paymentInvoiceAccess'] == true,
     );
@@ -657,6 +679,9 @@ class AuthSession {
       'appUsageViewAll': appUsageViewAll,
       'kpiPerformanceAccess': kpiPerformanceAccess,
       'kpiFollowupAccess': kpiFollowupAccess,
+      'hrPerformanceHrAccess': hrPerformanceHrAccess,
+      'hrPerformanceFinalAccess': hrPerformanceFinalAccess,
+      'hrPerformanceFollowupAccess': hrPerformanceFollowupAccess,
       'payrollReportAccess': payrollReportAccess,
       'paymentInvoiceAccess': paymentInvoiceAccess,
     };
@@ -718,6 +743,9 @@ class AuthSession {
       appUsageViewAll: json['appUsageViewAll'] == true,
       kpiPerformanceAccess: json['kpiPerformanceAccess'] == true,
       kpiFollowupAccess: json['kpiFollowupAccess'] == true,
+      hrPerformanceHrAccess: json['hrPerformanceHrAccess'] == true,
+      hrPerformanceFinalAccess: json['hrPerformanceFinalAccess'] == true,
+      hrPerformanceFollowupAccess: json['hrPerformanceFollowupAccess'] == true,
       payrollReportAccess: json['payrollReportAccess'] == true,
       paymentInvoiceAccess: json['paymentInvoiceAccess'] == true,
     );

@@ -62,8 +62,9 @@ const _fieldOverlays = <String, Map<String, dynamic>>{
   },
   'entertainmentApprovalNo': {
     'type': 'proposal',
+    'multiple': true,
     'dataSource': kApprovedMineDataSource,
-    'placeholder': '选择自己已通过的招待费提案',
+    'placeholder': '可多选自己已通过的招待费申请',
     'meta': {
       'titleContains': '招待费',
       'templateKey':

@@ -737,11 +737,15 @@ class _NativeApprovalAssistantPageState
     }
     return ChatApprovalCard(
       title: _approvalCardTitle(share),
-      statusLabel: share.isProposalIntake || share.isTaskTodo
+      statusLabel: share.isProposalIntake ||
+              share.isFundingProposal ||
+              share.isTaskTodo
           ? ''
           : detailStatusLabel(share.status),
       subtitle: share.isTaskTodo
           ? share.taskCardLine
+          : share.isFundingProposal
+          ? share.fundingCardLine
           : share.isProposalIntake
           ? share.proposalCardLine
           : share.businessType.toUpperCase() == 'PROPOSAL'
@@ -749,10 +753,15 @@ class _NativeApprovalAssistantPageState
           : '审批单据',
       brandLabel: share.isTaskTodo
           ? '审批待办'
+          : share.isFundingProposal
+          ? '资金提案'
           : share.isProposalIntake
           ? '协作提案'
           : '沙丘审批',
-      subtitleMaxLines: share.isProposalIntake || share.isTaskTodo ? 2 : 1,
+      subtitleMaxLines:
+          share.isProposalIntake || share.isFundingProposal || share.isTaskTodo
+          ? 2
+          : 1,
       onTap: () => widget.onOpenApproval?.call(share),
     );
   }

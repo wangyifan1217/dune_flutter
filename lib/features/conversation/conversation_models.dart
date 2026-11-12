@@ -90,6 +90,7 @@ class NativeConversation {
   bool get isApprovalAssistant => kind == 'APPROVAL_ASSISTANT';
   bool get isTaskAssistant => kind == 'TASK_ASSISTANT';
   bool get isKpiAssistant => kind == 'KPI_ASSISTANT';
+ bool get isHrPerformance=>kind=='HR_PERFORMANCE';
   bool get isDriveAssistant => kind == 'DRIVE_ASSISTANT';
   bool get isXrxsAssistant => kind == 'XRXS_ASSISTANT';
   bool get isWeeklySummary => kind == 'WEEKLY_SUMMARY';
@@ -110,6 +111,7 @@ class NativeConversation {
       isApprovalAssistant ||
       isTaskAssistant ||
       isKpiAssistant ||
+      isHrPerformance ||
       isReconciliationAssistant ||
       isDriveAssistant ||
       isXrxsAssistant ||
@@ -130,6 +132,7 @@ class NativeConversation {
     if (isApprovalAssistant) return '审批助手';
     if (isTaskAssistant) return '任务助手';
     if (isKpiAssistant) return '绩效助手';
+ if(isHrPerformance)return '人事绩效';
     if (isDriveAssistant) return '企业微盘';
     if (isXrxsAssistant) return '薪人薪事';
     if (isWeeklySummary) return '一周小结';

@@ -74,6 +74,7 @@ class _NativeTaskAssistantPageState extends State<NativeTaskAssistantPage> {
   int _detailReloadTick = 0;
   bool _showDailyReport = false;
   DateTime? _dailyReportDate;
+  bool _dailyTeamCalendar = false;
   bool _dailyPending = false;
   bool _guideAutoStarted = false;
   bool _activeTasksGuideStarted = false;
@@ -230,7 +231,7 @@ class _NativeTaskAssistantPageState extends State<NativeTaskAssistantPage> {
     } catch (_) {}
   }
 
-  void _openDailyReport({String? reportDate}) {
+  void _openDailyReport({String? reportDate, bool teamCalendar = false}) {
     DateTime? parsed;
     if (reportDate != null && reportDate.trim().isNotEmpty) {
       parsed = DateTime.tryParse(reportDate.trim());
@@ -238,14 +239,63 @@ class _NativeTaskAssistantPageState extends State<NativeTaskAssistantPage> {
     setState(() {
       _showDailyReport = true;
       _dailyReportDate = parsed;
+      _dailyTeamCalendar = teamCalendar;
     });
     _syncBackInterceptor();
+  }
+
+  Widget _compactHeaderAction({
+    required IconData icon,
+    required String tooltip,
+    required VoidCallback? onPressed,
+    Color? color,
+    bool showDot = false,
+    bool busy = false,
+  }) {
+    final tint = DunesColors.resolve(context, color ?? DunesColors.text2);
+    return IconButton(
+      tooltip: tooltip,
+      onPressed: busy ? null : onPressed,
+      visualDensity: VisualDensity.compact,
+      padding: const EdgeInsets.all(4),
+      constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+      icon: busy
+          ? const SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Icon(icon, size: 20, color: tint),
+                if (showDot)
+                  Positioned(
+                    right: -1,
+                    top: -1,
+                    child: Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: DunesColors.resolveNullable(
+                          context,
+                          const Color(0xFFE11D48),
+                          role: DunesColorRole.surface,
+                        ),
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+    );
   }
 
   void _closeDailyReport() {
     setState(() {
       _showDailyReport = false;
       _dailyReportDate = null;
+      _dailyTeamCalendar = false;
     });
     _syncBackInterceptor();
     unawaited(_refreshDailyStatus());
@@ -664,6 +714,7 @@ class _NativeTaskAssistantPageState extends State<NativeTaskAssistantPage> {
           child: NativeTaskDailyReportPage(
             session: widget.session,
             initialDate: _dailyReportDate,
+            openTeamCalendar: _dailyTeamCalendar,
             onBack: _closeDailyReport,
           ),
         ),
@@ -712,118 +763,32 @@ class _NativeTaskAssistantPageState extends State<NativeTaskAssistantPage> {
                   : (widget.onBack ?? () => Navigator.maybePop(context)),
               // 双栏主会话可隐藏返回；进入「进行中的任务」子页时必须能返回消息流。
               showBackButton: _showTasks || widget.showBackButton,
-              leadingAvatar: const TaskAssistantAvatar(size: 45),
+              leadingAvatar: const TaskAssistantAvatar(size: 32),
               actions: [
-                TaskGuideHelpButton(
-                  onPressed: () => unawaited(
-                    _showTasks
-                        ? _showActiveTasksGuide(force: true)
-                        : _showGuide(force: true),
-                  ),
-                ),
                 if (!_showTasks)
-                  TextButton(
+                  _compactHeaderAction(
+                    icon: Icons.task_alt_outlined,
+                    tooltip: '进入任务',
+                    onPressed: _openActiveTasks,
+                  ),
+                if (!_showTasks)
+                  _compactHeaderAction(
+                    icon: Icons.edit_calendar_outlined,
+                    tooltip: _dailyPending ? '日报待填' : '日报',
+                    color: _dailyPending ? const Color(0xFFE11D48) : null,
+                    showDot: _dailyPending,
                     onPressed: () => _openDailyReport(),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          _dailyPending ? '日报待填' : '日报',
-                          style: TextStyle(
-                            color: _dailyPending
-                                ? DunesColors.resolve(
-                                    context,
-                                    const Color(0xFFE11D48),
-                                  )
-                                : DunesColors.resolve(
-                                    context,
-                                    DunesColors.text2,
-                                  ),
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        if (_dailyPending) ...[
-                          const SizedBox(width: 4),
-                          Container(
-                            width: 8,
-                            height: 8,
-                            decoration: BoxDecoration(
-                              color: DunesColors.resolveNullable(
-                                context,
-                                Color(0xFFE11D48),
-                                role: DunesColorRole.surface,
-                              ),
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
                   ),
                 if (!_showTasks)
-                  IconButton(
-                    tooltip: '清空通知记录',
+                  _compactHeaderAction(
+                    icon: Icons.delete_sweep_outlined,
+                    tooltip: '清空',
                     onPressed: _clearing ? null : _clearHistory,
-                    icon: _clearing
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : Icon(
-                            Icons.delete_sweep_outlined,
-                            size: 22,
-                            color: DunesColors.resolve(
-                              context,
-                              DunesColors.text2,
-                            ),
-                          ),
+                    busy: _clearing,
                   ),
               ],
             ),
             Expanded(child: _showTasks ? _buildTasks() : _buildMessages()),
-            if (!_showTasks)
-              Container(
-                width: double.infinity,
-                padding: EdgeInsets.fromLTRB(
-                  16,
-                  10,
-                  16,
-                  12 + MediaQuery.paddingOf(context).bottom,
-                ),
-                decoration: BoxDecoration(
-                  color: DunesColors.resolve(
-                    context,
-                    Colors.white,
-                    role: DunesColorRole.surface,
-                  ),
-                  border: Border(
-                    top: BorderSide(
-                      color: DunesColors.resolve(
-                        context,
-                        Color(0xFFE8EAED),
-                        role: DunesColorRole.border,
-                      ),
-                    ),
-                  ),
-                ),
-                child: FilledButton.icon(
-                  onPressed: _openActiveTasks,
-                  style: FilledButton.styleFrom(
-                    backgroundColor: DunesColors.resolve(
-                      context,
-                      const Color(0xFF2F8F7E),
-                      role: DunesColorRole.surface,
-                    ),
-                    minimumSize: const Size.fromHeight(44),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
-                  icon: const Icon(Icons.task_alt_outlined, size: 19),
-                  label: const Text('进入任务'),
-                ),
-              ),
           ],
         ),
       ),
@@ -870,7 +835,12 @@ class _NativeTaskAssistantPageState extends State<NativeTaskAssistantPage> {
                 addAutomaticKeepAlives: false,
                 addRepaintBoundaries: true,
                 findChildIndexCallback: _findMessageChildIndex,
-                padding: const EdgeInsets.fromLTRB(12, 28, 12, 18),
+                padding: EdgeInsets.fromLTRB(
+                  12,
+                  28,
+                  12,
+                  18 + MediaQuery.paddingOf(context).bottom,
+                ),
                 itemCount: _messages.length + (_loadingOlder ? 1 : 0),
                 itemBuilder: (context, index) {
                   if (_loadingOlder && index == _messages.length) {
@@ -915,6 +885,8 @@ class _NativeTaskAssistantPageState extends State<NativeTaskAssistantPage> {
     final isSug = noticeType == 'meetingTaskSuggestions';
     final isDaily = noticeType == 'taskDailyReport';
     final reportDate = (payload['reportDate'] ?? '').toString();
+    final remindKind = (payload['remindKind'] ?? '').toString();
+    final openTeamCalendar = remindKind == 'submit_digest';
     final pendingCount = (payload['pendingTaskCount'] as num?)?.toInt() ?? 0;
     final deadline = (payload['deadline'] ?? '').toString();
     final meetingId = isSug
@@ -938,7 +910,7 @@ class _NativeTaskAssistantPageState extends State<NativeTaskAssistantPage> {
       showSenderMeta: true,
       readLabel: null,
       timeLabel: InboxFormat.formatTime(m.createdAt, withClock: true),
-      avatar: const TaskAssistantAvatar(size: 45),
+      avatar: const TaskAssistantAvatar(size: 36),
       content: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -959,11 +931,16 @@ class _NativeTaskAssistantPageState extends State<NativeTaskAssistantPage> {
               padding: const EdgeInsets.only(top: 6),
               child: _TaskAssignmentCard(
                 title: reportDate.isEmpty ? '任务日报' : '$reportDate 日报',
-                parentTitle: [
-                  if (pendingCount > 0) '待填 $pendingCount 项',
-                  if (deadline.isNotEmpty) '截止 $deadline',
-                ].join(' · '),
-                onTap: () => _openDailyReport(reportDate: reportDate),
+                parentTitle: openTeamCalendar
+                    ? '查看团队日报'
+                    : [
+                        if (pendingCount > 0) '待填 $pendingCount 项',
+                        if (deadline.isNotEmpty) '截止 $deadline',
+                      ].join(' · '),
+                onTap: () => _openDailyReport(
+                  reportDate: reportDate,
+                  teamCalendar: openTeamCalendar,
+                ),
               ),
             )
           else if (title.isNotEmpty)
@@ -971,7 +948,7 @@ class _NativeTaskAssistantPageState extends State<NativeTaskAssistantPage> {
               padding: const EdgeInsets.only(top: 6),
               child: _TaskAssignmentCard(
                 title: title,
-                parentTitle: parent,
+                parentTitle: parent.trim().isEmpty ? '' : '主目标：$parent',
                 onTap: taskId > 0 ? () => _openTaskDetail(taskId) : null,
               ),
             ),
@@ -1071,21 +1048,56 @@ class _TaskAssignmentCard extends StatelessWidget {
     return Material(
       color: DunesColors.resolve(
         context,
-        const Color(0xFFEAF5F3),
+        Colors.white,
         role: DunesColorRole.surface,
       ),
       borderRadius: BorderRadius.circular(10),
       child: InkWell(
         borderRadius: BorderRadius.circular(10),
         onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(10),
+        child: Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: DunesColors.resolve(
+                context,
+                const Color(0xFFE8EAED),
+                role: DunesColorRole.border,
+              ),
+            ),
+          ),
           child: Row(
             children: [
               Expanded(
-                child: Text(
-                  parentTitle.isEmpty ? title : '$title\n主目标：$parentTitle',
-                  style: const TextStyle(fontSize: 12, height: 1.4),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    if (parentTitle.trim().isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        parentTitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.text3,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ),
               if (onTap != null) ...[
@@ -1152,7 +1164,7 @@ class _ActiveSubtaskCard extends StatelessWidget {
       ),
       borderRadius: BorderRadius.circular(14),
       child: Container(
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
@@ -1209,16 +1221,19 @@ class _ActiveSubtaskCard extends StatelessWidget {
             ),
             Align(
               alignment: Alignment.centerRight,
-              child: TextButton.icon(
+              child: TextButton(
                 onPressed: canUpdate ? onUpdate : null,
                 style: TextButton.styleFrom(
                   foregroundColor: DunesColors.resolve(
                     context,
                     const Color(0xFF2F8F7E),
                   ),
+                  minimumSize: const Size(0, 28),
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  visualDensity: VisualDensity.compact,
                 ),
-                icon: const Icon(Icons.tune, size: 17),
-                label: const Text('更新进度'),
+                child: const Text('更新进度'),
               ),
             ),
           ],

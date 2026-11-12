@@ -61,6 +61,9 @@ class ApprovalChatShare {
   bool get isProposalIntake =>
       businessType.toUpperCase() == 'PROPOSAL_INTAKE';
 
+  bool get isFundingProposal =>
+      businessType.toUpperCase() == 'FUNDING_PROPOSAL';
+
   bool get isTaskTodo => kind.toUpperCase() == 'TASK' || todoId > 0;
 
   /// 协作提案 / 审批待办：正文说明要对方做什么，名片只承担入口。
@@ -133,6 +136,23 @@ class ApprovalChatShare {
     };
   }
 
+  /// 资金提案名片副标题。
+  String get fundingCardLine {
+    final parts = <String>[
+      if (submitterName.trim().isNotEmpty) '${submitterName.trim()} 提交',
+      if (code.trim().isNotEmpty) code.trim(),
+    ];
+    final state = switch (status.trim().toLowerCase()) {
+      'approved' => '已通过',
+      'reviewing' => '审批中',
+      'rejected' => '已驳回',
+      'draft' => '草稿',
+      _ => '',
+    };
+    if (state.isNotEmpty) parts.add(state);
+    return parts.isEmpty ? '资金提案' : parts.join(' · ');
+  }
+
   String get bodyText {
     final t = title.trim().isEmpty ? '审批单' : title.trim();
     return '[审批] $t';
@@ -178,6 +198,25 @@ class ApprovalChatShare {
               kind: kind.trim().isEmpty ? 'TASK' : kind.trim(),
             )
           : null,
+    );
+  }
+
+  factory ApprovalChatShare.fromFundingProposal({
+    required int id,
+    required String title,
+    required String status,
+    String code = '',
+    String submitterName = '',
+  }) {
+    final t = title.trim();
+    return ApprovalChatShare(
+      businessType: 'FUNDING_PROPOSAL',
+      businessId: id,
+      title: t.isEmpty ? '资金提案' : t,
+      status: status,
+      templateKey: 'funding-proposal',
+      code: code,
+      submitterName: submitterName.trim(),
     );
   }
 

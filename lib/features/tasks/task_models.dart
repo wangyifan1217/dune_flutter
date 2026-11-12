@@ -34,6 +34,7 @@ class TaskItem {
     this.parentTitle = '',
     this.sourceMeetingTitle = '',
     this.overdue = false,
+    this.latestProgressAt,
     this.coOwnerUserIds = const [],
     this.participantUserIds = const [],
     this.participants = const [],
@@ -85,6 +86,7 @@ class TaskItem {
   final String parentTitle;
   final String sourceMeetingTitle;
   final bool overdue;
+  final DateTime? latestProgressAt;
   final List<int> coOwnerUserIds;
   final List<int> participantUserIds;
   final List<TaskAssignee> participants;
@@ -157,6 +159,7 @@ class TaskItem {
       parentTitle: '${json['parentTitle'] ?? ''}',
       sourceMeetingTitle: '${json['sourceMeetingTitle'] ?? ''}',
       overdue: json['overdue'] == true,
+      latestProgressAt: parseTime(json['latestProgressAt']),
       coOwnerUserIds:
           (json['coOwnerUserIds'] as List?)
               ?.map((e) => (e as num).toInt())
@@ -183,6 +186,16 @@ class TaskItem {
       canEvaluate: json['canEvaluate'] == true,
     );
   }
+}
+
+List<TaskItem> dedupeTasksById(Iterable<TaskItem> items) {
+  final seen = <int>{};
+  final out = <TaskItem>[];
+  for (final item in items) {
+    if (item.id > 0 && !seen.add(item.id)) continue;
+    out.add(item);
+  }
+  return out;
 }
 
 List<TaskAssignee> _taskParticipants(dynamic raw) {

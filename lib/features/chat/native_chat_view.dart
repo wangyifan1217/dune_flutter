@@ -49,6 +49,7 @@ import '../meeting/native_meeting_detail_page.dart';
 import '../payroll/payroll_report_share_card.dart';
 import '../profile/work_profile_chat_share.dart';
 import '../kpi/kpi_score_summary_card.dart';
+import '../hr_performance/hr_performance_chat_card.dart';
 import '../kpi/kpi_summary_person_sheet.dart';
 import '../robots/robot_markdown.dart';
 import '../shell/dunes_toast.dart';
@@ -9651,16 +9652,26 @@ class _NativeChatViewState extends State<NativeChatView>
       }
       return ChatApprovalCard(
         title: approvalShare.title,
-        statusLabel: approvalShare.isProposalIntake
+        statusLabel: approvalShare.isProposalIntake ||
+                approvalShare.isFundingProposal
             ? ''
             : _approvalStatusLabel(approvalShare.status),
-        subtitle: approvalShare.isProposalIntake
+        subtitle: approvalShare.isFundingProposal
+            ? approvalShare.fundingCardLine
+            : approvalShare.isProposalIntake
             ? approvalShare.proposalCardLine
             : approvalShare.businessType.toUpperCase() == 'PROPOSAL'
             ? '销售提案'
             : '审批单据',
-        brandLabel: approvalShare.isProposalIntake ? '协作提案' : '沙丘审批',
-        subtitleMaxLines: approvalShare.isProposalIntake ? 2 : 1,
+        brandLabel: approvalShare.isFundingProposal
+            ? '资金提案'
+            : approvalShare.isProposalIntake
+            ? '协作提案'
+            : '沙丘审批',
+        subtitleMaxLines:
+            approvalShare.isProposalIntake || approvalShare.isFundingProposal
+            ? 2
+            : 1,
         onTap: () => _openApprovalShare(approvalShare, messageId: m.id),
         onSecondaryTapDown: isDesktopCommOnly && !_messageMultiSelectMode
             ? (details) =>
@@ -9839,6 +9850,9 @@ class _NativeChatViewState extends State<NativeChatView>
           onPlayError: (message) => _showToast(message, error: true),
         ),
       );
+    }
+    if(isHrPerformancePayload(m.payload)){
+      return Align(alignment:mine?Alignment.centerRight:Alignment.centerLeft,child:HrPerformanceChatCard(payload:m.payload!,session:widget.session));
     }
     if (_isRobotMarkdownPayload(m.payload)) {
       // 工作台转发的月度绩效汇总：渲染成汇总卡，不再把六列表格硬塞进气泡。
@@ -10123,6 +10137,7 @@ class _NativeChatViewState extends State<NativeChatView>
         onPlayError: (message) => _showToast(message, error: true),
       );
     }
+    if(isHrPerformancePayload(e.payload)){return HrPerformanceChatCard(payload:e.payload!,session:widget.session);}
     if (_isRobotMarkdownPayload(e.payload)) {
       final kpiSummary = KpiScoreSummaryData.fromMessage(e.payload, e.text);
       if (kpiSummary != null) {

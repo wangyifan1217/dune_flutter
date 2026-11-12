@@ -186,15 +186,15 @@ class _MeetingSuggestionImCardState extends State<MeetingSuggestionImCard> {
                 ),
                 const SizedBox(height: 12),
                 for (final preset in const ['2h', 'tomorrow9', '3d9'])
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: OutlinedButton(
-                      onPressed: () {
-                        Navigator.pop(ctx, (
-                          preset,
-                          meetingSuggestionRemindAt(preset),
-                        ));
-                      },
+                  InkWell(
+                    onTap: () {
+                      Navigator.pop(ctx, (
+                        preset,
+                        meetingSuggestionRemindAt(preset),
+                      ));
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 10),
                       child: Text(meetingSnoozePresetLabel(preset)),
                     ),
                   ),
@@ -352,7 +352,9 @@ class _MeetingSuggestionImCardState extends State<MeetingSuggestionImCard> {
             onPressed: _busy ? null : _snoozeAll,
             style: TextButton.styleFrom(
               visualDensity: VisualDensity.compact,
-              padding: const EdgeInsets.symmetric(horizontal: 8),
+              minimumSize: const Size(0, 28),
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),
             child: const Text('稍后提醒'),
           ),
@@ -361,7 +363,9 @@ class _MeetingSuggestionImCardState extends State<MeetingSuggestionImCard> {
             onPressed: _busy ? null : _acceptAll,
             style: TextButton.styleFrom(
               visualDensity: VisualDensity.compact,
-              padding: const EdgeInsets.symmetric(horizontal: 8),
+              minimumSize: const Size(0, 28),
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),
             child: const Text('全部创建'),
           ),
@@ -417,10 +421,17 @@ class _MeetingSuggestionImCardState extends State<MeetingSuggestionImCard> {
       decoration: BoxDecoration(
         color: DunesColors.resolve(
           context,
-          DunesColors.bgSoft,
+          Colors.white,
           role: DunesColorRole.surface,
         ),
         borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFE8EAED),
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -453,35 +464,50 @@ class _MeetingSuggestionImCardState extends State<MeetingSuggestionImCard> {
               ),
             )
           else
-            Wrap(
-              spacing: 4,
-              runSpacing: 4,
-              alignment: WrapAlignment.spaceBetween,
-              crossAxisAlignment: WrapCrossAlignment.center,
+            Row(
               children: [
-                FilledButton(
-                  style: FilledButton.styleFrom(
-                    backgroundColor: DunesColors.resolve(
-                      context,
-                      DunesColors.brandPurple,
-                      role: DunesColorRole.surface,
-                    ),
-                    visualDensity: VisualDensity.compact,
-                  ),
-                  onPressed: _busy ? null : () => _accept(s),
-                  child: const Text('创建'),
-                ),
-                TextButton(
-                  onPressed: _busy ? null : () => _snoozeOne(s),
-                  child: const Text('稍后'),
-                ),
-                TextButton(
-                  onPressed: _busy ? null : () => _dismiss(s),
-                  child: const Text('不相关'),
-                ),
+                _suggestionPill('创建', _busy ? null : () => _accept(s)),
+                _suggestionPill('稍后', _busy ? null : () => _snoozeOne(s)),
+                _suggestionPill('不相关', _busy ? null : () => _dismiss(s)),
               ],
             ),
         ],
+      ),
+    );
+  }
+
+  Widget _suggestionPill(String label, VoidCallback? onPressed) {
+    final accent = label == '创建';
+    return Padding(
+      padding: const EdgeInsets.only(right: 6),
+      child: SizedBox(
+        height: 28,
+        child: TextButton(
+          onPressed: onPressed,
+          style: TextButton.styleFrom(
+            minimumSize: const Size(0, 28),
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            visualDensity: VisualDensity.compact,
+            foregroundColor: DunesColors.resolve(
+              context,
+              accent ? const Color(0xFF2F8F7E) : DunesColors.text2,
+            ),
+            backgroundColor: accent
+                ? DunesColors.resolve(
+                    context,
+                    const Color(0xFFEAF5F3),
+                    role: DunesColorRole.surface,
+                  )
+                : DunesColors.resolve(
+                    context,
+                    const Color(0xFFF5F6F8),
+                    role: DunesColorRole.surface,
+                  ),
+            shape: const StadiumBorder(),
+          ),
+          child: Text(label, style: const TextStyle(fontSize: 12)),
+        ),
       ),
     );
   }

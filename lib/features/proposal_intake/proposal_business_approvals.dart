@@ -28,11 +28,15 @@ class ProposalBusinessApprovals extends StatefulWidget {
     this.service,
     this.allowLaunch = true,
     this.people = const [],
+    this.funding = false,
   });
   final AuthSession session;
   final ProposalIntakeRow proposal;
   final XflowService? service;
   final bool allowLaunch;
+
+  /// 资金提案：已通过才能发起，接口走 `/funding-proposals`。
+  final bool funding;
 
   /// 选「可发起人」用的人员名单。
   final List<ProposalPerson> people;
@@ -116,15 +120,20 @@ class _ProposalBusinessApprovalsState extends State<ProposalBusinessApprovals> {
     }
   }
 
-  /// 只有已完成的销售、采购提案，且后端判定当前用户可引用（提案负责人、可发起人等）时，
-  /// 才放开发起入口。提案内发起不等 11 月 1 日：生效日只用来拦截脱离提案的独立入口。
+  /// 销售、采购看已完成；资金提案看已通过。后端再校验一次能不能引用。
+  bool get _done => widget.funding
+      ? widget.proposal.status == 'approved'
+      : widget.proposal.status == 'done';
+
   bool get _canLaunch =>
       widget.allowLaunch &&
       _data['canLaunch'] == true &&
-      widget.proposal.status == 'done' &&
-      (widget.proposal.kind == 'sales' ||
-          widget.proposal.kind == 'purchase' ||
-          widget.proposal.kind.isEmpty);
+      _done &&
+      (widget.funding
+          ? widget.proposal.kind == 'funding'
+          : (widget.proposal.kind == 'sales' ||
+                widget.proposal.kind == 'purchase' ||
+                widget.proposal.kind.isEmpty));
 
   Future<void> _load() async {
     final request = ++_request;
@@ -134,7 +143,10 @@ class _ProposalBusinessApprovalsState extends State<ProposalBusinessApprovals> {
     });
     // Independent reads: a cost-collection failure must not erase approval records.
     final costs = _service
-        .fetchProposalCostCollection(widget.proposal.id)
+        .fetchProposalCostCollection(
+          widget.proposal.id,
+          funding: widget.funding,
+        )
         .then((value) {
           if (!mounted || request != _request) return;
           setState(() {
@@ -151,6 +163,7 @@ class _ProposalBusinessApprovalsState extends State<ProposalBusinessApprovals> {
         widget.proposal.id,
         page: _page,
         templateKey: _templateKey,
+        funding: widget.funding,
       );
       if (!mounted || request != _request) return;
       setState(() => _data = data);
@@ -194,13 +207,20 @@ class _ProposalBusinessApprovalsState extends State<ProposalBusinessApprovals> {
         context: context,
         session: widget.session,
         templateKey: selected.templateKey,
-        proposal: linkedProposalIntakePayload(
-          id: widget.proposal.id,
-          code: widget.proposal.code,
-          title: widget.proposal.title,
-          kind: widget.proposal.kind,
-          projectName: '${widget.proposal.form['projectName'] ?? ''}',
-        ),
+        proposal: widget.funding
+            ? linkedProposalFundingPayload(
+                id: widget.proposal.id,
+                code: widget.proposal.code,
+                title: widget.proposal.title,
+                projectName: '${widget.proposal.form['projectName'] ?? ''}',
+              )
+            : linkedProposalIntakePayload(
+                id: widget.proposal.id,
+                code: widget.proposal.code,
+                title: widget.proposal.title,
+                kind: widget.proposal.kind,
+                projectName: '${widget.proposal.form['projectName'] ?? ''}',
+              ),
       );
       if (mounted) await _load();
     } catch (e) {
@@ -360,11 +380,11 @@ class _ProposalBusinessApprovalsState extends State<ProposalBusinessApprovals> {
   }
 
   Widget _header() {
-    final done = widget.proposal.status == 'done';
+    final done = _done;
     final subtitle = _canLaunch
         ? '业务类审批须从本提案发起，开票与经营类成本自动归入本提案'
         : !done
-        ? '提案完成后才能发起业务审批'
+        ? (widget.funding ? '资金提案通过后才能发起业务审批' : '提案完成后才能发起业务审批')
         : _data['canLaunch'] == false
         ? '你暂无权限在此提案下发起业务审批'
         : '本提案关联的业务审批';
@@ -1215,6 +1235,7 @@ class _ProposalBusinessApprovalsState extends State<ProposalBusinessApprovals> {
         final result = await _service.fetchProposalLinkableApprovals(
           widget.proposal.id,
           query: query,
+          funding: widget.funding,
         );
         if (!ctx.mounted) return;
         setLocal(() {
@@ -1347,6 +1368,7 @@ class _ProposalBusinessApprovalsState extends State<ProposalBusinessApprovals> {
         widget.proposal.id,
         businessType: '${picked['businessType']}',
         businessId: '${picked['businessId']}',
+        funding: widget.funding,
       );
       if (mounted) await _load();
     } catch (e) {

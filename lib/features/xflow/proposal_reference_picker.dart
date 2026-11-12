@@ -8,6 +8,15 @@ import '../proposal_intake/proposal_intake_ui.dart';
 import 'xflow_detail_logic.dart';
 import 'xflow_service.dart';
 
+String _proposalKindName(dynamic kind) => switch ('$kind') {
+  'purchase' => '采购提案',
+  'funding' => '资金提案',
+  _ => '销售提案',
+};
+
+String _proposalDoneWord(dynamic kind) =>
+    '$kind' == 'funding' ? '已通过' : '已完成';
+
 Future<Map<String, dynamic>?> showCompletedProposalPicker(
   BuildContext context,
   XflowService service,
@@ -53,9 +62,18 @@ class _ProposalReferencePickerState extends State<ProposalReferencePicker> {
 
   void _loadDetail() {
     final id = parseLinkedProposalId(widget.value);
-    _detail =
-        id > 0 &&
-            linkedProposalOpensIntake(parseLinkedProposalSource(widget.value))
+    if (id <= 0) {
+      _detail = null;
+      return;
+    }
+    final source = parseLinkedProposalSource(widget.value);
+    if (linkedProposalOpensFunding(source)) {
+      _detail = widget.service
+          .fetchFundingProposal(id)
+          .catchError((_) => <String, dynamic>{});
+      return;
+    }
+    _detail = linkedProposalOpensIntake(source)
         ? widget.service
               .fetchLinkedProposalIntake(id)
               .catchError((_) => <String, dynamic>{})
@@ -112,7 +130,7 @@ class _ProposalReferencePickerState extends State<ProposalReferencePicker> {
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 10),
             child: Text(
-              '请选择已完成的销售或采购提案',
+              '请选择已完成的销售、采购提案，或已通过的资金提案',
               style: TextStyle(color: c(ProposalPalette.text3), fontSize: 12),
             ),
           )
@@ -165,9 +183,9 @@ class _ProposalReferencePickerState extends State<ProposalReferencePicker> {
                           const SizedBox(height: 4),
                           Text(
                             [
-                              data['kind'] == 'purchase' ? '采购提案' : '销售提案',
+                              _proposalKindName(data['kind']),
                               if (code.isNotEmpty) code,
-                              '已完成',
+                              _proposalDoneWord(data['kind']),
                             ].join('  ·  '),
                             style: TextStyle(
                               fontSize: 11.5,
@@ -193,8 +211,12 @@ class _ProposalReferencePickerState extends State<ProposalReferencePicker> {
                         '产品  ${form['product']}',
                       if ('${form['projectName'] ?? ''}'.trim().isNotEmpty)
                         '项目  ${form['projectName']}',
+                      if ('${form['counterpartyName'] ?? ''}'.trim().isNotEmpty)
+                        '对方主体  ${form['counterpartyName']}',
                       if ('${form['salesScale'] ?? ''}'.trim().isNotEmpty)
                         '年化规模  ${form['salesScale']} 万',
+                      if ('${form['financingAmount'] ?? ''}'.trim().isNotEmpty)
+                        '融资需求  ${form['financingAmount']}',
                     ];
                     if (facts.isEmpty) return const SizedBox.shrink();
                     return Padding(
@@ -247,7 +269,7 @@ class _CompletedProposalDialogState extends State<_CompletedProposalDialog> {
   final _search = TextEditingController();
   Timer? _debounce;
   String _kind = '';
-  int _page = 1, _total = 0, _request = 0;
+  int _page = 1, _total = 0, _pages = 1, _request = 0;
   bool _busy = true;
   String? _error;
   List<Map<String, dynamic>> _items = const [];
@@ -273,18 +295,47 @@ class _CompletedProposalDialogState extends State<_CompletedProposalDialog> {
       _items = const [];
     });
     try {
-      final data = await widget.service.fetchCompletedProposalIntakes(
-        query: _search.text,
-        kind: _kind,
-        page: _page,
-      );
+      late final Map<String, dynamic> data;
+      if (_kind == 'funding') {
+        data = await widget.service.fetchApprovedFundingProposals(
+          query: _search.text,
+          page: _page,
+        );
+      } else {
+        data = await widget.service.fetchCompletedProposalIntakes(
+          query: _search.text,
+          kind: _kind,
+          page: _page,
+        );
+      }
       if (!mounted || request != _request) return;
+      final items = (data['items'] as List? ?? const [])
+          .whereType<Map>()
+          .map((r) => Map<String, dynamic>.from(r))
+          .toList();
+      var total = (data['total'] as num?)?.toInt() ?? 0;
+      var pages = (total / 20).ceil();
+      if (_kind.isEmpty && _page == 1) {
+        try {
+          final funding = await widget.service.fetchApprovedFundingProposals(
+            query: _search.text,
+            page: 1,
+            pageSize: 100,
+          );
+          if (!mounted || request != _request) return;
+          final extra = (funding['items'] as List? ?? const [])
+              .whereType<Map>()
+              .map((r) => Map<String, dynamic>.from(r))
+              .toList();
+          items.insertAll(0, extra);
+          total += (funding['total'] as num?)?.toInt() ?? extra.length;
+        } catch (_) {}
+      }
+      if (pages < 1) pages = 1;
       setState(() {
-        _items = (data['items'] as List? ?? const [])
-            .whereType<Map>()
-            .map((r) => Map<String, dynamic>.from(r))
-            .toList();
-        _total = (data['total'] as num?)?.toInt() ?? 0;
+        _items = items;
+        _total = total;
+        _pages = pages;
       });
     } catch (e) {
       if (mounted && request == _request) {
@@ -345,7 +396,7 @@ class _CompletedProposalDialogState extends State<_CompletedProposalDialog> {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          '选择与你相关的销售或采购提案',
+                          '选择与你相关的销售、采购或资金提案',
                           style: TextStyle(
                             fontSize: 11,
                             color: color(ProposalPalette.text3),
@@ -429,6 +480,7 @@ class _CompletedProposalDialogState extends State<_CompletedProposalDialog> {
                       '': '全部',
                       'sales': '销售提案',
                       'purchase': '采购提案',
+                      'funding': '资金提案',
                     }.entries)
                       Theme(
                         data: Theme.of(context).copyWith(
@@ -559,7 +611,7 @@ class _CompletedProposalDialogState extends State<_CompletedProposalDialog> {
                                 ),
                               ),
                               subtitle: Text(
-                                '${row['kind'] == 'purchase' ? '采购提案' : '销售提案'} · ${row['code']}',
+                                '${_proposalKindName(row['kind'])} · ${row['code']}',
                                 style: TextStyle(
                                   fontSize: 11.5,
                                   color: color(ProposalPalette.text3),
@@ -569,18 +621,32 @@ class _CompletedProposalDialogState extends State<_CompletedProposalDialog> {
                                 Icons.chevron_right_rounded,
                                 color: color(purple),
                               ),
-                              onTap: () => Navigator.pop(
-                                context,
-                                linkedProposalIntakePayload(
-                                  id: int.parse(
-                                    '${row['proposalId'] ?? row['id']}',
-                                  ),
-                                  code: '${row['code'] ?? ''}',
-                                  title: '${row['title'] ?? ''}',
-                                  kind: '${row['kind'] ?? ''}',
-                                  projectName: linkedProposalProjectName(row),
-                                ),
-                              ),
+                              onTap: () {
+                                final kind = '${row['kind'] ?? ''}';
+                                final id = int.tryParse(
+                                      '${row['proposalId'] ?? row['id']}',
+                                    ) ??
+                                    0;
+                                Navigator.pop(
+                                  context,
+                                  kind == 'funding'
+                                      ? linkedProposalFundingPayload(
+                                          id: id,
+                                          code: '${row['code'] ?? ''}',
+                                          title: '${row['title'] ?? ''}',
+                                          projectName:
+                                              linkedProposalProjectName(row),
+                                        )
+                                      : linkedProposalIntakePayload(
+                                          id: id,
+                                          code: '${row['code'] ?? ''}',
+                                          title: '${row['title'] ?? ''}',
+                                          kind: kind,
+                                          projectName:
+                                              linkedProposalProjectName(row),
+                                        ),
+                                );
+                              },
                             ),
                           );
                         },
@@ -611,7 +677,7 @@ class _CompletedProposalDialogState extends State<_CompletedProposalDialog> {
                   ),
                   IconButton(
                     tooltip: '下一页',
-                    onPressed: _busy || _page * 20 >= _total
+                    onPressed: _busy || _page >= _pages
                         ? null
                         : () {
                             _page++;

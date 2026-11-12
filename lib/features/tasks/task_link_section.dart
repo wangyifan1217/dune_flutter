@@ -125,6 +125,139 @@ class _TaskLinkSectionState extends State<TaskLinkSection> {
     }
   }
 
+  Future<void> _editLink(TaskLink link) async {
+    final excerpt = TextEditingController(
+      text: link.decisionExcerpt.trim().isNotEmpty
+          ? link.decisionExcerpt
+          : link.matchReason,
+    );
+    var meetingId = link.meetingId ?? 0;
+    var meetingTitle = link.title;
+    var meetings = const <TaskLinkCandidateMeeting>[];
+    if (link.isMeeting) {
+      try {
+        final candidates = await _api.fetchCandidates(widget.task.id);
+        meetings = [
+          for (final item in candidates.meetings)
+            if (!item.linked || item.meetingId == link.meetingId) item,
+        ];
+      } catch (_) {}
+    }
+    if (!mounted) {
+      excerpt.dispose();
+      return;
+    }
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocal) => AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: const Text('修改关联'),
+          content: SizedBox(
+            width: 420,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (link.isMeeting) ...[
+                  Text(
+                    '会议',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: DunesColors.resolve(ctx, DunesColors.text3),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  DropdownButtonFormField<int>(
+                    key: ValueKey(meetingId),
+                    initialValue: meetings.any((m) => m.meetingId == meetingId)
+                        ? meetingId
+                        : null,
+                    isExpanded: true,
+                    decoration: const InputDecoration(
+                      isDense: true,
+                      border: OutlineInputBorder(),
+                    ),
+                    hint: Text(
+                      meetingTitle.trim().isEmpty ? '选择会议' : meetingTitle,
+                    ),
+                    items: [
+                      for (final item in meetings)
+                        DropdownMenuItem(
+                          value: item.meetingId,
+                          child: Text(
+                            item.title.trim().isEmpty ? '会议纪要' : item.title,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                    ],
+                    onChanged: (value) {
+                      if (value == null) return;
+                      TaskLinkCandidateMeeting? picked;
+                      for (final item in meetings) {
+                        if (item.meetingId == value) {
+                          picked = item;
+                          break;
+                        }
+                      }
+                      final chosenTitle = picked?.title.trim() ?? '';
+                      setLocal(() {
+                        meetingId = value;
+                        if (chosenTitle.isNotEmpty) meetingTitle = chosenTitle;
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                ],
+                TextField(
+                  controller: excerpt,
+                  maxLines: 4,
+                  decoration: const InputDecoration(
+                    labelText: '摘录 / 说明',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: _purple),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('保存'),
+            ),
+          ],
+        ),
+      ),
+    );
+    final nextExcerpt = excerpt.text.trim();
+    final nextMeeting = meetingId;
+    final nextTitle = meetingTitle;
+    excerpt.dispose();
+    if (saved != true || !mounted) return;
+    setState(() => _busy = true);
+    try {
+      await _api.updateLink(widget.task.id, link.id, {
+        'title': nextTitle,
+        'decisionExcerpt': nextExcerpt,
+        if (link.isMeeting && nextMeeting > 0) 'meetingId': nextMeeting,
+      });
+      if (!mounted) return;
+      showDunesCenterToast(context, '已修改关联');
+      await _load();
+    } catch (e) {
+      if (mounted) showDunesCenterToast(context, '$e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   Future<void> _deleteLink(TaskLink link) async {
     if (_busy) return;
     // 中间确认弹框（替代底部撤销 Snackbar，桌面端体验一致且不会残留）
@@ -615,6 +748,17 @@ class _TaskLinkSectionState extends State<TaskLinkSection> {
                     ],
                   ),
                 ),
+                if (widget.canEdit)
+                  IconButton(
+                    tooltip: '修改关联',
+                    visualDensity: VisualDensity.compact,
+                    onPressed: _busy ? null : () => _editLink(link),
+                    icon: Icon(
+                      Icons.edit_outlined,
+                      size: 18,
+                      color: DunesColors.resolve(context, DunesColors.text3),
+                    ),
+                  ),
                 if (widget.canEdit)
                   IconButton(
                     tooltip: '解除关联',

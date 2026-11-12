@@ -11,6 +11,7 @@ import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
 import '../shell/dunes_toast.dart';
+import '../funding_proposal/funding_proposal_opener.dart';
 import '../proposal_intake/proposal_intake_overlay.dart';
 import 'xflow_detail_logic.dart';
 import 'proposal_reference_picker.dart';
@@ -1513,10 +1514,36 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
               ),
               if (kind != null)
                 Text(
-                  kind == 'purchase' ? '采购提案' : '销售提案',
+                  kind == 'purchase'
+                      ? '采购提案'
+                      : kind == 'funding'
+                      ? '资金提案'
+                      : '销售提案',
                   style: const TextStyle(fontSize: 12),
                 ),
               if (id > 0 &&
+                  linkedProposalOpensFunding(
+                    parseLinkedProposalSource(raw),
+                    parseLinkedProposalBusinessType(raw),
+                  ))
+                TextButton(
+                  onPressed: () {
+                    final open = openFundingProposalFromApproval;
+                    if (open == null) {
+                      showDunesToast(context, '暂时无法打开资金提案');
+                      return;
+                    }
+                    unawaited(
+                      open(
+                        context: context,
+                        session: widget.session,
+                        proposalId: id,
+                      ),
+                    );
+                  },
+                  child: const Text('查看提案'),
+                )
+              else if (id > 0 &&
                   linkedProposalOpensIntake(parseLinkedProposalSource(raw)))
                 TextButton(
                   onPressed: () => showProposalIntakeOverlay(

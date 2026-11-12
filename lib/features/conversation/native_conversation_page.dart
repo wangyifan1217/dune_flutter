@@ -1,3 +1,4 @@
+import '../hr_performance/hr_performance_notice_page.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -1647,6 +1648,9 @@ class _NativeConversationPageState extends State<NativeConversationPage>
     } else if (c.isTaskAssistant) {
       rowKind = ChatInboxRowKind.taskAssistant;
       onTap = _openWithScrollPersist(() => widget.onOpenTaskAssistant?.call(c));
+    } else if(c.isHrPerformance){
+      rowKind=ChatInboxRowKind.administrativeNotice;
+      onTap=_openWithScrollPersist(()=>Navigator.of(context).push(MaterialPageRoute<void>(builder:(_)=>HrPerformanceNoticePage(session:widget.session,conversationId:c.id))));
     } else if (c.isKpiAssistant) {
       rowKind = ChatInboxRowKind.kpiAssistant;
       onTap = _openWithScrollPersist(() => widget.onOpenKpiAssistant?.call(c));

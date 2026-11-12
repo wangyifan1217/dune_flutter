@@ -6,6 +6,7 @@ import '../../core/navigation/navigation_controller.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
+import '../funding_proposal/funding_proposal_overlay.dart';
 import '../proposal_intake/proposal_intake_overlay.dart';
 import '../shell/dunes_toast.dart';
 import 'approval_chat_forward.dart';
@@ -28,6 +29,15 @@ Future<void> openLinkedProposalDetail({
   String businessType = '',
 }) async {
   if (proposalId <= 0 || !context.mounted) return;
+
+  if (linkedProposalOpensFunding(source, businessType)) {
+    await showFundingProposalOverlay(
+      context: context,
+      session: session,
+      proposalId: proposalId,
+    );
+    return;
+  }
 
   if (linkedProposalOpensIntake(source)) {
     await showProposalIntakeOverlay(
@@ -616,14 +626,14 @@ class _NativeB10PageState extends State<NativeB10Page> {
                                 onReturn: _return,
                                 onOpenLinkedProposal:
                                     (proposalId, source, businessType) {
-                                  openLinkedProposalDetail(
-                                    context: context,
-                                    session: widget.session,
-                                    proposalId: proposalId,
-                                    source: source,
-                                    businessType: businessType,
-                                  );
-                                },
+                                      openLinkedProposalDetail(
+                                        context: context,
+                                        session: widget.session,
+                                        proposalId: proposalId,
+                                        source: source,
+                                        businessType: businessType,
+                                      );
+                                    },
                               ),
                               XflowCcRulesCard(
                                 rules: _ccRules,

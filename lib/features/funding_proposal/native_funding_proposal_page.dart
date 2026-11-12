@@ -11,16 +11,27 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
+import '../proposal_intake/proposal_business_approvals.dart';
+import '../proposal_intake/proposal_estimate_summary.dart';
 import '../proposal_intake/proposal_intake_models.dart';
 import '../proposal_intake/proposal_intake_select.dart';
 import '../proposal_intake/proposal_intake_service.dart';
 import '../proposal_intake/proposal_intake_ui.dart';
+import '../proposal_intake/proposal_list_card.dart';
 import '../proposal_intake/settlement_catalog.dart';
 import '../shell/dunes_toast.dart';
+import '../xflow/approval_chat_forward.dart';
+import '../xflow/approval_chat_share.dart';
 import 'funding_proposal_models.dart';
+import 'funding_proposal_opener.dart';
 import 'funding_proposal_service.dart';
 
 // 分段条三色：净收益 / 利息 / 服务费+杂费。跑过色弱校验，相邻两段可区分。
+const _kListAccent = Color(0xFF4A3A9A);
+const _kListPage = Color(0xFFF7F6FB);
+const _kPhoneTextScale = 0.82;
+const _kDesktopTextScale = 0.95;
+
 const _kNetColor = Color(0xFF3F8F5A);
 const _kInterestColor = Color(0xFF7B5CD8);
 const _kFeeColor = Color(0xFFC9842A);
@@ -37,13 +48,44 @@ void _dismissKeyboard() {
   FocusManager.instance.primaryFocus?.unfocus();
 }
 
+/// 工作台加载时接上，审批里的「查看提案」才能打开资金提案。
+void ensureFundingProposalOpener() {
+  openFundingProposalFromApproval ??=
+      ({
+        required BuildContext context,
+        required AuthSession session,
+        required int proposalId,
+      }) {
+        return Navigator.of(context).push<void>(
+          MaterialPageRoute<void>(
+            builder: (_) => NativeFundingProposalPage(
+              session: session,
+              openId: proposalId,
+              linkedFromApproval: true,
+            ),
+          ),
+        );
+      };
+}
+
 /// 工作台「资金提案」：融资立项申请的填写、提交和四级审批。
 ///
 /// 所有下拉、测算、校验都来自后端；本页只负责收集输入和展示结果。
 class NativeFundingProposalPage extends StatefulWidget {
-  const NativeFundingProposalPage({super.key, required this.session});
+  const NativeFundingProposalPage({
+    super.key,
+    required this.session,
+    this.openId,
+    this.linkedFromApproval = false,
+  });
 
   final AuthSession session;
+
+  /// 从业务审批打开某一条资金提案。
+  final int? openId;
+
+  /// 返回时关掉这一层，不再落到资金提案列表。
+  final bool linkedFromApproval;
 
   @override
   State<NativeFundingProposalPage> createState() =>
@@ -82,6 +124,7 @@ class _NativeFundingProposalPageState extends State<NativeFundingProposalPage> {
   @override
   void initState() {
     super.initState();
+    ensureFundingProposalOpener();
     unawaited(_bootstrap());
   }
 
@@ -127,7 +170,18 @@ class _NativeFundingProposalPageState extends State<NativeFundingProposalPage> {
         _options = results[1] as FundingOptions;
       });
       await _reload();
-      if (_alive && _list.todoCount > 0 && _list.items.isEmpty) {
+      final openId = widget.openId;
+      if (_alive && openId != null && openId > 0) {
+        try {
+          _ensureLookups();
+          final full = await _service.fetch(openId);
+          if (_alive) setState(() => _open = full);
+        } catch (error) {
+          if (_alive) {
+            setState(() => _error = friendlyErrorText(error, fallback: '打开失败'));
+          }
+        }
+      } else if (_alive && _list.todoCount > 0 && _list.items.isEmpty) {
         setState(() => _scope = 'todo');
         await _reload();
       }
@@ -227,39 +281,447 @@ class _NativeFundingProposalPageState extends State<NativeFundingProposalPage> {
   }
 
   void _closeEditor() {
+    if (widget.linkedFromApproval && Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+      return;
+    }
     setState(() => _open = null);
     unawaited(_reload());
   }
 
   @override
   Widget build(BuildContext context) {
+    final media = MediaQuery.of(context);
+    final phone = ProposalLayout.isCompact(media.size.width);
+    final system = (media.textScaler.scale(100) / 100).clamp(0.8, 1.3);
     final open = _open;
-    if (open != null) {
-      return RepaintBoundary(
-        child: _FundingEditor(
-          key: ValueKey('funding-${open.id}'),
-          initial: open,
-          service: _service,
-          intake: _intake,
-          options: _options,
-          people: _people,
-          ourEntities: _ourEntities,
-          counterparties: _counterparties,
-          onBack: _closeEditor,
-        ),
-      );
+    final Widget page;
+    if (widget.openId != null && open == null) {
+      page = _booting
+          ? const Center(child: CircularProgressIndicator())
+          : _openFailed();
+    } else {
+      page = open != null ? _editor(open) : _listPage();
     }
+    return MediaQuery(
+      data: media.copyWith(
+        textScaler: TextScaler.linear(
+          system * (phone ? _kPhoneTextScale : _kDesktopTextScale),
+        ),
+      ),
+      child: DefaultTextStyle.merge(
+        style: const TextStyle(
+          fontFamily: kProposalProtoSans,
+          fontFamilyFallback: kProposalProtoSansFallback,
+        ),
+        child: page,
+      ),
+    );
+  }
+
+  Widget _openFailed() {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(_error ?? '打开失败'),
+          const SizedBox(height: 8),
+          TextButton(onPressed: _closeEditor, child: const Text('返回')),
+        ],
+      ),
+    );
+  }
+
+  Widget _editor(FundingProposal open) {
+    return RepaintBoundary(
+      child: _FundingEditor(
+        key: ValueKey('funding-${open.id}'),
+        initial: open,
+        service: _service,
+        intake: _intake,
+        options: _options,
+        people: _people,
+        ourEntities: _ourEntities,
+        counterparties: _counterparties,
+        onBack: _closeEditor,
+      ),
+    );
+  }
+
+  Widget _listPage() {
     return RepaintBoundary(
       child: GestureDetector(
         onTap: _dismissKeyboard,
         behavior: HitTestBehavior.translucent,
         child: Material(
+          color: _c(context, _kListPage, role: DunesColorRole.surface),
+          child: _buildList(context),
+        ),
+      ),
+    );
+  }
+
+  List<(String, String)> get _scopes => [
+    ('mine', '我发起的'),
+    ('todo', _list.todoCount > 0 ? '待我审批 ${_list.todoCount}' : '待我审批'),
+    ('all', _access.viewAll ? '全部' : '与我相关'),
+  ];
+
+  void _setScope(String key) {
+    if (_scope == key) return;
+    setState(() => _scope = key);
+    unawaited(_reload());
+  }
+
+  List<ProposalListStep> _fundingSteps(FundingProposal row) {
+    const nodes = [
+      ('funding', '资金'),
+      ('finance', '财务'),
+      ('risk', '风控'),
+      ('gm', '总经理'),
+    ];
+    if (row.status == kFundingStatusApproved) {
+      return [
+        for (final node in nodes)
+          ProposalListStep(node.$2, ProposalListStepState.done),
+      ];
+    }
+    if (row.status != kFundingStatusReviewing) {
+      return [
+        for (final node in nodes)
+          ProposalListStep(node.$2, ProposalListStepState.todo),
+      ];
+    }
+    final current = nodes.indexWhere((node) => node.$1 == row.currentNode);
+    return [
+      for (var i = 0; i < nodes.length; i++)
+        ProposalListStep(
+          nodes[i].$2,
+          current < 0
+              ? ProposalListStepState.todo
+              : i < current
+              ? ProposalListStepState.done
+              : i == current
+              ? ProposalListStepState.now
+              : ProposalListStepState.todo,
+        ),
+    ];
+  }
+
+  ProposalListCardData _fundingCard(FundingProposal row, int index) {
+    final form = row.form;
+    final party = '${form['counterpartyName'] ?? ''}'.trim();
+    final ours = '${form['ourPartyName'] ?? ''}'.trim();
+    final financing = _grouped('${form['financingAmount'] ?? ''}');
+    final net = row.estimate.text('netProfit', fallback: '');
+    final title = row.title.isEmpty ? '资金提案' : row.title;
+    final now = switch (row.status) {
+      kFundingStatusReviewing =>
+        '待${row.currentNodeLabel}${row.currentApproverName.isEmpty ? '' : ' ${row.currentApproverName}'}审批',
+      kFundingStatusRejected => '已驳回，修改后可重新提交',
+      kFundingStatusApproved => '已通过',
+      _ => '草稿',
+    };
+    return ProposalListCardData(
+      index: index,
+      tag1: party.isEmpty ? title : party,
+      name: title,
+      nameLabel: '提案名称',
+      chips: [if (row.code.isNotEmpty) row.code, if (ours.isNotEmpty) ours],
+      proposalType: '资金',
+      scale: financing.isEmpty ? '—' : financing,
+      mid: [
+        ProposalListCardMetric(
+          label: '融资需求',
+          value: financing.isEmpty ? '—' : financing,
+          mono: true,
+        ),
+        ProposalListCardMetric(
+          label: '对方主体',
+          value: party.isEmpty ? '—' : party,
+          wrap: true,
+        ),
+      ],
+      right: [
+        ProposalListCardMetric(
+          label: '净收益',
+          value: net.isEmpty || net == '—' ? '—' : net,
+          mono: true,
+        ),
+        ProposalListCardMetric(
+          label: '申请人',
+          value: row.createdByName.isEmpty ? '—' : row.createdByName,
+          wrap: true,
+        ),
+      ],
+      steps: _fundingSteps(row),
+      nowText: now,
+      days: fundingStatusLabel(row.status),
+      daysWarn: row.status == kFundingStatusRejected,
+    );
+  }
+
+  Widget _listHeader({required bool compact, required Widget search}) {
+    final title = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 28,
+          height: 28,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: _c(context, _kListAccent, role: DunesColorRole.surface),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: const Icon(
+            Icons.description_outlined,
+            size: 16,
+            color: Colors.white,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          '资金提案',
+          style: TextStyle(
+            fontSize: compact ? 17 : 19,
+            fontWeight: FontWeight.w800,
+            color: _c(context, _kListAccent),
+          ),
+        ),
+        const SizedBox(width: 6),
+        Padding(
+          padding: const EdgeInsets.only(top: 3),
+          child: Text(
+            'FUNDING',
+            style: TextStyle(
+              fontSize: 9.5,
+              letterSpacing: 2,
+              color: _c(context, const Color(0xFF8A85A0)),
+            ),
+          ),
+        ),
+      ],
+    );
+    final refresh = IconButton(
+      tooltip: '刷新',
+      onPressed: _loading ? null : _reload,
+      visualDensity: VisualDensity.compact,
+      style: IconButton.styleFrom(
+        backgroundColor: _c(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
+        side: BorderSide(
           color: _c(
             context,
-            ProposalPalette.page,
-            role: DunesColorRole.surface,
+            const Color(0xFFE4E1EE),
+            role: DunesColorRole.border,
           ),
-          child: _buildList(context),
+        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        fixedSize: const Size(36, 36),
+      ),
+      icon: Icon(
+        Icons.refresh_rounded,
+        size: 18,
+        color: _c(context, _kListAccent),
+      ),
+    );
+    final create = _access.fill
+        ? FilledButton.icon(
+            onPressed: _creating ? null : _create,
+            style: FilledButton.styleFrom(
+              backgroundColor: _c(
+                context,
+                _kListAccent,
+                role: DunesColorRole.surface,
+              ),
+              foregroundColor: Colors.white,
+              minimumSize: const Size(0, 36),
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+              textStyle: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            icon: const Icon(Icons.add, size: 16),
+            label: Text(_creating ? '新建中…' : (compact ? '新建' : '新建资金提案')),
+          )
+        : null;
+    if (compact) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Flexible(child: title),
+              const Spacer(),
+              refresh,
+              if (create != null) ...[const SizedBox(width: 6), create],
+            ],
+          ),
+          const SizedBox(height: 8),
+          SizedBox(height: 38, child: search),
+        ],
+      );
+    }
+    return Row(
+      children: [
+        title,
+        const Spacer(),
+        SizedBox(width: 300, height: 38, child: search),
+        const SizedBox(width: 8),
+        refresh,
+        if (create != null) ...[const SizedBox(width: 8), create],
+      ],
+    );
+  }
+
+  Widget _summaryTiles({required bool compact}) {
+    if (_list.items.isEmpty) return const SizedBox.shrink();
+    final reviewing = _list.items
+        .where((row) => row.status == kFundingStatusReviewing)
+        .length;
+    final approved = _list.items
+        .where((row) => row.status == kFundingStatusApproved)
+        .length;
+    var financing = 0.0;
+    for (final row in _list.items) {
+      final raw = '${row.form['financingAmount'] ?? ''}'.replaceAll(',', '');
+      financing += double.tryParse(raw) ?? 0;
+    }
+    final text = financing == financing.roundToDouble()
+        ? _grouped(financing.toStringAsFixed(0))
+        : _grouped(financing.toStringAsFixed(2));
+    Widget tile(String label, String value, String unit) => Expanded(
+      child: Container(
+        padding: EdgeInsets.symmetric(
+          horizontal: compact ? 9 : 14,
+          vertical: compact ? 7 : 10,
+        ),
+        decoration: BoxDecoration(
+          color: _c(context, Colors.white, role: DunesColorRole.surface),
+          border: Border.all(
+            color: _c(
+              context,
+              const Color(0xFFE8E5F1),
+              role: DunesColorRole.border,
+            ),
+          ),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: compact ? 11 : 12,
+                color: _c(context, const Color(0xFF6B6680)),
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text.rich(
+              TextSpan(
+                text: value,
+                style: TextStyle(
+                  fontSize: compact ? 15 : 20,
+                  height: 1.15,
+                  fontWeight: FontWeight.w700,
+                  color: _c(context, const Color(0xFF1F1B2E)),
+                  fontFamily: kProposalProtoMono,
+                  fontFamilyFallback: kProposalProtoMonoFallback,
+                ),
+                children: [
+                  TextSpan(
+                    text: unit,
+                    style: TextStyle(
+                      fontSize: compact ? 10.5 : 12,
+                      fontWeight: FontWeight.w400,
+                      color: _c(context, const Color(0xFF6B6680)),
+                      fontFamily: kProposalProtoSans,
+                      fontFamilyFallback: kProposalProtoSansFallback,
+                    ),
+                  ),
+                ],
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        ),
+      ),
+    );
+    return Row(
+      children: [
+        tile('审批中', '$reviewing', ' 份'),
+        SizedBox(width: compact ? 6 : 10),
+        tile('融资需求', text.isEmpty ? '0' : text, ' 元'),
+        SizedBox(width: compact ? 6 : 10),
+        tile('已通过', '$approved', ' 份'),
+      ],
+    );
+  }
+
+  Widget _scopeTabs({required bool compact}) {
+    return Container(
+      decoration: BoxDecoration(
+        color: _c(context, Colors.white, role: DunesColorRole.surface),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: _c(
+            context,
+            const Color(0xFFE8E5F1),
+            role: DunesColorRole.border,
+          ),
+        ),
+      ),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            for (final (key, label) in _scopes)
+              InkWell(
+                onTap: () => _setScope(key),
+                child: Container(
+                  padding: EdgeInsets.fromLTRB(
+                    compact ? 11 : 16,
+                    10,
+                    compact ? 11 : 16,
+                    8,
+                  ),
+                  decoration: BoxDecoration(
+                    border: Border(
+                      bottom: BorderSide(
+                        width: 2,
+                        color: _scope == key
+                            ? _c(context, _kListAccent)
+                            : Colors.transparent,
+                      ),
+                    ),
+                  ),
+                  child: Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: _scope == key
+                          ? FontWeight.w700
+                          : FontWeight.w500,
+                      color: _c(
+                        context,
+                        _scope == key ? _kListAccent : const Color(0xFF6B6680),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
         ),
       ),
     );
@@ -277,179 +739,119 @@ class _NativeFundingProposalPageState extends State<NativeFundingProposalPage> {
         ),
       );
     }
-    final scopes = <(String, String)>[
-      ('mine', '我发起的'),
-      ('todo', _list.todoCount > 0 ? '待我审批 ${_list.todoCount}' : '待我审批'),
-      ('all', _access.viewAll ? '全部' : '与我相关'),
-    ];
-    return RefreshIndicator(
-      onRefresh: _reload,
-      child: ListView(
-        primary: false,
-        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
-        children: [
-          Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 1080),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    children: [
-                      for (final (key, label) in scopes)
-                        _ScopeButton(
-                          label: label,
-                          selected: _scope == key,
-                          onTap: () {
-                            if (_scope == key) return;
-                            setState(() => _scope = key);
-                            unawaited(_reload());
-                          },
-                        ),
-                      SizedBox(
-                        width: 240,
-                        child: TextField(
-                          controller: _keyword,
-                          onTapOutside: (_) => _dismissKeyboard(),
-                          decoration: proposalInputDecoration(
-                            context: context,
-                            hint: '搜索名称、编号、对方主体',
-                            forceUnderline: true,
-                          ),
-                          onChanged: (_) {
-                            _searchDebounce?.cancel();
-                            _searchDebounce = Timer(
-                              const Duration(milliseconds: 350),
-                              () => unawaited(_reload()),
-                            );
-                          },
-                        ),
-                      ),
-                      if (_access.fill)
-                        FilledButton.icon(
-                          onPressed: _creating ? null : _create,
-                          icon: const Icon(Icons.add, size: 18),
-                          label: Text(_creating ? '新建中…' : '新建资金提案'),
-                          style: FilledButton.styleFrom(
-                            backgroundColor: _c(
-                              context,
-                              ProposalPalette.purple,
-                            ),
-                            minimumSize: const Size(0, 44),
-                          ),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  if (_error != null)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: Text(
-                        _error!,
-                        style: TextStyle(
-                          color: _c(context, ProposalPalette.coral),
-                        ),
-                      ),
-                    ),
-                  if (_loading && _list.items.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.all(32),
-                      child: Center(child: CircularProgressIndicator()),
-                    )
-                  else if (_list.items.isEmpty)
-                    Padding(
-                      padding: const EdgeInsets.all(40),
-                      child: Center(
-                        child: Text(
-                          _scope == 'todo' ? '没有待你审批的资金提案' : '还没有资金提案',
-                          style: TextStyle(
-                            color: _c(context, ProposalPalette.text2),
-                          ),
-                        ),
-                      ),
-                    )
-                  else
-                    for (final row in _list.items)
-                      _FundingListTile(
-                        row: row,
-                        onTap: () => unawaited(_openRow(row)),
-                      ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ScopeButton extends StatelessWidget {
-  const _ScopeButton({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: selected
-          ? _c(
-              context,
-              ProposalPalette.purpleSoft,
-              role: DunesColorRole.surface,
-            )
-          : _c(context, ProposalPalette.card, role: DunesColorRole.surface),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(999),
-        side: BorderSide(
-          color: _c(
-            context,
-            selected ? ProposalPalette.purpleLine : ProposalPalette.border,
-            role: DunesColorRole.border,
-          ),
-        ),
-      ),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(999),
-        onTap: onTap,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: 40),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            child: Text(
-              label,
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: _c(
-                  context,
-                  selected ? ProposalPalette.purpleDeep : ProposalPalette.text2,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = ProposalLayout.isCompact(constraints.maxWidth);
+        final search = TextField(
+          controller: _keyword,
+          onTapOutside: (_) => _dismissKeyboard(),
+          style: const TextStyle(fontSize: 13, height: 1.2),
+          decoration:
+              proposalInputDecoration(
+                context: context,
+                hint: '搜索名称、编号、对方主体',
+              ).copyWith(
+                prefixIcon: const Icon(Icons.search, size: 16),
+                prefixIconConstraints: const BoxConstraints(
+                  minWidth: 32,
+                  minHeight: 32,
+                ),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 8,
                 ),
               ),
+          onChanged: (_) {
+            _searchDebounce?.cancel();
+            _searchDebounce = Timer(
+              const Duration(milliseconds: 350),
+              () => unawaited(_reload()),
+            );
+          },
+        );
+        final List<Widget> cards = [
+          for (var i = 0; i < _list.items.length; i++)
+            ProposalListCard(
+              data: _fundingCard(_list.items[i], i),
+              onTap: () => unawaited(_openRow(_list.items[i])),
+            ),
+        ];
+        final empty = Padding(
+          padding: const EdgeInsets.symmetric(vertical: 48),
+          child: Center(
+            child: Text(
+              _error ?? (_scope == 'todo' ? '没有待你审批的资金提案' : '还没有资金提案'),
+              style: TextStyle(color: _c(context, ProposalPalette.text2)),
             ),
           ),
-        ),
-      ),
+        );
+        final List<Widget> rows = _loading && _list.items.isEmpty
+            ? const <Widget>[
+                Padding(
+                  padding: EdgeInsets.all(32),
+                  child: Center(child: CircularProgressIndicator()),
+                ),
+              ]
+            : _list.items.isEmpty
+            ? <Widget>[empty]
+            : cards;
+        final header = _listHeader(compact: compact, search: search);
+        final tiles = _summaryTiles(compact: compact);
+        final tabs = _scopeTabs(compact: compact);
+        if (compact) {
+          return RefreshIndicator(
+            onRefresh: _reload,
+            child: ListView(
+              primary: false,
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 24),
+              children: [
+                header,
+                if (_list.items.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  tiles,
+                ],
+                const SizedBox(height: 10),
+                tabs,
+                const SizedBox(height: 8),
+                ...rows,
+              ],
+            ),
+          );
+        }
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(28, 18, 28, 14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              header,
+              if (_list.items.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                tiles,
+              ],
+              const SizedBox(height: 12),
+              tabs,
+              const SizedBox(height: 8),
+              Expanded(
+                child: RefreshIndicator(
+                  onRefresh: _reload,
+                  child: ListView(
+                    primary: false,
+                    keyboardDismissBehavior:
+                        ScrollViewKeyboardDismissBehavior.onDrag,
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    children: rows,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }
-
-ProposalChipKind _statusKind(String status) => switch (status) {
-  kFundingStatusApproved => ProposalChipKind.ok,
-  kFundingStatusRejected => ProposalChipKind.warn,
-  kFundingStatusReviewing => ProposalChipKind.purple,
-  _ => ProposalChipKind.draft,
-};
 
 String _fmtTime(DateTime? t) {
   if (t == null) return '';
@@ -473,101 +875,6 @@ String _grouped(String raw) {
   }
   final frac = parts.length > 1 ? '.${parts[1]}' : '';
   return '${neg ? '-' : ''}$buf$frac';
-}
-
-class _FundingListTile extends StatelessWidget {
-  const _FundingListTile({required this.row, required this.onTap});
-
-  final FundingProposal row;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final form = row.form;
-    final financing = _grouped('${form['financingAmount'] ?? ''}');
-    final net = row.estimate.text('netProfit', fallback: '');
-    final pending = row.status == kFundingStatusReviewing
-        ? '待${row.currentNodeLabel}${row.currentApproverName.isEmpty ? '' : ' ${row.currentApproverName}'}审批'
-        : '';
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Material(
-        color: _c(context, ProposalPalette.card, role: DunesColorRole.surface),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-          side: BorderSide(
-            color: _c(
-              context,
-              ProposalPalette.border,
-              role: DunesColorRole.border,
-            ),
-          ),
-        ),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(12),
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(18, 14, 18, 14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        row.title.isEmpty ? '资金提案' : row.title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
-                          color: _c(context, ProposalPalette.text),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    ProposalStatusChip(
-                      label: fundingStatusLabel(row.status),
-                      kind: _statusKind(row.status),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  [
-                    row.code,
-                    if (row.createdByName.isNotEmpty) row.createdByName,
-                    _fmtTime(row.updatedAt),
-                  ].where((s) => s.isNotEmpty).join(' · '),
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: _c(context, ProposalPalette.text2),
-                  ),
-                ),
-                if (financing.isNotEmpty ||
-                    net.isNotEmpty ||
-                    pending.isNotEmpty) ...[
-                  const SizedBox(height: 6),
-                  Text(
-                    [
-                      if (financing.isNotEmpty) '融资需求 $financing',
-                      if (net.isNotEmpty) '净收益 $net',
-                      if (pending.isNotEmpty) pending,
-                    ].join(' · '),
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: _c(context, ProposalPalette.text),
-                      fontFeatures: const [FontFeature.tabularFigures()],
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
 }
 
 // ======================================================================
@@ -611,11 +918,35 @@ class _FundingEditorState extends State<_FundingEditor> {
   bool _busy = false;
   bool _estimating = false;
   bool _uploading = false;
+  bool _progressOpen = true;
+  bool _forwarding = false;
   int _estimateSeq = 0;
+  final _bizKey = GlobalKey();
 
   FundingOptions get _opts => widget.options;
   FundingPermissions get _perm => _row.permissions;
   bool get _editable => _perm.canEdit;
+
+  /// 业务审批面板沿用销售提案那一块，这里只换来源和「已通过」状态。
+  ProposalIntakeRow _asIntake() {
+    final form = Map<String, dynamic>.from(_form);
+    final project = '${form['projectName'] ?? ''}'.trim();
+    final party = '${form['counterpartyName'] ?? ''}'.trim();
+    if (project.isEmpty && party.isNotEmpty) form['projectName'] = party;
+    return ProposalIntakeRow(
+      id: _row.id,
+      code: _row.code,
+      title: _row.title.isEmpty ? '资金提案' : _row.title,
+      status: _row.status,
+      kind: 'funding',
+      form: form,
+      review: const {},
+      createdBy: _row.createdBy,
+      createdAt: _row.createdAt?.toIso8601String() ?? '',
+      updatedAt: _row.updatedAt?.toIso8601String() ?? '',
+      version: _row.version,
+    );
+  }
 
   static Map<String, dynamic> _clone(Map<String, dynamic> raw) {
     final decoded = jsonDecode(jsonEncode(raw));
@@ -874,6 +1205,36 @@ class _FundingEditorState extends State<_FundingEditor> {
     widget.onBack();
   }
 
+  Future<void> _forward() async {
+    if (_forwarding || _row.id <= 0) return;
+    setState(() => _forwarding = true);
+    try {
+      await forwardApprovalToConversation(
+        context: context,
+        session: widget.service.session,
+        share: ApprovalChatShare.fromFundingProposal(
+          id: _row.id,
+          title: _row.title.isEmpty ? '资金提案' : _row.title,
+          status: _row.status,
+          code: _row.code,
+          submitterName: _row.createdByName,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _forwarding = false);
+    }
+  }
+
+  void _scrollToBiz() {
+    final target = _bizKey.currentContext;
+    if (target == null) return;
+    Scrollable.ensureVisible(
+      target,
+      duration: const Duration(milliseconds: 280),
+      alignment: 0.08,
+    );
+  }
+
   // ---- 材料 ----
 
   Future<void> _pickFiles(String key) async {
@@ -975,35 +1336,59 @@ class _FundingEditorState extends State<_FundingEditor> {
                   _historySection(context),
               ],
             );
-            return ListView(
-              primary: false,
-              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 48),
+            return Column(
               children: [
-                Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 1360),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        _header(context),
-                        const SizedBox(height: 16),
-                        if (wide)
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                _topBar(),
+                if (_progressOpen)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                    child: _ApprovalPath(row: _row, options: _opts),
+                  ),
+                Expanded(
+                  child: ListView(
+                    primary: false,
+                    keyboardDismissBehavior:
+                        ScrollViewKeyboardDismissBehavior.onDrag,
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 48),
+                    children: [
+                      Center(
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 1360),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              Expanded(child: form),
-                              const SizedBox(width: 20),
-                              SizedBox(width: 360, child: panel),
+                              _titleBlock(context),
+                              const SizedBox(height: 16),
+                              if (wide)
+                                Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Expanded(child: form),
+                                    const SizedBox(width: 20),
+                                    SizedBox(width: 360, child: panel),
+                                  ],
+                                )
+                              else ...[
+                                panel,
+                                const SizedBox(height: 16),
+                                form,
+                              ],
+                              const SizedBox(height: 16),
+                              KeyedSubtree(
+                                key: _bizKey,
+                                child: ProposalBusinessApprovals(
+                                  key: ValueKey('funding-business-${_row.id}'),
+                                  session: widget.service.session,
+                                  proposal: _asIntake(),
+                                  funding: true,
+                                  people: widget.people,
+                                ),
+                              ),
                             ],
-                          )
-                        else ...[
-                          panel,
-                          const SizedBox(height: 16),
-                          form,
-                        ],
-                      ],
-                    ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
@@ -1014,88 +1399,289 @@ class _FundingEditorState extends State<_FundingEditor> {
     );
   }
 
-  Widget _header(BuildContext context) {
-    final perm = _perm;
-    final buttons = <Widget>[
-      if (perm.canDelete)
-        _ActionButton(
-          label: '删除',
-          onPressed: _busy ? null : _delete,
-          tone: _ActionTone.danger,
-        ),
-      if (perm.canWithdraw)
-        _ActionButton(label: '撤回', onPressed: _busy ? null : _withdraw),
-      if (perm.canEdit)
-        _ActionButton(label: '保存草稿', onPressed: _busy ? null : _save),
-      if (perm.canSubmit)
-        _ActionButton(
-          label: _row.status == kFundingStatusRejected ? '重新提交' : '提交审批',
-          onPressed: _busy ? null : _submit,
-          tone: _ActionTone.primary,
-        ),
-    ];
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        TextButton.icon(
-          onPressed: _back,
-          icon: const Icon(Icons.arrow_back, size: 18),
-          label: const Text('资金提案'),
-          style: TextButton.styleFrom(
-            foregroundColor: _c(context, ProposalPalette.purpleDeep),
-            minimumSize: const Size(0, 40),
+  static const _topToolH = 28.0;
+
+  BoxDecoration get _topToolDecoration => BoxDecoration(
+    color: _c(context, const Color(0xFFF3EFFA), role: DunesColorRole.surface),
+    borderRadius: BorderRadius.circular(8),
+    border: Border.all(
+      color: _c(
+        context,
+        ProposalPalette.borderStrong,
+        role: DunesColorRole.border,
+      ),
+      width: 0.8,
+    ),
+  );
+
+  Widget _topBar() {
+    final phone = ProposalLayout.isCompact(MediaQuery.sizeOf(context).width);
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.fromLTRB(4, 8, phone ? 8 : 12, 8),
+      decoration: BoxDecoration(
+        color: _c(context, ProposalPalette.app, role: DunesColorRole.surface),
+        border: Border(
+          bottom: BorderSide(
+            color: _c(
+              context,
+              ProposalPalette.borderSoft,
+              role: DunesColorRole.border,
+            ),
           ),
         ),
-        const SizedBox(height: 4),
-        Wrap(
-          spacing: 12,
-          runSpacing: 10,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 720),
-              child: Text(
-                _row.title.isEmpty ? '资金提案' : _row.title,
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w700,
-                  color: _c(context, ProposalPalette.text),
-                ),
-              ),
+      ),
+      child: Row(
+        children: [
+          IconButton(
+            tooltip: '返回',
+            onPressed: _back,
+            icon: Icon(
+              Icons.arrow_back_rounded,
+              size: 18,
+              color: _c(context, ProposalPalette.purpleDeep),
             ),
-            ProposalStatusChip(
-              label: fundingStatusLabel(_row.status),
-              kind: _statusKind(_row.status),
+          ),
+          const Spacer(),
+          _progressToggle(),
+          if (_row.id > 0) ...[
+            const SizedBox(width: 6),
+            DecoratedBox(
+              decoration: _topToolDecoration,
+              child: _topToolSlot(label: '业务审批', onPressed: _scrollToBiz),
             ),
-            if (_dirty && _editable)
-              Text(
-                '未保存',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: _c(context, ProposalPalette.amber),
-                ),
-              ),
           ],
-        ),
-        const SizedBox(height: 6),
-        Text(
-          [
-            _row.code,
-            if (_row.createdByName.isNotEmpty) '申请人 ${_row.createdByName}',
-            if (_row.createdAt != null) _fmtTime(_row.createdAt),
-          ].join(' · '),
-          style: TextStyle(
-            fontSize: 13,
-            color: _c(context, ProposalPalette.text2),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: _topToolCluster(),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _progressToggle() {
+    final color = _c(
+      context,
+      _progressOpen ? ProposalPalette.purpleDeep : ProposalPalette.text2,
+    );
+    return Tooltip(
+      message: _progressOpen ? '收起进度' : '进度',
+      child: InkWell(
+        onTap: () => setState(() => _progressOpen = !_progressOpen),
+        borderRadius: BorderRadius.circular(8),
+        child: SizedBox(
+          height: _topToolH,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  '进度',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    height: 1.1,
+                    color: color,
+                  ),
+                ),
+                Icon(
+                  _progressOpen
+                      ? Icons.expand_less_rounded
+                      : Icons.expand_more_rounded,
+                  size: 16,
+                  color: color,
+                ),
+              ],
+            ),
           ),
         ),
-        const SizedBox(height: 12),
-        _ApprovalPath(row: _row, options: _opts),
-        if (buttons.isNotEmpty) ...[
-          const SizedBox(height: 14),
-          Wrap(spacing: 10, runSpacing: 10, children: buttons),
+      ),
+    );
+  }
+
+  Widget _topToolCluster() {
+    final perm = _perm;
+    final slots = <Widget>[];
+    void add(String label, VoidCallback? onPressed, {bool loading = false}) {
+      if (slots.isNotEmpty) slots.add(_topDivider());
+      slots.add(
+        _topToolSlot(label: label, onPressed: onPressed, loading: loading),
+      );
+    }
+
+    if (perm.canEdit) add('保存', _busy ? null : _save);
+    if (perm.canSubmit) {
+      add(
+        _row.status == kFundingStatusRejected ? '重新提交' : '提交',
+        _busy ? null : _submit,
+      );
+    }
+    if (perm.canWithdraw) add('撤回', _busy ? null : _withdraw);
+    if (perm.canDelete) add('删除', _busy ? null : _delete);
+    if (_row.id > 0) {
+      add(
+        '转发',
+        _forwarding ? null : _forward,
+        loading: _forwarding,
+      );
+    }
+    if (slots.isEmpty) return const SizedBox.shrink();
+    return DecoratedBox(
+      decoration: _topToolDecoration,
+      child: Row(mainAxisSize: MainAxisSize.min, children: slots),
+    );
+  }
+
+  Widget _topDivider() {
+    return Container(
+      width: 0.8,
+      height: 14,
+      color: _c(
+        context,
+        ProposalPalette.borderStrong,
+        role: DunesColorRole.surface,
+      ),
+    );
+  }
+
+  Widget _topToolSlot({
+    required String label,
+    required VoidCallback? onPressed,
+    bool loading = false,
+  }) {
+    final enabled = onPressed != null && !loading;
+    return Tooltip(
+      message: label,
+      child: InkWell(
+        onTap: enabled ? onPressed : null,
+        child: SizedBox(
+          height: _topToolH,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: Center(
+              child: loading
+                  ? SizedBox(
+                      width: 12,
+                      height: 12,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 1.6,
+                        color: _c(context, ProposalPalette.purpleDeep),
+                      ),
+                    )
+                  : Text(
+                      label,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        height: 1,
+                        color: _c(
+                          context,
+                          enabled
+                              ? ProposalPalette.purpleDeep
+                              : ProposalPalette.text4,
+                        ),
+                      ),
+                    ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  String get _pillTone => switch (_row.status) {
+    kFundingStatusApproved => 'done',
+    kFundingStatusReviewing || kFundingStatusRejected => 'reviewing',
+    _ => 'draft',
+  };
+
+  Widget _titleBlock(BuildContext context) {
+    final phone = ProposalLayout.isCompact(MediaQuery.sizeOf(context).width);
+    final party = '${_form['counterpartyName'] ?? ''}'.trim();
+    final title = _row.title.isEmpty ? '资金提案' : _row.title;
+    final titleStyle = TextStyle(
+      color: _c(context, const Color(0xFF2A2638)),
+      fontSize: phone ? 16 : 18,
+      fontWeight: FontWeight.w700,
+    );
+    final meta = [
+      if (_row.code.isNotEmpty) _row.code,
+      if (_row.createdByName.isNotEmpty) '申请人 ${_row.createdByName}',
+      if (_row.createdAt != null) _fmtTime(_row.createdAt),
+      if (_dirty && _editable) '未保存',
+    ].join(' · ');
+    return Padding(
+      padding: EdgeInsets.only(bottom: phone ? 8 : 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              ShaderMask(
+                blendMode: BlendMode.srcIn,
+                shaderCallback: (bounds) => const LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [Color(0xFF7B5CF0), Color(0xFF4A83C4)],
+                ).createShader(bounds),
+                child: Icon(
+                  Icons.assignment_rounded,
+                  size: phone ? 20 : 24,
+                  color: Colors.white,
+                ),
+              ),
+              SizedBox(width: phone ? 4 : 6),
+              Text('提案 · ', style: titleStyle),
+              Flexible(
+                child: Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: titleStyle,
+                ),
+              ),
+              if (party.isNotEmpty)
+                Flexible(
+                  child: Text(
+                    ' · $party',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: titleStyle,
+                  ),
+                ),
+            ],
+          ),
+          SizedBox(height: phone ? 4 : 6),
+          Wrap(
+            spacing: 10,
+            runSpacing: 6,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              ProposalStatusPill(
+                status: _pillTone,
+                label: fundingStatusLabel(_row.status),
+                dot: false,
+              ),
+              if (meta.isNotEmpty)
+                Text(
+                  meta,
+                  style: TextStyle(
+                    color: _c(context, const Color(0xFF8A8499)),
+                    fontSize: 11,
+                  ),
+                ),
+            ],
+          ),
         ],
-      ],
+      ),
     );
   }
 

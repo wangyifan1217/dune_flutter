@@ -851,6 +851,7 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
         value: widget.values[field.key],
         placeholder: hint,
         readonly: field.readonly,
+        multiple: field.raw['multiple'] == true,
         mineApproved:
             field.raw['dataSource']?.toString() == kApprovedMineDataSource,
         meta: meta is Map ? Map<String, dynamic>.from(meta) : null,
@@ -2802,6 +2803,7 @@ class _XflowProposalPicker extends StatefulWidget {
     required this.placeholder,
     required this.readonly,
     required this.onChanged,
+    this.multiple = false,
     this.mineApproved = false,
     this.meta,
     this.fill = const {},
@@ -2815,6 +2817,7 @@ class _XflowProposalPicker extends StatefulWidget {
   final String placeholder;
   final bool readonly;
   final void Function(dynamic value) onChanged;
+  final bool multiple;
   final bool mineApproved;
   final Map<String, dynamic>? meta;
   final Map<String, String> fill;
@@ -2837,7 +2840,7 @@ class _XflowProposalPickerState extends State<_XflowProposalPicker> {
   @override
   void initState() {
     super.initState();
-    _controller.text = _displayText(widget.value);
+    _controller.text = widget.multiple ? '' : _displayText(widget.value);
     _focus.addListener(_onFocusChange);
   }
 
@@ -2872,6 +2875,7 @@ class _XflowProposalPickerState extends State<_XflowProposalPicker> {
   @override
   void didUpdateWidget(covariant _XflowProposalPicker oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (widget.multiple) return;
     if (oldWidget.value != widget.value) {
       final next = _displayText(widget.value);
       if (!_focus.hasFocus && _controller.text != next) {
@@ -2908,6 +2912,7 @@ class _XflowProposalPickerState extends State<_XflowProposalPicker> {
       _searched = false;
       _loading = false;
     });
+    if (widget.multiple) return;
     if (widget.mineApproved &&
         widget.onPatch != null &&
         widget.fill.isNotEmpty) {
@@ -2924,15 +2929,18 @@ class _XflowProposalPickerState extends State<_XflowProposalPicker> {
       unawaited(_selectApprovedMine(row, id: id, code: code, title: title));
       return;
     }
-    widget.onChanged(
-      linkedProposalIntakePayload(
-        id: id,
-        code: code,
-        title: title,
-        kind: '${row['kind'] ?? ''}',
-        projectName: linkedProposalProjectName(row),
-      ),
+    final payload = linkedProposalIntakePayload(
+      id: id,
+      code: code,
+      title: title,
+      kind: '${row['kind'] ?? ''}',
+      projectName: linkedProposalProjectName(row),
     );
+    if (widget.multiple) {
+      _commitMultiple(payload);
+      return;
+    }
+    widget.onChanged(payload);
     final label = code.isNotEmpty && title.isNotEmpty
         ? '$code · $title'
         : (code.isNotEmpty ? code : title);
@@ -3008,6 +3016,10 @@ class _XflowProposalPickerState extends State<_XflowProposalPicker> {
       'templateKey': '${row['templateKey'] ?? ''}',
       'source': 'approved_mine',
     };
+    if (widget.multiple) {
+      _commitMultiple(payload);
+      return;
+    }
     final patch = <String, dynamic>{
       ...fillFromApprovedDoc(widget.fill, source),
     };
@@ -3033,6 +3045,68 @@ class _XflowProposalPickerState extends State<_XflowProposalPicker> {
   int _int(dynamic v) {
     if (v is num) return v.toInt();
     return int.tryParse('$v') ?? 0;
+  }
+
+  void _commitMultiple(Map<String, dynamic> payload) {
+    widget.onChanged(appendProposalSelection(widget.value, payload));
+    _debounce?.cancel();
+    setState(() {
+      _controller.clear();
+      _results = const [];
+      _searched = false;
+      _loading = false;
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _releaseFocus();
+    });
+  }
+
+  void _removeProposal(int index) {
+    final next = proposalSelectionList(widget.value);
+    if (index < 0 || index >= next.length) return;
+    next.removeAt(index);
+    widget.onChanged(next.isEmpty ? null : next);
+  }
+
+  Widget _proposalChip(Map<String, dynamic> item, int index) {
+    final label = formatProposalDisplay(item);
+    return Container(
+      padding: const EdgeInsets.fromLTRB(10, 4, 4, 4),
+      decoration: BoxDecoration(
+        color: DunesColors.resolve(context, const Color(0xFFF4F0FB)),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 280),
+            child: Text(
+              label.isEmpty ? '已选单据' : label,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: DunesTypography.sans(
+                fontSize: 12,
+                color: DunesColors.resolve(context, DunesColors.text),
+                context: context,
+              ),
+            ),
+          ),
+          if (!widget.readonly)
+            GestureDetector(
+              onTap: () => _removeProposal(index),
+              child: Padding(
+                padding: const EdgeInsets.only(left: 4, right: 2),
+                child: Icon(
+                  Icons.close_rounded,
+                  size: 14,
+                  color: DunesColors.resolve(context, DunesColors.text3),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
   }
 
   Future<void> _search(String q) async {
@@ -3082,6 +3156,9 @@ class _XflowProposalPickerState extends State<_XflowProposalPicker> {
   @override
   Widget build(BuildContext context) {
     final hasText = _controller.text.trim().isNotEmpty;
+    final selected = widget.multiple
+        ? proposalSelectionList(widget.value)
+        : const <Map<String, dynamic>>[];
     return TapRegion(
       onTapOutside: (_) {
         _dismissSuggestions();
@@ -3090,31 +3167,43 @@ class _XflowProposalPickerState extends State<_XflowProposalPicker> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          TextField(
-            controller: _controller,
-            focusNode: _focus,
-            readOnly: widget.readonly,
-            decoration: xfSearchPickerDecoration(
-              context: context,
-              hint: widget.placeholder,
-              suffixIcon: xfSearchSuffixIcon(
-                context: context,
-                loading: _loading,
-                hasText: hasText,
-                readonly: widget.readonly,
-                onClear: _clearSelection,
-              ),
+          if (selected.isNotEmpty) ...[
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                for (var i = 0; i < selected.length; i++)
+                  _proposalChip(selected[i], i),
+              ],
             ),
-            minLines: 1,
-            maxLines: _results.isEmpty ? 4 : 1,
-            style: xfInputTextStyle(context: context),
-            onTap: widget.readonly
-                ? null
-                : () {
-                    if (!_focus.hasFocus) _focus.requestFocus();
-                  },
-            onChanged: widget.readonly ? null : _onQueryChanged,
-          ),
+            if (!widget.readonly) const SizedBox(height: 8),
+          ],
+          if (!widget.readonly || selected.isEmpty)
+            TextField(
+              controller: _controller,
+              focusNode: _focus,
+              readOnly: widget.readonly,
+              decoration: xfSearchPickerDecoration(
+                context: context,
+                hint: selected.isEmpty ? widget.placeholder : '继续添加',
+                suffixIcon: xfSearchSuffixIcon(
+                  context: context,
+                  loading: _loading,
+                  hasText: hasText,
+                  readonly: widget.readonly,
+                  onClear: _clearSelection,
+                ),
+              ),
+              minLines: 1,
+              maxLines: _results.isEmpty ? 4 : 1,
+              style: xfInputTextStyle(context: context),
+              onTap: widget.readonly
+                  ? null
+                  : () {
+                      if (!_focus.hasFocus) _focus.requestFocus();
+                    },
+              onChanged: widget.readonly ? null : _onQueryChanged,
+            ),
           if (_results.isNotEmpty) ...[
             const SizedBox(height: 6),
             XfPickerSuggestionList(

@@ -821,9 +821,16 @@ class XflowService {
     );
   }
 
+  String _proposalRoot(int proposalId, {bool funding = false}) =>
+      '${funding ? '/funding-proposals' : '/proposal-intakes'}/$proposalId';
+
   /// 提案成本归集：按项目成本、业务成本、税务成本、经营成本、周转资金汇总来源审批。
-  Future<Map<String, dynamic>> fetchProposalCostCollection(int proposalId) =>
-      _request('/proposal-intakes/$proposalId/cost-collection');
+  Future<Map<String, dynamic>> fetchProposalCostCollection(
+    int proposalId, {
+    bool funding = false,
+  }) => _request(
+    '${_proposalRoot(proposalId, funding: funding)}/cost-collection',
+  );
 
   /// 设置提案「可发起人」（整体替换）。只有提案负责人可以改。
   Future<Map<String, dynamic>> saveProposalApprovalLaunchers(
@@ -839,10 +846,11 @@ class XflowService {
   Future<List<Map<String, dynamic>>> fetchProposalLinkableApprovals(
     int proposalId, {
     String query = '',
+    bool funding = false,
   }) async {
     final q = query.trim();
     final rows = await _requestList(
-      '/proposal-intakes/$proposalId/linkable-approvals'
+      '${_proposalRoot(proposalId, funding: funding)}/linkable-approvals'
       '${q.isEmpty ? '' : '?q=${Uri.encodeQueryComponent(q)}'}',
     );
     return rows
@@ -856,8 +864,9 @@ class XflowService {
     int proposalId, {
     required String businessType,
     required String businessId,
+    bool funding = false,
   }) => _request(
-    '/proposal-intakes/$proposalId/link-approval',
+    '${_proposalRoot(proposalId, funding: funding)}/link-approval',
     method: 'POST',
     body: {'businessType': businessType, 'businessId': businessId},
   );
@@ -870,6 +879,47 @@ class XflowService {
     '/xflow/proposals/intake-done?${Uri(queryParameters: {'q': query.trim(), 'kind': kind, 'page': '$page', 'pageSize': '20'}).query}',
   );
 
+  /// 已通过、当前用户能看到的资金提案。页码从 1 起，和销售提案选择器一致。
+  Future<Map<String, dynamic>> fetchApprovedFundingProposals({
+    String query = '',
+    int page = 1,
+    int pageSize = 20,
+  }) async {
+    final apiPage = page <= 1 ? 0 : page - 1;
+    final data = await _request(
+      '/funding-proposals?${Uri(queryParameters: {'scope': 'all', 'status': 'approved', 'page': '$apiPage', 'pageSize': '$pageSize', if (query.trim().isNotEmpty) 'q': query.trim()}).query}',
+    );
+    final raw = data['items'];
+    final items = <Map<String, dynamic>>[];
+    if (raw is List) {
+      for (final row in raw) {
+        if (row is! Map) continue;
+        final form = row['form'] is Map ? row['form'] as Map : const {};
+        final party = '${form['counterpartyName'] ?? ''}'.trim();
+        final project = '${form['projectName'] ?? ''}'.trim();
+        items.add({
+          'id': row['id'],
+          'proposalId': row['id'],
+          'code': '${row['code'] ?? ''}',
+          'title': '${row['title'] ?? ''}',
+          'kind': 'funding',
+          'source': 'funding_proposal',
+          'businessType': 'FUNDING_PROPOSAL',
+          'status': '${row['status'] ?? 'approved'}',
+          'projectName': project.isNotEmpty ? project : party,
+          'form': form,
+        });
+      }
+    }
+    return {
+      'items': items,
+      'total': (data['total'] as num?)?.toInt() ?? items.length,
+    };
+  }
+
+  Future<Map<String, dynamic>> fetchFundingProposal(int id) =>
+      _request('/funding-proposals/$id');
+
   Future<Map<String, dynamic>> fetchLinkedProposalIntake(int id) =>
       _request('/proposal-intakes/$id');
 
@@ -879,8 +929,9 @@ class XflowService {
     String status = '',
     String templateKey = '',
     List<String> templateKeys = const [],
+    bool funding = false,
   }) => _request(
-    '/proposal-intakes/$proposalId/related-approvals?${Uri(queryParameters: {'page': '$page', 'pageSize': '20', 'status': status, 'templateKey': templateKey, if (templateKeys.isNotEmpty) 'templateKeys': templateKeys.join(',')}).query}',
+    '${_proposalRoot(proposalId, funding: funding)}/related-approvals?${Uri(queryParameters: {'page': '$page', 'pageSize': '20', 'status': status, 'templateKey': templateKey, if (templateKeys.isNotEmpty) 'templateKeys': templateKeys.join(',')}).query}',
   );
 
   Future<Map<String, dynamic>?> fetchOrgUser(int userId) async {

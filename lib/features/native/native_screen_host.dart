@@ -1,3 +1,4 @@
+import '../hr_performance/hr_performance_notice_page.dart';
 import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
@@ -77,6 +78,7 @@ import '../kb/native_kb_doc_page.dart';
 import '../kb/native_kb_home_page.dart';
 import '../kb/native_kb_models.dart';
 import '../kb/native_kb_service.dart';
+import '../funding_proposal/funding_proposal_overlay.dart';
 import '../xflow/native_b10_page.dart';
 import '../xflow/native_b3_page.dart';
 import '../xflow/native_xflow_proposal_page.dart';
@@ -739,6 +741,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     } else if (resolvedConversation.isTaskAssistant) {
       await _openTaskAssistant(resolvedConversation);
       routed = mounted && widget.navigation.currentScreen == 'TA1';
+    } else if(resolvedConversation.isHrPerformance){
+      unawaited(Navigator.of(context).push(MaterialPageRoute<void>(builder:(_)=>HrPerformanceNoticePage(session:widget.session,conversationId:resolvedConversation.id))));
+      routed=true;
     } else if (resolvedConversation.isKpiAssistant) {
       await _openKpiAssistant(resolvedConversation);
       routed = mounted && widget.navigation.currentScreen == 'KA1';
@@ -1844,6 +1849,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     if (conv.isTaskAssistant) {
       unawaited(_openTaskAssistant(conv));
       return;
+    }
+    if(conv.isHrPerformance){
+      unawaited(Navigator.of(context).push(MaterialPageRoute<void>(builder:(_)=>HrPerformanceNoticePage(session:widget.session,conversationId:conv.id))));return;
     }
     if (conv.isKpiAssistant) {
       unawaited(_openKpiAssistant(conv));
@@ -6381,6 +6389,13 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     ApprovalChatShare share, {
     required String from,
   }) {
+    if (share.businessType.toUpperCase() == 'FUNDING_PROPOSAL') {
+      return showFundingProposalOverlay(
+        context: context,
+        session: widget.session,
+        proposalId: share.businessId,
+      );
+    }
     if (share.businessType.toUpperCase() == 'PROPOSAL_INTAKE') {
       if (share.changeId > 0) {
         return showProposalIntakeChange(

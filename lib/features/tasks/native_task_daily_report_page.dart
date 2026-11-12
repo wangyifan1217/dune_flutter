@@ -75,11 +75,13 @@ class NativeTaskDailyReportPage extends StatefulWidget {
     super.key,
     required this.session,
     this.initialDate,
+    this.openTeamCalendar = false,
     required this.onBack,
   });
 
   final AuthSession session;
   final DateTime? initialDate;
+  final bool openTeamCalendar;
   final VoidCallback onBack;
 
   @override
@@ -115,7 +117,7 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage>
   bool _saving = false;
   bool _showHistory = false;
   bool _showCalendar = false;
-  bool _teamCalendar = false;
+  late bool _teamCalendar = widget.openTeamCalendar;
   bool _guideAutoStarted = false;
   Timer? _draftSaveTimer;
   String _draftStatus = '草稿仅保存在本机，提交后同步';
@@ -141,8 +143,10 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage>
     _blockers.addListener(_queueDraftSave);
     _otherWork.addListener(_queueDraftSave);
     _nextPlan.addListener(_queueDraftSave);
+    if (widget.openTeamCalendar) _showCalendar = true;
     unawaited(_reload());
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (widget.openTeamCalendar) unawaited(_loadCalendar(team: true));
       unawaited(_showGuide());
     });
   }
@@ -585,105 +589,108 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage>
   Widget build(BuildContext context) {
     return TaskCopyableScope(
       child: TaskTheme(
-      child: Material(
-        color: DunesColors.resolve(
-          context,
-          DunesColors.bgApp,
-          role: DunesColorRole.surface,
-        ),
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
-              child: Row(
-                children: [
-                  InkWell(
-                    borderRadius: BorderRadius.circular(8),
-                    onTap: widget.onBack,
-                    child: Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 4, vertical: 6),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.arrow_back_ios_new,
-                            size: 14,
-                            color: DunesColors.resolve(
-                              context,
-                              DunesColors.text2,
-                            ),
-                          ),
-                          SizedBox(width: 2),
-                          Text(
-                            '返回',
-                            style: TextStyle(
-                              fontSize: 13,
+        child: Material(
+          color: DunesColors.resolve(
+            context,
+            DunesColors.bgApp,
+            role: DunesColorRole.surface,
+          ),
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
+                child: Row(
+                  children: [
+                    InkWell(
+                      borderRadius: BorderRadius.circular(8),
+                      onTap: widget.onBack,
+                      child: Padding(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: 4,
+                          vertical: 6,
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.arrow_back_ios_new,
+                              size: 14,
                               color: DunesColors.resolve(
                                 context,
                                 DunesColors.text2,
                               ),
                             ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  Expanded(
-                    child: Align(
-                      alignment: Alignment.centerRight,
-                      child: SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        reverse: true,
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            IconButton(
-                              tooltip: '使用指引',
-                              onPressed: () =>
-                                  unawaited(_showGuide(force: true)),
-                              icon: Icon(
-                                Icons.help_outline,
+                            SizedBox(width: 2),
+                            Text(
+                              '返回',
+                              style: TextStyle(
+                                fontSize: 13,
                                 color: DunesColors.resolve(
                                   context,
                                   DunesColors.text2,
                                 ),
                               ),
                             ),
-                            TextButton(
-                              onPressed: () {
-                                setState(() {
-                                  _showHistory = !_showHistory;
-                                  _showCalendar = false;
-                                });
-                                if (_showHistory) unawaited(_loadHistory());
-                              },
-                              child: Text(_showHistory ? '返回填写' : '历史日报'),
-                            ),
-                            TextButton(
-                              onPressed: () {
-                                setState(() {
-                                  _showCalendar = !_showCalendar;
-                                  _showHistory = false;
-                                });
-                                if (_showCalendar) unawaited(_loadCalendar());
-                              },
-                              child: Text(_showCalendar ? '返回填写' : '月历'),
-                            ),
                           ],
                         ),
                       ),
                     ),
-                  ),
-                ],
+                    Expanded(
+                      child: Align(
+                        alignment: Alignment.centerRight,
+                        child: SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          reverse: true,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                tooltip: '使用指引',
+                                onPressed: () =>
+                                    unawaited(_showGuide(force: true)),
+                                icon: Icon(
+                                  Icons.help_outline,
+                                  color: DunesColors.resolve(
+                                    context,
+                                    DunesColors.text2,
+                                  ),
+                                ),
+                              ),
+                              TextButton(
+                                onPressed: () {
+                                  setState(() {
+                                    _showHistory = !_showHistory;
+                                    _showCalendar = false;
+                                  });
+                                  if (_showHistory) unawaited(_loadHistory());
+                                },
+                                child: Text(_showHistory ? '返回填写' : '历史日报'),
+                              ),
+                              TextButton(
+                                onPressed: () {
+                                  setState(() {
+                                    _showCalendar = !_showCalendar;
+                                    _showHistory = false;
+                                  });
+                                  if (_showCalendar) unawaited(_loadCalendar());
+                                },
+                                child: Text(_showCalendar ? '返回填写' : '月历'),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-            Expanded(
-              child: _showCalendar
-                  ? _buildCalendar()
-                  : (_showHistory ? _buildHistory() : _buildForm()),
-            ),
-          ],
+              Expanded(
+                child: _showCalendar
+                    ? _buildCalendar()
+                    : (_showHistory ? _buildHistory() : _buildForm()),
+              ),
+            ],
+          ),
         ),
-      ),
       ),
     );
   }

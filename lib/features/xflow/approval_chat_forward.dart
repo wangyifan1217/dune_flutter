@@ -15,7 +15,9 @@ Future<void> forwardApprovalToConversation({
 }) async {
   final st = share.status.toUpperCase();
   // 协作提案草稿已落库，允许以名片转发给同事一起填；xflow 草稿/作废仍不可转。
-  if (!share.isProposalIntake && (st == 'DRAFT' || st == 'VOIDED')) {
+  if (!share.isProposalIntake &&
+      !share.isFundingProposal &&
+      (st == 'DRAFT' || st == 'VOIDED')) {
     showDunesToast(context, '草稿或已作废单据不可转发', kind: DunesToastKind.error);
     return;
   }

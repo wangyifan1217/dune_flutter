@@ -486,7 +486,8 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
   bool get _canAddParticipant {
     final task = _detail?.task;
     if (!_canPostpone || task == null || !task.isMain) return false;
-    return task.ownerUserId == widget.session.userId || task.creatorUserId == widget.session.userId;
+    return task.ownerUserId == widget.session.userId ||
+        task.creatorUserId == widget.session.userId;
   }
 
   bool get _canAssign => _canPostpone;
@@ -624,12 +625,22 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
     final task = _detail?.task;
     if (task == null || _busy) return;
     final picked = await showTaskHelperPicker(
-      context, api: _api, title: '添加主任务参与人',
-      selectedIds: const {}, excludeUserId: 0, scope: 'participants',
+      context,
+      api: _api,
+      title: '添加主任务参与人',
+      selectedIds: const {},
+      excludeUserId: 0,
+      scope: 'participants',
     );
     if (picked == null || !mounted) return;
-    final ids = picked.map((p) => p.id).where((id) => !task.participantUserIds.contains(id)).toList();
-    if (ids.isEmpty) { showDunesCenterToast(context, '没有新增参与人'); return; }
+    final ids = picked
+        .map((p) => p.id)
+        .where((id) => !task.participantUserIds.contains(id))
+        .toList();
+    if (ids.isEmpty) {
+      showDunesCenterToast(context, '没有新增参与人');
+      return;
+    }
     setState(() => _busy = true);
     try {
       await _api.patchTask(task.id, {'addParticipantUserIds': ids});
@@ -780,6 +791,146 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
     return d.evalLogs
         .where((l) => l.taskId == d.task.id)
         .toList(growable: false);
+  }
+
+  String _shortDate(DateTime? value) {
+    if (value == null) return '尚未更新';
+    final local = value.toLocal();
+    final m = local.month.toString().padLeft(2, '0');
+    final day = local.day.toString().padLeft(2, '0');
+    return '${local.year}-$m-$day';
+  }
+
+  Widget _subtaskOverviewRow(TaskItem task) {
+    final due = task.dueAt == null ? '未设截止' : '截止 ${_shortDate(task.dueAt)}';
+    final status = task.overdue ? '已逾期' : taskStatusLabel(task.status);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.fromLTRB(12, 10, 8, 8),
+        decoration: BoxDecoration(
+          color: DunesColors.resolve(
+            context,
+            Colors.white,
+            role: DunesColorRole.surface,
+          ),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: DunesColors.resolve(
+              context,
+              const Color(0xFFE8EAED),
+              role: DunesColorRole.border,
+            ),
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              task.title.trim().isEmpty ? '未命名子目标' : task.title.trim(),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '${task.ownerName.trim().isEmpty ? '未指定' : task.ownerName.trim()} · $status · ${task.progressPct}% · $due',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 12,
+                color: DunesColors.resolve(context, DunesColors.text2),
+              ),
+            ),
+            Align(
+              alignment: Alignment.centerRight,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (!task.isPending)
+                    TextButton(
+                      onPressed: _busy ? null : () => _openProgressFor(task),
+                      style: TextButton.styleFrom(
+                        minimumSize: const Size(0, 28),
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        visualDensity: VisualDensity.compact,
+                      ),
+                      child: const Text('更新进度'),
+                    ),
+                  TextButton(
+                    onPressed: widget.onOpenTask == null
+                        ? null
+                        : () => widget.onOpenTask!(task.id),
+                    style: TextButton.styleFrom(
+                      minimumSize: const Size(0, 28),
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      visualDensity: VisualDensity.compact,
+                    ),
+                    child: const Text('详情'),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _subgoalProgressRow(TaskItem task) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: DunesColors.resolve(
+            context,
+            Colors.white,
+            role: DunesColorRole.surface,
+          ),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: DunesColors.resolve(
+              context,
+              const Color(0xFFE8EAED),
+              role: DunesColorRole.border,
+            ),
+          ),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                task.title.trim().isEmpty ? '未命名子目标' : task.title.trim(),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              _shortDate(task.latestProgressAt),
+              style: TextStyle(
+                fontSize: 12,
+                color: DunesColors.resolve(context, DunesColors.text3),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              '${task.progressPct}%',
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   String _activityKind(TaskDetail d, int logTaskId, bool isSubtask) {
@@ -1255,11 +1406,13 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
         );
       }
       if (_canAddParticipant) {
-        actions.add(OutlinedButton.icon(
-          onPressed: _busy ? null : _addParticipants,
-          icon: const Icon(Icons.group_add_outlined, size: 17),
-          label: const Text('添加参与人'),
-        ));
+        actions.add(
+          OutlinedButton.icon(
+            onPressed: _busy ? null : _addParticipants,
+            icon: const Icon(Icons.group_add_outlined, size: 17),
+            label: const Text('添加参与人'),
+          ),
+        );
       }
       if (_canAssign && _canAssignTeam) {
         actions.add(
@@ -1789,7 +1942,8 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
                               ),
                             ),
                           ],
-                          if (d.task.acceptanceCriteria.trim().isNotEmpty) ...[
+                          if (d.task.acceptanceCriteria.trim().isNotEmpty &&
+                              !(d.task.isMain && d.subtasks.isNotEmpty)) ...[
                             const SizedBox(height: 14),
                             Text(
                               '验收标准',
@@ -1851,7 +2005,7 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
                 if (d.task.isMain) ...[
                   const SizedBox(height: 18),
                   const Text(
-                    '子目标',
+                    '子任务概览',
                     style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
                   ),
                   const SizedBox(height: 4),
@@ -1893,18 +2047,7 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
                       ),
                     )
                   else
-                    ...d.subtasks.map(
-                      (s) => Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: TaskWorkbenchCard(
-                          task: s,
-                          onTap: () => widget.onOpenTask?.call(s.id),
-                          onProgress: s.isPending
-                              ? null
-                              : () => _openProgressFor(s),
-                        ),
-                      ),
-                    ),
+                    ...d.subtasks.map(_subtaskOverviewRow),
                 ],
                 const SizedBox(height: 18),
                 Text(
@@ -1915,7 +2058,9 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
                   ),
                 ),
                 const SizedBox(height: 8),
-                if (_visibleProgressLogs(d).isEmpty)
+                if (d.task.isMain && d.subtasks.isNotEmpty)
+                  ...d.subtasks.map(_subgoalProgressRow)
+                else if (_visibleProgressLogs(d).isEmpty)
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.all(16),

@@ -95,7 +95,12 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
   String? _inboxWarning;
   static const int _inboxPreview = 3;
   String? _goalRole;
-  String? _status;
+
+  /// 主目标列表的状态。除「我负责」外默认进行中。
+  String? _goalStatus = 'active';
+
+  /// 今日等其他列表的状态，不跟主目标的默认进行中绑在一起。
+  String? _otherStatus;
   String? _priority;
   DateTime? _dateFrom;
   DateTime? _dateTo;
@@ -177,6 +182,27 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
 
   String get _apiScope => _scope;
 
+  String? get _status => _scope == 'goals' ? _goalStatus : _otherStatus;
+
+  void _setStatus(String? value) {
+    if (_scope == 'goals') {
+      _goalStatus = value;
+    } else {
+      _otherStatus = value;
+    }
+  }
+
+  String? get _goalRoleQuery =>
+      _scope == 'goals' && _goalRole != null && _goalRole != 'probation'
+      ? _goalRole
+      : null;
+
+  String? get _sourceQuery =>
+      _scope == 'goals' && _goalRole == 'probation' ? 'probation' : null;
+
+  String? get _excludeSourceQuery =>
+      _scope == 'goals' && _goalRole != 'probation' ? 'probation' : null;
+
   void _publishChrome() {
     if (_page == _TaskPage.detail ||
         _page == _TaskPage.action ||
@@ -225,16 +251,24 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
             color: DunesColors.resolve(context, DunesColors.text2),
           ),
         ),
-        const SizedBox(width: 4),
         if (widget.onOpenSummary != null)
-          TextButton(
-            onPressed: widget.onOpenSummary,
-            child: const Text('任务汇总'),
+          _toolIcon(
+            tooltip: '任务汇总',
+            icon: Icons.analytics_outlined,
+            onPressed: widget.onOpenSummary!,
           ),
         if (_canCreateTasks) ...[
-          TextButton(onPressed: _openQuickCreate, child: const Text('快速新建')),
-          const SizedBox(width: 4),
-          _primaryCreateButton(),
+          _toolIcon(
+            tooltip: '快速新建',
+            icon: Icons.flash_on_outlined,
+            onPressed: () => unawaited(_openQuickCreate()),
+          ),
+          _toolIcon(
+            tooltip: '完整创建',
+            icon: Icons.add,
+            filled: true,
+            onPressed: () => unawaited(_openCreate()),
+          ),
         ],
       ],
     );
@@ -360,37 +394,32 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
     required String tooltip,
     required IconData icon,
     required VoidCallback onPressed,
+    bool filled = false,
   }) {
-    return IconButton(
+    final button = IconButton(
       tooltip: tooltip,
       onPressed: onPressed,
       visualDensity: VisualDensity.compact,
       padding: EdgeInsets.zero,
       constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+      style: filled
+          ? IconButton.styleFrom(
+              backgroundColor: kTaskPurple,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            )
+          : null,
       icon: Icon(
         icon,
         size: 20,
-        color: DunesColors.resolve(context, DunesColors.text2),
+        color: filled
+            ? DunesColors.resolve(context, Colors.white)
+            : DunesColors.resolve(context, DunesColors.text2),
       ),
     );
-  }
-
-  Widget _primaryCreateButton({bool compact = false}) {
-    return FilledButton.icon(
-      onPressed: () => _openCreate(),
-      icon: const Icon(Icons.add, size: 18),
-      label: const Text('完整创建'),
-      style: FilledButton.styleFrom(
-        backgroundColor: kTaskPurple,
-        visualDensity: VisualDensity.compact,
-        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        padding: EdgeInsets.symmetric(
-          horizontal: compact ? 10 : 12,
-          vertical: 10,
-        ),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      ),
-    );
+    if (!filled) return button;
+    return Padding(padding: const EdgeInsets.only(left: 4), child: button);
   }
 
   Future<void> _reload() async {
@@ -411,7 +440,9 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
         status: _status,
         priority: _priority,
         q: _search.text,
-        goalRole: _scope == 'goals' ? _goalRole : null,
+        goalRole: _goalRoleQuery,
+        source: _sourceQuery,
+        excludeSource: _excludeSourceQuery,
         dateFrom: _dateFrom,
         dateTo: _dateTo,
         page: 0,
@@ -423,7 +454,7 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
       } catch (_) {}
       if (!mounted) return;
       setState(() {
-        _items = list.items;
+        _items = dedupeTasksById(list.items);
         _listPage = 0;
         _hasMore = list.hasMore;
         _loading = false;
@@ -512,7 +543,9 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
         status: _status,
         priority: _priority,
         q: _search.text,
-        goalRole: _scope == 'goals' ? _goalRole : null,
+        goalRole: _goalRoleQuery,
+        source: _sourceQuery,
+        excludeSource: _excludeSourceQuery,
         dateFrom: _dateFrom,
         dateTo: _dateTo,
         page: next,
@@ -520,7 +553,7 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
       );
       if (!mounted) return;
       setState(() {
-        _items = <TaskItem>[..._items, ...result.items];
+        _items = dedupeTasksById(<TaskItem>[..._items, ...result.items]);
         _listPage = next;
         _hasMore = result.hasMore;
         _loadingMore = false;
@@ -967,6 +1000,7 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
                           'reports' => '任务流下级负责的主目标。进入详情后再看子目标。',
                           'owned' => '本人负责的主目标。进入详情后再看子目标。',
                           'assigned' => '本人分派的主目标。进入详情后再看子目标。',
+                          'probation' => '试用期主目标。进入详情后再看子目标。',
                           _ => '本人负责、分派、下级负责，以及子目标关联到自己的主目标。进入详情后再看子目标。',
                         },
                         'actionable' => '今天要执行的子目标、未拆解的主目标和待确认子目标。',
@@ -995,6 +1029,8 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
                             _roleChip('participant', '我参与'),
                             const SizedBox(width: 8),
                             _roleChip('reports', '下级'),
+                            const SizedBox(width: 8),
+                            _roleChip('probation', '试用期'),
                           ],
                         ),
                       ),
@@ -1050,7 +1086,15 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
         borderRadius: BorderRadius.circular(8),
         onTap: () {
           if (_goalRole == value) return;
-          setState(() => _goalRole = value);
+          setState(() {
+            final wasOwned = _goalRole == 'owned';
+            _goalRole = value;
+            if (value == 'owned') {
+              _goalStatus = null;
+            } else if (wasOwned) {
+              _goalStatus = 'active';
+            }
+          });
           unawaited(_reload());
         },
         child: Padding(
@@ -1284,7 +1328,7 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
                   ('rejected', '已驳回'),
                 ],
                 onChanged: (v) {
-                  setState(() => _status = v);
+                  setState(() => _setStatus(v));
                   unawaited(_reload());
                 },
                 minMenuWidth: 160,
@@ -1413,8 +1457,10 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
     if (_scope == 'inbox') return _buildInboxSlivers();
 
     final items = _focusItems(_items);
+    final defaultActive =
+        _scope == 'goals' && _goalRole != 'owned' && _status == 'active';
     final hasFilters =
-        (_status != null && _status!.isNotEmpty) ||
+        ((_status != null && _status!.isNotEmpty) && !defaultActive) ||
         (_priority != null && _priority!.isNotEmpty) ||
         _listFocus != null ||
         _search.text.trim().isNotEmpty ||
@@ -1537,49 +1583,11 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
       ];
     }
 
-    final wideGoals =
-        _scope == 'goals' && MediaQuery.sizeOf(context).width >= 720;
-    if (wideGoals) {
-      return [
-        SliverPadding(
-          padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-          sliver: SliverLayoutBuilder(
-            builder: (context, constraints) {
-              final width = constraints.crossAxisExtent;
-              final columns = (width / 340).floor().clamp(1, 4);
-              return SliverGrid(
-                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: columns,
-                  crossAxisSpacing: 12,
-                  mainAxisSpacing: 12,
-                  mainAxisExtent:
-                      (items.any((t) => t.isPending)
-                          ? 280
-                          : items.any((t) => t.hasPendingChange)
-                          ? 244
-                          : 220) +
-                      (MediaQuery.textScalerOf(context).scale(14) - 14).clamp(
-                            0,
-                            60,
-                          ) *
-                          8,
-                ),
-                delegate: SliverChildBuilderDelegate((context, index) {
-                  final task = items[index];
-                  return TaskWorkbenchCard(
-                    task: task,
-                    groupMode: true,
-                    onTap: () => _openDetail(task.id),
-                    onShare: () => unawaited(_shareTask(task)),
-                    onSubtasks: () => _openSubtasks(task),
-                    groupTrailingAction: _goalCardCompleteAction(task),
-                  );
-                }, childCount: items.length),
-              );
-            },
-          ),
-        ),
-      ];
+    if (_scope == 'goals') {
+      return _goalGroupSlivers(
+        items,
+        wide: MediaQuery.sizeOf(context).width >= 720,
+      );
     }
     return [
       SliverPadding(
@@ -1589,6 +1597,143 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
         ),
       ),
     ];
+  }
+
+  List<({String title, List<TaskItem> items})> _goalGroups(
+    List<TaskItem> items,
+  ) {
+    final overdue = <TaskItem>[];
+    final active = <TaskItem>[];
+    final rest = <String, List<TaskItem>>{};
+    final restOrder = <String>[];
+    for (final task in items) {
+      final open = task.status != 'completed' && task.status != 'cancelled';
+      if (task.overdue && open) {
+        overdue.add(task);
+        continue;
+      }
+      if (task.status == 'active' || task.status == 'in_progress') {
+        active.add(task);
+        continue;
+      }
+      final label = taskStatusLabel(task.status);
+      rest
+          .putIfAbsent(label, () {
+            restOrder.add(label);
+            return <TaskItem>[];
+          })
+          .add(task);
+    }
+    final groups = <({String title, List<TaskItem> items})>[];
+    if (overdue.isNotEmpty) {
+      groups.add((title: '已逾期', items: overdue));
+    }
+    if (_listFocus == 'overdue') return groups;
+    if (active.isNotEmpty) {
+      groups.add((title: '进行中', items: active));
+    }
+    for (final label in restOrder) {
+      final bucket = rest[label];
+      if (bucket != null && bucket.isNotEmpty) {
+        groups.add((title: label, items: bucket));
+      }
+    }
+    return groups;
+  }
+
+  List<Widget> _goalGroupSlivers(List<TaskItem> items, {required bool wide}) {
+    final groups = _goalGroups(items);
+    final slivers = <Widget>[];
+    for (var i = 0; i < groups.length; i++) {
+      final group = groups[i];
+      slivers.add(
+        SliverPadding(
+          padding: EdgeInsets.fromLTRB(20, i == 0 ? 0 : 8, 20, 0),
+          sliver: SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Text(
+                group.title,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: DunesColors.resolve(context, DunesColors.text3),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      if (wide) {
+        slivers.add(
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+            sliver: SliverLayoutBuilder(
+              builder: (context, constraints) {
+                final columns = (constraints.crossAxisExtent / 340)
+                    .floor()
+                    .clamp(1, 4)
+                    .toInt();
+                final extent =
+                    (group.items.any((t) => t.isPending)
+                        ? 280
+                        : group.items.any((t) => t.hasPendingChange)
+                        ? 244
+                        : 220) +
+                    (MediaQuery.textScalerOf(context).scale(14) - 14).clamp(
+                          0,
+                          60,
+                        ) *
+                        8;
+                final cardExtent = extent.toDouble();
+                return SliverGrid(
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: columns,
+                    crossAxisSpacing: 12,
+                    mainAxisSpacing: 12,
+                    mainAxisExtent: cardExtent,
+                  ),
+                  delegate: SliverChildBuilderDelegate(
+                    (context, index) =>
+                        _goalCard(group.items[index], wide: true),
+                    childCount: group.items.length,
+                  ),
+                );
+              },
+            ),
+          ),
+        );
+      } else {
+        slivers.add(
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+            sliver: SliverList(
+              delegate: SliverChildListDelegate([
+                for (final task in group.items) ...[
+                  _goalCard(task, wide: false),
+                  const SizedBox(height: 10),
+                ],
+              ]),
+            ),
+          ),
+        );
+      }
+    }
+    if (slivers.isNotEmpty) {
+      slivers.add(const SliverPadding(padding: EdgeInsets.only(bottom: 12)));
+    }
+    return slivers;
+  }
+
+  Widget _goalCard(TaskItem task, {required bool wide}) {
+    return TaskWorkbenchCard(
+      task: task,
+      groupMode: true,
+      onTap: () => _openDetail(task.id),
+      onShare: () => unawaited(_shareTask(task)),
+      onSubtasks: () => _openSubtasks(task),
+      groupTrailingAction: wide ? _goalCardCompleteAction(task) : null,
+    );
   }
 
   Widget _goalCardCompleteAction(TaskItem task) {

@@ -529,6 +529,7 @@ Future<void> showMineCreateSheet(
   required VoidCallback onKnowledge,
   VoidCallback? onWorkbench,
   VoidCallback? onPerformance,
+  VoidCallback? onHrPerformance,
   bool showProposals = true,
 }) {
   return showModalBottomSheet<void>(
@@ -766,6 +767,18 @@ Future<void> showMineCreateSheet(
                       subtitle: '查看组织文档与知识沉淀',
                       onTap: onKnowledge,
                     ),
+                    if (onHrPerformance != null)
+                      option(
+                        icon: Icons.fact_check_outlined,
+                        iconGradient: const [
+                          Color(0xFF7B5CD8),
+                          Color(0xFF552D8E),
+                        ],
+                        bg: MinePalette.wash,
+                        title: '人事绩效',
+                        subtitle: '查看考核进度与任务证据',
+                        onTap: onHrPerformance,
+                      ),
                     if (onPerformance != null)
                       option(
                         icon: Icons.insights_outlined,
@@ -1282,10 +1295,8 @@ class _MineHomeBodyState extends State<MineHomeBody> {
             .toList(growable: false);
         _actionable = results[2].items
             .where(
-              (row) => proposalIntakeStillActionableFor(
-                row,
-                widget.session.userId,
-              ),
+              (row) =>
+                  proposalIntakeStillActionableFor(row, widget.session.userId),
             )
             .toList(growable: false);
         _loading = false;
@@ -3758,10 +3769,7 @@ class _MineHomeBodyState extends State<MineHomeBody> {
               ),
             ),
           ),
-          if (action != null) ...[
-            const SizedBox(width: 4),
-            action,
-          ],
+          if (action != null) ...[const SizedBox(width: 4), action],
         ],
       ),
     );

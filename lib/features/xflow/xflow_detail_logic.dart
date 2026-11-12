@@ -109,6 +109,12 @@ enum DetailStatusTone { ok, warn, bad, muted }
 
 String formatProposalDisplay(dynamic val) {
   if (val == null || val == '') return '';
+  if (val is List) {
+    return val
+        .map(formatProposalDisplay)
+        .where((text) => text.isNotEmpty)
+        .join('、');
+  }
   if (val is String) {
     final text = val.trim();
     if (text.isEmpty || text.startsWith('map[')) return '';
@@ -124,6 +130,39 @@ String formatProposalDisplay(dynamic val) {
     if (pid != null) return '提案#$pid';
   }
   return val.toString();
+}
+
+int proposalSelectionId(Map<dynamic, dynamic> item) {
+  final raw = item['proposalId'] ?? item['businessId'] ?? item['id'];
+  if (raw is num) return raw.toInt();
+  return int.tryParse('$raw') ?? 0;
+}
+
+/// 单张关联提案或已选列表都归一成列表。旧数据是单个对象，打开后仍显示为一条。
+List<Map<String, dynamic>> proposalSelectionList(dynamic value) {
+  if (value is List) {
+    return [
+      for (final item in value)
+        if (item is Map) Map<String, dynamic>.from(item),
+    ];
+  }
+  if (value is Map && value.isNotEmpty) {
+    return [Map<String, dynamic>.from(value)];
+  }
+  return const [];
+}
+
+/// 追加一张关联提案。同一张已选过则保持原列表。
+List<Map<String, dynamic>> appendProposalSelection(
+  dynamic current,
+  Map<String, dynamic> next,
+) {
+  final list = proposalSelectionList(current);
+  final id = proposalSelectionId(next);
+  if (id > 0 && list.any((item) => proposalSelectionId(item) == id)) {
+    return list;
+  }
+  return [...list, Map<String, dynamic>.from(next)];
 }
 
 /// 从关联提案字段取值解析可跳转的提案 ID；解析不到返回 0。
@@ -144,13 +183,16 @@ int parseLinkedProposalId(dynamic val) {
 }
 
 const linkedProposalSourceIntake = 'proposal_intake';
+const linkedProposalSourceFunding = 'funding_proposal';
 
 /// 解析关联提案来源：协作提案为 `proposal_intake`，历史销售提案为空。
 String parseLinkedProposalSource(dynamic val) {
   if (val is! Map) return '';
   final source = '${val['source'] ?? ''}'.trim().toLowerCase();
+  if (source == linkedProposalSourceFunding) return linkedProposalSourceFunding;
   if (source == linkedProposalSourceIntake) return linkedProposalSourceIntake;
   final businessType = '${val['businessType'] ?? ''}'.trim().toUpperCase();
+  if (businessType == 'FUNDING_PROPOSAL') return linkedProposalSourceFunding;
   if (businessType == 'PROPOSAL_INTAKE') return linkedProposalSourceIntake;
   return '';
 }
@@ -164,10 +206,19 @@ String parseLinkedProposalBusinessType(dynamic val) {
 bool linkedProposalOpensIntake(String source) =>
     source.trim().toLowerCase() == linkedProposalSourceIntake;
 
+bool linkedProposalOpensFunding(String source, [String businessType = '']) {
+  final kind = businessType.trim().toUpperCase();
+  return source.trim().toLowerCase() == linkedProposalSourceFunding ||
+      kind == 'FUNDING_PROPOSAL';
+}
+
 /// 电子报销关联的招待费、借款等是动态审批，不能按销售提案打开。
 bool linkedProposalOpensSubmission(String businessType) {
   final kind = businessType.trim().toUpperCase();
-  return kind.isNotEmpty && kind != 'PROPOSAL' && kind != 'PROPOSAL_INTAKE';
+  return kind.isNotEmpty &&
+      kind != 'PROPOSAL' &&
+      kind != 'PROPOSAL_INTAKE' &&
+      kind != 'FUNDING_PROPOSAL';
 }
 
 Map<String, dynamic> linkedProposalIntakePayload({
@@ -189,6 +240,24 @@ Map<String, dynamic> linkedProposalIntakePayload({
   };
 }
 
+Map<String, dynamic> linkedProposalFundingPayload({
+  required int id,
+  required String code,
+  required String title,
+  String projectName = '',
+}) {
+  final project = projectName.trim();
+  return <String, dynamic>{
+    'proposalId': id,
+    'code': code,
+    'title': title,
+    'kind': 'funding',
+    'source': linkedProposalSourceFunding,
+    'businessType': 'FUNDING_PROPOSAL',
+    if (project.isNotEmpty) 'projectName': project,
+  };
+}
+
 /// 提案表单里的项目名称。从提案发起审批时用来回填「成本中心/项目」。
 String linkedProposalProjectName(dynamic linked) {
   if (linked is! Map) return '';
@@ -206,19 +275,13 @@ void applyLinkedProposalProject(Map<String, dynamic> values) {
   values['costCenter'] = project;
 }
 
-typedef OpenLinkedProposalCallback = void Function(
-  int proposalId,
-  String source,
-  String businessType,
-);
+typedef OpenLinkedProposalCallback =
+    void Function(int proposalId, String source, String businessType);
 
 String formatUserDisplay(dynamic val) {
   if (val == null || val == '') return '';
   if (val is List) {
-    return val
-        .map(formatUserDisplay)
-        .where((e) => e.isNotEmpty)
-        .join('、');
+    return val.map(formatUserDisplay).where((e) => e.isNotEmpty).join('、');
   }
   if (val is String) {
     if (val.startsWith('map[')) return '';
@@ -253,7 +316,9 @@ String formatFieldValue(XflowField field, dynamic val) {
     case 'user':
       return formatUserDisplay(val);
     case 'upload':
-      final files = normalizeUploadItems(val).where((it) => it['status'] != 'error').toList();
+      final files = normalizeUploadItems(
+        val,
+      ).where((it) => it['status'] != 'error').toList();
       if (files.isEmpty) return '';
       if (xflowIsInvoiceField(field)) {
         final summary = xflowInvoiceSummary(files);
@@ -286,13 +351,18 @@ String formatFieldValue(XflowField field, dynamic val) {
   }
   if (val is List) {
     if (val.isEmpty) return '';
-    if (field.type == 'dynamicList' || field.type == 'matrix' || field.type == 'structuredTable') {
+    if (field.type == 'dynamicList' ||
+        field.type == 'matrix' ||
+        field.type == 'structuredTable') {
       return field.isCardDynamicList ? '${val.length}组' : '${val.length}行';
     }
     if (val.isNotEmpty && val.first is Map) {
       return val
           .map((row) {
             if (row is! Map) return row.toString();
+            if (row['proposalId'] != null || row['code'] != null) {
+              return formatProposalDisplay(row);
+            }
             if (row['fileName'] != null) return row['fileName'].toString();
             if (row['label'] != null) return row['label'].toString();
             if (row['name'] != null) return row['name'].toString();
@@ -305,7 +375,9 @@ String formatFieldValue(XflowField field, dynamic val) {
     return val.where((e) => '$e'.isNotEmpty).join('、');
   }
   if (val is Map) {
-    if (field.type == 'dynamicList' || field.type == 'matrix' || field.type == 'structuredTable') {
+    if (field.type == 'dynamicList' ||
+        field.type == 'matrix' ||
+        field.type == 'structuredTable') {
       return field.isCardDynamicList ? '1组' : '1行';
     }
     if (val['fileName'] != null) return val['fileName'].toString();
@@ -323,14 +395,18 @@ String formatFieldValue(XflowField field, dynamic val) {
 
 bool isExpandableField(XflowField field, dynamic val) {
   if (val == null) return false;
-  if (field.type == 'dynamicList' || field.type == 'matrix' || field.type == 'structuredTable') {
+  if (field.type == 'dynamicList' ||
+      field.type == 'matrix' ||
+      field.type == 'structuredTable') {
     return normalizeDynamicListValue(val).isNotEmpty;
   }
   if (field.type == 'billCascade') {
     return xflowBillSelectedList(val).isNotEmpty;
   }
   if (field.type == 'upload') {
-    return normalizeUploadItems(val).where((it) => it['status'] != 'error').isNotEmpty;
+    return normalizeUploadItems(
+      val,
+    ).where((it) => it['status'] != 'error').isNotEmpty;
   }
   return false;
 }
@@ -339,7 +415,11 @@ List<Map<String, dynamic>> normalizeDynamicListValue(dynamic val) {
   if (val == null || val == '') return [];
   if (val is List) {
     return val
-        .map((e) => e is Map<String, dynamic> ? e : (e is Map ? Map<String, dynamic>.from(e) : null))
+        .map(
+          (e) => e is Map<String, dynamic>
+              ? e
+              : (e is Map ? Map<String, dynamic>.from(e) : null),
+        )
         .whereType<Map<String, dynamic>>()
         .toList(growable: false);
   }
@@ -347,8 +427,12 @@ List<Map<String, dynamic>> normalizeDynamicListValue(dynamic val) {
   return [];
 }
 
-List<Map<String, dynamic>> inferColumns(List<Map<String, dynamic>> rows, XflowField field) {
-  if (field.raw['columns'] is List && (field.raw['columns'] as List).isNotEmpty) {
+List<Map<String, dynamic>> inferColumns(
+  List<Map<String, dynamic>> rows,
+  XflowField field,
+) {
+  if (field.raw['columns'] is List &&
+      (field.raw['columns'] as List).isNotEmpty) {
     return (field.raw['columns'] as List)
         .whereType<Map>()
         .map((c) => Map<String, dynamic>.from(c))
@@ -357,7 +441,10 @@ List<Map<String, dynamic>> inferColumns(List<Map<String, dynamic>> rows, XflowFi
   if (rows.isEmpty || rows.first.isEmpty) return [];
   final nestedKey = (field.raw['nestedKey'] ?? 'items').toString();
   return rows.first.keys
-      .where((k) => k != nestedKey && rows.first[k] is! List && rows.first[k] is! Map)
+      .where(
+        (k) =>
+            k != nestedKey && rows.first[k] is! List && rows.first[k] is! Map,
+      )
       .map((k) => {'key': k, 'label': colLabels[k] ?? k})
       .toList(growable: false);
 }
@@ -372,7 +459,11 @@ String formatGroupCellDisplay(XflowField col, Map<String, dynamic> row) {
   return formatCellDisplay(row[col.key], col.raw, row);
 }
 
-String formatCellDisplay(dynamic val, Map<String, dynamic> col, Map<String, dynamic> row) {
+String formatCellDisplay(
+  dynamic val,
+  Map<String, dynamic> col,
+  Map<String, dynamic> row,
+) {
   if (val == null || val == '') {
     final aliases = {
       'note': ['description', 'desc', 'remark'],
@@ -391,7 +482,8 @@ String formatCellDisplay(dynamic val, Map<String, dynamic> col, Map<String, dyna
   if (val == null || val == '') return '—';
   if (col['type']?.toString() == 'select' && col['options'] is List) {
     for (final o in col['options'] as List) {
-      if (o is Map && '${o['value']}' == '$val') return (o['label'] ?? val).toString();
+      if (o is Map && '${o['value']}' == '$val')
+        return (o['label'] ?? val).toString();
     }
   }
   if (val is Map) return formatUserDisplay(val);
@@ -404,7 +496,8 @@ String fmtList(dynamic arr) {
       .map((x) {
         if (x == null || x == '') return '';
         if (x is String) return x;
-        if (x is Map) return (x['label'] ?? x['name'] ?? x['province'] ?? '').toString();
+        if (x is Map)
+          return (x['label'] ?? x['name'] ?? x['province'] ?? '').toString();
         return x.toString();
       })
       .where((e) => e.isNotEmpty)
@@ -421,20 +514,30 @@ List<DetailSection> buildFieldSections(
   if (parseLinkedProposalId(formValues['linkedProposal']) > 0) {
     fields = [
       XflowField.fromJson({
-        'key': 'linkedProposal', 'label': '关联提案',
-        'type': 'proposal', 'readonly': true,
+        'key': 'linkedProposal',
+        'label': '关联提案',
+        'type': 'proposal',
+        'readonly': true,
       }),
       ...fields.where((field) => field.key != 'linkedProposal'),
     ];
   }
   final fv = Map<String, dynamic>.from(formValues);
-  if ((fv['provinces'] == null || (fv['provinces'] is List && (fv['provinces'] as List).isEmpty)) &&
+  if ((fv['provinces'] == null ||
+          (fv['provinces'] is List && (fv['provinces'] as List).isEmpty)) &&
       detail.raw['coverage'] is List) {
     fv['provinces'] = detail.raw['coverage'];
   }
   const priorityKeys = [
-    'title', 'tag1', 'provinces', 'txType', 'goodType', 'proposalType',
-    'techPlatform', 'launchDate', 'launchChannel',
+    'title',
+    'tag1',
+    'provinces',
+    'txType',
+    'goodType',
+    'proposalType',
+    'techPlatform',
+    'launchDate',
+    'launchChannel',
   ];
   final sections = <DetailSection>[];
   var currentTitle = '基本信息';
@@ -450,7 +553,9 @@ List<DetailSection> buildFieldSections(
       if (bi >= 0) return 1;
       return 0;
     });
-    sections.add(DetailSection(title: currentTitle, items: List.from(currentItems)));
+    sections.add(
+      DetailSection(title: currentTitle, items: List.from(currentItems)),
+    );
     currentItems = [];
   }
 
@@ -462,9 +567,14 @@ List<DetailSection> buildFieldSections(
       currentTitle = field.label.isEmpty ? '板块' : field.label;
       continue;
     }
-    if (field.type == 'action' || field.type == 'row' || field.key == 'proposalCode') continue;
+    if (field.type == 'action' ||
+        field.type == 'row' ||
+        field.key == 'proposalCode')
+      continue;
     var val = fv[field.key];
-    if (field.type == 'dynamicList' || field.type == 'matrix' || field.type == 'structuredTable') {
+    if (field.type == 'dynamicList' ||
+        field.type == 'matrix' ||
+        field.type == 'structuredTable') {
       val = normalizeDynamicListValue(val);
     }
     var text = formatFieldValue(field, val);
@@ -525,24 +635,32 @@ List<DetailSection> buildSectionsByDetailConfig(
     'solution': ['方案叙事'],
     'tech': ['技术能力', '风控标准'],
   };
-  return tabs.map<DetailSection>((tab) {
-    final key = (tab is Map ? tab['key'] : tab)?.toString() ?? '';
-    final tabLabel = (tab is Map ? tab['label'] : null)?.toString() ?? key;
-    final titles = tabGroups[key] ?? [tabLabel.split(' · ').first];
-    final items = <DetailFieldItem>[];
-    for (final sec in allSections) {
-      if (titles.contains(sec.title)) items.addAll(sec.items);
-    }
-    if (items.isEmpty && key == 'biz' && allSections.isNotEmpty) {
-      items.addAll(allSections.first.items);
-    }
-    return DetailSection(title: tabLabel, items: items);
-  }).where((s) => s.items.isNotEmpty).toList(growable: false);
+  return tabs
+      .map<DetailSection>((tab) {
+        final key = (tab is Map ? tab['key'] : tab)?.toString() ?? '';
+        final tabLabel = (tab is Map ? tab['label'] : null)?.toString() ?? key;
+        final titles = tabGroups[key] ?? [tabLabel.split(' · ').first];
+        final items = <DetailFieldItem>[];
+        for (final sec in allSections) {
+          if (titles.contains(sec.title)) items.addAll(sec.items);
+        }
+        if (items.isEmpty && key == 'biz' && allSections.isNotEmpty) {
+          items.addAll(allSections.first.items);
+        }
+        return DetailSection(title: tabLabel, items: items);
+      })
+      .where((s) => s.items.isNotEmpty)
+      .toList(growable: false);
 }
 
-RejectStepInfo? lastRejectStep(XflowApprovalTrail? trail, Map<int, String> assigneeNames) {
+RejectStepInfo? lastRejectStep(
+  XflowApprovalTrail? trail,
+  Map<int, String> assigneeNames,
+) {
   if (trail == null) return null;
-  final rejected = trail.steps.where((s) => s.decision.toUpperCase() == 'REJECTED').toList();
+  final rejected = trail.steps
+      .where((s) => s.decision.toUpperCase() == 'REJECTED')
+      .toList();
   if (rejected.isEmpty) return null;
   final step = rejected.last;
   return RejectStepInfo(
@@ -608,7 +726,11 @@ String currentApproverLabel(
 }
 
 /// 流程追踪首节点「提交人」：代发起场景仍展示推送人，审批链归属不变。
-String trailSubmitterLabel(XflowProposalDetail detail, XflowApprovalTrail? trail, Map<int, String> assigneeNames) {
+String trailSubmitterLabel(
+  XflowProposalDetail detail,
+  XflowApprovalTrail? trail,
+  Map<int, String> assigneeNames,
+) {
   final raw = detail.raw;
   final draftedBy = raw['draftedBy'];
   if (draftedBy is Map) {
@@ -675,9 +797,7 @@ String stageLabel(
       final no = _stageNoOf(stage);
       if (no != wantNo) continue;
       final liveNorm = _normApproverType('${stage['approverType'] ?? ''}');
-      if (liveNorm.isNotEmpty &&
-          stepNorm.isNotEmpty &&
-          liveNorm != stepNorm) {
+      if (liveNorm.isNotEmpty && stepNorm.isNotEmpty && liveNorm != stepNorm) {
         continue;
       }
       final name = (stage['stageName'] ?? stage['name'] ?? stage['label'] ?? '')
@@ -759,7 +879,9 @@ String fmtDetailTime(dynamic v) {
 }
 
 String owner2Line(Map<String, dynamic> fv, Map<String, dynamic> raw) {
-  final name = formatUserDisplay(fv['owner2']).ifEmpty(formatUserDisplay(raw['owner2']));
+  final name = formatUserDisplay(
+    fv['owner2'],
+  ).ifEmpty(formatUserDisplay(raw['owner2']));
   final level = (fv['owner2Level'] ?? raw['owner2Level'] ?? '').toString();
   if (name.isEmpty) return level.isEmpty ? '' : '${level.toUpperCase()}级';
   return level.isEmpty ? name : '$name · ${level.toUpperCase()}级';

@@ -11,6 +11,7 @@ import '../../core/theme/dunes_theme.dart';
 import '../../core/widgets/dunes_month_picker.dart';
 import '../../core/widgets/cached_network_image.dart';
 import '../auth/auth_session.dart';
+import '../hr_performance/native_hr_performance_page.dart';
 import '../auth/qr_login_scan_page.dart';
 import '../attendance/native_attendance_page.dart';
 import '../conversation/comm_unread_notifier.dart';
@@ -315,6 +316,7 @@ class _NativeMyWorkProfileCenterPageState
   @override
   void initState() {
     super.initState();
+    ensureFundingProposalOpener();
     _activeTabIndex = widget.initialTabIndex;
     final initial = widget.initialMonth ?? _currentMonth;
     _month = DateTime(initial.year, initial.month);
@@ -1330,7 +1332,9 @@ class _NativeMyWorkProfileCenterPageState
                             shape: BoxShape.circle,
                             boxShadow: [
                               BoxShadow(
-                                color: const Color(0xFF2B2160).withValues(alpha: .06),
+                                color: const Color(
+                                  0xFF2B2160,
+                                ).withValues(alpha: .06),
                                 blurRadius: 18,
                                 offset: const Offset(0, 6),
                               ),
@@ -1344,131 +1348,135 @@ class _NativeMyWorkProfileCenterPageState
                 ),
                 Expanded(
                   child: RefreshIndicator(
-              onRefresh: () async {
-                setState(() => _mineRefreshToken++);
-                await _loadAffairsData(silent: true);
-              },
-              child: ListView(
-                padding: EdgeInsets.only(
-                  bottom:
-                      dunesAppBottomNavContentPadding(context, fallback: 20) +
-                      72,
-                ),
-                children: [
-                  // 宽度跟灯塔一致：铺满，左右 22 一条左沿（kMinePageGutter）。
-                  Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          MineHomeHeader(
-                            month: _month,
-                            onPickMonth: _pickMonth,
-                            onCurrentMonth: _resetMonth,
-                            // 点头像改头像：右下角铅笔提示可编辑。
-                            avatar: Tooltip(
-                              message: '更换头像',
-                              child: GestureDetector(
-                                behavior: HitTestBehavior.opaque,
-                                onTap: _avatarSheetOpen
-                                    ? null
-                                    : _openAvatarEditor,
-                                child: Stack(
-                                  clipBehavior: Clip.none,
-                                  children: [
-                                    NativeAvatarCircle(
-                                      key: ValueKey<String>(
-                                        '${profile.avatarPreset}|${profile.avatarObjectKey}|${profile.avatarUrl}|$_avatarRefreshVersion',
+                    onRefresh: () async {
+                      setState(() => _mineRefreshToken++);
+                      await _loadAffairsData(silent: true);
+                    },
+                    child: ListView(
+                      padding: EdgeInsets.only(
+                        bottom:
+                            dunesAppBottomNavContentPadding(
+                              context,
+                              fallback: 20,
+                            ) +
+                            72,
+                      ),
+                      children: [
+                        // 宽度跟灯塔一致：铺满，左右 22 一条左沿（kMinePageGutter）。
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            MineHomeHeader(
+                              month: _month,
+                              onPickMonth: _pickMonth,
+                              onCurrentMonth: _resetMonth,
+                              // 点头像改头像：右下角铅笔提示可编辑。
+                              avatar: Tooltip(
+                                message: '更换头像',
+                                child: GestureDetector(
+                                  behavior: HitTestBehavior.opaque,
+                                  onTap: _avatarSheetOpen
+                                      ? null
+                                      : _openAvatarEditor,
+                                  child: Stack(
+                                    clipBehavior: Clip.none,
+                                    children: [
+                                      NativeAvatarCircle(
+                                        key: ValueKey<String>(
+                                          '${profile.avatarPreset}|${profile.avatarObjectKey}|${profile.avatarUrl}|$_avatarRefreshVersion',
+                                        ),
+                                        size: 50,
+                                        avatarPreset: profile.avatarPreset,
+                                        avatarUrl: avatarUrl,
+                                        fallbackText: name.characters.first,
+                                        borderWidth: 0,
                                       ),
-                                      size: 50,
-                                      avatarPreset: profile.avatarPreset,
-                                      avatarUrl: avatarUrl,
-                                      fallbackText: name.characters.first,
-                                      borderWidth: 0,
-                                    ),
-                                    Positioned(
-                                      right: -3,
-                                      bottom: -3,
-                                      child: Container(
-                                        width: 19,
-                                        height: 19,
-                                        decoration: BoxDecoration(
-                                          color: DunesColors.resolve(
-                                            context,
-                                            Colors.white,
-                                            role: DunesColorRole.surface,
-                                          ),
-                                          shape: BoxShape.circle,
-                                          boxShadow: [
-                                            BoxShadow(
-                                              color: Colors.black.withValues(
-                                                alpha: .18,
-                                              ),
-                                              blurRadius: 4,
-                                              offset: const Offset(0, 1),
+                                      Positioned(
+                                        right: -3,
+                                        bottom: -3,
+                                        child: Container(
+                                          width: 19,
+                                          height: 19,
+                                          decoration: BoxDecoration(
+                                            color: DunesColors.resolve(
+                                              context,
+                                              Colors.white,
+                                              role: DunesColorRole.surface,
                                             ),
-                                          ],
-                                        ),
-                                        child: Icon(
-                                          _avatarSheetOpen
-                                              ? Icons.more_horiz
-                                              : Icons.edit_rounded,
-                                          size: 11,
-                                          color: DunesColors.resolve(
-                                            context,
-                                            const Color(0xFF65399E),
+                                            shape: BoxShape.circle,
+                                            boxShadow: [
+                                              BoxShadow(
+                                                color: Colors.black.withValues(
+                                                  alpha: .18,
+                                                ),
+                                                blurRadius: 4,
+                                                offset: const Offset(0, 1),
+                                              ),
+                                            ],
+                                          ),
+                                          child: Icon(
+                                            _avatarSheetOpen
+                                                ? Icons.more_horiz
+                                                : Icons.edit_rounded,
+                                            size: 11,
+                                            color: DunesColors.resolve(
+                                              context,
+                                              const Color(0xFF65399E),
+                                            ),
                                           ),
                                         ),
                                       ),
-                                    ),
-                                  ],
+                                    ],
+                                  ),
                                 ),
                               ),
+                              name: name,
+                              subtitle: identityLine,
                             ),
-                            name: name,
-                            subtitle: identityLine,
-                          ),
-                          if (!isDesktopCommOnly &&
-                              widget.session.canUseAttendance)
+                            if (!isDesktopCommOnly &&
+                                widget.session.canUseAttendance)
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: kMinePageGutter,
+                                ),
+                                child: AttendanceSummaryCard(
+                                  session: widget.session,
+                                  refreshToken: _attendanceRefreshToken,
+                                  onTap: _openAttendance,
+                                ),
+                              ),
                             Padding(
                               padding: const EdgeInsets.symmetric(
                                 horizontal: kMinePageGutter,
                               ),
-                              child: AttendanceSummaryCard(
+                              child: MineHomeBody(
                                 session: widget.session,
-                                refreshToken: _attendanceRefreshToken,
-                                onTap: _openAttendance,
+                                month: _month,
+                                counts: counts,
+                                showProposals: showProposals,
+                                companyView: widget.session.mineCompanyView,
+                                refreshToken: _mineRefreshToken,
+                                onOpenPendingApprovals: () =>
+                                    widget.navigation.go('B1'),
+                                onOpenTodoApprovals: () =>
+                                    widget.navigation.go('B13'),
+                                onOpenInitiated: () => widget.onOpenB14(),
+                                onOpenCc: () => widget.navigation.go('P1'),
+                                onOpenRejected: () => widget.onOpenB14(),
+                                onOpenPendingInitiate: () => widget.onOpenB14(
+                                  filter: 'PENDING_INITIATE',
+                                ),
+                                onOpenLighthouse: () =>
+                                    widget.navigation.go('LH'),
+                                onOpenProposalList: _openProposalIntake,
+                                onOpenProposalDetail: _openDesktopProposal,
                               ),
                             ),
-                          Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: kMinePageGutter,
-                            ),
-                            child: MineHomeBody(
-                              session: widget.session,
-                              month: _month,
-                              counts: counts,
-                              showProposals: showProposals,
-                              companyView: widget.session.mineCompanyView,
-                              refreshToken: _mineRefreshToken,
-                              onOpenPendingApprovals: () =>
-                                  widget.navigation.go('B1'),
-                              onOpenTodoApprovals: () =>
-                                  widget.navigation.go('B13'),
-                              onOpenInitiated: () => widget.onOpenB14(),
-                              onOpenCc: () => widget.navigation.go('P1'),
-                              onOpenRejected: () => widget.onOpenB14(),
-                              onOpenPendingInitiate: () =>
-                                  widget.onOpenB14(filter: 'PENDING_INITIATE'),
-                              onOpenLighthouse: () =>
-                                  widget.navigation.go('LH'),
-                              onOpenProposalList: _openProposalIntake,
-                              onOpenProposalDetail: _openDesktopProposal,
-                            ),
-                          ),
-                        ],
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
-                ],
-              ),
-            ),
                 ),
               ],
             ),
@@ -1489,6 +1497,18 @@ class _NativeMyWorkProfileCenterPageState
                   onApproval: () => widget.onOpenB3(),
                   onMeeting: () => widget.navigation.go('MM-L'),
                   onKnowledge: () => widget.navigation.go('K1'),
+                  onHrPerformance: widget.session.isExternalUser
+                      ? null
+                      : () => Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) => Scaffold(
+                              appBar: AppBar(title: const Text('人事绩效')),
+                              body: NativeHrPerformancePage(
+                                session: widget.session,
+                              ),
+                            ),
+                          ),
+                        ),
                   onPerformance: widget.session.isExternalUser
                       ? null
                       : () => widget.navigation.go('B2PERF'),

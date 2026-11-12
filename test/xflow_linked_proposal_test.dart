@@ -94,6 +94,30 @@ void main() {
     expect(linkedProposalOpensSubmission(''), isFalse);
   });
 
+  test('funding proposal link opens the funding page', () {
+    final payload = linkedProposalFundingPayload(
+      id: 15,
+      code: 'ZJ-20261112-000015',
+      title: '一笔融资',
+      projectName: '对方主体',
+    );
+    expect(parseLinkedProposalSource(payload), linkedProposalSourceFunding);
+    expect(
+      linkedProposalOpensFunding(
+        parseLinkedProposalSource(payload),
+        parseLinkedProposalBusinessType(payload),
+      ),
+      isTrue,
+    );
+    expect(linkedProposalOpensIntake(parseLinkedProposalSource(payload)), isFalse);
+    expect(
+      linkedProposalOpensSubmission(parseLinkedProposalBusinessType(payload)),
+      isFalse,
+    );
+    expect(payload['kind'], 'funding');
+    expect(payload['projectName'], '对方主体');
+  });
+
   test('approval linked intake is treated as collaboration proposal', () {
     final payload = linkedProposalIntakePayload(
       id: 37,

@@ -63,6 +63,20 @@ class TaskLinkApi {
     return TaskLink.fromJson(Map<String, dynamic>.from(data as Map));
   }
 
+  Future<TaskLink> updateLink(
+    int taskId,
+    int linkId,
+    Map<String, dynamic> body,
+  ) async {
+    final resp = await http.patch(
+      _uri('tasks/$taskId/links/$linkId'),
+      headers: _headers,
+      body: jsonEncode(body),
+    );
+    final data = _unwrap(resp);
+    return TaskLink.fromJson(Map<String, dynamic>.from(data as Map));
+  }
+
   /// 删除关联，返回被删行（用于撤销时原样加回）。
   Future<TaskLink> deleteLink(int taskId, int linkId) async {
     final resp = await http.delete(

@@ -1,4 +1,5 @@
 import 'package:dunes_app/features/xflow/electronic_reimbursement_form.dart';
+import 'package:dunes_app/features/xflow/xflow_detail_logic.dart';
 import 'package:dunes_app/features/xflow/xflow_models.dart';
 import 'package:dunes_app/features/xflow/xflow_upload_field.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -42,7 +43,9 @@ void main() {
       expect(fields[1].readonly, isTrue);
       expect(fields[2].type, 'proposal');
       expect(fields[2].raw['dataSource'], kApprovedMineDataSource);
+      expect(fields[2].raw['multiple'], isTrue);
       expect(fields[3].type, 'proposal');
+      expect(fields[3].raw['multiple'], isNot(true));
       expect(fields[4].readonly, isTrue);
     },
   );
@@ -186,6 +189,34 @@ void main() {
     );
     expect(fields.single.uploadTemplate?.name, '自定义模板.xlsx');
     expect(fields.single.uploadTemplate?.label, '下载费用模板');
+  });
+
+  test('keeps several entertainment approvals and skips duplicates', () {
+    const first = {
+      'proposalId': 1249,
+      'code': '#1249',
+      'title': '何佳伟 · 招待费申请 · 广东中石油采购提案',
+    };
+    const second = {
+      'proposalId': 1300,
+      'code': '#1300',
+      'title': '何佳伟 · 招待费申请 · 另一次招待',
+    };
+    final selected = appendProposalSelection(
+      appendProposalSelection(first, second),
+      first,
+    );
+    expect(selected, hasLength(2));
+    expect(proposalSelectionList(first), hasLength(1));
+    final field = XflowField.fromJson({
+      'key': 'entertainmentApprovalNo',
+      'type': 'proposal',
+      'label': '关联招待费审批单号',
+    });
+    expect(
+      formatFieldValue(field, selected),
+      '#1249 · 何佳伟 · 招待费申请 · 广东中石油采购提案、#1300 · 何佳伟 · 招待费申请 · 另一次招待',
+    );
   });
 
   test('turns on invoice recognition for linked invoice uploads', () {

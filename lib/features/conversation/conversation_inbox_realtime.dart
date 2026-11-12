@@ -325,6 +325,7 @@ abstract final class ConversationInboxRealtime {
       case 'APPROVAL_ASSISTANT':
       case 'TASK_ASSISTANT':
       case 'KPI_ASSISTANT':
+      case 'HR_PERFORMANCE':
         return true;
       default:
         return false;

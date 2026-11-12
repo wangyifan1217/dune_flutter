@@ -53,6 +53,8 @@ class TaskApi {
     String? priority,
     String? q,
     String? goalRole,
+    String? source,
+    String? excludeSource,
     DateTime? dateFrom,
     DateTime? dateTo,
     int page = 0,
@@ -67,6 +69,10 @@ class TaskApi {
     if (priority != null && priority.isNotEmpty) query['priority'] = priority;
     if (q != null && q.trim().isNotEmpty) query['q'] = q.trim();
     if (goalRole != null && goalRole.isNotEmpty) query['goalRole'] = goalRole;
+    if (source != null && source.isNotEmpty) query['source'] = source;
+    if (excludeSource != null && excludeSource.isNotEmpty) {
+      query['excludeSource'] = excludeSource;
+    }
     final from = _dateQuery(dateFrom);
     final to = _dateQuery(dateTo);
     if (from != null) query['dateFrom'] = from;
@@ -94,6 +100,8 @@ class TaskApi {
     String? priority,
     String? q,
     String? goalRole,
+    String? source,
+    String? excludeSource,
     DateTime? dateFrom,
     DateTime? dateTo,
     int size = 100,
@@ -107,6 +115,8 @@ class TaskApi {
         priority: priority,
         q: q,
         goalRole: goalRole,
+        source: source,
+        excludeSource: excludeSource,
         dateFrom: dateFrom,
         dateTo: dateTo,
         page: page,
@@ -187,10 +197,12 @@ class TaskApi {
     final task = TaskItem.fromJson(
       Map<String, dynamic>.from(map['task'] as Map),
     );
-    final subs = (map['subtasks'] as List? ?? const [])
-        .whereType<Map>()
-        .map((e) => TaskItem.fromJson(Map<String, dynamic>.from(e)))
-        .toList(growable: false);
+    final subs = dedupeTasksById(
+      (map['subtasks'] as List? ?? const [])
+          .whereType<Map>()
+          .map((e) => TaskItem.fromJson(Map<String, dynamic>.from(e)))
+          .where((item) => item.id != task.id),
+    );
     final logs = (map['logs'] as List? ?? const [])
         .whereType<Map>()
         .map((e) => TaskProgressLog.fromJson(Map<String, dynamic>.from(e)))

@@ -74,6 +74,15 @@ void main() {
   });
 
   group('lighthouseHeroMetricPeriodLabel', () {
+    test('大数卡标题：利润叫「盈利」，本期写今日 / 本月，往前写当日', () {
+      expect(lighthouseHeroMastheadTitle('day', 'profit'), '今日盈利');
+      expect(lighthouseHeroMastheadTitle('day', 'profit', periodOffset: -3), '当日盈利');
+      expect(lighthouseHeroMastheadTitle('month', 'profit'), '本月盈利');
+      expect(lighthouseHeroMastheadTitle('week', 'profit', periodOffset: -1), '当周盈利');
+      expect(lighthouseHeroMastheadTitle('day', 'verifiedSales'), '本日核销额');
+      expect(lighthouseHeroMastheadTitleFontSize, greaterThan(lighthouseHeroMastheadLabelFontSize));
+    });
+
     test('builds 本日核销额 / 本日利润', () {
       expect(lighthouseHeroMetricPeriodLabel('day', 'verifiedSales'), '本日核销额');
       expect(lighthouseHeroMetricPeriodLabel('day', 'profit'), '本日利润');
@@ -2298,30 +2307,30 @@ void main() {
   test('compact hero keeps KPI and trend side by side on wide screens', () {
     expect(lighthouseCompactHeroKpiFlex, 3);
     expect(lighthouseCompactHeroTrendFlex, 7);
-    expect(lighthouseCompactHeroSparkHeight, 180);
-    expect(lighthouseCompactHeroSparkHeightNarrow, 216);
+    expect(lighthouseCompactHeroSparkHeight, 212);
+    expect(lighthouseCompactHeroSparkHeightNarrow, 248);
     expect(lighthouseCompactHeroChartMaxHeightWide, 84);
     expect(lighthouseCompactHeroChartMaxHeightNarrow, 112);
     expect(lighthouseCompactHeroNarrowBreakpoint, 600);
     expect(lighthouseCompactHeroIsNarrow(599), isTrue);
     expect(lighthouseCompactHeroIsNarrow(600), isFalse);
-    expect(lighthouseCompactHeroSparkHeightFor(390), 216);
-    expect(lighthouseCompactHeroSparkHeightFor(800), 180);
+    expect(lighthouseCompactHeroSparkHeightFor(390), 248);
+    expect(lighthouseCompactHeroSparkHeightFor(800), 212);
     expect(
       lighthouseCompactHeroSparkHeightFor(800, hasBiButton: true),
-      180 + lighthouseHeroBiButtonReserveHeight,
+      212 + lighthouseHeroBiButtonReserveHeight,
     );
     expect(
       lighthouseCompactHeroSparkHeightFor(390, hasBiButton: true),
-      216 + lighthouseHeroBiButtonReserveHeight,
+      248 + lighthouseHeroBiButtonReserveHeight,
     );
-    expect(lighthouseNetTAHeroSparkHeightFor(390), 216);
-    expect(lighthouseNetTAHeroSparkHeightFor(800), 180);
+    expect(lighthouseNetTAHeroSparkHeightFor(390), 248);
+    expect(lighthouseNetTAHeroSparkHeightFor(800), 212);
     expect(lighthouseNetTABankBalanceExtraHeight, 40);
     expect(lighthouseHeroBiButtonReserveHeight, 32);
     expect(
       lighthouseNetTAHeroSparkHeightFor(800, hasBankBalance: true),
-      180 + lighthouseNetTABankBalanceExtraHeight,
+      212 + lighthouseNetTABankBalanceExtraHeight,
     );
     expect(
       lighthouseNetTAHeroSparkHeightFor(
@@ -2329,7 +2338,7 @@ void main() {
         hasBankBalance: true,
         hasBiButton: true,
       ),
-      216 +
+      248 +
           lighthouseNetTABankBalanceExtraHeight +
           lighthouseHeroBiButtonReserveHeight,
     );
@@ -2399,7 +2408,10 @@ void main() {
     expect(lighthouseHeroMastheadLabelIconSize, 18);
     expect(lighthouseHeroMastheadLabelRadius, 8);
     expect(lighthouseHeroGroupTitleFontSize, 10);
-    expect(lighthouseHeroMastheadFontSize, 32);
+    expect(lighthouseHeroMastheadFontSize, 36);
+    expect(lighthouseHeroMastheadFontSizeFor(200), 36);
+    expect(lighthouseHeroMastheadFontSizeFor(100), 26);
+    expect(lighthouseHeroMastheadFontSizeFor(125), 30);
     expect(lighthouseHeroMetricValueFontSize, 13);
     expect(lighthouseHeroMetricLabelFontSize, 9);
     expect(lighthouseHeroMetricDeltaFontSize, 8);

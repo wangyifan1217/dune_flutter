@@ -181,7 +181,7 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.text('BI 视图'), findsWidgets);
+    expect(find.text('数据分析'), findsWidgets);
     expect(find.text('ANALYTICS'), findsOneWidget);
 
     await tester.tap(find.byIcon(Icons.close_rounded));
@@ -252,7 +252,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 800));
 
-    expect(find.text('BI 视图'), findsWidgets);
+    expect(find.text('数据分析'), findsWidgets);
     expect(find.textContaining('合计'), findsWidgets);
     expect(find.textContaining('成品油'), findsWidgets);
     expect(find.textContaining('领先次名'), findsNothing);

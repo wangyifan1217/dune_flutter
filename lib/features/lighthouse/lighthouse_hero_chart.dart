@@ -32,6 +32,14 @@ const Color _kInk = Color(0xFF2B2147);
 const Color _kSub = Color(0xFF716985);
 const Color _kMuteText = Color(0xFF5A5C56);
 const Color _kMute2 = Color(0xFF94938A);
+
+/// 分段模式下图顶上留给叠加读数的高度。
+const double _kReadoutReserve = 26;
+
+/// 2026-11-13 · 图上方那排「利润 / 核销额 / 销售额 / 收入…」图例胶囊不画了（太花）。
+/// 点某天浮出的小卡片里每根线都有同色圆点和数，主线换指标走下面的指标格。
+/// 想恢复改回 true。
+const bool lighthouseHeroTrendShowsSegmentTabs = false;
 const Color _kFocus = Color(0xFF6A4FC9);
 const Color _kPlum = Color(0xFF7B5CD8);
 const Color _kDeep = Color(0xFF5A458F);
@@ -104,6 +112,8 @@ class LighthouseHeroTrendCard extends StatefulWidget {
     this.wideVisibleCount,
     this.selectedIndex,
     this.onSelectedIndexChanged,
+    this.onSelectedIndexCommitted,
+    this.commitHint,
     this.trailing,
     this.lastIsPartial = false,
     this.body,
@@ -145,6 +155,13 @@ class LighthouseHeroTrendCard extends StatefulWidget {
   /// 选中的点（labels 的绝对下标）。传了 [onSelectedIndexChanged] 时受控。
   final int? selectedIndex;
   final ValueChanged<int?>? onSelectedIndexChanged;
+
+  /// 双击某一点（labels 的绝对下标）：外层整页切到那一期重拉。
+  /// 单击只走 [onSelectedIndexChanged]（预览，不发请求）。
+  final ValueChanged<int>? onSelectedIndexCommitted;
+
+  /// 选中点的小卡片底下那行提示（如「双击看这天明细」）。null = 不写。
+  final String? commitHint;
   final Widget? trailing;
 
   /// 最后一点是「进行中」的本期（今天）。
@@ -477,9 +494,41 @@ class _LighthouseHeroTrendCardState extends State<LighthouseHeroTrendCard>
     return (_start + t.round()).clamp(_start, _start + n - 1).toInt();
   }
 
+  /// 双击判定：两次抬手间隔不超过 300ms、落在同一格（±1）。
+  /// 不用 GestureDetector.onDoubleTap —— 那会让所有单击都多等 300ms。
+  static const Duration _kDoubleTapWindow = Duration(milliseconds: 300);
+  DateTime? _lastTapAt;
+  int? _lastTapIndex;
+
+  bool _registerTapForDouble(int i) {
+    final now = DateTime.now();
+    final prevAt = _lastTapAt;
+    final prev = _lastTapIndex;
+    final isDouble =
+        prevAt != null &&
+        prev != null &&
+        now.difference(prevAt) <= _kDoubleTapWindow &&
+        (i - prev).abs() <= 1;
+    if (isDouble) {
+      _lastTapAt = null;
+      _lastTapIndex = null;
+    } else {
+      _lastTapAt = now;
+      _lastTapIndex = i;
+    }
+    return isDouble;
+  }
+
   void _tapColumn(double dx, double w) {
     if (_n <= 0) return;
     final i = _colAt(dx, w);
+    final commit = widget.onSelectedIndexCommitted;
+    if (commit != null && _registerTapForDouble(i)) {
+      // 双击：第一下可能把已选中的点点灭了，这里重新点亮再交给外层换数。
+      if (_sel != i) _select(i);
+      commit(i);
+      return;
+    }
     _select(_sel == i ? null : i);
   }
 
@@ -795,6 +844,12 @@ class _LighthouseHeroTrendCardState extends State<LighthouseHeroTrendCard>
     ),
   );
 
+  Widget _dotSwatch(Color color) => Container(
+    width: 6,
+    height: 6,
+    decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+  );
+
   Widget _barSwatch(Color color) => SizedBox(
     height: 8,
     child: Row(
@@ -818,11 +873,7 @@ class _LighthouseHeroTrendCardState extends State<LighthouseHeroTrendCard>
             name: l.name,
             on: _vis.contains(l.key),
             focus: _focus == l.key,
-            swatch: _lineSwatch(
-              _vis.contains(l.key) ? _c(l.color) : off,
-              l.dash,
-              _focus == l.key ? 2 : 1.4,
-            ),
+            swatch: _dotSwatch(_vis.contains(l.key) ? _c(l.color) : off),
             onTap: () => _tapChip(l.key),
           ),
         if (hasBars)
@@ -1104,9 +1155,10 @@ class _LighthouseHeroTrendCardState extends State<LighthouseHeroTrendCard>
                     padding: const EdgeInsets.symmetric(horizontal: 9),
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
+                      // 没选中的不铺底，像标注不像按钮。
                       color: l.key == focus
                           ? _c(l.color, DunesColorRole.surface).withAlpha(20)
-                          : _c(const Color(0xFFF8F7FB), DunesColorRole.surface),
+                          : Colors.transparent,
                       border: Border.all(
                         color: l.key == focus
                             ? _c(l.color, DunesColorRole.border).withAlpha(86)
@@ -1115,19 +1167,12 @@ class _LighthouseHeroTrendCardState extends State<LighthouseHeroTrendCard>
                       ),
                       borderRadius: BorderRadius.circular(11),
                     ),
-                    // 每段前面一小段线（和图里那根线同色），比色块更像图例。
+                    // 2026-11-13 · 色线 → 6px 小圆点（原型 v2），颜色和图里那根线一一对应。
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Container(
-                          width: 10,
-                          height: 3,
-                          decoration: BoxDecoration(
-                            color: _c(l.color).withAlpha(l.key == focus ? 255 : 128),
-                            borderRadius: BorderRadius.circular(1.5),
-                          ),
-                        ),
-                        const SizedBox(width: 4),
+                        _dotSwatch(_c(l.color).withAlpha(l.key == focus ? 255 : 170)),
+                        const SizedBox(width: 5),
                         Text(
                           l.name,
                           maxLines: 1,
@@ -1150,8 +1195,9 @@ class _LighthouseHeroTrendCardState extends State<LighthouseHeroTrendCard>
 
   /// 「2.68亿  ↑14%  10.25 整天 · 较前一日」：主线在读数那天的值、和前一期比。
   Widget _focusReadout(int? idx, LhHeroLine line) {
-    if (idx == null || idx < 0 || idx >= _len) {
-      return const SizedBox(height: 26);
+    // 2026-11-13 · 读数只在看的不是今天 / 本月时出现：本期的数左边大数卡已经写了。
+    if (idx == null || idx < 0 || idx >= _len || idx == _len - 1) {
+      return const SizedBox(height: 22);
     }
     final v = idx < line.values.length ? line.values[idx] : null;
     double? prev;
@@ -1196,7 +1242,7 @@ class _LighthouseHeroTrendCardState extends State<LighthouseHeroTrendCard>
       height: 22,
       child: FittedBox(
         fit: BoxFit.scaleDown,
-        alignment: Alignment.centerLeft,
+        alignment: Alignment.center,
         child: Row(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.baseline,
@@ -1335,24 +1381,10 @@ class _LighthouseHeroTrendCardState extends State<LighthouseHeroTrendCard>
           _comboReadout(sel ?? readIdx, pair),
           const SizedBox(height: 4),
         ] else if (seg) ...[
-          _segmentTabs(segTabs, focus),
-          const SizedBox(height: 6),
-          AnimatedSwitcher(
-            duration: const Duration(milliseconds: 180),
-            switchInCurve: Curves.easeOut,
-            switchOutCurve: Curves.easeIn,
-            child: KeyedSubtree(
-              key: ValueKey('${focus ?? ''}:${sel ?? readIdx}'),
-              child: _focusReadout(
-                sel ?? readIdx,
-                segTabs.firstWhere(
-                  (l) => l.key == focus,
-                  orElse: () => drawn.isEmpty ? segTabs.first : drawn.first,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 4),
+          if (lighthouseHeroTrendShowsSegmentTabs) ...[
+            _segmentTabs(segTabs, focus),
+            const SizedBox(height: 6),
+          ],
         ] else ...[
           _chips(available, hasBars),
           const SizedBox(height: 6),
@@ -1405,6 +1437,8 @@ class _LighthouseHeroTrendCardState extends State<LighthouseHeroTrendCard>
                           dotFill: _c(const Color(0xFFFFFFFF), DunesColorRole.surface),
                           barsOverlay: pair != null,
                           barColor: pair != null ? _c(pair.bar.color) : null,
+                          // 分段模式：顶上 26px 留给叠上来的读数。
+                          topReserve: seg ? _kReadoutReserve : 0,
                         ),
                        ),
                       ),
@@ -1426,10 +1460,35 @@ class _LighthouseHeroTrendCardState extends State<LighthouseHeroTrendCard>
                         bottom: 2,
                         child: IgnorePointer(child: tag),
                       ),
+                    // 2026-11-13 · 读数叠在图顶上（原型 v2），不再单独占一行，图借到这截高度。
+                    if (seg)
+                      Positioned(
+                        left: 0,
+                        right: 0,
+                        top: 0,
+                        child: IgnorePointer(
+                          child: AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 180),
+                            switchInCurve: Curves.easeOut,
+                            switchOutCurve: Curves.easeIn,
+                            child: KeyedSubtree(
+                              key: ValueKey('${focus ?? ''}:${sel ?? readIdx}'),
+                              child: _focusReadout(
+                                sel ?? readIdx,
+                                segTabs.firstWhere(
+                                  (l) => l.key == focus,
+                                  orElse: () =>
+                                      drawn.isEmpty ? segTabs.first : drawn.first,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
                     // 点了某天：照旧浮那张列全字段的小卡片（分段模式也要，大读数只读主线）。
                     if (sel != null && pair == null)
                       Positioned(
-                        top: 0,
+                        top: seg ? _kReadoutReserve : 0,
                         left: tipOnLeft ? 2 : null,
                         right: tipOnLeft ? null : 2,
                         child: IgnorePointer(
@@ -1504,10 +1563,13 @@ class _LighthouseHeroTrendCardState extends State<LighthouseHeroTrendCard>
               Container(
                 width: 6,
                 height: 6,
-                decoration: BoxDecoration(
-                  color: c,
-                  borderRadius: BorderRadius.circular(round ? 1.5 : 1),
-                ),
+                // 2026-11-13 · 色块 → 圆点（柱那一行仍是小方块）。
+                decoration: round
+                    ? BoxDecoration(color: c, shape: BoxShape.circle)
+                    : BoxDecoration(
+                        color: c,
+                        borderRadius: BorderRadius.circular(1),
+                      ),
               ),
               const SizedBox(width: 5),
               Text(name, style: _sans(9.5, FontWeight.w500, _kMuteText)),
@@ -1563,6 +1625,14 @@ class _LighthouseHeroTrendCardState extends State<LighthouseHeroTrendCard>
               widget.bars!.format(barValue),
               bold: true,
               round: false,
+            ),
+          if (widget.commitHint != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                widget.commitHint!,
+                style: _sans(8.5, FontWeight.w500, _kMute2),
+              ),
             ),
         ],
       ),
@@ -1666,7 +1736,11 @@ class _HeroTrendPainter extends CustomPainter {
     required this.dotFill,
     this.barsOverlay = false,
     this.barColor,
+    this.topReserve = 0,
   });
+
+  /// 顶上留给叠加读数的高度（px）。线区上沿至少从这里开始。
+  final double topReserve;
 
   /// 一屏几格。
   final int n;
@@ -1700,7 +1774,7 @@ class _HeroTrendPainter extends CustomPainter {
     //   原来线挤在上半、柱沉在 80% 那根基线上，中间空一条带，两样东西各说各的。
     //   刻度字（1.94亿 / 4.28亿）压线又读不清，去掉了；量级看读数。
     // 2026-10-27 · 线不再顶满：上下各留一口气，渐变面才有地方淡出去。
-    final lineTop = h * (barsOverlay ? 0.08 : 0.14);
+    final lineTop = math.max(h * (barsOverlay ? 0.08 : 0.14), topReserve);
     final lineBot = h * (barsOverlay ? 0.70 : (hasBars ? 0.56 : 0.80));
     final barTop = h * 0.70;
     final barBot = h * 0.98;
@@ -1724,19 +1798,9 @@ class _HeroTrendPainter extends CustomPainter {
       }
     }
 
-    // 「进行中」那一格垫一块很淡的竖条：这一格还没过完。
+    // 2026-11-13 · 「进行中」那一格的竖条去掉（像个虚线框，看着像断了）；
+    // 今天改由虚线接到真实位置 + 空心圈交代。
     final colW = n <= 1 ? w * 0.3 : w * 0.90 / (n - 1);
-    if (partialK != null) {
-      final cx = _x(partialK!, w);
-      final bw = math.min(colW * 0.8, 40.0);
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(
-          Rect.fromLTWH(cx - bw / 2, 4, bw, h - 8),
-          const Radius.circular(8),
-        ),
-        Paint()..color = plum.withAlpha(12),
-      );
-    }
 
     // 选中：一根细虚线竖线（原来是一整列渐变色块，太重）。颜色跟主线走。
     if (selJ != null) {
@@ -1903,15 +1967,17 @@ class _HeroTrendPainter extends CustomPainter {
             ..shader = ui.Gradient.linear(
               Offset(0, lineTop),
               Offset(0, floor),
-              [l.color.withAlpha(60), l.color.withAlpha(10), l.color.withAlpha(0)],
+              // 2026-11-13 · 24% → 10%，只留一层薄色。
+              [l.color.withAlpha(26), l.color.withAlpha(5), l.color.withAlpha(0)],
               const [0.0, 0.7, 1.0],
             ),
         );
       }
-      // 主线 2.4 + 一层淡淡的同色光晕；配线 1.3、三成色，只当背景看形状。
+      // 2026-11-13 · 主线 2.4 + 光晕 → 1.75、不要光晕（手机上糊成 4–5px）；
+      // 配线 1.3、三成色，只当背景看形状。
       final stroke = Paint()
         ..style = PaintingStyle.stroke
-        ..strokeWidth = l.focus ? 2.4 : 1.3
+        ..strokeWidth = l.focus ? 1.75 : 1.3
         ..strokeCap = StrokeCap.round
         ..strokeJoin = StrokeJoin.round
         ..color = l.focus ? l.color : l.color.withAlpha(82);
@@ -1919,22 +1985,22 @@ class _HeroTrendPainter extends CustomPainter {
         canvas.drawCircle(bodyOffs.first, l.focus ? 2.4 : 1.5, Paint()..color = stroke.color);
       } else if (bodyOffs.length >= 2) {
         final body = l.dash == null ? path : _dashPath(path, l.dash!);
-        if (l.focus) {
-          canvas.drawPath(
-            body,
-            Paint()
-              ..style = PaintingStyle.stroke
-              ..strokeWidth = 5
-              ..strokeCap = StrokeCap.round
-              ..strokeJoin = StrokeJoin.round
-              ..color = l.color.withAlpha(46)
-              ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3),
-          );
-        }
         canvas.drawPath(body, stroke);
       }
       if (tailPartial && l.focus) {
         final at = offs.last;
+        // 进行中那一段：虚线接到今天的真实位置，不让最后一个点孤零零掉在角落。
+        canvas.drawPath(
+          _dashPath(
+            _smoothRange(offs, offs.length - 2, offs.length - 1),
+            const [3, 3],
+          ),
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 1.5
+            ..strokeCap = StrokeCap.round
+            ..color = l.color.withAlpha(140),
+        );
         canvas.drawCircle(at, 4.2, Paint()..color = dotFill);
         canvas.drawPath(
           _dashPath(
@@ -2017,6 +2083,13 @@ class _HeroTrendPainter extends CustomPainter {
           lo = mid - minSpan / 2;
           hi = mid + minSpan / 2;
         }
+      }
+      // 2026-11-13 · 不再贴边拉满：上留 12%、下留 22%（原型 v2），
+      // 正常起伏不被放大成大波浪，渐变面也有地方淡出去。
+      final pad = hi - lo;
+      if (pad > 0) {
+        lo -= pad * 0.22;
+        hi += pad * 0.12;
       }
       out[i] = (lo: lo, hi: hi);
     }

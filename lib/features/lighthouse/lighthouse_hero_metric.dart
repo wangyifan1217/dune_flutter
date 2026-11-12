@@ -42,10 +42,12 @@ const int lighthouseCompactHeroKpiFlex = 3;
 const int lighthouseCompactHeroTrendFlex = 7;
 
 /// 给左侧 KPI（标签 + 大数 +「↓xx% vs 昨日」）留足高度，避免环比被裁切。
-const double lighthouseCompactHeroSparkHeight = 180;
+/// 2026-11-13 · 趋势图加高（原型 v2）：180 → 212，窄屏 216 → 248。读数改叠在图顶上，
+/// 不再单独占一行，多出来的高度全给图。
+const double lighthouseCompactHeroSparkHeight = 212;
 
 /// 窄屏仍左右并排：走势图略加高，但不把「本日利润」整块挪到图上面。
-const double lighthouseCompactHeroSparkHeightNarrow = 216;
+const double lighthouseCompactHeroSparkHeightNarrow = 248;
 const double lighthouseCompactHeroChartMaxHeightWide = 84;
 const double lighthouseCompactHeroChartMaxHeightNarrow = 132;
 const double lighthouseCompactHeroNarrowBreakpoint = 600;
@@ -779,8 +781,22 @@ const double lighthouseHeroMastheadLabelFontSize = 11;
 const double lighthouseHeroMastheadLabelIconSize = 18;
 const double lighthouseHeroMastheadLabelRadius = 8;
 const double lighthouseHeroGroupTitleFontSize = 10;
+
+/// 2026-11-13 · 主 Hero 大数卡上的口径胶囊（「今日盈利」）放大、加粗，要醒目。
+/// 只管主 Hero；BI 视图、收起摘要仍用上面 11 / 18 那组。
+const double lighthouseHeroMastheadTitleFontSize = 15;
+const double lighthouseHeroMastheadTitleIconSize = 24;
+const double lighthouseHeroMastheadTitleGlyphSize = 15;
 /// 2026-10-21 · 29 → 32：对齐改版原型（大数卡翻页后只放大数 + 环比 + 迷你柱）。
-const double lighthouseHeroMastheadFontSize = 32;
+/// 2026-11-13 · 32 → 36：近 7 日迷你柱去掉、标题改成纯文字（方案 A），大数做主角。
+const double lighthouseHeroMastheadFontSize = 36;
+
+/// 大数按卡宽收：手机上大数卡只有 ~100px，36 号「13.35万」的「万」会被挤出去。
+/// 150px 以上用满 36，再窄按比例缩，最小 26。
+double lighthouseHeroMastheadFontSizeFor(double width) {
+  if (!width.isFinite || width >= 150) return lighthouseHeroMastheadFontSize;
+  return (lighthouseHeroMastheadFontSize * width / 150).clamp(26.0, lighthouseHeroMastheadFontSize);
+}
 
 /// 主 Hero 右卡用新走势卡（多线叠画 + 资金模式），见 lighthouse_hero_chart.dart。
 /// 改回 false 退回原来的 _TrendChart（带历史拖动 / 月末预测）。
@@ -4818,6 +4834,29 @@ String lighthouseHeroMetricPeriodLabel(String period, String metricKey) {
     _ => '',
   };
   return prefix.isEmpty ? metric : '$prefix$metric';
+}
+
+/// 主 Hero 大数卡的标题。利润在这里叫「盈利」（2026-11-13 老板定）：
+/// 本期写「今日 / 本周 / 本月 / 本季 / 本年」，翻到往前某一期写「当日 / 当周…」，
+/// 不再出现「本日」。其它指标照旧走 [lighthouseHeroMetricPeriodLabel]。
+String lighthouseHeroMastheadTitle(
+  String period,
+  String metricKey, {
+  int periodOffset = 0,
+}) {
+  if (metricKey != 'profit') {
+    return lighthouseHeroMetricPeriodLabel(period, metricKey);
+  }
+  final current = periodOffset == 0;
+  final prefix = switch (period) {
+    'day' => current ? '今日' : '当日',
+    'week' => current ? '本周' : '当周',
+    'month' => current ? '本月' : '当月',
+    'quarter' => current ? '本季' : '当季',
+    'year' => current ? '本年' : '当年',
+    _ => '',
+  };
+  return '$prefix盈利';
 }
 
 /// Masthead follows the expanded Hero metric; default is 利润.

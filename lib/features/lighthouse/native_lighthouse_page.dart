@@ -8990,6 +8990,8 @@ class _TrendChart extends StatefulWidget {
     this.chartHeight = 112,
     this.onInteractionChanged,
     this.onSelectedIndexChanged,
+    this.onSelectedIndexCommitted,
+    this.commitHint,
     this.selectedIndex,
     this.suppressPointMom = false,
     this.lastPointIsPeriod = false,
@@ -9221,6 +9223,14 @@ class _TrendChart extends StatefulWidget {
   /// 注意：外层拿到序号后**不要**把那一点的值回灌成本图的 period* 入参 ——
   /// didUpdateWidget 会判成「数据换了」而清掉选中点，一点就弹回去。
   final ValueChanged<int?>? onSelectedIndexChanged;
+
+  /// 双击某一点：外层把整页（列表、合计、明细）切到那一期再拉一遍数。
+  /// 单击 / 拖动只走 [onSelectedIndexChanged]，用已有走势换大数，不发请求。
+  /// 回传的是原始下标（末点即使 [lastPointIsPeriod] 也照传 n-1）。
+  final ValueChanged<int>? onSelectedIndexCommitted;
+
+  /// 选中了某一点、且双击它会换数时，图左下角浮的一行小字（如「双击看这天明细」）。
+  final String? commitHint;
 
   /// 外层持有的选中点。主 Hero 必须传：否则「回本期」只清大数、图还亮着。
   /// 账本行内图不传，选中态留在图自己手里。
@@ -10014,15 +10024,40 @@ class _TrendChartState extends State<_TrendChart>
     }
   }
 
-  void _setSelectionFromX(double localX, double widthPx) {
-    if (_paceTap != null) setState(() => _paceTap = null);
+  /// 双击判定：两次抬手间隔不超过 300ms、落在同一格（±1，手指抖一下也算）。
+  /// 不用 GestureDetector.onDoubleTap —— 那会让所有单击都多等 300ms 才响应，
+  /// 还会和 onTapDown 选点、横向拖动抢手势。
+  static const Duration _kDoubleTapWindow = Duration(milliseconds: 300);
+  DateTime? _lastTapAt;
+  int? _lastTapRaw;
+
+  bool _registerTapForDouble(int raw) {
+    final now = DateTime.now();
+    final prevAt = _lastTapAt;
+    final prevRaw = _lastTapRaw;
+    final isDouble =
+        prevAt != null &&
+        prevRaw != null &&
+        now.difference(prevAt) <= _kDoubleTapWindow &&
+        (raw - prevRaw).abs() <= 1;
+    if (isDouble) {
+      _lastTapAt = null;
+      _lastTapRaw = null;
+    } else {
+      _lastTapAt = now;
+      _lastTapRaw = raw;
+    }
+    return isDouble;
+  }
+
+  /// 手指 x → 点的原始下标（不做 [lastPointIsPeriod] 的末点归零）。
+  int? _rawIndexAtX(double localX, double widthPx) {
     final n = _n;
     final usable = widthPx - _kChartPadH * 2;
-    if (usable <= 0 || n <= 0) return;
+    if (usable <= 0 || n <= 0) return null;
     final relX = (localX - _kChartPadH).clamp(0.0, usable);
-    final int raw;
     if (_windowed) {
-      raw = lighthouseTrendIndexAtX(
+      return lighthouseTrendIndexAtX(
         x: localX,
         padH: _kChartPadH,
         step: _stepFor(widthPx),
@@ -10030,9 +10065,15 @@ class _TrendChartState extends State<_TrendChart>
         visible: _visible,
         count: n,
       );
-    } else {
-      raw = n <= 1 ? 0 : ((relX / usable) * (n - 1)).round().clamp(0, n - 1);
     }
+    return n <= 1 ? 0 : ((relX / usable) * (n - 1)).round().clamp(0, n - 1);
+  }
+
+  void _setSelectionFromX(double localX, double widthPx) {
+    if (_paceTap != null) setState(() => _paceTap = null);
+    final n = _n;
+    final raw = _rawIndexAtX(localX, widthPx);
+    if (raw == null) return;
     final int? i = widget.lastPointIsPeriod && raw == n - 1 ? null : raw;
     if (_selectedIndex != i) {
       setState(() => _selectedIndex = i);
@@ -11866,6 +11907,24 @@ class _TrendChartState extends State<_TrendChart>
             if (!viewport) _setSelectionFromX(d.localPosition.dx, w);
           },
           onTapUp: (d) {
+            // 双击某一点 → 外层按那一期整页重拉。当月那一列的预测点自己有
+            // 「连点两下开量化报告」，那里不抢。
+            final commit = widget.onSelectedIndexCommitted;
+            final pace = paceHit;
+            final onPace =
+                pace != null && (d.localPosition.dx - pace.x).abs() <= 22;
+            if (commit != null && !onPace) {
+              final raw = _rawIndexAtX(d.localPosition.dx, w);
+              if (raw != null && _registerTapForDouble(raw)) {
+                _setSelectionFromX(d.localPosition.dx, w);
+                LighthouseFeedback.instance.play(
+                  LighthouseFeedbackKind.select,
+                );
+                commit(raw);
+                _notifyInteraction(false);
+                return;
+              }
+            }
             final prevTap = _paceTap;
             final prevSel = _selectedIndex;
             _setSelectionFromX(d.localPosition.dx, w);
@@ -12182,6 +12241,14 @@ class _TrendChartState extends State<_TrendChart>
                     left: 0,
                     top: geo.plotBottom - 16,
                     child: _viewportTag('加载更早', busy: true),
+                  )
+                else if (widget.commitHint != null && _selectedIndex != null)
+                  Positioned(
+                    left: 0,
+                    top: geo.plotBottom - 16,
+                    child: IgnorePointer(
+                      child: _viewportTag(widget.commitHint!),
+                    ),
                   )
                 else if (showEarliestTag)
                   Positioned(
@@ -16602,7 +16669,6 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
     _pkQueryCtrl.dispose();
     _clearBackInterceptor();
     _delayNoticeTimer?.cancel();
-    _heroPointPickTimer?.cancel();
     _ddEntry?.remove();
     _detailSkuSearchCtrl.dispose();
     _ledgerSearchCtl.dispose();
@@ -19024,7 +19090,8 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
   List<Map<String, dynamic>> _rowsAtSelectedHeroPoint(
     List<Map<String, dynamic>> rows,
   ) {
-    final selected = _heroPointIndex;
+    // 单击预览不改写行上的数，双击落地后才按那一点取。
+    final selected = _heroPagePointIndex;
     if (selected == null ||
         _detailKey != null ||
         widget.sharedCard != null ||
@@ -21545,7 +21612,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
   }
 
   bool get _heroPointDrivesPeriodIsland =>
-      _heroPointIndex != null &&
+      _heroPagePointIndex != null &&
       _detailKey == null &&
       widget.sharedCard == null &&
       !_isCustomRange &&
@@ -21553,7 +21620,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
 
   String? get _heroPointIslandLabel {
     if (!_heroPointDrivesPeriodIsland) return null;
-    final index = _heroPointIndex!;
+    final index = _heroPagePointIndex!;
     final keys = _heroSeriesMetrics['heroSeriesKeys'];
     final count = keys is List ? keys.length : 0;
     final labels = _heroTrendLabels(count);
@@ -21562,7 +21629,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
 
   String? get _heroPointIslandRange {
     if (!_heroPointDrivesPeriodIsland) return null;
-    final index = _heroPointIndex!;
+    final index = _heroPagePointIndex!;
     final keys = _heroSeriesMetrics['heroSeriesKeys'];
     if (keys is! List || index < 0 || index >= keys.length) return null;
     final key = keys[index].toString();
@@ -25010,16 +25077,16 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
     });
   }
 
-  /// 点走势上的某一格，等于在右上角选中那一天 / 那一周 / 那一月。
-  /// 列表、合计都走原来的周期加载，不再按点改写行上的数。
-  Timer? _heroPointPickTimer;
-
+  /// 2026-11-12 · 走势点选拆成两档（老板：往前点一天就跑半天，影响浏览）：
+  ///   · 单击 / 拖动 = 预览：只有走势图里变（亮点 + 小卡片），不发请求；
+  ///     大数、七格、环比、右上角日期、产品行都不动（见 [_heroPagePointIndex]）。
+  ///   · 双击 = 切换：等于在右上角选中那一天 / 那一周 / 那一月，整页重拉
+  ///     （[_onHeroPointCommitted]）。
   void _onHeroPointSelected(int? i) {
     if (!mounted) return;
-    _heroPointPickTimer?.cancel();
     if (i == null) {
-      // 日线末点就是今天；点它直接恢复本期和下方数据行。
-      _clearHeroPointSelection();
+      // 图上取消选中只收起预览，不重拉；要回本期走大数旁的「回本期」。
+      if (_heroPointIndex != null) setState(() => _heroPointIndex = null);
       return;
     }
     if (_heroPointIndex != i) {
@@ -25029,14 +25096,67 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
       );
       setState(() => _heroPointIndex = i);
     }
+  }
+
+  /// 双击走势上的某一点：整页切到那一期。双击的就是本期（今天 / 本月）时等于「回本期」。
+  void _onHeroPointCommitted(int i) {
+    if (!mounted) return;
     final raw = _heroSeriesMetrics['heroSeriesKeys'];
     if (raw is! List || i < 0 || i >= raw.length) return;
     final key = raw[i].toString();
     if (key.isEmpty) return;
-    _heroPointPickTimer = Timer(const Duration(milliseconds: 160), () {
-      if (!mounted || _heroPointIndex != i) return;
-      _applyHeroPointAsPeriod(key);
-    });
+    final offset = _heroPointOffsetAt(i);
+    if (offset == 0) {
+      _clearHeroPointSelection();
+      return;
+    }
+    if (_heroPointIndex != i) setState(() => _heroPointIndex = i);
+    _applyHeroPointAsPeriod(key);
+  }
+
+  /// 走势第 i 点对应右上角那一档的 offset（null = 解析不了）。
+  int? _heroPointOffsetAt(int i) {
+    final raw = _heroSeriesMetrics['heroSeriesKeys'];
+    if (raw is! List || i < 0 || i >= raw.length) return null;
+    final key = raw[i].toString();
+    if (key.isEmpty) return null;
+    return _periodOffsetForHeroKey(key, _isCustomRange ? 'day' : _period);
+  }
+
+  /// 选中的点就是右上角当前那一期（双击切过来的）。走势的桶和周期同粒度
+  /// （日线 / 周线 / 月线…），所以 offset 对上就是同一期。自定义区间是一段，不算。
+  /// 本期（offset 0）不算：在本期单击最新一点也只在走势图里变；双击本期 = 回本期，
+  /// 会直接清掉选中。
+  bool get _heroPointCommitted {
+    final i = _heroPointIndex;
+    if (i == null || _isCustomRange || _periodOffset == 0) return false;
+    final offset = _heroPointOffsetAt(i);
+    return offset != null && offset == _periodOffset;
+  }
+
+  /// 单击 / 拖动出来的预览：只在走势图里亮点、浮卡片，页面其它地方不动。
+  bool get _heroPointIsPreview => _heroPointIndex != null && !_heroPointCommitted;
+
+  /// 页面上除走势图以外的地方（大数、七格、环比、右上角日期、产品行）认的选中点。
+  /// 只有双击落地后才有；单击预览时是 null，它们照旧显示右上角那一期。
+  int? get _heroPagePointIndex => _heroPointCommitted ? _heroPointIndex : null;
+
+  /// 预览态时图上浮的提示；已经是当前这一期、或这一点切不过去就不提示。
+  String? get _heroPointCommitHint {
+    if (!_heroPointIsPreview) return null;
+    final offset = _heroPointOffsetAt(_heroPointIndex!);
+    if (offset == null || offset > 0) return null;
+    // 点的就是右上角当前那一期，双击也不会换数。
+    if (!_isCustomRange && offset == _periodOffset) return null;
+    final unit = switch (_isCustomRange ? 'day' : _period) {
+      'day' => '天',
+      'week' => '周',
+      'month' => '月',
+      'quarter' => '季',
+      'year' => '年',
+      _ => '期',
+    };
+    return '双击看这$unit明细';
   }
 
   void _applyHeroPointAsPeriod(String key) {
@@ -25101,11 +25221,11 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
 
   /// 点日视图里走势末点就是本期（当天），点它不进点选态。
   bool get _heroLastPointIsPeriod =>
+      _periodOffset == 0 &&
       lighthouseHeroLastPointIsPeriod(_period, isCustomRange: _isCustomRange);
 
   /// 点今天时清掉走势选中，日期和列表也回到本期。
   void _clearHeroPointSelection() {
-    _heroPointPickTimer?.cancel();
     final pinned = _heroChartPin != null;
     final shifted = _periodOffset != 0 || _isCustomRange;
     if (_heroPointIndex == null && !shifted && !pinned) return;
@@ -26136,6 +26256,8 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
             key: const ValueKey('hero-overview-netTa'),
             legendNamesOnly: true,
             onSelectedIndexChanged: _onHeroPointSelected,
+            onSelectedIndexCommitted: _onHeroPointCommitted,
+            commitHint: _heroPointCommitHint,
             lastPointIsPeriod: _heroLastPointIsPeriod,
             selectedIndex: _heroPointIndex,
             suppressPointMom: lighthouseHeroSuppressPointMom,
@@ -26292,6 +26414,8 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
           historyHasMore: _heroHistoryHasMore,
           onNeedHistory: _loadHeroHistory,
           onSelectedIndexChanged: _onHeroPointSelected,
+          onSelectedIndexCommitted: _onHeroPointCommitted,
+          commitHint: _heroPointCommitHint,
           lastPointIsPeriod: _heroLastPointIsPeriod,
           selectedIndex: _heroPointIndex,
           suppressPointMom: lighthouseHeroSuppressPointMom,
@@ -26461,7 +26585,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
   ({double value, String delta, bool active}) _heroPrepaidReadout(
     Map<String, double> heroTotals,
   ) {
-    final d = _heroPointIndex != null
+    final d = _heroPagePointIndex != null
         ? _deltaAtHeroPoint('prepaid')
         : _deltaForMetric('prepaid');
     return (
@@ -27012,7 +27136,11 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
           child: Row(
             children: [
               metric(
-                lighthouseHeroMetricPeriodLabel(_period, mastheadKey),
+                lighthouseHeroMastheadTitle(
+                  _period,
+                  mastheadKey,
+                  periodOffset: _periodOffset,
+                ),
                 isRate
                     ? value.toStringAsFixed(2)
                     : '${isNeg ? '−' : ''}${_fmtMoney(value.abs())}',
@@ -27496,6 +27624,8 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
 
   /// 利润页底部：近 7 日利润迷你柱。正数红、负数绿（和利润数字同一套），
   /// 最后一根实色。走势上点了某一天 → 柱子截到那一天，下面写那一天。
+  // 2026-11-13 · 主 Hero 不再用（迷你柱去掉），留着方便想恢复时直接接回。
+  // ignore: unused_element
   Widget _buildHeroProfitMiniBars(
     List<double> series, {
     int? pickIndex,
@@ -27657,7 +27787,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
 
     // 2026-10-26 · 右边走势点了某一天：左边总资产、环比、预收净增柱都换成那一天
     // （和利润页同一个 _heroPointIndex）。资产走势在快照日之后没有数 → 写「待更新」。
-    final pick = _heroPointIndex ?? -1;
+    final pick = _heroPagePointIndex ?? -1;
     final pickOk = pick >= 0 && pick < labels.length;
     double? pickTotal;
     ({double pct, bool isUp})? pickDelta;
@@ -27890,6 +28020,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
   int _heroChartWideCount(int labelCount) =>
       math.min(31, _heroChartVisibleCount(labelCount) * 2);
 
+  // ignore: unused_element
   Widget _heroTrendKButton() {
     final can = _heroCanOpenFullscreen;
     return Semantics(
@@ -28043,8 +28174,11 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
       wideVisibleCount: _heroChartWideCount(n),
       selectedIndex: _heroPointIndex,
       onSelectedIndexChanged: _onHeroPointSelected,
+      onSelectedIndexCommitted: _onHeroPointCommitted,
+      commitHint: _heroPointCommitHint,
       lastIsPartial: _heroChartPartialPeriod,
-      trailing: _heroTrendKButton(),
+      // 2026-11-13 · 右上角紫色 K 线小按钮（打开走势大图）先屏蔽；想恢复把这行放回来。
+      // trailing: _heroTrendKButton(),
       // 图里横拖往前翻历史（10.21 换新卡时漏接了，2026-10-26 补回）。
       historyCount: _heroHistoryCount,
       historyLoading: _heroHistoryLoading,
@@ -28212,6 +28346,8 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
       // 点哪一天，左边资金页跟着换（和利润卡共用一个选中点）。
       selectedIndex: _heroPointIndex,
       onSelectedIndexChanged: _onHeroPointSelected,
+      onSelectedIndexCommitted: _onHeroPointCommitted,
+      commitHint: _heroPointCommitHint,
       bars: pp.isEmpty
           ? null
           : LhHeroBars(
@@ -29803,9 +29939,10 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
     }
 
     // 一级 / 二级共用：点住某一天 → 大数、环比、指标栏切到那一天，并出「回本期」。
-    final pointTotals = _heroPointIndex == null
+    // 只认双击落地的点；单击预览只在走势图里变。
+    final pointTotals = _heroPagePointIndex == null
         ? null
-        : _heroTotalsAtPoint(_heroPointIndex!, totals);
+        : _heroTotalsAtPoint(_heroPagePointIndex!, totals);
     heroPointActive = pointTotals != null;
     heroTotals = pointTotals ?? totals;
     heroMastheadValue = _mastheadValueForKey(heroTotals, mastheadKey);
@@ -29849,7 +29986,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
         : _heroTrendLabels(heroTrendPointCount);
     // 选中点的日期，画进大数上方那颗标签胶囊里 —— 大数换了口径，
     // 标签必须当场说清楚换成了哪一天，否则就是一个没有出处的数字。
-    final heroPointIdx = _heroPointIndex;
+    final heroPointIdx = _heroPagePointIndex;
     final heroPointLabel =
         (heroPointActive &&
             heroPointIdx != null &&
@@ -30227,246 +30364,82 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
                                           if (lighthouseHeroMastheadLabelAboveNumber) ...[
                                             Align(
                                               alignment: Alignment.centerLeft,
-                                              child: Container(
-                                                padding:
-                                                    const EdgeInsets.fromLTRB(
-                                                      5,
-                                                      4,
-                                                      7,
-                                                      4,
-                                                    ),
-                                                decoration: BoxDecoration(
-                                                  color: profitPanel
-                                                      ? DunesColors.resolve(
-                                                          context,
-                                                          const Color(
-                                                            lighthouseHeroResultSectionChipValue,
-                                                          ),
-                                                          role: DunesColorRole
-                                                              .surface,
-                                                        )
-                                                      : DunesColors.resolve(
-                                                          context,
-                                                          _LhPlum.primary,
-                                                          role: DunesColorRole
-                                                              .surface,
-                                                        ).withAlpha(12),
-                                                  borderRadius:
-                                                      BorderRadius.circular(
-                                                        lighthouseHeroMastheadLabelRadius,
+                                              // 2026-11-13 · 方案 A「标题式」：去掉胶囊底色和图标框（原来被撑成整条色块、
+                                              // 和大数抢主角），标签就是一行深灰粗体标题，右边小字写日期。
+                                              child: Row(
+                                                children: [
+                                                  Flexible(
+                                                    child: FittedBox(
+                                                      fit: BoxFit.scaleDown,
+                                                      alignment: Alignment.centerLeft,
+                                                      // 窄卡上整体缩小，不截成「当…」。
+                                                      child: Text(
+                                                        lighthouseHeroMastheadTitle(
+                                                          _period,
+                                                          mastheadKey,
+                                                          periodOffset: _periodOffset,
+                                                        ),
+                                                        maxLines: 1,
+                                                        softWrap: false,
+                                                        style: LhTypography.sans(
+                                                          size: lighthouseHeroMastheadTitleFontSize,
+                                                          color: DunesColors.resolve(context, LhColors.ink),
+                                                          weight: FontWeight.w700,
+                                                          letterSpacing: 0.5,
+                                                          height: 1.1,
+                                                          context: context,
+                                                        ),
                                                       ),
-                                                ),
-                                                child: Row(
-                                                  children: [
-                                                    Container(
-                                                      width:
-                                                          lighthouseHeroMastheadLabelIconSize,
-                                                      height:
-                                                          lighthouseHeroMastheadLabelIconSize,
-                                                      decoration: BoxDecoration(
-                                                        color: profitPanel
-                                                            ? DunesColors.resolve(
-                                                                context,
-                                                                const Color(
-                                                                  lighthouseLedgerResultBlockAccentValue,
-                                                                ),
-                                                                role:
-                                                                    DunesColorRole
-                                                                        .surface,
-                                                              ).withAlpha(34)
-                                                            : DunesColors.resolve(
-                                                                context,
-                                                                _LhPlum.primary,
-                                                                role:
-                                                                    DunesColorRole
-                                                                        .surface,
-                                                              ).withAlpha(24),
-                                                        borderRadius:
-                                                            BorderRadius.circular(
-                                                              5,
-                                                            ),
-                                                      ),
-                                                      child: Icon(
-                                                        Icons
-                                                            .trending_up_rounded,
-                                                        size: 11,
-                                                        color: profitPanel
-                                                            ? DunesColors.resolve(
-                                                                context,
-                                                                const Color(
-                                                                  lighthouseHeroResultSectionTitleValue,
-                                                                ),
-                                                              )
-                                                            : DunesColors.resolve(
-                                                                context,
-                                                                _LhPlum.primary,
-                                                              ),
+                                                  ),
+                                                  ),
+                                                  // 点了下面某个指标后，大数和走势都换成它；给一个明面上的 ×，一点回到默认口径。
+                                                  if (lighthouseHeroMastheadShowsFocusExit &&
+                                                      _expandedTrendKey != null)
+                                                    GestureDetector(
+                                                      behavior: HitTestBehavior.opaque,
+                                                      onTap: () {
+                                                        LighthouseFeedback.instance.play(
+                                                          LighthouseFeedbackKind.select,
+                                                        );
+                                                        setState(() {
+                                                          _expandedTrendKey = null;
+                                                          _heroTraceKey = null;
+                                                        });
+                                                      },
+                                                      child: Padding(
+                                                        padding: const EdgeInsets.symmetric(
+                                                          horizontal: 4,
+                                                          vertical: 3,
+                                                        ),
+                                                        child: Icon(
+                                                          Icons.close_rounded,
+                                                          size: 13,
+                                                          color: DunesColors.resolve(context, _LhPlum.primary),
+                                                        ),
                                                       ),
                                                     ),
-                                                    const SizedBox(width: 5),
-                                                    // 选中某一天时，日期**替换**掉口径名而不是排在它
-                                                    // 后面 —— 追加的写法会把「本月利润」挤成「本日…」，
-                                                    // 而日期本来就是更具体的那一个，该它站在前面。
-                                                    if (heroPointLabel !=
-                                                        null) ...[
-                                                      // 2026-10-21 · 日期不再参与缩：窄卡上「10.16」被挤成「10.…」，
-                                                      // 读不出是哪一天。日期最短也就「2026.10」，让口径名去缩。
-                                                      Text(
-                                                          heroPointLabel,
-                                                          maxLines: 1,
-                                                          softWrap: false,
-                                                          overflow: TextOverflow
-                                                              .ellipsis,
-                                                          style: _tabular(
-                                                            LhTypography.mono(
-                                                              size:
-                                                                  lighthouseHeroMastheadLabelFontSize,
-                                                              color:
-                                                                  DunesColors.resolve(
-                                                                    context,
-                                                                    _LhPlum
-                                                                        .primary,
-                                                                  ),
-                                                              weight: FontWeight
-                                                                  .w700,
-                                                              letterSpacing:
-                                                                  0.2,
-                                                              height: 1.0,
-                                                              context: context,
-                                                            ),
-                                                          ),
-                                                        ),
-                                                      const SizedBox(width: 4),
-                                                      Flexible(
-                                                        flex: 2,
-                                                        child: Text(
-                                                          _metricPageLabel(
-                                                            mastheadKey,
-                                                          ),
-                                                          maxLines: 1,
-                                                          overflow: TextOverflow
-                                                              .ellipsis,
-                                                          style: LhTypography.sans(
-                                                            size:
-                                                                lighthouseHeroMastheadLabelFontSize,
-                                                            color:
-                                                                DunesColors.resolve(
-                                                                  context,
-                                                                  LhColors.ink2,
-                                                                ),
-                                                            weight:
-                                                                FontWeight.w600,
-                                                            letterSpacing: 0.1,
-                                                            height: 1.0,
-                                                            context: context,
-                                                          ),
+                                                  const Spacer(),
+                                                  if (mastheadBox.maxWidth >= 140 &&
+                                                        (heroPointLabel ?? _mastheadDayLabel) != null)
+                                                    Text(
+                                                      (heroPointLabel ?? _mastheadDayLabel)!,
+                                                      maxLines: 1,
+                                                      softWrap: false,
+                                                      style: _tabular(
+                                                        LhTypography.mono(
+                                                          size: 11,
+                                                          weight: FontWeight.w600,
+                                                          color: DunesColors.resolve(context, LhColors.mute),
+                                                          letterSpacing: 0.2,
+                                                          height: 1.0,
+                                                          context: context,
                                                         ),
                                                       ),
-                                                      const SizedBox(width: 3),
-                                                      GestureDetector(
-                                                        behavior:
-                                                            HitTestBehavior
-                                                                .opaque,
-                                                        onTap:
-                                                            _clearHeroPointSelection,
-                                                        child: Padding(
-                                                          padding:
-                                                              EdgeInsets.symmetric(
-                                                                horizontal: 2,
-                                                                vertical: 3,
-                                                              ),
-                                                          child: Icon(
-                                                            Icons
-                                                                .refresh_rounded,
-                                                            size: 11,
-                                                            color:
-                                                                DunesColors.resolve(
-                                                                  context,
-                                                                  _LhPlum
-                                                                      .primary,
-                                                                ),
-                                                          ),
-                                                        ),
-                                                      ),
-                                                    ] else ...[
-                                                      Flexible(
-                                                        child: Text(
-                                                          lighthouseHeroMetricPeriodLabel(
-                                                            _period,
-                                                            mastheadKey,
-                                                          ),
-                                                          maxLines: 1,
-                                                          overflow: TextOverflow
-                                                              .ellipsis,
-                                                          style: LhTypography.sans(
-                                                            size:
-                                                                lighthouseHeroMastheadLabelFontSize,
-                                                            color:
-                                                                DunesColors.resolve(
-                                                                  context,
-                                                                  LhColors.ink,
-                                                                ),
-                                                            weight:
-                                                                FontWeight.w600,
-                                                            letterSpacing: 0.1,
-                                                            height: 1.0,
-                                                            context: context,
-                                                          ),
-                                                        ),
-                                                      ),
-                                                      // 点了下面某个指标后，大数和走势都换成它；
-                                                      // 原来只能再点一次那格才回得去，很多人不知道。
-                                                      // 这里给一个明面上的 ×，一点回到默认口径。
-                                                      if (lighthouseHeroMastheadShowsFocusExit &&
-                                                          _expandedTrendKey !=
-                                                              null) ...[
-                                                        const SizedBox(
-                                                          width: 3,
-                                                        ),
-                                                        GestureDetector(
-                                                          behavior:
-                                                              HitTestBehavior
-                                                                  .opaque,
-                                                          onTap: () {
-                                                            LighthouseFeedback
-                                                                .instance
-                                                                .play(
-                                                                  LighthouseFeedbackKind
-                                                                      .select,
-                                                                );
-                                                            setState(() {
-                                                              _expandedTrendKey =
-                                                                  null;
-                                                              _heroTraceKey =
-                                                                  null;
-                                                            });
-                                                          },
-                                                          child: Padding(
-                                                            padding:
-                                                                EdgeInsets.symmetric(
-                                                                  horizontal: 4,
-                                                                  vertical: 3,
-                                                                ),
-                                                            child: Icon(
-                                                              Icons
-                                                                  .close_rounded,
-                                                              size: 12,
-                                                              color:
-                                                                  DunesColors.resolve(
-                                                                    context,
-                                                                    _LhPlum
-                                                                        .primary,
-                                                                  ),
-                                                            ),
-                                                          ),
-                                                        ),
-                                                      ],
-                                                    ],
-                                                  ],
-                                                ),
+                                                    ),
+                                                ],
                                               ),
                                             ),
-                                            const SizedBox(height: 6),
+                                            const SizedBox(height: 8),
                                           ],
                                           if (mastheadKey == 'grossMargin') ...[
                                             Text(
@@ -30501,7 +30474,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
                                                       text: '−',
                                                       style: LhTypography.number(
                                                         size:
-                                                            lighthouseHeroMastheadFontSize,
+                                                            lighthouseHeroMastheadFontSizeFor(mastheadBox.maxWidth),
                                                         color:
                                                             DunesColors.resolve(
                                                               context,
@@ -30520,7 +30493,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
                                                               _fmtMoney(v)),
                                                     style: LhTypography.number(
                                                       size:
-                                                          lighthouseHeroMastheadFontSize,
+                                                          lighthouseHeroMastheadFontSizeFor(mastheadBox.maxWidth),
                                                       // 2026-10-26 · 大数和右边选中那一段同色
                                                       // （核销紫、销售蓝、收入琥珀…）；利润负数仍绿。
                                                       color: mastheadIsNeg
@@ -30618,20 +30591,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
                                   withAssets: totalsOverride == null,
                                 ),
                               ],
-                              // 翻页版：预收净增去了资金页，这里换成近 7 日利润迷你柱。
-                              // 敏感财务名单关掉资金页后，也走这根利润柱，避免退回「预收净增」小卡。
-                              if (heroPaged ||
-                                  (!flatHero &&
-                                      _tab != 'netTa' &&
-                                      _hidesSensitiveFinance &&
-                                      totalsOverride == null))
-                                _buildHeroProfitMiniBars(
-                                  profitSeries,
-                                  pickIndex: heroPointActive ? heroPointIdx : null,
-                                  labels: heroTrendLabels.isNotEmpty
-                                      ? heroTrendLabels
-                                      : profitLabels,
-                                ),
+                              // 2026-11-13 · 近 7 日利润迷你柱去掉（走势统一看右边大图），大数卡只留标签、大数、环比。
                             ],
                           ),
                         ),
@@ -30761,9 +30721,10 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
                               profitPanel: false,
                             )
                           : _buildHeroWideRail(
-                              label: lighthouseHeroMetricPeriodLabel(
+                              label: lighthouseHeroMastheadTitle(
                                 _period,
                                 mastheadKey,
+                                periodOffset: _periodOffset,
                               ),
                               mastheadKey: mastheadKey,
                               value: heroMastheadValue,
@@ -31436,7 +31397,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
   /// 点选走势图某一期：日线与上月同日比较；
   /// 未点选的本期仍使用后端下发的同期窗口环比。
   ({double pct, bool isUp})? _deltaAtHeroPoint(String key) {
-    final i = _heroPointIndex;
+    final i = _heroPagePointIndex;
     if (i == null) return null;
     final series = key == 'netTaBankBalance'
         ? _netTABankBalanceSeries()
@@ -31464,7 +31425,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
     required bool pointMode,
     required List<double> series,
   }) {
-    final i = _heroPointIndex;
+    final i = _heroPagePointIndex;
     if (!pointMode || i == null) return _periodVsLabel;
     if (lighthouseHeroPointUsesAlignedPeriodDelta(
       partialPeriod: _periodInProgress,
@@ -31942,6 +31903,13 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
   // ═══════════════════════════════════════════════════════════════════════
 
   String _two(int v) => v.toString().padLeft(2, '0');
+
+  /// 大数卡标题右边那行小日期（日视图写「11.12」；其它周期不写，标题里已有本周 / 本月）。
+  String? get _mastheadDayLabel {
+    if (_period != 'day' || _isCustomRange) return null;
+    final d = _periodAnchor('day', _periodOffset);
+    return '${_two(d.month)}.${_two(d.day)}';
+  }
 
   /// 给定粒度 + offset 的锚点日期（实例起点）。
   DateTime _periodAnchor(String period, int offset) {
@@ -35298,7 +35266,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
     );
     // 点选某一期时，七格环比也切到该点对前一点，不再挂整段 vs 上月。
     final rawDelta = entityRow == null
-        ? (_heroPointIndex != null
+        ? (_heroPagePointIndex != null
               ? _deltaAtHeroPoint(keyId)
               : _deltaForMetric(keyId))
         : _deltaFromEntityRow(entityRow, keyId);
@@ -35461,7 +35429,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
       duration: const Duration(milliseconds: 700),
       // 在走势图上拖着选点时数字要跟着手指走：700ms 的 tween 会变成
       // 一串永远在追赶的中间值，读不到任何一天的真实数。
-      immediate: _heroPointIndex != null,
+      immediate: _heroPagePointIndex != null,
       builder: (context, v) => LhScrollRichText(
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
@@ -36524,6 +36492,8 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
         compareSameDayPrevMonth: _dayComparesPrevMonth,
         key: const ValueKey('hero-swap-netTaBankBalance'),
         onSelectedIndexChanged: _onHeroPointSelected,
+        onSelectedIndexCommitted: _onHeroPointCommitted,
+        commitHint: _heroPointCommitHint,
         lastPointIsPeriod: _heroLastPointIsPeriod,
         selectedIndex: _heroPointIndex,
         suppressPointMom: lighthouseHeroSuppressPointMom,
@@ -36618,6 +36588,8 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
       historyHasMore: _heroHistoryHasMore,
       onNeedHistory: _loadHeroHistory,
       onSelectedIndexChanged: _onHeroPointSelected,
+      onSelectedIndexCommitted: _onHeroPointCommitted,
+      commitHint: _heroPointCommitHint,
       lastPointIsPeriod: _heroLastPointIsPeriod,
       selectedIndex: _heroPointIndex,
       suppressPointMom: lighthouseHeroSuppressPointMom,
@@ -36690,6 +36662,8 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
       historyHasMore: _heroHistoryHasMore,
       onNeedHistory: _loadHeroHistory,
       onSelectedIndexChanged: _onHeroPointSelected,
+      onSelectedIndexCommitted: _onHeroPointCommitted,
+      commitHint: _heroPointCommitHint,
       lastPointIsPeriod: _heroLastPointIsPeriod,
       selectedIndex: _heroPointIndex,
       suppressPointMom: lighthouseHeroSuppressPointMom,
@@ -41808,13 +41782,13 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Icon(
-                Icons.insights_rounded,
+                Icons.bar_chart_rounded,
                 size: 13,
                 color: DunesColors.resolve(context, _LhPlum.primary),
               ),
               const SizedBox(width: 5),
               Text(
-                'BI 视图',
+                '数据分析',
                 style: LhTypography.sans(
                   size: 11,
                   color: DunesColors.resolve(context, _LhPlum.primary),
@@ -41879,18 +41853,18 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
         child: Row(
           children: [
             Icon(
-              Icons.insights_rounded,
+              Icons.bar_chart_rounded,
               size: 13,
               color: DunesColors.resolve(context, _LhPlum.primary),
             ),
             const SizedBox(width: 6),
             Expanded(
               child: LhScrollText(
-                'BI 视图',
+                '数据分析',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: LhTypography.sans(
-                  size: 11.5,
+                  size: 12.5,
                   color: DunesColors.resolve(context, _LhPlum.deep),
                   weight: FontWeight.w700,
                   letterSpacing: 0.3,
@@ -41904,12 +41878,13 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
               width: 17,
               height: 17,
               alignment: Alignment.center,
+              // 2026-11-13 · 箭头放进白色小圆（原型 v2）。
               decoration: BoxDecoration(
                 color: DunesColors.resolve(
                   context,
-                  _LhPlum.primary,
+                  const Color(0xFFFFFFFF),
                   role: DunesColorRole.surface,
-                ).withAlpha(30),
+                ),
                 shape: BoxShape.circle,
               ),
               child: Icon(
@@ -53247,10 +53222,10 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
     String group,
     Widget? trailing,
   ) {
-    if (!widget.session.lighthouseAudienceAccess) {
-      return trailing ?? const SizedBox.shrink();
-    }
     // 2026-11-02 · 小人图标改成「👥 N」：一眼看出这一行几个人能看。
+    // 2026-11-13 · 不再只看账号上的「灯塔可见人员」开关：授权管理人没开这个开关
+    // 也要看到行上的入口（后端放行）。开关没开的账号先试拉人数，被拒就不画。
+    final audience = widget.session.lighthouseAudienceAccess;
     final t = _rowVisibilityTarget(tab, name);
     return Row(
       mainAxisSize: MainAxisSize.min,
@@ -53263,6 +53238,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
           province: t.hasCoord ? t.province : null,
           drill: t.hasCoord && t.drill,
           scale: _fs(1),
+          hideWhenUnavailable: !audience,
           onTap: () => _showRowVisibility(row, tab, name, group),
         ),
         SizedBox(width: _fs(3)),

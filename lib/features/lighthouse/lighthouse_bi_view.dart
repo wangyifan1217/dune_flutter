@@ -907,7 +907,7 @@ class _LhBiViewPageState extends State<LhBiViewPage>
       child: Row(
         children: [
           Text(
-            'BI 视图',
+            '数据分析',
             style: LhTypography.sans(
               size: 17,
               color: DunesColors.resolve(context, LhBiPlum.primary),

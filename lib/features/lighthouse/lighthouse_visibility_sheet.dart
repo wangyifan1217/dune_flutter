@@ -19,7 +19,12 @@ import 'lighthouse_theme.dart';
 //       关掉规则内的人 = 单独关闭；再打开 = 回到规则内。打开规则外的人 = 单独放行（可设期限）。
 //   · 汇总卡上的「👥 N」：只管整个板块。开关 = 能进入板块；点人名展开板块细项和期限。
 //   · 数据范围（按规则 / 只看放行行 / 全部数据）不在这里，留在管理后台和数据规则一起配。
-//   普通人只读；授权管理人（默认许正阳，管理后台可配）可改。开关即时生效。
+//   普通人只读；授权管理人（默认许正阳、朱子姝，管理后台可配）可改，两人看到的是同一屏。
+//   开关即时生效。
+//
+//   2026-11-13 · 绩效任务：管理后台「是否为绩效任务」= 是 的规则，在这里给管理人标出来。
+//   行上标「绩效任务」，板块上写「含 N 项绩效任务」；关掉时先确认一次 —— 关的只是看数，
+//   绩效照常考核，关了他就看不到自己被考核的数。
 // ═════════════════════════════════════════════════════════════════════════════
 
 const Color _kVisPrimary = Color(0xFF7B5CD8);
@@ -27,6 +32,9 @@ const Color _kVisDeep = Color(0xFF5A458F);
 const Color _kVisLine = Color(0xFFE4DCF4);
 const Color _kVisCell = Color(0xFFF8F6FC);
 const Color _kVisOff = Color(0xFFB04F33);
+// 2026-11-13 · 绩效任务改蓝色（原琥珀色）；紫色已经给了「单独放行」，蓝色不撞。
+const Color _kVisKpi = Color(0xFF2F5DA8);
+const Color _kVisKpiBg = Color(0xFFE6EEFA);
 
 const _kLedgerModules = {'product', 'supply', 'channel', 'people', 'net_ta', 'analysis'};
 const _kFundModules = {'fund_pool', 'business_finance'};
@@ -160,6 +168,9 @@ class LhVisibilityCounts extends ChangeNotifier {
 
   int? countOf(String key) => _counts[key];
 
+  /// 这一格人数拉不到（多半是后端拒绝：既不是灯塔可见人员，也不是授权管理人）。
+  bool failedOf(String key) => _failed.contains(key);
+
   void request(LighthouseService service, String module, bool drill, Map<String, String> coords) {
     final key = keyOf(module, drill, coords);
     if (_counts.containsKey(key) ||
@@ -232,7 +243,13 @@ class LhVisibilityChip extends StatelessWidget {
     this.entity,
     this.drill = false,
     this.scale = 1.0,
+    this.hideWhenUnavailable = false,
   });
+
+  /// 拉人数失败时整颗不画（2026-11-13）：账号没开「灯塔可见人员」时，
+  /// 授权管理人（许正阳、朱子姝）后端照样放行，行上要能看到入口；
+  /// 其他人后端拒绝，入口就藏掉。
+  final bool hideWhenUnavailable;
 
   final LighthouseService service;
   final String module;
@@ -261,6 +278,9 @@ class LhVisibilityChip extends StatelessWidget {
       builder: (context, _) {
         final n = counts.countOf(key);
         if (n == null) counts.request(service, module, drill, coords);
+        if (hideWhenUnavailable && n == null && counts.failedOf(key)) {
+          return const SizedBox.shrink();
+        }
         final ink = DunesColors.resolve(context, _kVisDeep);
         return Semantics(
           button: true,
@@ -332,6 +352,13 @@ class _LhVisibilityDialogState extends State<_LhVisibilityDialog> {
   final List<int> _order = <int>[];
   final Set<int> _pinTop = <int>{};
 
+  /// 2026-11-13 · 打开弹窗那一刻就没权限的人（规则外 / 已关闭 / 板块未开）：
+  /// 收进底部「未开通」一组，默认折叠，上面只列有权限的人。
+  /// 按打开时的快照分组 —— 弹窗里刚关掉的人留在原位，不会一点就跳走。
+  final Set<int> _offAtOpen = <int>{};
+  bool _offSnapTaken = false;
+  bool _offExpanded = false;
+
   @override
   void initState() {
     super.initState();
@@ -397,6 +424,13 @@ class _LhVisibilityDialogState extends State<_LhVisibilityDialog> {
         _today = (data['today'] ?? '').toString();
         if (canManage) {
           _candidates = _stable(_candidates);
+          if (!_offSnapTaken) {
+            _offSnapTaken = true;
+            _offAtOpen.addAll([
+              for (final u in _candidates)
+                if (u['visible'] != true) _id(u),
+            ]);
+          }
         } else {
           _users = _stable(_users);
         }
@@ -462,6 +496,69 @@ class _LhVisibilityDialogState extends State<_LhVisibilityDialog> {
   String get _rowName => (widget.entity ?? '').isNotEmpty ? '这个主体' : '这一行';
   bool _viewAll(Map<String, dynamic> u) => u['source'] == 'view_all' || u['baseSource'] == 'view_all';
 
+  /// 这个人在这里的绩效任务（「产品 · 省份」）。只给管理人看。
+  List<String> _kpiTasks(Map<String, dynamic> u) {
+    if (!_canManage) return const [];
+    final raw = u['kpiTasks'];
+    if (raw is! List) return const [];
+    return [for (final e in raw) if ('$e'.trim().isNotEmpty) '$e'.trim()];
+  }
+
+  /// 关掉绩效任务前确认一次。返回 true = 继续关。
+  Future<bool> _confirmKpiOff(Map<String, dynamic> user, List<String> tasks) async {
+    final name = user['userName']?.toString() ?? '他';
+    const maxShown = 6;
+    final shown = tasks.take(maxShown).toList();
+    final more = tasks.length - shown.length;
+    final scope = _row ? '$_rowName是$name的绩效任务' : '$name在这个板块有 ${tasks.length} 项绩效任务';
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(
+          '确认关闭绩效任务的看数权限？',
+          style: LhTypography.sans(size: 15, weight: FontWeight.w700, color: DunesColors.resolve(ctx, LhColors.ink), context: ctx),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '$scope：',
+              style: LhTypography.sans(size: 13, color: DunesColors.resolve(ctx, LhColors.ink), context: ctx),
+            ),
+            const SizedBox(height: 6),
+            for (final t in shown)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 3),
+                child: Text(
+                  '· $t',
+                  style: LhTypography.sans(size: 12.5, weight: FontWeight.w600, color: DunesColors.resolve(ctx, _kVisKpi), context: ctx),
+                ),
+              ),
+            if (more > 0)
+              Text(
+                '等 $more 项',
+                style: LhTypography.sans(size: 12, color: DunesColors.resolve(ctx, LhColors.mute), context: ctx),
+              ),
+            const SizedBox(height: 8),
+            Text(
+              '关闭后$name在灯塔里看不到这部分数据，但绩效照常考核。',
+              style: LhTypography.sans(size: 12.5, color: DunesColors.resolve(ctx, LhColors.mute), context: ctx),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('先不关')),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text('仍然关闭', style: TextStyle(color: DunesColors.resolve(ctx, _kVisOff))),
+          ),
+        ],
+      ),
+    );
+    return ok == true;
+  }
+
   /// 板块那条单独设置（期限 / 细项都挂在它上面）。
   Map<String, dynamic>? _moduleOv(Map<String, dynamic> u) =>
       _map(u['moduleOverride']) ?? (_row ? null : _map(u['override']));
@@ -473,6 +570,10 @@ class _LhVisibilityDialogState extends State<_LhVisibilityDialog> {
   Future<void> _toggleRow(Map<String, dynamic> user, bool on) async {
     final id = _id(user);
     if (id <= 0 || _saving.contains(id)) return;
+    final kpi = _kpiTasks(user);
+    if (!on && kpi.isNotEmpty) {
+      if (!await _confirmKpiOff(user, kpi) || !mounted) return;
+    }
     final base = user['baseSource']?.toString() ?? '';
     final ov = _map(user['override']);
     final Map<String, dynamic> item;
@@ -509,6 +610,10 @@ class _LhVisibilityDialogState extends State<_LhVisibilityDialog> {
   Future<void> _toggleModule(Map<String, dynamic> user, bool on) async {
     final id = _id(user);
     if (id <= 0 || _saving.contains(id)) return;
+    final kpi = _kpiTasks(user);
+    if (!on && kpi.isNotEmpty) {
+      if (!await _confirmKpiOff(user, kpi) || !mounted) return;
+    }
     final base = user['baseSource']?.toString() ?? '';
     final ov = _moduleOv(user);
     final Map<String, dynamic> item;
@@ -602,8 +707,12 @@ class _LhVisibilityDialogState extends State<_LhVisibilityDialog> {
       case 'view_all':
         return t('全部数据', green);
       case 'unrestricted':
-      case 'rule':
         return t('规则内', green);
+      case 'rule':
+        // 管理人看：规则内再分「绩效任务」和「仅看数」。
+        if (!_canManage) return t('规则内', green);
+        if (_kpiTasks(user).isNotEmpty) return t('绩效任务', (_kVisKpi, _kVisKpiBg));
+        return t('仅看数', green);
       case 'override_on':
         return t('单独放行', purple);
       case 'override_off':
@@ -639,7 +748,9 @@ class _LhVisibilityDialogState extends State<_LhVisibilityDialog> {
 
   String get _footNote {
     if (_row) {
-      return '开关即时生效。「规则内」= 管理后台的数据规则本来就让他看；关掉为单独关闭，再打开恢复规则内。'
+      return '开关即时生效。「绩效任务」= 这一行是他的考核任务；「仅看数」= 规则只开了看数。'
+          '关掉为单独关闭（只停看数，绩效照常考核），再打开恢复。'
+          '没权限的人收在最下面「未开通」里，点开可以再打开。'
           '「板块未开」的人需先在汇总的「👥」里开通板块。';
     }
     return switch (widget.module) {
@@ -668,6 +779,19 @@ class _LhVisibilityDialogState extends State<_LhVisibilityDialog> {
     final visibleCount = _canManage
         ? _candidates.where((u) => u['visible'] == true).length
         : _users.length;
+    // 搜索时平铺，关掉的人也要能搜到；不搜时没权限的人折到底部一组。
+    final fold = _canManage && q.isEmpty;
+    final main = fold
+        ? shown.where((u) => !_offAtOpen.contains(_id(u))).toList()
+        : shown;
+    final off = fold
+        ? shown.where((u) => _offAtOpen.contains(_id(u))).toList()
+        : const <Map<String, dynamic>>[];
+    final offRows = off.isEmpty ? 0 : 1 + (_offExpanded ? off.length : 0);
+    Widget person(Map<String, dynamic> u) => KeyedSubtree(
+      key: ValueKey<int>(_id(u)),
+      child: _row ? _rowPerson(context, u) : _modulePerson(context, u),
+    );
 
     return ConstrainedBox(
       constraints: BoxConstraints(maxWidth: 440, maxHeight: _canManage ? 660 : 560),
@@ -743,13 +867,12 @@ class _LhVisibilityDialogState extends State<_LhVisibilityDialog> {
                 Expanded(
                   child: ListView.builder(
                     padding: const EdgeInsets.only(bottom: 4),
-                    itemCount: shown.length,
-                    itemBuilder: (context, index) => KeyedSubtree(
-                      key: ValueKey<int>(_id(shown[index])),
-                      child: _row
-                          ? _rowPerson(context, shown[index])
-                          : _modulePerson(context, shown[index]),
-                    ),
+                    itemCount: main.length + offRows,
+                    itemBuilder: (context, index) {
+                      if (index < main.length) return person(main[index]);
+                      if (index == main.length) return _offHeader(context, off);
+                      return person(off[index - main.length - 1]);
+                    },
                   ),
                 ),
               if (!_loading)
@@ -765,6 +888,55 @@ class _LhVisibilityDialogState extends State<_LhVisibilityDialog> {
                     ),
                   ),
                 ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// 底部「未开通 · N 人」折叠头。里面有被关掉的绩效任务时单独点出来。
+  Widget _offHeader(BuildContext context, List<Map<String, dynamic>> off) {
+    final kpi = off.where((u) => _kpiTasks(u).isNotEmpty).length;
+    final mute = DunesColors.resolve(context, LhColors.mute);
+    return Semantics(
+      button: true,
+      expanded: _offExpanded,
+      label: '未开通 ${off.length} 人',
+      excludeSemantics: true,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => setState(() => _offExpanded = !_offExpanded),
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 44),
+          padding: const EdgeInsets.fromLTRB(16, 10, 14, 10),
+          decoration: BoxDecoration(
+            color: DunesColors.resolve(context, _kVisCell, role: DunesColorRole.surface),
+            border: Border(
+              top: BorderSide(color: DunesColors.resolve(context, _kVisLine), width: 0.6),
+              bottom: BorderSide(color: DunesColors.resolve(context, _kVisLine), width: 0.6),
+            ),
+          ),
+          child: Row(
+            children: [
+              Text(
+                '未开通 · ${off.length} 人',
+                style: LhTypography.sans(size: 12, weight: FontWeight.w600, color: mute, context: context),
+              ),
+              if (kpi > 0) ...[
+                const SizedBox(width: 6),
+                _statusChip(context, '含 $kpi 人绩效任务', _kVisKpi, _kVisKpiBg),
+              ],
+              const Spacer(),
+              Text(
+                _offExpanded ? '收起' : '展开',
+                style: LhTypography.sans(size: 11.5, color: mute, context: context),
+              ),
+              Icon(
+                _offExpanded ? Icons.expand_less_rounded : Icons.expand_more_rounded,
+                size: 18,
+                color: mute,
+              ),
             ],
           ),
         ),
@@ -952,6 +1124,11 @@ class _LhVisibilityDialogState extends State<_LhVisibilityDialog> {
                     Flexible(child: _nameText(context, name, on)),
                     const SizedBox(width: 6),
                     _statusChip(context, status.$1, status.$2, status.$3),
+                    // 已关闭 / 单独放行 / 全部数据的人，绩效任务另挂一个签，关掉的最要看见。
+                    if (_kpiTasks(user).isNotEmpty && status.$1 != '绩效任务') ...[
+                      const SizedBox(width: 4),
+                      _statusChip(context, '绩效任务', _kVisKpi, _kVisKpiBg),
+                    ],
                   ],
                 ),
                 if (dept.isNotEmpty || (term != null && _canManage)) ...[
@@ -1028,6 +1205,10 @@ class _LhVisibilityDialogState extends State<_LhVisibilityDialog> {
                   if (summary.isNotEmpty) ...[
                     const SizedBox(height: 3),
                     _smallText(context, summary),
+                  ],
+                  if (_kpiTasks(user).isNotEmpty) ...[
+                    const SizedBox(height: 3),
+                    _smallText(context, '含 ${_kpiTasks(user).length} 项绩效任务', color: _kVisKpi),
                   ],
                 ],
               ),

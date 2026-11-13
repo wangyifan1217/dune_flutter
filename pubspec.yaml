@@ -19,6 +19,8 @@ dependencies:
   file_selector: ^1.1.0
   permission_handler: ^12.0.3
   image_picker: ^1.2.2
+  # 打卡用应用内前置摄像头自动拍照。不引入 ML Kit，避免安卓包打进人脸模型原生库。
+  camera: '>=0.11.2 <0.12.0'
   video_player: ^2.10.0
   # Windows æ¡é¢æ­æ¾éé¢å¤å®ç°ï¼å¦å VIDEO æ°æ³¡æ æ³æ­ã
   video_player_win: ^3.2.0

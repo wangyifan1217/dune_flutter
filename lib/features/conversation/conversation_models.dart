@@ -132,7 +132,7 @@ class NativeConversation {
     if (isApprovalAssistant) return '审批助手';
     if (isTaskAssistant) return '任务助手';
     if (isKpiAssistant) return '绩效助手';
- if(isHrPerformance)return '人事绩效';
+    if (isHrPerformance) return '绩效考核';
     if (isDriveAssistant) return '企业微盘';
     if (isXrxsAssistant) return '薪人薪事';
     if (isWeeklySummary) return '一周小结';

@@ -6,6 +6,7 @@ import '../auth/auth_session.dart';
 import '../conversation/conversation_models.dart';
 import '../conversation/conversation_service.dart';
 import 'hr_performance_chat_card.dart';
+import 'hr_performance_service.dart';
 
 class HrPerformanceNoticePage extends StatefulWidget {
   const HrPerformanceNoticePage({
@@ -71,7 +72,7 @@ class _HrPerformanceNoticePageState extends State<HrPerformanceNoticePage> {
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(
-      title: const Text('人事绩效'),
+      title: const Text(hrPerformanceTitle),
       actions: [
         IconButton(
           onPressed: _busy ? null : () => _load(),

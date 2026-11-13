@@ -65,6 +65,63 @@ void main() {
     expect(xflowBillTypeProjectLine(snap), '券包销售款 · 吉林移动');
   });
 
+  test('snapshot keeps reconcile amount, pnl and remark', () {
+    final snap = xflowBillSnapshot({
+      'id': 9,
+      'billAmount': 100,
+      'reconcileAmount': 80,
+      'pnlAmount': 20,
+      'reconcileRemark': '尾差',
+    }, remainingKind: 'payable', billDirection: 'AR');
+    expect(snap['reconcileAmount'], 80);
+    expect(snap['pnlAmount'], 20);
+    expect(snap['reconcileRemark'], '尾差');
+    expect(xflowBillReconcileAmount({}), 0);
+    expect(xflowBillReconcileRemark({}), '');
+  });
+
+  test('empty reconcile status is 未对账 and cannot be selected', () {
+    expect(xflowBillReconcileStatus({}), 'UNRECONCILED');
+    expect(xflowBillReconcileStatusLabel({}), '未对账');
+    expect(xflowBillReconcileSelectable({}), isFalse);
+    expect(
+      xflowBillReconcileStatusLabel({'reconcileStatus': 'PARTIAL'}),
+      '部分对账',
+    );
+    expect(
+      xflowBillReconcileSelectable({
+        'reconcileStatus': 'RECONCILED',
+        'reconcileStatusLabel': '已对账',
+      }),
+      isTrue,
+    );
+    expect(
+      xflowBillReconcileStatusLabel({
+        'reconcileStatus': 'RECONCILED',
+        'reconcileStatusLabel': '已对账',
+      }),
+      '已对账',
+    );
+    expect(
+      xflowUnreconciledBillProblem(
+        label: '关联应付账单',
+        value: [
+          {'reconcileStatus': 'UNRECONCILED'},
+        ],
+      ),
+      '关联应付账单含未对账账单，需要对账才能进行审批',
+    );
+    expect(
+      xflowUnreconciledBillProblem(
+        label: '关联应付账单',
+        value: [
+          {'reconcileStatus': 'PARTIAL'},
+        ],
+      ),
+      isNull,
+    );
+  });
+
   test('detail line lists selected bills, expandable', () {
     final field = XflowField.fromJson({
       'key': 'linkedArBills',
@@ -378,6 +435,11 @@ void main() {
   testWidgets('selected cards stay on the form; picker opens as a dialog', (
     tester,
   ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -405,6 +467,10 @@ void main() {
     );
     expect(find.text('宁波纵横 - 能链石化 - 2026-07-31'), findsOneWidget);
     expect(find.text('券包销售款 · 吉林移动'), findsOneWidget);
+    expect(find.text('对账金额'), findsOneWidget);
+    expect(find.text('损益金额'), findsOneWidget);
+    expect(find.text('差异原因'), findsOneWidget);
+    expect(find.text('—'), findsOneWidget);
     expect(find.text('+ 添加账单'), findsOneWidget);
     expect(find.byType(XfAddRowButton), findsOneWidget);
     expect(find.text('账单类型'), findsNothing);

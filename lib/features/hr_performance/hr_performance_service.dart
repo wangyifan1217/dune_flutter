@@ -5,6 +5,9 @@ import 'package:http/http.dart' as http;
 import '../../core/http/session_http.dart';
 import '../auth/auth_session.dart';
 
+/// 用户看到的名称。已发布得分仍叫「绩效」，灯塔导入发布仍叫「月度绩效考评」。
+const hrPerformanceTitle = '绩效考核';
+
 const hrPerformanceStageLabels = <String, String>{
   'opening': '开启考核 / 待补配',
   'indicators': '指标确认',

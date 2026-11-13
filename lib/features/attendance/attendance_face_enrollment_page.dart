@@ -103,7 +103,7 @@ class _AttendanceFaceEnrollmentPageState
           const SizedBox(height: 16),
           const Text('请独自正对镜头，保持光线充足、面部清晰。照片仅用于本次处理，系统保存人脸特征用于后续比对。'),
           const SizedBox(height: 16),
-          const Text('录入完成后，本次打卡仍需再次拍照核验；录入本身不会生成打卡记录。'),
+          const Text('录入完成后，本次打卡会再自动识别一次；录入本身不会生成打卡记录。'),
           const SizedBox(height: 28),
           FilledButton.icon(
             onPressed: _busy ? null : _enroll,

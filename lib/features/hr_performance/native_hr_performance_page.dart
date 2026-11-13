@@ -23,10 +23,14 @@ class NativeHrPerformancePage extends StatefulWidget {
     required this.session,
     this.service,
     this.conversationService,
+    this.initialMonth,
+    this.initialRecordId,
   });
   final AuthSession session;
   final HrPerformanceService? service;
   final ConversationService? conversationService;
+  final String? initialMonth;
+  final int? initialRecordId;
   @override
   State<NativeHrPerformancePage> createState() =>
       _NativeHrPerformancePageState();
@@ -53,11 +57,23 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
 
   String get _monthKey =>
       '${_month.year}-${_month.month.toString().padLeft(2, '0')}';
+  int? _pendingSelectId;
+
   @override
   void initState() {
     super.initState();
     final now = DateTime.now().toUtc().add(const Duration(hours: 8));
     _month = DateTime(now.year, now.month - 1);
+    final month = RegExp(
+      r'^(\d{4})-(\d{2})$',
+    ).firstMatch(widget.initialMonth ?? '');
+    if (month != null) {
+      _month = DateTime(
+        int.parse(month.group(1)!),
+        int.parse(month.group(2)!),
+      );
+    }
+    _pendingSelectId = widget.initialRecordId;
     _load();
   }
 
@@ -80,7 +96,9 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
         _records = rows;
         _alerts = results[2] as List<Map<String, dynamic>>;
         _selectedIds.removeWhere((id) => !rows.any((r) => r.id == id));
-        final matches = rows.where((r) => r.id == _selected?.id);
+        final preferred = _pendingSelectId ?? _selected?.id;
+        _pendingSelectId = null;
+        final matches = rows.where((r) => r.id == preferred);
         _selected = matches.isEmpty
             ? (rows.isEmpty ? null : rows.first)
             : matches.first;
@@ -141,7 +159,7 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
       final id = await showConversationPickerSheet(
         context: context,
         service: conv,
-        title: '转发人事绩效到会话',
+        title: '转发绩效考核到会话',
       );
       if (id == null || !mounted) return;
       var confirmed = false;
@@ -165,7 +183,7 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
         confirmScores: confirmed,
       );
       final people = hrMaps(payload['rows']);
-      final markdown = StringBuffer('### 人事绩效 · $_monthKey\n');
+      final markdown = StringBuffer('### $hrPerformanceTitle · $_monthKey\n');
       if (payload['hasScores'] == true) {
         markdown.writeln('| 姓名 | 部门 | 得分 | 等级 | 系数 |');
         markdown.writeln('|---|---|---|---|---|');
@@ -677,7 +695,7 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
                                             MaterialPageRoute<void>(
                                               builder: (_) => Scaffold(
                                                 appBar: AppBar(
-                                                  title: const Text('人事绩效'),
+                                                  title: const Text(hrPerformanceTitle),
                                                 ),
                                                 body: HrPerformanceDetail(
                                                   session: widget.session,

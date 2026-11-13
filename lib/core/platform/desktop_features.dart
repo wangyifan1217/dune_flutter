@@ -61,6 +61,7 @@ bool isDesktopAllowedCommScreen(String screenId) {
     'B2KNOWLEDGE',
     'B2BUSINESS',
     'B2PERF',
+    'B2HR',
     'B2SALES',
     'B2PURCHASE',
     'B1',

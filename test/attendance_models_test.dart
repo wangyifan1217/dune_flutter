@@ -1,3 +1,4 @@
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:dunes_app/features/attendance/attendance_models.dart';
 
@@ -42,5 +43,16 @@ void main() {
     expect(page.hasMore, isTrue);
     expect(page.items.single.isCheckIn, isFalse);
     expect(page.items.single.siteName, '总部');
+  });
+
+  test('photo bytes keep jpeg and reject unknown data', () {
+    final photo = attendanceFacePhotoFromBytes(
+      Uint8List.fromList([0xff, 0xd8, 0xff, 1]),
+    );
+    expect(photo.contentType, 'image/jpeg');
+    expect(
+      () => attendanceFacePhotoFromBytes(Uint8List.fromList([1, 2, 3, 4])),
+      throwsA(isA<Exception>()),
+    );
   });
 }

@@ -7,6 +7,29 @@ class AttendanceFacePhoto {
   final String contentType;
 }
 
+AttendanceFacePhoto attendanceFacePhotoFromBytes(Uint8List bytes) {
+  if (bytes.length > 5 * 1024 * 1024) {
+    throw Exception('照片超过 5 MB，请重新拍照');
+  }
+  final jpeg =
+      bytes.length >= 3 &&
+      bytes[0] == 0xff &&
+      bytes[1] == 0xd8 &&
+      bytes[2] == 0xff;
+  const pngHeader = [137, 80, 78, 71, 13, 10, 26, 10];
+  final png =
+      bytes.length >= pngHeader.length && _bytesStartWith(bytes, pngHeader);
+  if (!jpeg && !png) throw Exception('拍照格式不受支持，请重新拍照');
+  return AttendanceFacePhoto(bytes, jpeg ? 'image/jpeg' : 'image/png');
+}
+
+bool _bytesStartWith(Uint8List bytes, List<int> header) {
+  for (var i = 0; i < header.length; i++) {
+    if (bytes[i] != header[i]) return false;
+  }
+  return true;
+}
+
 class AttendanceSite {
   const AttendanceSite({
     required this.id,

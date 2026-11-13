@@ -1,4 +1,5 @@
 import '../hr_performance/hr_performance_notice_page.dart';
+import '../hr_performance/hr_performance_screen.dart';
 import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
@@ -317,6 +318,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   Timer? _workbenchBadgeRefreshDebounce;
   bool _commBadgeRefreshInFlight = false;
   bool _commBadgeRefreshQueued = false;
+
+  /// 进行中的刷新如果落后于更新的请求，丢弃它的结果，避免旧的未读数把已清掉的角标写回去。
+  int _commBadgeRefreshEpoch = 0;
   DateTime? _commBadgeRefreshBackoffUntil;
   bool _workbenchBadgeRefreshInFlight = false;
   bool _workbenchBadgeRefreshQueued = false;
@@ -387,12 +391,6 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   final GlobalKey _purchaseProposalKey = GlobalKey(
     debugLabel: 'purchase-proposal-keep-alive',
   );
-
-  /// 允许在已读回执或重新拿到服务端快照后把桌面角标同步为 0。
-  ///
-  /// APP 可能在后台时收不到 PC 端发出的实时已读事件；下次恢复/启动
-  /// 时必须允许“服务端总未读为 0”清掉遗留的系统角标。
-  bool _pendingBadgeZeroSync = false;
 
   /// 用户本次前台会话内主动点进聊天；切后台后清零，避免 resume 误触已读。
   bool _userActivelyInChat = false;
@@ -525,10 +523,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   @override
   void initState() {
     super.initState();
+    HrPerformanceNavigation.bind(widget.navigation);
     WidgetsBinding.instance.addObserver(this);
-    // 首次从服务端拿到完整未读快照时，服务端结果可以校正上一次设备
-    // 留下的系统角标（例如 PC 已读、APP 当时处于后台的情况）。
-    _pendingBadgeZeroSync = true;
     unawaited(ConversationRealtimeHub.instance.of(widget.session).connect());
     NovaBackgroundCoordinator.instance.addListener(_onNovaCoordinatorUpdate);
     MeetingUploadCoordinator.instance.attach(widget.session);
@@ -587,8 +583,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       return;
     }
     // 先通知聊天页补拉最新消息，再恢复已读上报，避免缺消息却先标已读。
-    // 窗口恢复时重新以服务端快照校正角标，覆盖 PC/APP 跨端已读。
-    _pendingBadgeZeroSync = true;
+    // 窗口恢复时按列表未读重写角标，覆盖 PC 已读后残留的系统角标。
     ChatForegroundSync.notifyResumed();
     // 恢复前台且仍停在会话页时，重新允许已读上报。
     if (_isOnActiveChatScreen() && !_userActivelyInChat) {
@@ -609,9 +604,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   }
 
   void _requestCommBadgeRefreshFromServer() {
-    // 推送展示/恢复回调意味着设备刚有机会与服务端同步；允许本次
-    // 成功返回 0 时清除可能由其他设备留下的旧角标。
-    _pendingBadgeZeroSync = true;
+    // 推送展示或回到前台后，用当前列表未读覆盖系统角标。
     _scheduleCommBadgeRefresh();
   }
 
@@ -818,8 +811,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       }
       _syncActiveViewReport();
     } else if (state == AppLifecycleState.resumed) {
-      // 与托盘 inactive→active 对齐：恢复时补拉当前会话最新消息。
-      _pendingBadgeZeroSync = true;
+      // 与托盘 inactive→active 对齐：恢复时补拉当前会话最新消息，并校正角标。
       ChatForegroundSync.notifyResumed();
       _scheduleCommBadgeRefresh();
       if (_isOnActiveChatScreen() && !_userActivelyInChat) {
@@ -942,8 +934,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       final userId = (event.raw['userId'] as num?)?.toInt() ?? 0;
       final convId = event.conversationId ?? 0;
       if (userId == widget.session.userId) {
-        // 同账号在其他设备已读时，也允许将本机的系统角标清零。
-        _pendingBadgeZeroSync = true;
+        // 同账号在其他设备已读：清掉免打扰 @，随后按列表重算系统角标。
         _commUnread.clearMutedMention(convId);
       }
       _scheduleCommBadgeRefresh();
@@ -952,17 +943,13 @@ class _NativeScreenHostState extends State<NativeScreenHost>
 
     if (event.type == 'conversation_updated') {
       final totalUnread = (event.raw['totalUnread'] as num?)?.toInt();
-      if (totalUnread != null) {
-        // 正在看某会话时，totalUnread 可能仍含本会话未读；走 REST 汇总
-        //（treatAsRead）避免 Tab 小红点误亮。
-        final viewingId = _activeViewingConversationId() ?? 0;
-        if (viewingId > 0) {
-          _scheduleCommBadgeRefresh();
-        } else {
-          _applyRealtimeUnreadTotal(totalUnread);
-        }
-        return;
+      // 其他端已读会带 totalUnread=0。先清系统角标，再按列表复核，
+      // 避免服务端总数偏大时把已经空掉的列表又标回去。
+      if (totalUnread != null && totalUnread <= 0) {
+        _applyRealtimeUnreadTotal(0);
       }
+      _scheduleCommBadgeRefresh();
+      return;
     }
 
     if (event.type == 'message' || event.type == 'system_flow') {
@@ -1181,7 +1168,6 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     bool preserveUnread = false,
   }) {
     if (conversationId > 0) {
-      _pendingBadgeZeroSync = true;
       if (!preserveUnread) {
         _commUnread.clearMutedMention(conversationId);
         _conversationReadSignal.notifyRead(conversationId);
@@ -1201,16 +1187,13 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         _syncActiveViewReport();
       }
     }
-    print(
-      '[Badge] handleConversationRead conv=$conversationId pendingZero=$_pendingBadgeZeroSync',
-    );
+    print('[Badge] handleConversationRead conv=$conversationId');
     unawaited(_refreshCommUnreadBadge());
   }
 
   void _handleNotificationsRead() {
-    _pendingBadgeZeroSync = true;
     _notificationsReadSignal.notifyRead();
-    print('[Badge] handleNotificationsRead pendingZero=true');
+    print('[Badge] handleNotificationsRead');
     unawaited(_refreshCommUnreadBadge());
   }
 
@@ -1220,7 +1203,6 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     final total = totalUnread < 0 ? 0 : totalUnread;
     _commUnread.update(total);
     windowsTrayUpdateUnread(total);
-    if (total == 0) _pendingBadgeZeroSync = false;
     syncPushBadgeCount(total);
   }
 
@@ -1495,6 +1477,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
 
   Future<void> _refreshCommUnreadBadge() async {
     if (_commBadgeRefreshInFlight) {
+      // 让进行中的旧快照失效，避免它在 PC 已读之后把角标又写高。
+      _commBadgeRefreshEpoch++;
       _commBadgeRefreshQueued = true;
       return;
     }
@@ -1503,6 +1487,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       return;
     }
     _commBadgeRefreshInFlight = true;
+    final epoch = ++_commBadgeRefreshEpoch;
     // 共用 Client：超时后 close 可中止挂起连接，避免弱网堆积拖死 UI。
     final httpClient = http.Client();
     final convService = ConversationService(
@@ -1522,7 +1507,14 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         convService.fetchConversations(),
         notifService.fetchSummary(),
         InboxHiddenStorage.load(),
-        convService.fetchTotalUnread(),
+        // 只用于对照日志。接口失败不能挡住角标按列表清零。
+        convService.fetchTotalUnread().then<int?>(
+          (value) => value,
+          onError: (Object error, StackTrace _) {
+            print('[Badge] unread-total failed: $error');
+            return null;
+          },
+        ),
       ];
       if (!widget.session.isExternalUser) {
         futures.add(aiSummaryService.fetchUnreadCount());
@@ -1530,6 +1522,12 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       final results = await Future.wait<Object?>(
         futures,
       ).timeout(const Duration(seconds: 10));
+      if (!mounted || epoch != _commBadgeRefreshEpoch) {
+        print(
+          '[Badge] drop stale refresh epoch=$epoch current=$_commBadgeRefreshEpoch',
+        );
+        return;
+      }
       _commBadgeRefreshBackoffUntil = null;
       final allRows = results[0] as List<NativeConversation>;
       _commBadgeConversations
@@ -1571,42 +1569,28 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       if (mounted) {
         final viewingId = _activeViewingConversationId() ?? 0;
         final treatAsRead = viewingId > 0 ? <int>{viewingId} : const <int>{};
-        var viewingUnread = 0;
-        if (viewingId > 0) {
-          for (final c in rows) {
-            if (c.id == viewingId) {
-              viewingUnread = _commUnread.effectiveUnreadCount(c);
-              break;
-            }
-          }
-        }
-        final summedTotal = _commUnread.sumConversationUnread(
+        // 角标跟列表里看得到的未读：会话（免打扰只计 @）+ 通知 + 智能总结。
+        // 正在查看的会话按已读计。/comm/unread-total 会漏算广播，也会在
+        // PC 已读后仍偏大；拿它抬高角标，列表已经是 0，图标还会挂着很多条。
+        final badgeTotal = _commUnread.sumConversationUnread(
           rows: rows,
           notifUnread: widget.session.isExternalUser ? 0 : notif.unreadCount,
           aiSummaryUnread: effectiveAiUnread,
           treatAsReadIds: treatAsRead,
         );
-        // 取服务端总数与本地汇总的较大值：服务端 /comm/unread-total 会漏算
-        // 广播等场景（返回 0），若盲信它的 0 会在仍有未读时误清角标。
-        // 当前正在查看的会话已 mark-read / 不计入角标，需从 apiTotal 扣掉。
-        final apiRaw = apiTotal ?? 0;
-        final apiVal = apiRaw > viewingUnread ? apiRaw - viewingUnread : 0;
-        final serverTotal = widget.session.isExternalUser
-            ? summedTotal
-            : (apiVal > summedTotal ? apiVal : summedTotal);
         final localBadge = await readPushBadgeCount();
+        if (!mounted || epoch != _commBadgeRefreshEpoch) return;
         final unreadRows = rows
             .where((c) => c.unreadCount > 0 && c.id != viewingId)
             .map((c) => 'id=${c.id} kind=${c.kind} unread=${c.unreadCount}')
             .join('; ');
         print(
-          '[Badge] refresh apiTotal=$apiTotal viewing=$viewingId viewingUnread=$viewingUnread '
-          'summed=$summedTotal notif=${notif.unreadCount} '
-          'next=$serverTotal local=$localBadge pendingZero=$_pendingBadgeZeroSync '
-          'unreadRows=[$unreadRows]',
+          '[Badge] refresh apiTotal=$apiTotal viewing=$viewingId '
+          'summed=$badgeTotal notif=${notif.unreadCount} '
+          'local=$localBadge unreadRows=[$unreadRows]',
         );
-        _commUnread.update(serverTotal);
-        windowsTrayUpdateUnread(serverTotal);
+        _commUnread.update(badgeTotal);
+        windowsTrayUpdateUnread(badgeTotal);
         windowsTrayPushUnreadFromConversations(
           rows: rows,
           commUnread: _commUnread,
@@ -1614,15 +1598,12 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           session: widget.session,
           avatarService: convService,
         );
-        if (serverTotal == 0) {
-          if (!_pendingBadgeZeroSync) {
-            print('[Badge] skip sync 0 (no fresh snapshot/read ack)');
-            return;
-          }
-          _pendingBadgeZeroSync = false;
-          print('[Badge] sync 0 after fresh snapshot/read ack');
+        if (badgeTotal == 0 && localBadge > 0) {
+          print(
+            '[Badge] clear stale system badge local=$localBadge apiTotal=$apiTotal',
+          );
         }
-        syncPushBadgeCount(serverTotal);
+        syncPushBadgeCount(badgeTotal);
       }
     } catch (e, st) {
       // 弱网下无超时会堆积连接拖死 UI；失败后短暂退避。
@@ -2521,7 +2502,6 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         widget.navigation.go('AS3');
       },
       onOpened: () {
-        _pendingBadgeZeroSync = true;
         unawaited(_refreshCommUnreadBadge());
       },
     );
@@ -4755,6 +4735,12 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           session: widget.session,
           onBack: widget.navigation.back,
         );
+      case 'B2HR':
+        return HrPerformanceScreen(
+          key: ValueKey<int>(HrPerformanceNavigation.generation),
+          session: widget.session,
+          onBack: widget.navigation.back,
+        );
       case 'B2SALES':
         return _buildMyProposalIntakePage(kind: 'sales', title: '销售提案');
       case 'B2PURCHASE':
@@ -5912,6 +5898,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       'B2KNOWLEDGE',
       'B2BUSINESS',
       'B2PERF',
+      'B2HR',
       'B2SALES',
       'B2PURCHASE',
       'B1',

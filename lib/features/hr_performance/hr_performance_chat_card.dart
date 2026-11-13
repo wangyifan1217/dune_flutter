@@ -2,41 +2,14 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/dunes_theme.dart';
 import '../auth/auth_session.dart';
-import '../shell/dunes_toast.dart';
 import 'hr_performance_detail.dart';
+import 'hr_performance_overlay.dart';
 import 'hr_performance_service.dart';
 import 'hr_performance_sheets.dart';
 
 bool isHrPerformancePayload(Map<String, dynamic>? payload) =>
     payload?['hrPerformanceSummary'] == true ||
     payload?['hrPerformanceNotice'] == true;
-Future<void> openHrPerformanceRecord(
-  BuildContext context,
-  AuthSession session,
-  int id,
-) async {
-  try {
-    final service = HrPerformanceService(session);
-    final record = await service.detail(id);
-    if (!context.mounted) return;
-    await Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => Scaffold(
-          appBar: AppBar(title: const Text('人事绩效')),
-          body: HrPerformanceDetail(
-            session: session,
-            record: record,
-            service: service,
-          ),
-        ),
-      ),
-    );
-  } catch (e) {
-    if (context.mounted) {
-      showDunesToast(context, '无法打开考核表：$e', kind: DunesToastKind.error);
-    }
-  }
-}
 
 class HrPerformanceChatCard extends StatefulWidget {
   const HrPerformanceChatCard({
@@ -76,8 +49,8 @@ class _HrPerformanceChatCardState extends State<HrPerformanceChatCard> {
                   Expanded(
                     child: Text(
                       notice
-                          ? '${p['title'] ?? '人事绩效提醒'}'
-                          : '人事绩效汇总 · ${p['month'] ?? ''}',
+                          ? '${p['title'] ?? '$hrPerformanceTitle提醒'}'
+                          : '$hrPerformanceTitle汇总 · ${p['month'] ?? ''}',
                       style: const TextStyle(fontWeight: FontWeight.w600),
                     ),
                   ),

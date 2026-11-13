@@ -217,6 +217,59 @@ String xflowBillMoney(dynamic raw) {
   return '${n.toStringAsFixed(2)} 元';
 }
 
+/// 未对账时接口把对账金额记为 0。
+double xflowBillReconcileAmount(Map row) =>
+    (xflowBillNum(row['reconcileAmount']) ?? 0).toDouble();
+
+double xflowBillPnlAmount(Map row) =>
+    (xflowBillNum(row['pnlAmount']) ?? 0).toDouble();
+
+/// 列表没有逐条差异原因，整单备注在 reconcileRemark。
+String xflowBillReconcileRemark(Map row) =>
+    xflowBillText(row['reconcileRemark']);
+
+const xflowBillReconcileBlockedHint = '需要对账才能进行审批';
+
+/// 空值按未对账。取值与资管 AmBillConstants.ReconcileStatus 一致。
+String xflowBillReconcileStatus(Map row) {
+  switch (xflowBillText(row['reconcileStatus']).toUpperCase()) {
+    case 'PARTIAL':
+      return 'PARTIAL';
+    case 'RECONCILED':
+      return 'RECONCILED';
+    default:
+      return 'UNRECONCILED';
+  }
+}
+
+String xflowBillReconcileStatusLabel(Map row) {
+  final label = xflowBillText(row['reconcileStatusLabel']);
+  if (label.isNotEmpty) return label;
+  switch (xflowBillReconcileStatus(row)) {
+    case 'PARTIAL':
+      return '部分对账';
+    case 'RECONCILED':
+      return '已对账';
+    default:
+      return '未对账';
+  }
+}
+
+bool xflowBillReconcileSelectable(Map row) =>
+    xflowBillReconcileStatus(row) != 'UNRECONCILED';
+
+String? xflowUnreconciledBillProblem({
+  required String label,
+  required dynamic value,
+}) {
+  final blocked = xflowBillSelectedList(value)
+      .where((row) => !xflowBillReconcileSelectable(row))
+      .length;
+  if (blocked == 0) return null;
+  final name = label.trim().isEmpty ? '关联账单' : label.trim();
+  return '$name含未对账账单，需要对账才能进行审批';
+}
+
 List<String> xflowBillAmountValues(Map row, String remainingKind) {
   final mid = remainingKind.trim() == 'invoice'
       ? xflowBillMoney(row['invoiceAmount'])
@@ -311,6 +364,11 @@ Map<String, dynamic> xflowBillSnapshot(
     'remainingAmount': remainingKind.trim() == 'invoice'
         ? invoiceable
         : payable,
+    'reconcileAmount': xflowBillReconcileAmount(src),
+    'pnlAmount': xflowBillPnlAmount(src),
+    'reconcileRemark': xflowBillReconcileRemark(src),
+    'reconcileStatus': xflowBillReconcileStatus(src),
+    'reconcileStatusLabel': xflowBillReconcileStatusLabel(src),
     'label': xflowBillLabelOf(src),
   };
 }

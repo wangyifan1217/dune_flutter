@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
+import '../shell/dunes_toast.dart';
 import 'xflow_bill_cascade.dart';
 import 'xflow_form_styles.dart';
 import 'xflow_models.dart';
@@ -273,6 +274,14 @@ class _BillCascadeSheetState extends State<_BillCascadeSheet> {
     final id = xflowBillId(row);
     if (id == null) return;
     final exists = _picked.any((e) => xflowBillHasId(e, id));
+    if (!exists && !xflowBillReconcileSelectable(row)) {
+      showDunesToast(
+        context,
+        xflowBillReconcileBlockedHint,
+        kind: DunesToastKind.error,
+      );
+      return;
+    }
     setState(() {
       if (exists) {
         _picked = [
@@ -556,6 +565,10 @@ class _SelectedBillTile extends StatelessWidget {
             remainingKind: remainingKind,
             billDirection: billDirection,
           ),
+          if (!readonly && !xflowBillReconcileSelectable(row)) ...[
+            const SizedBox(height: 6),
+            const _ReconcileBlockedHint(),
+          ],
         ],
       ),
     );
@@ -579,6 +592,7 @@ class _ResultBillTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final blocked = !xflowBillReconcileSelectable(row);
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: InkWell(
@@ -595,7 +609,7 @@ class _ResultBillTile extends StatelessWidget {
                   )
                 : DunesColors.resolve(
                     context,
-                    Colors.white,
+                    blocked ? DunesColors.bgSoft : Colors.white,
                     role: DunesColorRole.surface,
                   ),
             borderRadius: BorderRadius.circular(8),
@@ -624,13 +638,18 @@ class _ResultBillTile extends StatelessWidget {
                       style: DunesTypography.sans(
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
-                        color: DunesColors.resolve(context, DunesColors.text),
+                        color: DunesColors.resolve(
+                          context,
+                          blocked ? DunesColors.text2 : DunesColors.text,
+                        ),
                         context: context,
                       ),
                     ),
                   ),
                   Icon(
-                    selected
+                    blocked && !selected
+                        ? Icons.block
+                        : selected
                         ? Icons.check_circle_rounded
                         : Icons.circle_outlined,
                     size: 18,
@@ -657,9 +676,30 @@ class _ResultBillTile extends StatelessWidget {
                 remainingKind: remainingKind,
                 billDirection: billDirection,
               ),
+              if (blocked) ...[
+                const SizedBox(height: 6),
+                const _ReconcileBlockedHint(),
+              ],
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _ReconcileBlockedHint extends StatelessWidget {
+  const _ReconcileBlockedHint();
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      xflowBillReconcileBlockedHint,
+      style: DunesTypography.sans(
+        fontSize: 11,
+        height: 1.35,
+        color: DunesColors.resolve(context, DunesColors.coral),
+        context: context,
       ),
     );
   }
@@ -998,39 +1038,133 @@ class XflowBillAmountGrid extends StatelessWidget {
       billDirection: billDirection,
     );
     final values = xflowBillAmountValues(row, remainingKind);
-    return Row(
+    final remark = xflowBillReconcileRemark(row);
+    final labelSize = compact ? 10.0 : 10.0;
+    final valueSize = compact ? 11.0 : 12.0;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        for (var i = 0; i < labels.length; i++)
+        _threeColumns(
+          context,
+          [
+            (labels[0], values[0], false),
+            (labels[1], values[1], false),
+            (labels[2], values[2], true),
+          ],
+          labelSize: labelSize,
+          valueSize: valueSize,
+        ),
+        const SizedBox(height: 6),
+        _threeColumns(
+          context,
+          [
+            ('对账金额', xflowBillMoney(xflowBillReconcileAmount(row)), false),
+            ('损益金额', xflowBillMoney(xflowBillPnlAmount(row)), false),
+            (
+              '对账状态',
+              xflowBillReconcileStatusLabel(row),
+              false,
+            ),
+          ],
+          labelSize: labelSize,
+          valueSize: valueSize,
+        ),
+        const SizedBox(height: 6),
+        Text(
+          '差异原因',
+          style: DunesTypography.sans(
+            fontSize: labelSize,
+            color: DunesColors.resolve(context, DunesColors.text3),
+            context: context,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          remark.isEmpty ? '—' : remark,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: DunesTypography.sans(
+            fontSize: valueSize,
+            height: 1.35,
+            fontWeight: FontWeight.w600,
+            color: DunesColors.resolve(context, DunesColors.text),
+            context: context,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _threeColumns(
+    BuildContext context,
+    List<(String, String, bool)> cells, {
+    required double labelSize,
+    required double valueSize,
+    int valueLines = 1,
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (var i = 0; i < 3; i++)
           Expanded(
             child: Padding(
-              padding: EdgeInsets.only(right: i == labels.length - 1 ? 0 : 8),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    labels[i],
-                    style: DunesTypography.sans(
-                      fontSize: compact ? 10 : 11,
-                      color: DunesColors.resolve(context, DunesColors.text3),
-                      context: context,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    values[i],
-                    style: DunesTypography.sans(
-                      fontSize: compact ? 12 : 13,
-                      fontWeight: FontWeight.w700,
-                      color: i == labels.length - 1
-                          ? DunesColors.resolve(context, DunesColors.accentDeep)
-                          : DunesColors.resolve(context, DunesColors.text),
-                      context: context,
-                    ),
-                  ),
-                ],
-              ),
+              padding: EdgeInsets.only(right: i == 2 ? 0 : 8),
+              child: i < cells.length
+                  ? _amountCell(
+                      context,
+                      cells[i].$1,
+                      cells[i].$2,
+                      labelSize: labelSize,
+                      valueSize: valueSize,
+                      emphasize: cells[i].$3,
+                      valueLines: valueLines,
+                    )
+                  : const SizedBox.shrink(),
             ),
           ),
+      ],
+    );
+  }
+
+  Widget _amountCell(
+    BuildContext context,
+    String label,
+    String value, {
+    required double labelSize,
+    required double valueSize,
+    bool emphasize = false,
+    int valueLines = 1,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: DunesTypography.sans(
+            fontSize: labelSize,
+            color: DunesColors.resolve(context, DunesColors.text3),
+            context: context,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          value,
+          maxLines: valueLines,
+          overflow: TextOverflow.ellipsis,
+          style: DunesTypography.sans(
+            fontSize: valueSize,
+            height: 1.35,
+            fontWeight: FontWeight.w600,
+            color: label == '对账状态' && value == '未对账'
+              ? DunesColors.resolve(context, DunesColors.coral)
+              : emphasize
+              ? DunesColors.resolve(context, DunesColors.accentDeep)
+              : DunesColors.resolve(context, DunesColors.text),
+            context: context,
+          ),
+        ),
       ],
     );
   }

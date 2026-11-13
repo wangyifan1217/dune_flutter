@@ -11,7 +11,7 @@ import '../../core/theme/dunes_theme.dart';
 import '../../core/widgets/dunes_month_picker.dart';
 import '../../core/widgets/cached_network_image.dart';
 import '../auth/auth_session.dart';
-import '../hr_performance/native_hr_performance_page.dart';
+import '../hr_performance/hr_performance_screen.dart';
 import '../auth/qr_login_scan_page.dart';
 import '../attendance/native_attendance_page.dart';
 import '../conversation/comm_unread_notifier.dart';
@@ -1499,16 +1499,7 @@ class _NativeMyWorkProfileCenterPageState
                   onKnowledge: () => widget.navigation.go('K1'),
                   onHrPerformance: widget.session.isExternalUser
                       ? null
-                      : () => Navigator.of(context).push(
-                          MaterialPageRoute<void>(
-                            builder: (_) => Scaffold(
-                              appBar: AppBar(title: const Text('人事绩效')),
-                              body: NativeHrPerformancePage(
-                                session: widget.session,
-                              ),
-                            ),
-                          ),
-                        ),
+                      : () => HrPerformanceNavigation.open(),
                   onPerformance: widget.session.isExternalUser
                       ? null
                       : () => widget.navigation.go('B2PERF'),

@@ -24,6 +24,7 @@ import 'xflow_service.dart';
 import 'xflow_shared_widgets.dart';
 import 'proposal_upload_config.dart';
 import 'electronic_reimbursement_form.dart';
+import 'xflow_bill_cascade.dart';
 import 'xflow_upload_field.dart' show xflowInvoiceSubmitProblem;
 
 class NativeXflowFormPage extends StatefulWidget {
@@ -803,6 +804,17 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
     if (invoiceProblem != null) {
       showDunesToast(context, invoiceProblem, kind: DunesToastKind.error);
       return;
+    }
+    for (final field in _template?.fields ?? const []) {
+      if (field.type != 'billCascade') continue;
+      final blocked = xflowUnreconciledBillProblem(
+        label: field.label,
+        value: _values[field.key],
+      );
+      if (blocked != null) {
+        showDunesToast(context, blocked, kind: DunesToastKind.error);
+        return;
+      }
     }
     final status = _editingStatus;
     if (_isEditing && status == 'pending_initiate') {

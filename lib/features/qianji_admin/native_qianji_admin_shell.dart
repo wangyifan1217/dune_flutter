@@ -147,7 +147,7 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
     _WorkbenchView.fundingProposal: '资金提案',
     _WorkbenchView.travelImport: '差旅导入',
     _WorkbenchView.kpiPerformance: '月度绩效考评',
-    _WorkbenchView.hrPerformance: '人事绩效',
+    _WorkbenchView.hrPerformance: hrPerformanceTitle,
     _WorkbenchView.payrollReports: '工资报表',
     _WorkbenchView.paymentInvoice: '付款发票审批',
     _WorkbenchView.reimbursementSummary: '报销汇总',
@@ -1166,7 +1166,7 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
         ),
       if (!_session.isExternalUser && _hrPerformanceAccess.allowed)
         _WorkbenchTile(
-          title: '人事绩效',
+          title: hrPerformanceTitle,
           subtitle: _hrPerformanceAccess.pendingCount > 0
               ? '进度与证据 · ${_hrPerformanceAccess.pendingCount} 项待办'
               : '考核进度 · 任务证据',

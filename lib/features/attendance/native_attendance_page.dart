@@ -307,9 +307,7 @@ class _NativeAttendancePageState extends State<NativeAttendancePage>
           permission != LocationPermission.whileInUse) {
         return;
       }
-      final position = await _awaitRefinedPosition(
-        const Duration(seconds: 8),
-      );
+      final position = await _awaitRefinedPosition(const Duration(seconds: 8));
       if (mounted && !_submitting && !_locating) {
         final chosen = betterAttendancePosition(
           _position,
@@ -511,28 +509,25 @@ class _NativeAttendancePageState extends State<NativeAttendancePage>
     }
 
     timer = Timer(timeout, () {
-      unawaited(
-        finishWithoutNewFix(Exception('定位超时，请到窗边或室外重试')),
-      );
+      unawaited(finishWithoutNewFix(Exception('定位超时，请到窗边或室外重试')));
     });
     unawaited(() async {
       final cached = await _recentCachedPosition();
       if (!settled && cached != null) accept(cached);
     }());
 
-    subscription = Geolocator.getPositionStream(
-      locationSettings: _attendanceLocationSettings(),
-    ).listen(
-      accept,
-      onError: (Object error, StackTrace stack) {
-        unawaited(finishWithoutNewFix(error, stack));
-      },
-      onDone: () {
-        unawaited(
-          finishWithoutNewFix(Exception('暂时没有定位结果，请稍后重试')),
+    subscription =
+        Geolocator.getPositionStream(
+          locationSettings: _attendanceLocationSettings(),
+        ).listen(
+          accept,
+          onError: (Object error, StackTrace stack) {
+            unawaited(finishWithoutNewFix(error, stack));
+          },
+          onDone: () {
+            unawaited(finishWithoutNewFix(Exception('暂时没有定位结果，请稍后重试')));
+          },
         );
-      },
-    );
     return completer.future;
   }
 
@@ -633,7 +628,7 @@ class _NativeAttendancePageState extends State<NativeAttendancePage>
       mounted && (ModalRoute.of(context)?.isCurrent ?? true);
 
   String get _submissionLabel => switch (_punchPhase) {
-    AttendancePunchPhase.capturing => '请拍摄本人照片',
+    AttendancePunchPhase.capturing => '请正对镜头',
     AttendancePunchPhase.verifying => '正在核验人脸',
     AttendancePunchPhase.locating => '正在确认位置',
     AttendancePunchPhase.submitting => '正在提交',
@@ -655,7 +650,7 @@ class _NativeAttendancePageState extends State<NativeAttendancePage>
           accountName: widget.session.displayName?.trim().isNotEmpty == true
               ? widget.session.displayName!
               : widget.session.phone,
-          capture: widget.captureFace ?? captureAttendanceFace,
+          capture: widget.captureFace ?? () => captureAttendanceFace(context),
         ),
       ),
     );
@@ -730,7 +725,7 @@ class _NativeAttendancePageState extends State<NativeAttendancePage>
       final record = await AttendancePunchFlow(_service).submit(
         type: type,
         faceRequired: latest.faceRequired,
-        capture: widget.captureFace ?? captureAttendanceFace,
+        capture: widget.captureFace ?? () => captureAttendanceFace(context),
         isActive: () => _attemptActive,
         onPhase: (phase) {
           if (mounted) setState(() => _punchPhase = phase);
@@ -774,6 +769,14 @@ class _NativeAttendancePageState extends State<NativeAttendancePage>
         _messageIsError = false;
       });
       HapticFeedback.heavyImpact();
+      if (latest.faceRequired && mounted) {
+        unawaited(
+          _openPunchSuccess(
+            type == 'check_in' ? '上班打卡成功' : '下班打卡成功',
+            _clock(record.punchedAt),
+          ),
+        );
+      }
       try {
         final today = await _service.fetchToday();
         if (mounted) setState(() => _today = today);
@@ -790,6 +793,28 @@ class _NativeAttendancePageState extends State<NativeAttendancePage>
         });
       }
     }
+  }
+
+  Future<void> _openPunchSuccess(String title, String time) {
+    return showDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      builder: (context) => AlertDialog(
+        icon: const Icon(
+          Icons.check_circle_rounded,
+          color: Color(0xFF198A60),
+          size: 42,
+        ),
+        title: Text(title),
+        content: Text('打卡时间 $time'),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('完成'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showMessage(String value, {required bool error}) {
@@ -948,7 +973,7 @@ class _NativeAttendancePageState extends State<NativeAttendancePage>
                                 : allDone
                                 ? '上下班记录已保存，仍可补充打卡'
                                 : today?.faceRequired == true
-                                ? '先确认位置，再拍照核验本人即可完成$nextLabel'
+                                ? '先确认位置，正对镜头即可完成$nextLabel'
                                 : '定位确认后即可完成$nextLabel',
                             complete: allDone,
                           ),
@@ -990,11 +1015,11 @@ class _NativeAttendancePageState extends State<NativeAttendancePage>
                               ),
                               title: Text(
                                 _faceStatus?.enrolled == true
-                                    ? '人脸已录入 · 每次打卡需拍照核验'
+                                    ? '人脸已录入 · 打开相机后自动拍照，无需点击'
                                     : '首次打卡前需录入本人脸',
                               ),
                               subtitle: const Text(
-                                '正对镜头并保持光线充足。未录入时会先引导拍照录入，再进行打卡核验。',
+                                '请正对镜头并保持光线充足。相机会自动拍照并关闭，核验通过后完成打卡。',
                               ),
                               trailing: _faceStatus?.enrolled == true
                                   ? null

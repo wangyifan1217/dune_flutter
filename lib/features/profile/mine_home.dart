@@ -775,7 +775,7 @@ Future<void> showMineCreateSheet(
                           Color(0xFF552D8E),
                         ],
                         bg: MinePalette.wash,
-                        title: '人事绩效',
+                        title: '绩效考核',
                         subtitle: '查看考核进度与任务证据',
                         onTap: onHrPerformance,
                       ),

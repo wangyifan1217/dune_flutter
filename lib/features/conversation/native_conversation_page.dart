@@ -17,6 +17,7 @@ import '../ai_summary/ai_summary_service.dart';
 import '../auth/auth_session.dart';
 import '../contacts/contact_models.dart';
 import '../contacts/contact_service.dart';
+import '../push/push_service.dart';
 import '../shell/dunes_main_tab_bar.dart';
 import '../workbench/workbench_badge_notifier.dart';
 import 'comm_unread_notifier.dart';
@@ -1364,6 +1365,8 @@ class _NativeConversationPageState extends State<NativeConversationPage>
     );
     widget.commUnread.update(total);
     windowsTrayUpdateUnread(total);
+    // 列表未读变了就同步系统角标。PC 已读会先把列表清成 0，不能等角标刷新再决定写不写 0。
+    syncPushBadgeCount(total);
     windowsTrayPushUnreadFromConversations(
       rows: visibleRows,
       commUnread: widget.commUnread,

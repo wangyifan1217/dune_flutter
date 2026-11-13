@@ -117,14 +117,21 @@ Future<void> unbindPushSessionImpl() async {
 void syncPushBadgeCountImpl(int count) {
   if (!(Platform.isWindows || Platform.isMacOS)) return;
   final n = normalizeDesktopBadgeCount(count);
+  _desiredDesktopBadgeCount = n;
+  if (_desktopBadgeSyncing) return;
+  if (_appliedDesktopBadgeCount == n) return;
   unawaited(_syncDesktopBadge(n));
 }
 
 Future<int> readPushBadgeCountImpl() async => _lastDesktopBadgeCount;
 
 int _lastDesktopBadgeCount = 0;
+int? _appliedDesktopBadgeCount;
+int? _desiredDesktopBadgeCount;
+bool _desktopBadgeSyncing = false;
 
 Future<void> _syncDesktopBadge(int count) async {
+  _desktopBadgeSyncing = true;
   _lastDesktopBadgeCount = count;
   try {
     if (Platform.isMacOS) {
@@ -149,6 +156,15 @@ Future<void> _syncDesktopBadge(int count) async {
     }
   } catch (e, st) {
     debugPrint('[DesktopPush] badge sync failed count=$count err=$e\n$st');
+  } finally {
+    // 失败也记成已写入。这台机器上任务栏角标接口会抛错并抢走焦点，
+    // 同一个数字再写一次就会把窗口打进失焦循环。
+    _appliedDesktopBadgeCount = count;
+    _desktopBadgeSyncing = false;
+    final desired = _desiredDesktopBadgeCount;
+    if (desired != null && desired != count) {
+      unawaited(_syncDesktopBadge(desired));
+    }
   }
 }
 

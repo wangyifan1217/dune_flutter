@@ -1,4 +1,3 @@
-import '../hr_performance/hr_performance_notice_page.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -17,7 +16,6 @@ import '../ai_summary/ai_summary_service.dart';
 import '../auth/auth_session.dart';
 import '../contacts/contact_models.dart';
 import '../contacts/contact_service.dart';
-import '../push/push_service.dart';
 import '../shell/dunes_main_tab_bar.dart';
 import '../workbench/workbench_badge_notifier.dart';
 import 'comm_unread_notifier.dart';
@@ -70,6 +68,7 @@ class NativeConversationPage extends StatefulWidget {
     this.onOpenXrxsAssistant,
     this.onOpenWeeklySummary,
     this.onOpenAdministrativeNotice,
+    this.onOpenHrPerformance,
     this.onOpenReconciliationAssistant,
     this.onStartPrivateChat,
     this.onOpenGlobalSearch,
@@ -108,6 +107,7 @@ class NativeConversationPage extends StatefulWidget {
   final ValueChanged<NativeConversation>? onOpenXrxsAssistant;
   final ValueChanged<NativeConversation>? onOpenWeeklySummary;
   final ValueChanged<NativeConversation>? onOpenAdministrativeNotice;
+  final ValueChanged<NativeConversation>? onOpenHrPerformance;
   final ValueChanged<NativeConversation>? onOpenReconciliationAssistant;
 
   /// 搜索命中尚无会话的联系人时，按 peerId 打开私聊（首条消息前不建会话）。
@@ -236,6 +236,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
   int _inboxRetryCount = 0;
 
   bool _loading = true;
+  bool _inboxPausedOffscreen = false;
   String? _error;
   List<NativeConversation> _items = const <NativeConversation>[];
   Set<int> _markedUnreadIds = <int>{};
@@ -732,7 +733,18 @@ class _NativeConversationPageState extends State<NativeConversationPage>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    final desktopVisible =
+        isDesktopCommOnly && !windowsTrayIsWindowObscured();
+    if (state == AppLifecycleState.inactive && desktopVisible) return;
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.inactive) {
+      _inboxPausedOffscreen = true;
+      return;
+    }
     if (state != AppLifecycleState.resumed) return;
+    if (isDesktopCommOnly && !_inboxPausedOffscreen) return;
+    _inboxPausedOffscreen = false;
     // 从后台（含点击推送通知）回到前台时，重连实时通道并刷新未读，
     // 避免会话列表未读条数图标停留在旧状态。
     unawaited(_realtime.connect());
@@ -1365,8 +1377,6 @@ class _NativeConversationPageState extends State<NativeConversationPage>
     );
     widget.commUnread.update(total);
     windowsTrayUpdateUnread(total);
-    // 列表未读变了就同步系统角标。PC 已读会先把列表清成 0，不能等角标刷新再决定写不写 0。
-    syncPushBadgeCount(total);
     windowsTrayPushUnreadFromConversations(
       rows: visibleRows,
       commUnread: widget.commUnread,
@@ -1651,9 +1661,11 @@ class _NativeConversationPageState extends State<NativeConversationPage>
     } else if (c.isTaskAssistant) {
       rowKind = ChatInboxRowKind.taskAssistant;
       onTap = _openWithScrollPersist(() => widget.onOpenTaskAssistant?.call(c));
-    } else if(c.isHrPerformance){
-      rowKind=ChatInboxRowKind.administrativeNotice;
-      onTap=_openWithScrollPersist(()=>Navigator.of(context).push(MaterialPageRoute<void>(builder:(_)=>HrPerformanceNoticePage(session:widget.session,conversationId:c.id))));
+    } else if (c.isHrPerformance) {
+      rowKind = ChatInboxRowKind.administrativeNotice;
+      onTap = _openWithScrollPersist(
+        () => widget.onOpenHrPerformance?.call(c),
+      );
     } else if (c.isKpiAssistant) {
       rowKind = ChatInboxRowKind.kpiAssistant;
       onTap = _openWithScrollPersist(() => widget.onOpenKpiAssistant?.call(c));
@@ -1731,6 +1743,8 @@ class _NativeConversationPageState extends State<NativeConversationPage>
         ? '任务助手'
         : c.isKpiAssistant
         ? '绩效助手'
+        : c.isHrPerformance
+        ? '绩效考核'
         : c.isDriveAssistant
         ? '企业微盘'
         : c.isXrxsAssistant
@@ -1765,6 +1779,8 @@ class _NativeConversationPageState extends State<NativeConversationPage>
           ? '子任务分配 · 进度跟进'
           : c.preview.isEmpty && c.isKpiAssistant
           ? '写分后请确认已知悉'
+          : c.preview.isEmpty && c.isHrPerformance
+          ? '考核待办 · 结果下发 · 督办'
           : c.preview.isEmpty && c.isDriveAssistant
           ? '共享空间文件动态'
           : c.preview.isEmpty && c.isXrxsAssistant
@@ -1850,6 +1866,8 @@ class _NativeConversationPageState extends State<NativeConversationPage>
         ? '任务助手'
         : c.isKpiAssistant
         ? '绩效助手'
+        : c.isHrPerformance
+        ? '绩效考核'
         : c.isDriveAssistant
         ? '企业微盘'
         : c.isXrxsAssistant
@@ -1917,6 +1935,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
                 c.isApprovalAssistant ||
                 c.isTaskAssistant ||
                 c.isKpiAssistant ||
+                c.isHrPerformance ||
                 c.isDriveAssistant ||
                 c.isXrxsAssistant ||
                 (c.isWeeklySummary && !widget.session.isExternalUser) ||

@@ -181,9 +181,29 @@ class HrPerformanceService {
           as Map,
     ),
   );
-  Future<List<Map<String,dynamic>>> batch(List<HrPerformanceRecord> records,String action,String reason)async{
-    final results=<Map<String,dynamic>>[];
-    for(var offset=0;offset<records.length;offset+=200){final batch=records.skip(offset).take(200);final data=_unwrap(await dunesHttpPost(session,'/hr-performance/batch',body:jsonEncode({'items':[for(final r in batch){'id':r.id,'version':r.version}],'action':action,'reason':reason})));results.addAll(HrPerformanceRecord._maps(data));}
+  Future<List<Map<String, dynamic>>> batch(
+    List<HrPerformanceRecord> records,
+    String action,
+    String reason,
+  ) async {
+    final results = <Map<String, dynamic>>[];
+    for (var offset = 0; offset < records.length; offset += 200) {
+      final batch = records.skip(offset).take(200);
+      final data = _unwrap(
+        await dunesHttpPost(
+          session,
+          '/hr-performance/batch',
+          body: jsonEncode({
+            'items': [
+              for (final r in batch) {'id': r.id, 'version': r.version},
+            ],
+            'action': action,
+            'reason': reason,
+          }),
+        ),
+      );
+      results.addAll(HrPerformanceRecord._maps(data));
+    }
     return results;
   }
 
@@ -205,4 +225,45 @@ class HrPerformanceService {
   Future<void> closeAlert(int id, String resolution) async {
     await _post('/hr-performance/alerts', {'id': id, 'resolution': resolution});
   }
+
+  Future<Map<String, dynamic>> library() async => Map<String, dynamic>.from(
+    _unwrap(await dunesHttpGet(session, '/hr-performance/library')) as Map,
+  );
+
+  Future<Map<String, dynamic>> templates() async => Map<String, dynamic>.from(
+    _unwrap(await dunesHttpGet(session, '/hr-performance/templates')) as Map,
+  );
+
+  Future<Map<String, dynamic>> saveTemplates(
+    int version,
+    List<Map<String, dynamic>> templates,
+  ) async => Map<String, dynamic>.from(
+    _unwrap(
+          await dunesHttpPut(
+            session,
+            '/hr-performance/templates',
+            body: jsonEncode({'version': version, 'templates': templates}),
+          ),
+        )
+        as Map,
+  );
+
+  Future<Map<String, dynamic>> saveLibrary(
+    int version,
+    List<Map<String, dynamic>> indicators, {
+    List<String>? dimensions,
+  }) async => Map<String, dynamic>.from(
+    _unwrap(
+          await dunesHttpPut(
+            session,
+            '/hr-performance/library',
+            body: jsonEncode({
+              'version': version,
+              'indicators': indicators,
+              'dimensions': ?dimensions,
+            }),
+          ),
+        )
+        as Map,
+  );
 }

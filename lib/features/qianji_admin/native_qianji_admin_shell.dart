@@ -19,6 +19,7 @@ import '../proposal_intake/native_proposal_intake_page.dart';
 import '../proposal_intake/proposal_intake_service.dart';
 import '../kpi/native_workbench_kpi_page.dart';
 import '../kpi/workbench_kpi_service.dart';
+import '../hr_performance/hr_performance_library_page.dart';
 import '../hr_performance/hr_performance_service.dart';
 import '../hr_performance/native_hr_performance_page.dart';
 import '../payment_invoice/native_payment_invoice_page.dart';
@@ -102,6 +103,7 @@ enum _WorkbenchView {
   travelImport,
   kpiPerformance,
   hrPerformance,
+  hrPerformanceLibrary,
   payrollReports,
   paymentInvoice,
   reimbursementSummary,
@@ -148,6 +150,7 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
     _WorkbenchView.travelImport: '差旅导入',
     _WorkbenchView.kpiPerformance: '月度绩效考评',
     _WorkbenchView.hrPerformance: hrPerformanceTitle,
+    _WorkbenchView.hrPerformanceLibrary: '考核配置',
     _WorkbenchView.payrollReports: '工资报表',
     _WorkbenchView.paymentInvoice: '付款发票审批',
     _WorkbenchView.reimbursementSummary: '报销汇总',
@@ -281,6 +284,7 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
         : await _probeHrPerformance(session);
     if (!mounted || epoch != _accessEpoch) return;
     if (_hrPerformanceAccess.allowed == access.allowed &&
+        _hrPerformanceAccess.hr == access.hr &&
         _hrPerformanceAccess.pendingCount == access.pendingCount) {
       return;
     }
@@ -994,6 +998,11 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
           key: const ValueKey<String>('workbench-hr-performance'),
           session: _session,
         );
+      case _WorkbenchView.hrPerformanceLibrary:
+        return HrPerformanceLibraryPage(
+          key: const ValueKey<String>('workbench-hr-performance-library'),
+          session: _session,
+        );
       case _WorkbenchView.kpiPerformance:
         return NativeWorkbenchKpiPage(
           key: const ValueKey<String>('workbench-kpi-performance'),
@@ -1174,6 +1183,15 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
           color: DunesColors.resolve(context, _themePurple),
           enabled: true,
           onTap: () => _open(_WorkbenchView.hrPerformance),
+        ),
+      if (!_session.isExternalUser && _hrPerformanceAccess.hr)
+        _WorkbenchTile(
+          title: '考核配置',
+          subtitle: '指标库 · 生成考核表',
+          icon: Icons.tune_outlined,
+          color: DunesColors.resolve(context, _themePurple),
+          enabled: true,
+          onTap: () => _open(_WorkbenchView.hrPerformanceLibrary),
         ),
       if (!_session.isExternalUser && _canSeePayrollReports == true)
         _WorkbenchTile(

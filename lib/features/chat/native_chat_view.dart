@@ -1375,16 +1375,20 @@ class _NativeChatViewState extends State<NativeChatView>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    final desktopVisible =
+        isDesktopCommOnly && !windowsTrayIsWindowObscured();
     if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.hidden) {
       _onChatForegroundPaused(viewportCollapsed: true);
       return;
     }
     if (state == AppLifecycleState.inactive) {
+      if (desktopVisible) return;
       _onChatForegroundPaused();
       return;
     }
     if (state == AppLifecycleState.resumed) {
+      if (desktopVisible && !_backgroundLayoutActive) return;
       _onChatForegroundResumed();
     }
   }

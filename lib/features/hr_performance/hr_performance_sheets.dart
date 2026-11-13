@@ -3,10 +3,11 @@ import 'package:flutter/material.dart';
 import '../contacts/contact_models.dart';
 import 'hr_performance_service.dart';
 
-List<Map<String, dynamic>> hrMaps(dynamic value) => (value is List ? value : const [])
-    .whereType<Map>()
-    .map((e) => Map<String, dynamic>.from(e))
-    .toList();
+List<Map<String, dynamic>> hrMaps(dynamic value) =>
+    (value is List ? value : const [])
+        .whereType<Map>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList();
 double hrNumber(dynamic value) {
   final v = double.tryParse('$value');
   if (v == null || !v.isFinite) throw const FormatException('请填写有效数字');
@@ -141,7 +142,7 @@ Future<Map<String, dynamic>?> showHrReasonSheet(
   values: {'reason': '', 'target': targets?.first},
   fields: (v, update) => [
     if (targets != null)
-      DropdownButtonFormField<String>(
+      _HrSelect<String>(
         initialValue: hrText(v['target']),
         decoration: const InputDecoration(labelText: '处理方式'),
         items: targets
@@ -191,7 +192,7 @@ Future<Map<String, dynamic>?> showHrScoreSheet(
     values: {'lines': lines, 'reason': ''},
     submitLabel: initial ? '提交初评' : '保存并提交',
     message: initial
-        ? '每项 0–100 分。无建议分、与建议分不一致、低于备注线时须填写备注。'
+        ? '按每项满分填写得分；无建议分、与建议分不一致或低于备注线时须填写备注。'
         : '改动任何分数都须填写改分理由。',
     fields: (v, update) => [
       for (final line in lines)
@@ -203,6 +204,10 @@ Future<Map<String, dynamic>?> showHrScoreSheet(
               children: [
                 Text('${line['name']} · 权重 ${line['weight']}%'),
                 Text('建议分：${line['suggestedScore'] ?? '无'}'),
+                for (final band in hrMaps(line['bands']))
+                  Text(
+                    '${band['min']}–${band['max']} 分：${band['description']}',
+                  ),
                 TextFormField(
                   key: ValueKey('hr-score-${line['indicatorId']}'),
                   initialValue: hrText(line['score']),
@@ -226,7 +231,7 @@ Future<Map<String, dynamic>?> showHrScoreSheet(
           ),
         ),
       Text(
-        '指标加权分：${lines.fold<double>(0, (n, l) => n + (double.tryParse('${l['score']}') ?? 0) * ((l['weight'] as num?)?.toDouble() ?? 0) / 100).toStringAsFixed(1)}；本月加减分：${record.bonuses.fold<double>(0, (n, b) => n + ((b['points'] as num?)?.toDouble() ?? 0)).toStringAsFixed(1)}',
+        '指标得分：${lines.fold<double>(0, (n, l) => n + (double.tryParse('${l['score']}') ?? 0) * (l['directScore'] == true ? 1 : ((l['weight'] as num?)?.toDouble() ?? 0) / 100)).toStringAsFixed(1)}；本月加减分：${record.bonuses.fold<double>(0, (n, b) => n + ((b['points'] as num?)?.toDouble() ?? 0)).toStringAsFixed(1)}',
       ),
       if (!initial) hrReasonField(v, label: '改分理由（改动时必填）'),
     ],
@@ -234,8 +239,11 @@ Future<Map<String, dynamic>?> showHrScoreSheet(
       final result = <Map<String, dynamic>>[];
       for (final l in lines) {
         final score = hrNumber(l['score']);
-        if (score < 0 || score > 100) {
-          throw const FormatException('指标分须为 0–100');
+        final maxScore = l['directScore'] == true
+            ? ((l['weight'] as num?)?.toDouble() ?? 0)
+            : 100.0;
+        if (score < 0 || score > maxScore) {
+          throw FormatException('指标分须为 0–$maxScore');
         }
         final decimal = (rules['decimalPlaces'] as num?)?.toInt() ?? 1;
         final multiplier = decimal == 0 ? 1 : 10;
@@ -246,7 +254,10 @@ Future<Map<String, dynamic>?> showHrScoreSheet(
         if (initial &&
             (l['suggestedScore'] == null ||
                 (hrNumber(l['suggestedScore']) - score).abs() > 0.00001 ||
-                score < ((rules['remarkBelow'] as num?)?.toDouble() ?? 60)) &&
+                (l['directScore'] == true && maxScore > 0
+                        ? score * 100 / maxScore
+                        : score) <
+                    ((rules['remarkBelow'] as num?)?.toDouble() ?? 60)) &&
             hrText(l['remark']).isEmpty) {
           throw FormatException('${l['name']}须填写评分备注');
         }
@@ -399,7 +410,7 @@ Future<Map<String, dynamic>?> showHrBonusSheet(
       'source': '',
     },
     fields: (v, update) => [
-      DropdownButtonFormField<String>(
+      _HrSelect<String>(
         initialValue: '${v['itemId']}',
         items: items
             .map(
@@ -419,10 +430,21 @@ Future<Map<String, dynamic>?> showHrBonusSheet(
         keyboardType: const TextInputType.numberWithOptions(decimal: true),
         onChanged: (x) => v['points'] = x,
       ),
-      hrReasonField(v, label:items.firstWhere((i)=>i['id']==v['itemId'])['requireSource']==true?'来源说明（必填）':'来源说明（选填）', keyName: 'source'),
+      hrReasonField(
+        v,
+        label:
+            items.firstWhere((i) => i['id'] == v['itemId'])['requireSource'] ==
+                true
+            ? '来源说明（必填）'
+            : '来源说明（选填）',
+        keyName: 'source',
+      ),
     ],
     submit: (v) {
-      if (hrNumber(v['points']) <= 0 || (items.firstWhere((i)=>i['id']==v['itemId'])['requireSource']==true&&hrText(v['source']).isEmpty)) {
+      if (hrNumber(v['points']) <= 0 ||
+          (items.firstWhere((i) => i['id'] == v['itemId'])['requireSource'] ==
+                  true &&
+              hrText(v['source']).isEmpty)) {
         throw const FormatException('请填写正数分值和来源说明');
       }
       return {
@@ -448,7 +470,7 @@ Future<Map<String, dynamic>?> showHrAssignmentSheet(
   values: {'reason': ''},
   fields: (v, update) => [
     if (['opening', 'indicators'].contains(record.stage)) ...[
-      DropdownButtonFormField<int>(
+      _HrSelect<int>(
         decoration: InputDecoration(labelText: '部门（当前：${record.department}）'),
         items: departments
             .map(
@@ -460,7 +482,7 @@ Future<Map<String, dynamic>?> showHrAssignmentSheet(
             .toList(),
         onChanged: (x) => v['departmentId'] = x,
       ),
-      DropdownButtonFormField<int>(
+      _HrSelect<int>(
         decoration: InputDecoration(labelText: '岗位（当前：${record.position}）'),
         items: positions
             .map(
@@ -482,7 +504,7 @@ Future<Map<String, dynamic>?> showHrAssignmentSheet(
         decoration: const InputDecoration(labelText: '试用期截止（YYYY-MM-DD，可清空）'),
         onChanged: (x) => v['probationEndAt'] = x,
       ),
-      DropdownButtonFormField<String>(
+      _HrSelect<String>(
         decoration: const InputDecoration(labelText: '本周期模板（留空保持）'),
         items: hrMaps(config['templates'])
             .where((t) => t['enabled'] == true)
@@ -496,7 +518,7 @@ Future<Map<String, dynamic>?> showHrAssignmentSheet(
         onChanged: (x) => v['templateId'] = x,
       ),
     ],
-    DropdownButtonFormField<int>(
+    _HrSelect<int>(
       decoration: const InputDecoration(labelText: '直属主管（留空保持）'),
       items: contacts
           .where((u) => u.enabled && u.userId != record.userId)
@@ -507,7 +529,7 @@ Future<Map<String, dynamic>?> showHrAssignmentSheet(
           .toList(),
       onChanged: (x) => v['directSupervisorId'] = x,
     ),
-    DropdownButtonFormField<int>(
+    _HrSelect<int>(
       decoration: const InputDecoration(labelText: '分管主管（留空保持）'),
       items: contacts
           .where((u) => u.enabled)
@@ -530,8 +552,112 @@ Future<Map<String, dynamic>?> showHrAssignmentSheet(
       'positionId',
       'hiredAt',
       'probationEndAt',
-    ].every((key) => v[key] == null))
+    ].every((key) => v[key] == null)) {
       throw const FormatException('请选择要补配的内容');
+    }
     return v;
   },
 );
+
+/// 与绩效弹层统一的单选入口，长名单支持搜索。
+class _HrSelect<T> extends StatefulWidget {
+  const _HrSelect({
+    this.initialValue,
+    this.decoration = const InputDecoration(),
+    required this.items,
+    required this.onChanged,
+  });
+  final T? initialValue;
+  final InputDecoration decoration;
+  final List<DropdownMenuItem<T>> items;
+  final ValueChanged<T?> onChanged;
+  @override
+  State<_HrSelect<T>> createState() => _HrSelectState<T>();
+}
+
+class _HrSelectState<T> extends State<_HrSelect<T>> {
+  T? value;
+  @override
+  void initState() {
+    super.initState();
+    value = widget.initialValue;
+  }
+
+  Future<void> choose() async {
+    String query = '';
+    final selected = await showModalBottomSheet<DropdownMenuItem<T>>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => StatefulBuilder(
+        builder: (context, update) {
+          final choices = widget.items.where((item) {
+            final child = item.child;
+            final label = child is Text ? (child.data ?? '') : '';
+            return query.isEmpty ||
+                label.toLowerCase().contains(query.toLowerCase());
+          }).toList();
+          return SizedBox(
+            height: MediaQuery.sizeOf(context).height * .65,
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: TextField(
+                    decoration: const InputDecoration(
+                      prefixIcon: Icon(Icons.search),
+                      hintText: '搜索',
+                      border: OutlineInputBorder(),
+                    ),
+                    onChanged: (v) => update(() => query = v.trim()),
+                  ),
+                ),
+                Expanded(
+                  child: ListView(
+                    children: [
+                      for (final item in choices)
+                        ListTile(
+                          title: item.child,
+                          trailing: item.value == value
+                              ? const Icon(Icons.check_rounded)
+                              : null,
+                          onTap: () => Navigator.pop(context, item),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+    if (selected == null || !mounted) return;
+    setState(() => value = selected.value);
+    widget.onChanged(selected.value);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final selected = widget.items.where((item) => item.value == value).toList();
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: choose,
+        child: InputDecorator(
+          decoration: widget.decoration.copyWith(
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+            suffixIcon: const Icon(Icons.expand_more_rounded),
+          ),
+          child: selected.isEmpty
+              ? const Text('请选择', style: TextStyle(color: Colors.grey))
+              : selected.first.child,
+        ),
+      ),
+    );
+  }
+}

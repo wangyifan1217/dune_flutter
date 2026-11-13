@@ -53,6 +53,7 @@ bool isDesktopAllowedCommScreen(String screenId) {
     'WS1',
     'RA1',
     'AN1',
+    'HP1',
     // 我的及审批 / 知识库 / 企业微盘
     'B2',
     'B2P',

@@ -6,6 +6,7 @@ import '../contacts/contact_service.dart';
 import '../shell/dunes_toast.dart';
 import '../tasks/native_task_detail_page.dart';
 import 'hr_performance_service.dart';
+import 'hr_performance_sheet.dart';
 import 'hr_performance_sheets.dart';
 
 const hrActionLabels = <String, String>{
@@ -429,22 +430,12 @@ class _HrPerformanceDetailState extends State<HrPerformanceDetail> {
               ),
             )
           else
-            LayoutBuilder(
-              builder: (context, constraints) {
-                final wideLine = constraints.maxWidth >= 520;
-                return Column(
-                  children: [
-                    for (final l in r.lines) ...[
-                      _HrLineCard(
-                        line: l,
-                        wide: wideLine,
-                        scoresVisible: r.scoresVisible,
-                      ),
-                      const SizedBox(height: 8),
-                    ],
-                  ],
-                );
-              },
+            HrAssessmentSheet(
+              lines: r.lines,
+              scoresVisible: r.scoresVisible,
+              month: _hrMonthLabel(r.month),
+              name: r.name,
+              supervisor: hrText(r.snapshot['directSupervisorName']),
             ),
           if (r.bonuses.isNotEmpty) ...[
             const SizedBox(height: 8),
@@ -991,92 +982,6 @@ class _HrActionButton extends StatelessWidget {
         textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
       ),
       child: Text(label),
-    );
-  }
-}
-
-class _HrLineCard extends StatelessWidget {
-  const _HrLineCard({
-    required this.line,
-    required this.wide,
-    required this.scoresVisible,
-  });
-  final Map<String, dynamic> line;
-  final bool wide;
-  final bool scoresVisible;
-
-  @override
-  Widget build(BuildContext context) {
-    final metrics = Wrap(
-      spacing: 12,
-      runSpacing: 4,
-      children: [
-        Text(
-          '权重 ${line['weight']}%',
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-            color: DunesColors.resolve(context, DunesColors.brandPurpleDeep),
-          ),
-        ),
-        if (scoresVisible)
-          Text(
-            '建议 ${line['suggestedScore'] ?? '—'} · 得分 ${line['score'] ?? '—'}',
-            style: TextStyle(
-              fontSize: 12,
-              color: DunesColors.resolve(context, DunesColors.text2),
-            ),
-          ),
-      ],
-    );
-    final body = Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          '${line['name']}',
-          style: TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-            color: DunesColors.resolve(context, DunesColors.text),
-          ),
-        ),
-        if (hrText(line['instructions']).isNotEmpty) ...[
-          const SizedBox(height: 4),
-          Text(
-            hrText(line['instructions']),
-            style: TextStyle(
-              fontSize: 12,
-              height: 1.4,
-              color: DunesColors.resolve(context, DunesColors.text3),
-            ),
-          ),
-        ],
-        if (scoresVisible && hrText(line['remark']).isNotEmpty) ...[
-          const SizedBox(height: 4),
-          Text(
-            hrText(line['remark']),
-            style: TextStyle(
-              fontSize: 12,
-              color: DunesColors.resolve(context, DunesColors.text2),
-            ),
-          ),
-        ],
-      ],
-    );
-    return _HrPanel(
-      child: wide
-          ? Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(child: body),
-                const SizedBox(width: 12),
-                metrics,
-              ],
-            )
-          : Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [body, const SizedBox(height: 8), metrics],
-            ),
     );
   }
 }

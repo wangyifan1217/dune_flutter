@@ -217,6 +217,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   String _dailyReconAsOfDate = '';
   String _dailyReconCardType = '';
   NativeConversation? _selectedAdministrativeNotice;
+  NativeConversation? _selectedHrPerformance;
   int? _administrativeNoticeTargetId;
   int? _driveTargetItemId;
   String? _xrxsLoginSid;
@@ -318,9 +319,6 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   Timer? _workbenchBadgeRefreshDebounce;
   bool _commBadgeRefreshInFlight = false;
   bool _commBadgeRefreshQueued = false;
-
-  /// 进行中的刷新如果落后于更新的请求，丢弃它的结果，避免旧的未读数把已清掉的角标写回去。
-  int _commBadgeRefreshEpoch = 0;
   DateTime? _commBadgeRefreshBackoffUntil;
   bool _workbenchBadgeRefreshInFlight = false;
   bool _workbenchBadgeRefreshQueued = false;
@@ -392,8 +390,17 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     debugLabel: 'purchase-proposal-keep-alive',
   );
 
-  /// 用户本次前台会话内主动点进聊天；切后台后清零，避免 resume 误触已读。
+  /// 允许在已读回执或重新拿到服务端快照后把桌面角标同步为 0。
+  ///
+  /// APP 可能在后台时收不到 PC 端发出的实时已读事件；下次恢复/启动
+  /// 时必须允许“服务端总未读为 0”清掉遗留的系统角标。
+  bool _pendingBadgeZeroSync = false;
+
+  /// 用户本次前台会话内主动点进聊天；窗口真正看不见后清零，避免 resume 误触已读。
   bool _userActivelyInChat = false;
+
+  /// 窗口已最小化或收进托盘。仅失焦不算，避免任务栏角标抢走焦点时把聊天冻住。
+  bool _desktopChatHeldForObscured = false;
   final Set<int> _tpnsOpeningConversationIds = <int>{};
 
   /// 已上报给服务端的「正在查看」会话，用于抑制该会话 APP TPNS。
@@ -480,6 +487,10 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       final id = _selectedAdministrativeNotice?.id ?? 0;
       return id > 0 ? id : null;
     }
+    if (screen == 'HP1') {
+      final id = _selectedHrPerformance?.id ?? 0;
+      return id > 0 ? id : null;
+    }
     return null;
   }
 
@@ -525,6 +536,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     super.initState();
     HrPerformanceNavigation.bind(widget.navigation);
     WidgetsBinding.instance.addObserver(this);
+    // 首次从服务端拿到完整未读快照时，服务端结果可以校正上一次设备
+    // 留下的系统角标（例如 PC 已读、APP 当时处于后台的情况）。
+    _pendingBadgeZeroSync = true;
     unawaited(ConversationRealtimeHub.instance.of(widget.session).connect());
     NovaBackgroundCoordinator.instance.addListener(_onNovaCoordinatorUpdate);
     MeetingUploadCoordinator.instance.attach(widget.session);
@@ -568,33 +582,19 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   }
 
   void _onDesktopWindowInactiveChanged(bool inactive) {
-    if (!mounted) return;
+    if (!mounted || !windowsTrayIsWindowObscured()) return;
     if (inactive) {
-      // 先冻住聊天滚动，避免 Windows 把 reverse 列表夹到 0 后误判贴底。
-      ChatForegroundSync.notifyPaused();
-      // 最小化/失焦/托盘：停止 autoMarkRead，避免后台把消息标成已读。
-      if (_userActivelyInChat) {
-        setState(() => _userActivelyInChat = false);
-      } else {
-        _userActivelyInChat = false;
-      }
-      _syncActiveViewReport();
-      _scheduleCommBadgeRefresh();
-      return;
+      _holdDesktopChatForObscuredWindow();
     }
-    // 先通知聊天页补拉最新消息，再恢复已读上报，避免缺消息却先标已读。
-    // 窗口恢复时按列表未读重写角标，覆盖 PC 已读后残留的系统角标。
-    ChatForegroundSync.notifyResumed();
-    // 恢复前台且仍停在会话页时，重新允许已读上报。
-    if (_isOnActiveChatScreen() && !_userActivelyInChat) {
-      setState(() => _userActivelyInChat = true);
-    }
-    _syncActiveViewReport();
-    _scheduleCommBadgeRefresh();
   }
 
   void _onDesktopWindowObscuredChanged() {
-    if (!mounted || windowsTrayIsWindowObscured()) return;
+    if (!mounted) return;
+    if (windowsTrayIsWindowObscured()) {
+      _holdDesktopChatForObscuredWindow();
+      return;
+    }
+    _releaseDesktopChatAfterObscuredWindow();
     // 隐藏/最小化期间跳过了 presence 轮询，窗口重新可见时立刻补一次。
     unawaited(
       ConversationRealtimeHub.instance
@@ -603,8 +603,38 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     );
   }
 
+  void _holdDesktopChatForObscuredWindow() {
+    if (_desktopChatHeldForObscured) return;
+    _desktopChatHeldForObscured = true;
+    // 先冻住聊天滚动，避免 Windows 把 reverse 列表夹到 0 后误判贴底。
+    ChatForegroundSync.notifyPaused();
+    if (_userActivelyInChat && mounted) {
+      print('[Badge] window obscured -> clear activelyInChat');
+      setState(() => _userActivelyInChat = false);
+    } else {
+      _userActivelyInChat = false;
+    }
+    _syncActiveViewReport();
+    _scheduleCommBadgeRefresh();
+  }
+
+  void _releaseDesktopChatAfterObscuredWindow() {
+    if (!_desktopChatHeldForObscured) return;
+    _desktopChatHeldForObscured = false;
+    // 先通知聊天页补拉最新消息，再恢复已读上报，避免缺消息却先标已读。
+    _pendingBadgeZeroSync = true;
+    ChatForegroundSync.notifyResumed();
+    if (_isOnActiveChatScreen() && !_userActivelyInChat) {
+      setState(() => _userActivelyInChat = true);
+    }
+    _syncActiveViewReport();
+    _scheduleCommBadgeRefresh();
+  }
+
   void _requestCommBadgeRefreshFromServer() {
-    // 推送展示或回到前台后，用当前列表未读覆盖系统角标。
+    // 推送展示/恢复回调意味着设备刚有机会与服务端同步；允许本次
+    // 成功返回 0 时清除可能由其他设备留下的旧角标。
+    _pendingBadgeZeroSync = true;
     _scheduleCommBadgeRefresh();
   }
 
@@ -734,9 +764,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     } else if (resolvedConversation.isTaskAssistant) {
       await _openTaskAssistant(resolvedConversation);
       routed = mounted && widget.navigation.currentScreen == 'TA1';
-    } else if(resolvedConversation.isHrPerformance){
-      unawaited(Navigator.of(context).push(MaterialPageRoute<void>(builder:(_)=>HrPerformanceNoticePage(session:widget.session,conversationId:resolvedConversation.id))));
-      routed=true;
+    } else if (resolvedConversation.isHrPerformance) {
+      _openHrPerformance(resolvedConversation);
+      routed = mounted && widget.navigation.currentScreen == 'HP1';
     } else if (resolvedConversation.isKpiAssistant) {
       await _openKpiAssistant(resolvedConversation);
       routed = mounted && widget.navigation.currentScreen == 'KA1';
@@ -799,6 +829,22 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           state == AppLifecycleState.hidden ||
           state == AppLifecycleState.detached,
     );
+    if (isDesktopCommOnly) {
+      final visible = !windowsTrayIsWindowObscured();
+      // Windows 写任务栏角标会抢走焦点，Flutter 只报 inactive。
+      // 窗口还看得见时不要当成离开会话。
+      if (state == AppLifecycleState.inactive && visible) return;
+      if (state == AppLifecycleState.paused ||
+          state == AppLifecycleState.inactive ||
+          state == AppLifecycleState.hidden) {
+        _holdDesktopChatForObscuredWindow();
+        return;
+      }
+      if (state == AppLifecycleState.resumed && visible) {
+        _releaseDesktopChatAfterObscuredWindow();
+      }
+      return;
+    }
     if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.inactive ||
         state == AppLifecycleState.hidden) {
@@ -811,7 +857,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       }
       _syncActiveViewReport();
     } else if (state == AppLifecycleState.resumed) {
-      // 与托盘 inactive→active 对齐：恢复时补拉当前会话最新消息，并校正角标。
+      // 与托盘 inactive→active 对齐：恢复时补拉当前会话最新消息。
+      _pendingBadgeZeroSync = true;
       ChatForegroundSync.notifyResumed();
       _scheduleCommBadgeRefresh();
       if (_isOnActiveChatScreen() && !_userActivelyInChat) {
@@ -934,7 +981,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       final userId = (event.raw['userId'] as num?)?.toInt() ?? 0;
       final convId = event.conversationId ?? 0;
       if (userId == widget.session.userId) {
-        // 同账号在其他设备已读：清掉免打扰 @，随后按列表重算系统角标。
+        // 同账号在其他设备已读时，也允许将本机的系统角标清零。
+        _pendingBadgeZeroSync = true;
         _commUnread.clearMutedMention(convId);
       }
       _scheduleCommBadgeRefresh();
@@ -943,13 +991,17 @@ class _NativeScreenHostState extends State<NativeScreenHost>
 
     if (event.type == 'conversation_updated') {
       final totalUnread = (event.raw['totalUnread'] as num?)?.toInt();
-      // 其他端已读会带 totalUnread=0。先清系统角标，再按列表复核，
-      // 避免服务端总数偏大时把已经空掉的列表又标回去。
-      if (totalUnread != null && totalUnread <= 0) {
-        _applyRealtimeUnreadTotal(0);
+      if (totalUnread != null) {
+        // 正在看某会话时，totalUnread 可能仍含本会话未读；走 REST 汇总
+        //（treatAsRead）避免 Tab 小红点误亮。
+        final viewingId = _activeViewingConversationId() ?? 0;
+        if (viewingId > 0) {
+          _scheduleCommBadgeRefresh();
+        } else {
+          _applyRealtimeUnreadTotal(totalUnread);
+        }
+        return;
       }
-      _scheduleCommBadgeRefresh();
-      return;
     }
 
     if (event.type == 'message' || event.type == 'system_flow') {
@@ -1168,6 +1220,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     bool preserveUnread = false,
   }) {
     if (conversationId > 0) {
+      _pendingBadgeZeroSync = true;
       if (!preserveUnread) {
         _commUnread.clearMutedMention(conversationId);
         _conversationReadSignal.notifyRead(conversationId);
@@ -1187,13 +1240,16 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         _syncActiveViewReport();
       }
     }
-    print('[Badge] handleConversationRead conv=$conversationId');
+    print(
+      '[Badge] handleConversationRead conv=$conversationId pendingZero=$_pendingBadgeZeroSync',
+    );
     unawaited(_refreshCommUnreadBadge());
   }
 
   void _handleNotificationsRead() {
+    _pendingBadgeZeroSync = true;
     _notificationsReadSignal.notifyRead();
-    print('[Badge] handleNotificationsRead');
+    print('[Badge] handleNotificationsRead pendingZero=true');
     unawaited(_refreshCommUnreadBadge());
   }
 
@@ -1203,6 +1259,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     final total = totalUnread < 0 ? 0 : totalUnread;
     _commUnread.update(total);
     windowsTrayUpdateUnread(total);
+    if (total == 0) _pendingBadgeZeroSync = false;
     syncPushBadgeCount(total);
   }
 
@@ -1356,7 +1413,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         s == 'XA1' ||
         s == 'WS1' ||
         s == 'RA1' ||
-        s == 'AN1') {
+        s == 'AN1' ||
+        s == 'HP1') {
       return true;
     }
     return (_dualPaneSelectedConversationId ?? 0) > 0;
@@ -1386,6 +1444,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     if (screen == 'AN1' && _selectedAdministrativeNotice?.id == convId) {
       return true;
     }
+    if (screen == 'HP1' && _selectedHrPerformance?.id == convId) return true;
     return false;
   }
 
@@ -1436,6 +1495,10 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       final id = _selectedWeeklySummary?.id ?? 0;
       return id > 0 ? id : null;
     }
+    if (screen == 'HP1') {
+      final id = _selectedHrPerformance?.id ?? 0;
+      return id > 0 ? id : null;
+    }
     return null;
   }
 
@@ -1477,8 +1540,6 @@ class _NativeScreenHostState extends State<NativeScreenHost>
 
   Future<void> _refreshCommUnreadBadge() async {
     if (_commBadgeRefreshInFlight) {
-      // 让进行中的旧快照失效，避免它在 PC 已读之后把角标又写高。
-      _commBadgeRefreshEpoch++;
       _commBadgeRefreshQueued = true;
       return;
     }
@@ -1487,7 +1548,6 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       return;
     }
     _commBadgeRefreshInFlight = true;
-    final epoch = ++_commBadgeRefreshEpoch;
     // 共用 Client：超时后 close 可中止挂起连接，避免弱网堆积拖死 UI。
     final httpClient = http.Client();
     final convService = ConversationService(
@@ -1507,14 +1567,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         convService.fetchConversations(),
         notifService.fetchSummary(),
         InboxHiddenStorage.load(),
-        // 只用于对照日志。接口失败不能挡住角标按列表清零。
-        convService.fetchTotalUnread().then<int?>(
-          (value) => value,
-          onError: (Object error, StackTrace _) {
-            print('[Badge] unread-total failed: $error');
-            return null;
-          },
-        ),
+        convService.fetchTotalUnread(),
       ];
       if (!widget.session.isExternalUser) {
         futures.add(aiSummaryService.fetchUnreadCount());
@@ -1522,12 +1575,6 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       final results = await Future.wait<Object?>(
         futures,
       ).timeout(const Duration(seconds: 10));
-      if (!mounted || epoch != _commBadgeRefreshEpoch) {
-        print(
-          '[Badge] drop stale refresh epoch=$epoch current=$_commBadgeRefreshEpoch',
-        );
-        return;
-      }
       _commBadgeRefreshBackoffUntil = null;
       final allRows = results[0] as List<NativeConversation>;
       _commBadgeConversations
@@ -1569,28 +1616,42 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       if (mounted) {
         final viewingId = _activeViewingConversationId() ?? 0;
         final treatAsRead = viewingId > 0 ? <int>{viewingId} : const <int>{};
-        // 角标跟列表里看得到的未读：会话（免打扰只计 @）+ 通知 + 智能总结。
-        // 正在查看的会话按已读计。/comm/unread-total 会漏算广播，也会在
-        // PC 已读后仍偏大；拿它抬高角标，列表已经是 0，图标还会挂着很多条。
-        final badgeTotal = _commUnread.sumConversationUnread(
+        var viewingUnread = 0;
+        if (viewingId > 0) {
+          for (final c in rows) {
+            if (c.id == viewingId) {
+              viewingUnread = _commUnread.effectiveUnreadCount(c);
+              break;
+            }
+          }
+        }
+        final summedTotal = _commUnread.sumConversationUnread(
           rows: rows,
           notifUnread: widget.session.isExternalUser ? 0 : notif.unreadCount,
           aiSummaryUnread: effectiveAiUnread,
           treatAsReadIds: treatAsRead,
         );
+        // 取服务端总数与本地汇总的较大值：服务端 /comm/unread-total 会漏算
+        // 广播等场景（返回 0），若盲信它的 0 会在仍有未读时误清角标。
+        // 当前正在查看的会话已 mark-read / 不计入角标，需从 apiTotal 扣掉。
+        final apiRaw = apiTotal ?? 0;
+        final apiVal = apiRaw > viewingUnread ? apiRaw - viewingUnread : 0;
+        final serverTotal = widget.session.isExternalUser
+            ? summedTotal
+            : (apiVal > summedTotal ? apiVal : summedTotal);
         final localBadge = await readPushBadgeCount();
-        if (!mounted || epoch != _commBadgeRefreshEpoch) return;
         final unreadRows = rows
             .where((c) => c.unreadCount > 0 && c.id != viewingId)
             .map((c) => 'id=${c.id} kind=${c.kind} unread=${c.unreadCount}')
             .join('; ');
         print(
-          '[Badge] refresh apiTotal=$apiTotal viewing=$viewingId '
-          'summed=$badgeTotal notif=${notif.unreadCount} '
-          'local=$localBadge unreadRows=[$unreadRows]',
+          '[Badge] refresh apiTotal=$apiTotal viewing=$viewingId viewingUnread=$viewingUnread '
+          'summed=$summedTotal notif=${notif.unreadCount} '
+          'next=$serverTotal local=$localBadge pendingZero=$_pendingBadgeZeroSync '
+          'unreadRows=[$unreadRows]',
         );
-        _commUnread.update(badgeTotal);
-        windowsTrayUpdateUnread(badgeTotal);
+        _commUnread.update(serverTotal);
+        windowsTrayUpdateUnread(serverTotal);
         windowsTrayPushUnreadFromConversations(
           rows: rows,
           commUnread: _commUnread,
@@ -1598,12 +1659,15 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           session: widget.session,
           avatarService: convService,
         );
-        if (badgeTotal == 0 && localBadge > 0) {
-          print(
-            '[Badge] clear stale system badge local=$localBadge apiTotal=$apiTotal',
-          );
+        if (serverTotal == 0) {
+          if (!_pendingBadgeZeroSync) {
+            print('[Badge] skip sync 0 (no fresh snapshot/read ack)');
+            return;
+          }
+          _pendingBadgeZeroSync = false;
+          print('[Badge] sync 0 after fresh snapshot/read ack');
         }
-        syncPushBadgeCount(badgeTotal);
+        syncPushBadgeCount(serverTotal);
       }
     } catch (e, st) {
       // 弱网下无超时会堆积连接拖死 UI；失败后短暂退避。
@@ -1640,7 +1704,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         current == 'XA1' ||
         current == 'WS1' ||
         current == 'RA1' ||
-        current == 'AN1') {
+        current == 'AN1' ||
+        current == 'HP1') {
       widget.navigation.replaceTop(screenId);
     } else {
       widget.navigation.go(screenId);
@@ -1666,6 +1731,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       _selectedWeeklySummary = null;
       _selectedReconciliation = null;
       _selectedAdministrativeNotice = null;
+      _selectedHrPerformance = null;
       _administrativeNoticeTargetId = null;
       _focusMessageId = focusMessageId;
       _focusMessageHint = focusHint;
@@ -1697,6 +1763,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       _selectedWeeklySummary = null;
       _selectedReconciliation = null;
       _selectedAdministrativeNotice = null;
+      _selectedHrPerformance = null;
       _administrativeNoticeTargetId = null;
       _focusMessageId = focusMessageId;
       _focusMessageHint = focusHint;
@@ -1761,6 +1828,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       _selectedWeeklySummary = null;
       _selectedReconciliation = null;
       _selectedAdministrativeNotice = null;
+      _selectedHrPerformance = null;
       _administrativeNoticeTargetId = null;
       _focusMessageId = focusMessageId;
       _focusMessageHint = focusHint;
@@ -1789,6 +1857,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       _selectedWeeklySummary = null;
       _selectedReconciliation = null;
       _selectedAdministrativeNotice = null;
+      _selectedHrPerformance = null;
       _administrativeNoticeTargetId = null;
       _focusMessageId = null;
       _focusMessageHint = null;
@@ -1831,8 +1900,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       unawaited(_openTaskAssistant(conv));
       return;
     }
-    if(conv.isHrPerformance){
-      unawaited(Navigator.of(context).push(MaterialPageRoute<void>(builder:(_)=>HrPerformanceNoticePage(session:widget.session,conversationId:conv.id))));return;
+    if (conv.isHrPerformance) {
+      _openHrPerformance(conv);
+      return;
     }
     if (conv.isKpiAssistant) {
       unawaited(_openKpiAssistant(conv));
@@ -2080,6 +2150,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         _selectedWeeklySummary = null;
         _selectedReconciliation = null;
         _selectedAdministrativeNotice = null;
+        _selectedHrPerformance = null;
         _administrativeNoticeTargetId = null;
         _searchConversationId = id;
         _searchTitle = '${contact.displayLabel} · 搜索';
@@ -2113,6 +2184,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         _selectedWeeklySummary = null;
         _selectedReconciliation = null;
         _selectedAdministrativeNotice = null;
+        _selectedHrPerformance = null;
         _administrativeNoticeTargetId = null;
       }
     });
@@ -2186,6 +2258,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     if (chatScreen == 'AN1') {
       return _selectedAdministrativeNotice?.id;
     }
+    if (chatScreen == 'HP1') {
+      return _selectedHrPerformance?.id;
+    }
     return null;
   }
 
@@ -2202,6 +2277,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     if (screen == 'XA1') return screen;
     if (screen == 'WS1') return screen;
     if (screen == 'AN1') return screen;
+    if (screen == 'HP1') return screen;
     if (screen == 'RA1') return screen;
     if (screen == 'C6') return 'C6';
     if (screen == 'C9' && _profileEmbedsInDualPane) return 'C9';
@@ -2219,6 +2295,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     if (_selectedWeeklySummary != null) return 'WS1';
     if (_selectedReconciliation != null) return 'RA1';
     if (_selectedAdministrativeNotice != null) return 'AN1';
+    if (_selectedHrPerformance != null) return 'HP1';
     return 'C1';
   }
 
@@ -2284,7 +2361,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         screen == 'DA1' ||
         screen == 'XA1' ||
         screen == 'WS1' ||
-        screen == 'AN1';
+        screen == 'AN1' ||
+        screen == 'HP1';
   }
 
   void _onPrivateChatSettingsChanged({
@@ -2502,6 +2580,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         widget.navigation.go('AS3');
       },
       onOpened: () {
+        _pendingBadgeZeroSync = true;
         unawaited(_refreshCommUnreadBadge());
       },
     );
@@ -2636,6 +2715,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           : _openXrxsAssistant,
       onOpenWeeklySummary: _openWeeklySummary,
       onOpenAdministrativeNotice: _openAdministrativeNotice,
+      onOpenHrPerformance: _openHrPerformance,
       onOpenReconciliationAssistant: !widget.session.isExternalUser
           ? _openReconciliationAssistant
           : null,
@@ -2655,6 +2735,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       _selectedXrxsAssistant = null;
       _selectedWeeklySummary = null;
       _selectedAdministrativeNotice = null;
+      _selectedHrPerformance = null;
       _administrativeNoticeTargetId = null;
       _focusMessageId = null;
       _focusMessageHint = null;
@@ -2686,6 +2767,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       _selectedXrxsAssistant = null;
       _selectedWeeklySummary = null;
       _selectedAdministrativeNotice = null;
+      _selectedHrPerformance = null;
       _administrativeNoticeTargetId = null;
       _focusMessageId = null;
       _focusMessageHint = null;
@@ -2718,6 +2800,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       _selectedWeeklySummary = null;
       _selectedReconciliation = null;
       _selectedAdministrativeNotice = null;
+      _selectedHrPerformance = null;
       _administrativeNoticeTargetId = null;
       _focusMessageId = null;
       _focusMessageHint = null;
@@ -2779,6 +2862,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       _selectedWeeklySummary = null;
       _selectedReconciliation = null;
       _selectedAdministrativeNotice = null;
+      _selectedHrPerformance = null;
       _administrativeNoticeTargetId = null;
       if (hint != null && hint.id > 0) _selectedTaskAssistant = hint;
     });
@@ -2841,6 +2925,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       _selectedWeeklySummary = null;
       _selectedReconciliation = null;
       _selectedAdministrativeNotice = null;
+      _selectedHrPerformance = null;
       _administrativeNoticeTargetId = null;
       if (hint != null && hint.id > 0) _selectedKpiAssistant = hint;
     });
@@ -2903,6 +2988,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       _selectedWeeklySummary = null;
       _selectedReconciliation = null;
       _selectedAdministrativeNotice = null;
+      _selectedHrPerformance = null;
       _administrativeNoticeTargetId = null;
       if (hint != null && hint.id > 0) _selectedDriveAssistant = hint;
     });
@@ -2949,6 +3035,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       _selectedXrxsAssistant = null;
       _selectedReconciliation = null;
       _selectedAdministrativeNotice = null;
+      _selectedHrPerformance = null;
       _administrativeNoticeTargetId = null;
       if (hint != null && hint.id > 0) _selectedWeeklySummary = hint;
     });
@@ -2994,6 +3081,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       _selectedXrxsAssistant = null;
       _selectedWeeklySummary = null;
       _selectedReconciliation = null;
+      _selectedHrPerformance = null;
       if (hint != null && hint.id > 0) {
         _selectedAdministrativeNotice = hint;
       } else {
@@ -3004,6 +3092,43 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     _markUserEnteredChat();
     // 行政通知未读以「确认」为准：进入详情不能本地清角标。
     _goChatScreen('AN1');
+  }
+
+  void _openHrPerformance(NativeConversation hint) {
+    setState(() {
+      _selectedPrivate = null;
+      _selectedPrivatePeerUserId = null;
+      _selectedGroup = null;
+      _selectedRobot = null;
+      _selectedApprovalAssistant = null;
+      _selectedTaskAssistant = null;
+      _selectedKpiAssistant = null;
+      _selectedDriveAssistant = null;
+      _selectedXrxsAssistant = null;
+      _selectedWeeklySummary = null;
+      _selectedReconciliation = null;
+      _selectedAdministrativeNotice = null;
+      _selectedHrPerformance = null;
+      _administrativeNoticeTargetId = null;
+      _focusMessageId = null;
+      _focusMessageHint = null;
+      if (hint.id > 0) _selectedHrPerformance = hint;
+    });
+    if ((_selectedHrPerformance?.id ?? 0) <= 0) return;
+    _markUserEnteredChat();
+    _goChatScreen('HP1');
+    _conversationReadSignal.notifyRead(_selectedHrPerformance!.id);
+  }
+
+  Widget _buildHrPerformancePage({bool showBackButton = true}) {
+    final hint = _selectedHrPerformance;
+    return HrPerformanceNoticePage(
+      key: ValueKey<int>(hint?.id ?? 0),
+      session: widget.session,
+      conversationId: hint?.id ?? 0,
+      showBackButton: showBackButton,
+      onBack: () => _leaveChatToInbox(clearSelection: true),
+    );
   }
 
   Widget _buildAdministrativeNoticePage({bool showBackButton = true}) {
@@ -3065,6 +3190,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       _selectedWeeklySummary = null;
       _selectedReconciliation = null;
       _selectedAdministrativeNotice = null;
+      _selectedHrPerformance = null;
       _administrativeNoticeTargetId = null;
       if (hint != null && hint.id > 0) _selectedXrxsAssistant = hint;
     });
@@ -3253,6 +3379,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     if (screen == 'AN1' || dual == 'AN1') {
       return 'an';
     }
+    if (screen == 'HP1' || dual == 'HP1') {
+      return 'hp';
+    }
     if (screen == 'RA1' || dual == 'RA1') {
       return 'reconciliation';
     }
@@ -3316,6 +3445,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     }
     if (screen == 'AN1' || dual == 'AN1') {
       return _DualChatSlot.administrativeNotice(_selectedAdministrativeNotice);
+    }
+    if (screen == 'HP1' || dual == 'HP1') {
+      return _DualChatSlot.hrPerformance(_selectedHrPerformance);
     }
     if (screen == 'RA1' || dual == 'RA1') {
       return _DualChatSlot.reconciliation(_selectedReconciliation);
@@ -3513,6 +3645,16 @@ class _NativeScreenHostState extends State<NativeScreenHost>
             autoMarkRead: autoMark,
             onBack: () => _leaveChatToInbox(clearSelection: true),
             onConversationRead: _handleConversationRead,
+          ),
+        );
+      case _DualChatKind.hrPerformance:
+        return KeyedSubtree(
+          key: key,
+          child: HrPerformanceNoticePage(
+            session: widget.session,
+            conversationId: slot.conversation?.id ?? 0,
+            showBackButton: false,
+            onBack: () => _leaveChatToInbox(clearSelection: true),
           ),
         );
       case _DualChatKind.administrativeNotice:
@@ -4751,6 +4893,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         return _buildAdministrativeNoticePage(
           showBackButton: !isDesktopCommOnly,
         );
+      case 'HP1':
+        return _buildHrPerformancePage(showBackButton: !isDesktopCommOnly);
       case 'AA1':
         return _buildApprovalAssistantPage();
       case 'AA2':
@@ -5877,6 +6021,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       'DA1',
       'XA1',
       'AN1',
+      'HP1',
       'WS1',
       'Z2',
       'AS1',
@@ -9135,6 +9280,7 @@ enum _DualChatKind {
   xrxs,
   weeklySummary,
   administrativeNotice,
+  hrPerformance,
   reconciliation,
 }
 
@@ -9212,6 +9358,13 @@ class _DualChatSlot {
   factory _DualChatSlot.administrativeNotice(NativeConversation? conversation) {
     return _DualChatSlot._(
       kind: _DualChatKind.administrativeNotice,
+      conversation: conversation,
+    );
+  }
+
+  factory _DualChatSlot.hrPerformance(NativeConversation? conversation) {
+    return _DualChatSlot._(
+      kind: _DualChatKind.hrPerformance,
       conversation: conversation,
     );
   }

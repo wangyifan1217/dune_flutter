@@ -127,6 +127,7 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
   bool? _canSeeProposalIntake;
   bool? _canSeeKpiPerformance;
   HrPerformanceAccess _hrPerformanceAccess = const HrPerformanceAccess();
+  bool _hrConfigTemplates = false;
   bool? _canSeePayrollReports;
   bool? _canSeePaymentInvoice;
   bool? _canSeeReimbursementSummary;
@@ -587,6 +588,11 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
 
   void _openTaskSummary() => _open(_WorkbenchView.hrbp);
 
+  void _openHrConfig({required bool templates}) {
+    _hrConfigTemplates = templates;
+    _open(_WorkbenchView.hrPerformanceLibrary);
+  }
+
   void _openMergedChoices({
     required String title,
     required List<_WorkbenchTile> choices,
@@ -1000,8 +1006,12 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
         );
       case _WorkbenchView.hrPerformanceLibrary:
         return HrPerformanceLibraryPage(
-          key: const ValueKey<String>('workbench-hr-performance-library'),
+          key: ValueKey<String>(
+            'workbench-hr-performance-${_hrConfigTemplates ? 'templates' : 'library'}',
+          ),
           session: _session,
+          showTemplates: _hrConfigTemplates,
+          onClose: () => _goPage(0),
         );
       case _WorkbenchView.kpiPerformance:
         return NativeWorkbenchKpiPage(
@@ -1187,11 +1197,31 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
       if (!_session.isExternalUser && _hrPerformanceAccess.hr)
         _WorkbenchTile(
           title: '考核配置',
-          subtitle: '指标库 · 生成考核表',
+          subtitle: '指标库 · 考核模板',
           icon: Icons.tune_outlined,
           color: DunesColors.resolve(context, _themePurple),
           enabled: true,
-          onTap: () => _open(_WorkbenchView.hrPerformanceLibrary),
+          onTap: () => _openMergedChoices(
+            title: '考核配置',
+            choices: [
+              _WorkbenchTile(
+                title: '指标库',
+                subtitle: '维护考核维度和评分标准',
+                icon: Icons.tune_outlined,
+                color: DunesColors.resolve(context, _themePurple),
+                enabled: true,
+                onTap: () => _openHrConfig(templates: false),
+              ),
+              _WorkbenchTile(
+                title: '考核模板',
+                subtitle: '按岗位组装最终考核表',
+                icon: Icons.assignment_outlined,
+                color: DunesColors.resolve(context, _themePurple),
+                enabled: true,
+                onTap: () => _openHrConfig(templates: true),
+              ),
+            ],
+          ),
         ),
       if (!_session.isExternalUser && _canSeePayrollReports == true)
         _WorkbenchTile(

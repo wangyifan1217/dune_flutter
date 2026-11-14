@@ -125,41 +125,55 @@ class HrConfigSection extends StatelessWidget {
         color: hrConfigBorder(context, const Color(0xFFECE7F3)),
       ),
     ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(
+    child: LayoutBuilder(
+      builder: (context, constraints) {
+        final inlineAction = action != null && constraints.maxWidth >= 560;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Icon(icon, size: 18, color: hrConfigColor(context, hrConfigPurple)),
-            const SizedBox(width: 9),
-            Expanded(
-              child: Text(
-                title,
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700,
-                  color: hrConfigColor(context, const Color(0xFF30263E)),
+            Row(
+              children: [
+                Icon(
+                  icon,
+                  size: 18,
+                  color: hrConfigColor(context, hrConfigPurple),
+                ),
+                const SizedBox(width: 9),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: hrConfigColor(context, const Color(0xFF30263E)),
+                    ),
+                  ),
+                ),
+                if (inlineAction) action!,
+              ],
+            ),
+            if (!inlineAction && action != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: Align(alignment: Alignment.centerLeft, child: action),
+              ),
+            if (subtitle != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 7),
+                child: Text(
+                  subtitle!,
+                  style: TextStyle(
+                    fontSize: 12,
+                    height: 1.5,
+                    color: hrConfigColor(context, const Color(0xFF8C8298)),
+                  ),
                 ),
               ),
-            ),
-            ?action,
+            const SizedBox(height: 18),
+            child,
           ],
-        ),
-        if (subtitle != null)
-          Padding(
-            padding: const EdgeInsets.only(top: 7),
-            child: Text(
-              subtitle!,
-              style: TextStyle(
-                fontSize: 12,
-                height: 1.5,
-                color: hrConfigColor(context, const Color(0xFF8C8298)),
-              ),
-            ),
-          ),
-        const SizedBox(height: 18),
-        child,
-      ],
+        );
+      },
     ),
   );
 }

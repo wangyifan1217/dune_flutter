@@ -270,14 +270,17 @@ void main() {
       expect(find.text('指标权重合计：100.0%'), findsOneWidget);
       await tester.tap(find.byTooltip('清空指标搜索'));
       await tester.pumpAndSettle();
-      await tester.tap(
-        find.descendant(
-          of: find.byKey(const ValueKey('hr-template-item-collaboration')),
-          matching: find.byTooltip('移出模板'),
-        ),
+      final removeCollaboration = find.descendant(
+        of: find.byKey(const ValueKey('hr-template-item-collaboration')),
+        matching: find.byTooltip('移出模板'),
       );
+      await tester.ensureVisible(removeCollaboration);
+      await tester.pumpAndSettle();
+      await tester.tap(removeCollaboration);
       await tester.pumpAndSettle();
       expect(find.text('协作与责任'), findsNothing);
+      await tester.ensureVisible(find.text('添加指标'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('添加指标'));
       await tester.pumpAndSettle();
       await tester.enterText(

@@ -302,16 +302,11 @@ class MeetingRecordingBar extends StatelessWidget {
           label:
               '$label，${meetingRecordingElapsed(live.elapsed.value)}，点击进入当前会议',
           button: true,
-          child: Material(
-            key: const Key('meeting-recording-bar'),
-            color: DunesColors.resolve(
-              context,
-              Colors.white,
-              role: DunesColorRole.surface,
-            ),
-            shape: RoundedRectangleBorder(
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: Colors.transparent,
               borderRadius: BorderRadius.circular(16),
-              side: BorderSide(
+              border: Border.all(
                 color: DunesColors.resolve(
                   context,
                   DunesColors.brandPurpleLine,
@@ -319,69 +314,84 @@ class MeetingRecordingBar extends StatelessWidget {
                 ),
               ),
             ),
-            elevation: 2,
-            shadowColor: DunesColors.brandPurple.withValues(alpha: 0.12),
-            child: InkWell(
-              onTap: onOpen,
+            child: Material(
+              key: const Key('meeting-recording-bar'),
+              type: MaterialType.transparency,
               borderRadius: BorderRadius.circular(16),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 9,
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 38,
-                      height: 38,
-                      decoration: BoxDecoration(
-                        color: color.withValues(alpha: 0.10),
-                        borderRadius: BorderRadius.circular(11),
-                      ),
-                      child: recovering
-                          ? Padding(
-                              padding: const EdgeInsets.all(10),
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
+              child: InkWell(
+                onTap: onOpen,
+                borderRadius: BorderRadius.circular(16),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 9,
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 38,
+                        height: 38,
+                        decoration: BoxDecoration(
+                          color: color.withValues(alpha: 0.10),
+                          borderRadius: BorderRadius.circular(11),
+                        ),
+                        child: recovering
+                            ? Padding(
+                                padding: const EdgeInsets.all(10),
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: color,
+                                ),
+                              )
+                            : Icon(
+                                paused
+                                    ? Icons.pause_rounded
+                                    : Icons.graphic_eq_rounded,
                                 color: color,
+                                size: 22,
                               ),
-                            )
-                          : Icon(
-                              paused
-                                  ? Icons.pause_rounded
-                                  : Icons.graphic_eq_rounded,
-                              color: color,
-                              size: 22,
-                            ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            label,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: DunesTypography.sans(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color: DunesColors.resolve(
-                                context,
-                                DunesColors.text,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              label,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: DunesTypography.sans(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: DunesColors.resolve(
+                                  context,
+                                  DunesColors.text,
+                                ),
+                                context: context,
                               ),
-                              context: context,
                             ),
-                          ),
-                          const SizedBox(height: 3),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  title.isEmpty ? '现场会议' : title,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
+                            const SizedBox(height: 3),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    title.isEmpty ? '现场会议' : title,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: DunesTypography.sans(
+                                      fontSize: 12,
+                                      color: DunesColors.resolve(
+                                        context,
+                                        DunesColors.text2,
+                                      ),
+                                      context: context,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  meetingRecordingElapsed(live.elapsed.value),
                                   style: DunesTypography.sans(
                                     fontSize: 12,
                                     color: DunesColors.resolve(
@@ -391,35 +401,23 @@ class MeetingRecordingBar extends StatelessWidget {
                                     context: context,
                                   ),
                                 ),
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                meetingRecordingElapsed(live.elapsed.value),
-                                style: DunesTypography.sans(
-                                  fontSize: 12,
-                                  color: DunesColors.resolve(
-                                    context,
-                                    DunesColors.text2,
-                                  ),
-                                  context: context,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
+                              ],
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      paused || failed ? '处理' : '查看',
-                      style: DunesTypography.sans(
-                        fontSize: 12,
-                        color: color,
-                        context: context,
+                      const SizedBox(width: 6),
+                      Text(
+                        paused || failed ? '处理' : '查看',
+                        style: DunesTypography.sans(
+                          fontSize: 12,
+                          color: color,
+                          context: context,
+                        ),
                       ),
-                    ),
-                    Icon(Icons.chevron_right_rounded, color: color, size: 18),
-                  ],
+                      Icon(Icons.chevron_right_rounded, color: color, size: 18),
+                    ],
+                  ),
                 ),
               ),
             ),

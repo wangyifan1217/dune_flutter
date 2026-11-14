@@ -13,10 +13,14 @@ class HrPerformanceLibraryPage extends StatefulWidget {
     super.key,
     required this.session,
     this.service,
+    this.showTemplates = false,
+    this.onClose,
   });
 
   final AuthSession session;
   final HrPerformanceService? service;
+  final bool showTemplates;
+  final VoidCallback? onClose;
 
   @override
   State<HrPerformanceLibraryPage> createState() =>
@@ -110,7 +114,8 @@ class _HrPerformanceLibraryPageState extends State<HrPerformanceLibraryPage> {
   @override
   void initState() {
     super.initState();
-    _load();
+    _showTemplates = widget.showTemplates;
+    if (!_showTemplates) _load();
   }
 
   @override
@@ -475,6 +480,21 @@ class _HrPerformanceLibraryPageState extends State<HrPerformanceLibraryPage> {
   Widget build(BuildContext context) {
     final text = DunesColors.resolve(context, DunesColors.text);
     final muted = DunesColors.resolve(context, DunesColors.text3);
+    if (_showTemplates) {
+      return HrPerformanceTemplatesPage(
+        session: widget.session,
+        service: _service,
+        listBackTooltip: widget.showTemplates ? '返回工作台' : '返回指标库',
+        onBack: () {
+          if (widget.showTemplates) {
+            widget.onClose?.call();
+            return;
+          }
+          setState(() => _showTemplates = false);
+          _load();
+        },
+      );
+    }
     if (_loading) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -488,16 +508,6 @@ class _HrPerformanceLibraryPageState extends State<HrPerformanceLibraryPage> {
             FilledButton(onPressed: _load, child: const Text('重试')),
           ],
         ),
-      );
-    }
-    if (_showTemplates) {
-      return HrPerformanceTemplatesPage(
-        session: widget.session,
-        service: _service,
-        onBack: () {
-          setState(() => _showTemplates = false);
-          _load();
-        },
       );
     }
     final searching = _searchController.text.trim().isNotEmpty;

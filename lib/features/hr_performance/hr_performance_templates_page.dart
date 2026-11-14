@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 import '../auth/auth_session.dart';
@@ -20,11 +21,13 @@ class HrPerformanceTemplatesPage extends StatefulWidget {
     required this.service,
     required this.onBack,
     this.loadContacts,
+    this.listBackTooltip = '返回指标库',
   });
   final AuthSession session;
   final HrPerformanceService service;
   final VoidCallback onBack;
   final Future<ContactOrgData> Function()? loadContacts;
+  final String listBackTooltip;
   @override
   State<HrPerformanceTemplatesPage> createState() => _State();
 }
@@ -215,14 +218,73 @@ class _State extends State<HrPerformanceTemplatesPage> {
     ];
     for (final i in indicators) {
       if (result.contains('${i['id']}') && !selected.contains('${i['id']}')) {
-        next.add({
+        final item = {
           'indicatorId': i['id'],
           'weight': i['weight'],
           'snapshot': jsonDecode(jsonEncode(i)),
-        });
+        };
+        final dimension = itemDimension(item);
+        var insertAt = next.length;
+        for (var index = next.length - 1; index >= 0; index--) {
+          if (itemDimension(next[index]) == dimension) {
+            insertAt = index + 1;
+            break;
+          }
+        }
+        next.insert(insertAt, item);
       }
     }
     setState(() => d['items'] = next);
+  }
+
+  String itemDimension(Map<String, dynamic> item) {
+    final name = '${effective(item)['project'] ?? ''}'.trim();
+    return name.isEmpty ? '未分组' : name;
+  }
+
+  List<_IndicatorGroup> indicatorGroups(List<Map<String, dynamic>> items) {
+    final order = <String>[];
+    final grouped = <String, List<Map<String, dynamic>>>{};
+    for (final item in items) {
+      final key = itemDimension(item);
+      grouped
+          .putIfAbsent(key, () {
+            order.add(key);
+            return <Map<String, dynamic>>[];
+          })
+          .add(item);
+    }
+    return [for (final key in order) _IndicatorGroup(key, grouped[key]!)];
+  }
+
+  void applyGroups(List<_IndicatorGroup> groups) {
+    editing!['items'] = [
+      for (final group in groups)
+        for (final item in group.items) item,
+    ];
+  }
+
+  void moveDimension(int index, int steps) {
+    final groups = indicatorGroups(maps(editing!['items']));
+    final target = (index + steps).clamp(0, groups.length - 1);
+    if (target == index) return;
+    final moved = groups.removeAt(index);
+    groups.insert(target, moved);
+    setState(() => applyGroups(groups));
+  }
+
+  void moveIndicator(String dimension, int index, int steps) {
+    final groups = indicatorGroups(maps(editing!['items']));
+    final group = groups.firstWhere((entry) => entry.name == dimension);
+    final target = (index + steps).clamp(0, group.items.length - 1);
+    if (target == index) return;
+    final items = [...group.items];
+    final moved = items.removeAt(index);
+    items.insert(target, moved);
+    group.items
+      ..clear()
+      ..addAll(items);
+    setState(() => applyGroups(groups));
   }
 
   Future<void> editItem(BuildContext ctx, Map<String, dynamic> item) async {
@@ -613,23 +675,60 @@ class _State extends State<HrPerformanceTemplatesPage> {
 
   Widget indicatorSection(BuildContext ctx) {
     final items = maps(editing!['items']);
-    final visible = items.where((i) {
-      final source = effective(i);
-      return hrPerformanceMatchesSearch(indicatorSearch.text, [
-        '${source['name']}',
-        '${source['project']}',
-        '${source['instructions'] ?? ''}',
-        ...maps(source['bands']).map((b) => '${b['description']}'),
-      ]);
-    }).toList();
+    final searching = indicatorSearch.text.trim().isNotEmpty;
+    final allGroups = indicatorGroups(items);
+    final visibleGroups = <_IndicatorGroup>[];
+    for (final group in allGroups) {
+      final shown = group.items.where((item) {
+        final source = effective(item);
+        return hrPerformanceMatchesSearch(indicatorSearch.text, [
+          '${source['name']}',
+          '${source['project']}',
+          '${source['instructions'] ?? ''}',
+          ...maps(source['bands']).map((band) => '${band['description']}'),
+        ]);
+      }).toList();
+      if (shown.isEmpty) continue;
+      visibleGroups.add(
+        _IndicatorGroup(
+          group.name,
+          shown,
+          weight: group.weight,
+          totalCount: group.items.length,
+        ),
+      );
+    }
+    final canReorder = !searching && !saving && visibleGroups.isNotEmpty;
+    final buttonStyle = OutlinedButton.styleFrom(
+      visualDensity: VisualDensity.compact,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+    );
     return HrConfigSection(
-      title: '考核指标',
+      title: '考核内容',
       icon: Icons.assignment_outlined,
-      subtitle: '从指标库添加指标，分别设置权重和评分标准。',
-      action: OutlinedButton.icon(
-        onPressed: saving ? null : () => chooseIndicators(ctx),
-        icon: const Icon(Icons.add_rounded, size: 17),
-        label: const Text('添加指标', style: TextStyle(fontSize: 12)),
+      subtitle: '一个考核维度对应多项指标，维度权重等于其中指标权重之和。按住左侧手柄拖到新位置后松手。',
+      action: Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          Tooltip(
+            message: '预览最终考核表',
+            child: OutlinedButton.icon(
+              onPressed: () => preview(ctx),
+              style: buttonStyle,
+              icon: const Icon(Icons.visibility_outlined, size: 16),
+              label: const Text('预览考核表', style: TextStyle(fontSize: 12)),
+            ),
+          ),
+          OutlinedButton.icon(
+            onPressed: saving ? null : () => chooseIndicators(ctx),
+            style: buttonStyle,
+            icon: const Icon(Icons.add_rounded, size: 17),
+            label: const Text('添加指标', style: TextStyle(fontSize: 12)),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -651,7 +750,7 @@ class _State extends State<HrPerformanceTemplatesPage> {
             ),
           ),
           const SizedBox(height: 12),
-          if (visible.isEmpty)
+          if (visibleGroups.isEmpty)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 28),
               child: Center(
@@ -663,120 +762,267 @@ class _State extends State<HrPerformanceTemplatesPage> {
                   ),
                 ),
               ),
+            )
+          else
+            for (var index = 0; index < visibleGroups.length; index++)
+              dimensionCard(
+                ctx,
+                visibleGroups[index],
+                index: index,
+                canReorder: canReorder && allGroups.length > 1,
+                canReorderItems: canReorder,
+              ),
+          Text(
+            '已选 ${items.length} 项指标，${allGroups.length} 个维度',
+            style: TextStyle(
+              fontSize: 12,
+              color: hrConfigColor(ctx, const Color(0xFF8C8298)),
             ),
-          for (final item in visible)
-            Builder(
-              builder: (ctx) {
-                final source = effective(item);
-                return Container(
-                  key: ValueKey('hr-template-item-${item['indicatorId']}'),
-                  margin: const EdgeInsets.only(bottom: 10),
-                  decoration: BoxDecoration(
-                    border: Border.all(
-                      color: hrConfigBorder(ctx, const Color(0xFFECE7F3)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget dimensionCard(
+    BuildContext ctx,
+    _IndicatorGroup group, {
+    required int index,
+    required bool canReorder,
+    required bool canReorderItems,
+  }) {
+    final indicatorList = Column(
+      children: [
+        for (var itemIndex = 0; itemIndex < group.items.length; itemIndex++)
+          indicatorTile(
+            ctx,
+            group.items[itemIndex],
+            onMove: canReorderItems && group.items.length > 1
+                ? (steps) => moveIndicator(group.name, itemIndex, steps)
+                : null,
+          ),
+      ],
+    );
+    return Container(
+      key: ValueKey('hr-template-dimension-${group.name}'),
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: hrConfigSurface(ctx, const Color(0xFFFCFBFE)),
+        border: Border.all(color: hrConfigBorder(ctx, const Color(0xFFE5DDEF))),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(4, 6, 12, 6),
+            child: Row(
+              children: [
+                if (canReorder)
+                  _OrderDragHandle(
+                    handleKey: ValueKey(
+                      'hr-template-dimension-drag-${group.name}',
                     ),
-                    borderRadius: BorderRadius.circular(12),
+                    extentKey: ValueKey('hr-template-dimension-${group.name}'),
+                    message: '拖动调整维度顺序',
+                    label: group.name,
+                    gap: 12,
+                    onMove: (steps) => moveDimension(index, steps),
+                  )
+                else
+                  const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: hrConfigSurface(ctx, const Color(0xFFF2ECFC)),
+                    borderRadius: BorderRadius.circular(8),
                   ),
-                  child: Material(
-                    color: Colors.transparent,
-                    borderRadius: BorderRadius.circular(12),
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(12),
-                      onTap: saving ? null : () => editItem(ctx, item),
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(12, 14, 4, 14),
-                        child: Row(
+                  child: Icon(
+                    Icons.account_tree_outlined,
+                    size: 16,
+                    color: hrConfigColor(ctx, hrConfigPurple),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        group.name,
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: hrConfigColor(ctx, const Color(0xFF302B39)),
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        group.totalCount == group.items.length
+                            ? '${group.items.length} 个指标'
+                            : '显示 ${group.items.length} / ${group.totalCount} 个指标',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: hrConfigColor(ctx, const Color(0xFF8C8298)),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      '维度权重',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: hrConfigColor(ctx, const Color(0xFF8C8298)),
+                      ),
+                    ),
+                    Text(
+                      _templatePercent(group.weight),
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: hrConfigColor(ctx, hrConfigPurple),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 0, 8, 4),
+            child: indicatorList,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget indicatorTile(
+    BuildContext ctx,
+    Map<String, dynamic> item, {
+    ValueChanged<int>? onMove,
+  }) {
+    final source = effective(item);
+    final items = maps(editing!['items']);
+    return Container(
+      key: ValueKey('hr-template-item-${item['indicatorId']}'),
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: hrConfigSurface(ctx, Colors.white),
+        border: Border.all(color: hrConfigBorder(ctx, const Color(0xFFECE7F3))),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          if (onMove != null)
+            _OrderDragHandle(
+              handleKey: ValueKey(
+                'hr-template-item-drag-${item['indicatorId']}',
+              ),
+              extentKey: ValueKey('hr-template-item-${item['indicatorId']}'),
+              message: '拖动调整指标顺序',
+              label: '${source['name']}',
+              gap: 8,
+              onMove: onMove,
+            ),
+          Expanded(
+            child: Material(
+              color: Colors.transparent,
+              borderRadius: BorderRadius.circular(12),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(12),
+                onTap: saving ? null : () => editItem(ctx, item),
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(
+                    onMove == null ? 12 : 4,
+                    12,
+                    4,
+                    12,
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(9),
+                        decoration: BoxDecoration(
+                          color: hrConfigSurface(ctx, const Color(0xFFF2ECFC)),
+                          borderRadius: BorderRadius.circular(9),
+                        ),
+                        child: Icon(
+                          Icons.assessment_outlined,
+                          size: 18,
+                          color: hrConfigColor(ctx, hrConfigPurple),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Container(
-                              padding: const EdgeInsets.all(9),
-                              decoration: BoxDecoration(
-                                color: hrConfigSurface(
-                                  ctx,
-                                  const Color(0xFFF2ECFC),
-                                ),
-                                borderRadius: BorderRadius.circular(9),
-                              ),
-                              child: Icon(
-                                Icons.assessment_outlined,
-                                size: 18,
-                                color: hrConfigColor(ctx, hrConfigPurple),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    '${source['name']}',
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w600,
-                                      color: hrConfigColor(
-                                        ctx,
-                                        const Color(0xFF302B39),
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 5),
-                                  Text(
-                                    '${source['project']} · ${maps(source['bands']).length} 个评分分档',
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: hrConfigColor(
-                                        ctx,
-                                        const Color(0xFF8C8298),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
                             Text(
-                              '${item['weight']}%',
+                              '${source['name']}',
                               style: TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.w700,
-                                color: hrConfigColor(ctx, hrConfigPurple),
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: hrConfigColor(
+                                  ctx,
+                                  const Color(0xFF302B39),
+                                ),
                               ),
                             ),
-                            IconButton(
-                              tooltip: '编辑模板指标',
-                              onPressed: saving
-                                  ? null
-                                  : () => editItem(ctx, item),
-                              icon: const Icon(Icons.edit_outlined, size: 18),
-                            ),
-                            IconButton(
-                              tooltip: '移出模板',
-                              onPressed: saving
-                                  ? null
-                                  : () => setState(
-                                      () => editing!['items'] = items
-                                          .where(
-                                            (i) =>
-                                                i['indicatorId'] !=
-                                                item['indicatorId'],
-                                          )
-                                          .toList(),
-                                    ),
-                              icon: const Icon(Icons.close_rounded, size: 18),
+                            const SizedBox(height: 5),
+                            Text(
+                              '${maps(source['bands']).length} 个评分分档',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: hrConfigColor(
+                                  ctx,
+                                  const Color(0xFF8C8298),
+                                ),
+                              ),
                             ),
                           ],
                         ),
                       ),
-                    ),
+                      Text(
+                        _templatePercent(
+                          (item['weight'] as num?)?.toDouble() ?? 0,
+                        ),
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                          color: hrConfigColor(ctx, hrConfigPurple),
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: '编辑模板指标',
+                        onPressed: saving ? null : () => editItem(ctx, item),
+                        icon: const Icon(Icons.edit_outlined, size: 18),
+                      ),
+                      IconButton(
+                        tooltip: '移出模板',
+                        onPressed: saving
+                            ? null
+                            : () => setState(
+                                () => editing!['items'] = items
+                                    .where(
+                                      (entry) =>
+                                          entry['indicatorId'] !=
+                                          item['indicatorId'],
+                                    )
+                                    .toList(),
+                              ),
+                        icon: const Icon(Icons.close_rounded, size: 18),
+                      ),
+                    ],
                   ),
-                );
-              },
-            ),
-          Text(
-            '已选 ${items.length} 项指标',
-            style: TextStyle(
-              fontSize: 12,
-              color: hrConfigColor(ctx, const Color(0xFF8C8298)),
+                ),
+              ),
             ),
           ),
         ],
@@ -1023,7 +1269,9 @@ class _State extends State<HrPerformanceTemplatesPage> {
                           Row(
                             children: [
                               IconButton(
-                                tooltip: d == null ? '返回指标库' : '返回模板列表',
+                                tooltip: d == null
+                                    ? widget.listBackTooltip
+                                    : '返回模板列表',
                                 onPressed: saving ? null : leave,
                                 icon: const Icon(
                                   Icons.arrow_back_rounded,
@@ -1161,7 +1409,7 @@ class _State extends State<HrPerformanceTemplatesPage> {
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
-                                  '${items.length} 项指标 · 合计须为 100%',
+                                  '${items.length} 项指标 · ${indicatorGroups(items).length} 个维度 · 合计须为 100%',
                                   style: TextStyle(
                                     fontSize: 11,
                                     color: hrConfigColor(
@@ -1197,4 +1445,211 @@ class _State extends State<HrPerformanceTemplatesPage> {
       },
     ),
   );
+}
+
+class _IndicatorGroup {
+  _IndicatorGroup(this.name, this.items, {double? weight, int? totalCount})
+    : weight =
+          weight ??
+          items.fold<double>(
+            0,
+            (sum, item) => sum + ((item['weight'] as num?)?.toDouble() ?? 0),
+          ),
+      totalCount = totalCount ?? items.length;
+
+  final String name;
+  final List<Map<String, dynamic>> items;
+  final double weight;
+  final int totalCount;
+}
+
+class _OrderDragHandle extends StatefulWidget {
+  const _OrderDragHandle({
+    required this.handleKey,
+    required this.extentKey,
+    required this.message,
+    required this.label,
+    required this.gap,
+    required this.onMove,
+  });
+
+  final Key handleKey;
+  final Key extentKey;
+  final String message;
+  final String label;
+  final double gap;
+  final ValueChanged<int> onMove;
+
+  @override
+  State<_OrderDragHandle> createState() => _OrderDragHandleState();
+}
+
+class _OrderDragHandleState extends State<_OrderDragHandle> {
+  double _dy = 0;
+  Offset _point = Offset.zero;
+  OverlayEntry? _entry;
+
+  @override
+  void dispose() {
+    _removeOverlay();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return RawGestureDetector(
+      behavior: HitTestBehavior.opaque,
+      gestures: <Type, GestureRecognizerFactory>{
+        _EagerVerticalDragGestureRecognizer:
+            GestureRecognizerFactoryWithHandlers<
+              _EagerVerticalDragGestureRecognizer
+            >(_EagerVerticalDragGestureRecognizer.new, (instance) {
+              instance.onStart = (details) {
+                _dy = 0;
+                _point = details.globalPosition;
+                _showOverlay();
+              };
+              instance.onUpdate = (details) {
+                _dy += details.delta.dy;
+                _point = details.globalPosition;
+                _entry?.markNeedsBuild();
+              };
+              instance.onEnd = (_) {
+                _finish();
+              };
+              instance.onCancel = _finish;
+            }),
+      },
+      child: MouseRegion(
+        cursor: SystemMouseCursors.grab,
+        child: Tooltip(
+          message: widget.message,
+          child: Padding(
+            key: widget.handleKey,
+            padding: const EdgeInsets.all(10),
+            child: Icon(
+              Icons.drag_indicator_rounded,
+              size: 20,
+              color: hrConfigColor(context, hrConfigPurple),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showOverlay() {
+    _removeOverlay();
+    final overlay = Overlay.maybeOf(context, rootOverlay: true);
+    if (overlay == null) return;
+    _entry = OverlayEntry(
+      builder: (context) {
+        final width = MediaQuery.sizeOf(context).width;
+        final maxLeft = width - 276;
+        final left = (_point.dx + 18).clamp(
+          16.0,
+          maxLeft < 16 ? 16.0 : maxLeft,
+        );
+        return Positioned(
+          left: left,
+          top: _point.dy - 24 < 8 ? 8 : _point.dy - 24,
+          width: 260,
+          child: IgnorePointer(
+            child: Material(
+              elevation: 8,
+              color: hrConfigSurface(context, Colors.white),
+              shadowColor: Colors.black26,
+              borderRadius: BorderRadius.circular(12),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.drag_indicator_rounded,
+                      size: 18,
+                      color: hrConfigColor(context, hrConfigPurple),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        widget.label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: hrConfigColor(
+                            context,
+                            const Color(0xFF302B39),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+    overlay.insert(_entry!);
+  }
+
+  void _removeOverlay() {
+    _entry?.remove();
+    _entry?.dispose();
+    _entry = null;
+  }
+
+  double _slotExtent() {
+    RenderBox? box;
+    context.visitAncestorElements((element) {
+      if (element.widget.key == widget.extentKey) {
+        final render = element.renderObject;
+        if (render is RenderBox && render.hasSize) box = render;
+        return false;
+      }
+      return true;
+    });
+    final height = box?.size.height ?? 72;
+    return (height < 24 ? 72 : height) + widget.gap;
+  }
+
+  void _finish() {
+    final steps = _dragSteps(_dy, _slotExtent());
+    _dy = 0;
+    _removeOverlay();
+    if (steps != 0 && mounted) widget.onMove(steps);
+  }
+}
+
+int _dragSteps(double dy, double slot) {
+  if (!dy.isFinite || !slot.isFinite || slot <= 0) return 0;
+  final raw = dy / slot;
+  if (raw.abs() < 0.35) return 0;
+  final rounded = raw.round();
+  if (rounded == 0) return raw.isNegative ? -1 : 1;
+  return rounded;
+}
+
+class _EagerVerticalDragGestureRecognizer
+    extends VerticalDragGestureRecognizer {
+  @override
+  void addAllowedPointer(PointerDownEvent event) {
+    super.addAllowedPointer(event);
+    resolve(GestureDisposition.accepted);
+  }
+}
+
+String _templatePercent(double value) {
+  if (!value.isFinite) return '0%';
+  final rounded = (value * 10).round() / 10;
+  if ((rounded - rounded.roundToDouble()).abs() < 0.001) {
+    return '${rounded.toInt()}%';
+  }
+  return '${rounded.toStringAsFixed(1)}%';
 }

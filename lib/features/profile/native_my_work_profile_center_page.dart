@@ -25,7 +25,6 @@ import '../chat/app_theme_guide.dart';
 import '../funding_proposal/native_funding_proposal_page.dart';
 import '../kb/native_kb_models.dart';
 import '../kb/native_kb_service.dart';
-import '../meeting/meeting_live_controller.dart';
 import '../meeting/native_meeting_service.dart';
 import '../shell/dunes_main_tab_bar.dart';
 import '../shell/dunes_toast.dart';
@@ -303,7 +302,6 @@ class _NativeMyWorkProfileCenterPageState
   bool _qrScannerOpening = false;
   int _avatarRefreshVersion = 0;
   int _attendanceRefreshToken = 0;
-  final MeetingLiveController _live = MeetingLiveController.instance;
 
   DateTime get _currentMonth {
     final now = DateTime.now();
@@ -323,9 +321,6 @@ class _NativeMyWorkProfileCenterPageState
 
     _profile = _restoreCachedProfile();
     widget.workbenchRefresh.addListener(_onWorkbenchDataRefresh);
-    _live.active.addListener(_onLiveStateChanged);
-    _live.paused.addListener(_onLiveStateChanged);
-    _live.elapsed.addListener(_onLiveStateChanged);
 
     _loadWorkProfileData();
     _loadAffairsData(silent: _profile != null);
@@ -335,14 +330,7 @@ class _NativeMyWorkProfileCenterPageState
   @override
   void dispose() {
     widget.workbenchRefresh.removeListener(_onWorkbenchDataRefresh);
-    _live.active.removeListener(_onLiveStateChanged);
-    _live.paused.removeListener(_onLiveStateChanged);
-    _live.elapsed.removeListener(_onLiveStateChanged);
     super.dispose();
-  }
-
-  void _onLiveStateChanged() {
-    if (mounted) setState(() {});
   }
 
   void _onWorkbenchDataRefresh() {
@@ -1258,14 +1246,6 @@ class _NativeMyWorkProfileCenterPageState
     if (mounted) setState(() => _attendanceRefreshToken++);
   }
 
-  String _formatLiveElapsed(Duration duration) {
-    final total = duration.inSeconds.clamp(0, 24 * 60 * 60);
-    final h = (total ~/ 3600).toString().padLeft(2, '0');
-    final m = ((total % 3600) ~/ 60).toString().padLeft(2, '0');
-    final s = (total % 60).toString().padLeft(2, '0');
-    return '$h:$m:$s';
-  }
-
   @override
   Widget build(BuildContext context) {
     // 2026-10-29 · 「我的」v3：只留审批与提案；AI、知识库、工作画像挪去 AI 板块。
@@ -1517,14 +1497,6 @@ class _NativeMyWorkProfileCenterPageState
                 ),
               ),
             ),
-
-            // 会议录音悬浮药丸（让出新建按钮的位置）
-            if (_live.active.value && !isWindowsDesktopCommOnly)
-              Positioned(
-                right: 16,
-                bottom: navExtent + 84,
-                child: _buildLiveTranscribeFab(),
-              ),
 
             // 盖在「我的」内容上，不伸出左侧主导航。
             if (_desktopProposal != null)
@@ -3503,64 +3475,6 @@ class _NativeMyWorkProfileCenterPageState
                     Color(0xFFB4A7C2),
                   ),
                 ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  /// 会议录音悬浮药丸
-  Widget _buildLiveTranscribeFab() {
-    final paused = _live.paused.value;
-    final elapsedText = _formatLiveElapsed(_live.elapsed.value);
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(24),
-        onTap: () => widget.navigation.go('MM0'),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          decoration: BoxDecoration(
-            color: paused
-                ? DunesColors.resolve(
-                    context,
-                    DunesColors.text3,
-                    role: DunesColorRole.surface,
-                  )
-                : DunesColors.resolve(
-                    context,
-                    DunesColors.coral,
-                    role: DunesColorRole.surface,
-                  ),
-            borderRadius: BorderRadius.circular(24),
-            boxShadow: [
-              BoxShadow(
-                color: (paused ? DunesColors.text3 : DunesColors.coral)
-                    .withValues(alpha: 0.4),
-                blurRadius: 12,
-                spreadRadius: 1,
-                offset: const Offset(0, 3),
-              ),
-            ],
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                paused ? Icons.pause_rounded : Icons.mic_rounded,
-                color: DunesColors.resolve(context, Colors.white),
-                size: 18,
-              ),
-              const SizedBox(width: 6),
-              Text(
-                paused ? '纪要录音已暂停' : '纪要录音中 $elapsedText',
-                style: TextStyle(
-                  color: DunesColors.resolve(context, Colors.white),
-                  fontSize: 13,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
             ],
           ),
         ),

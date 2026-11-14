@@ -154,7 +154,7 @@ import '../lighthouse/platform_tree.dart';
 import '../meeting/meeting_list_cache.dart';
 import '../meeting/meeting_abandoned_recovery.dart';
 import '../meeting/meeting_live_controller.dart';
-import '../meeting/meeting_recording_interruption.dart';
+import '../meeting/meeting_recording_chrome.dart';
 import '../meeting/meeting_upload_coordinator.dart';
 import '../meeting/native_meeting_create_page.dart';
 import '../meeting/native_meeting_detail_page.dart';
@@ -5539,6 +5539,19 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   @override
   Widget build(BuildContext context) {
     final screen = widget.navigation.currentScreen;
+    final separateChrome =
+        !isDesktopCommOnly &&
+        (screen == 'Z4' ||
+            (isWideChatLayout(context) && _isDualPaneChatRoute(screen)));
+    return MeetingRecordingLayout(
+      visible: separateChrome,
+      onOpen: () => openCurrentMeeting(widget.navigation),
+      child: _buildScreenContent(context),
+    );
+  }
+
+  Widget _buildScreenContent(BuildContext context) {
+    final screen = widget.navigation.currentScreen;
     final depth = widget.navigation.history.length;
     final previousScreen = _lastScreen;
     final isBack = previousScreen != null && depth < _lastHistoryDepth;
@@ -6164,6 +6177,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     // 饕输入框弹键盘时藏起底栏，避免键盘和 Tab 叠在一起。
     final hideTabForKeyboard =
         screen == 'QJ' && MediaQuery.viewInsetsOf(context).bottom > 0;
+    final showTab = _showsAppBottomTabBar(screen) && !hideTabForKeyboard;
     return ColoredBox(
       color: DunesColors.resolve(
         context,
@@ -6173,13 +6187,21 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       child: Stack(
         children: [
           Positioned.fill(
-            child: DesktopSectionTransition(
-              token: _desktopSectionTransitionToken,
-              child: content,
+            child: MeetingRecordingLayout(
+              visible:
+                  widget.navigation.currentScreen != 'MM0' &&
+                  widget.navigation.currentScreen != 'Z4',
+              bottomNavigationExtent: showTab
+                  ? dunesAppBottomNavOverlayExtent(context)
+                  : 0,
+              onOpen: () => openCurrentMeeting(widget.navigation),
+              child: DesktopSectionTransition(
+                token: _desktopSectionTransitionToken,
+                child: content,
+              ),
             ),
           ),
-          if (_showsAppBottomTabBar(screen) && !hideTabForKeyboard)
-            Align(alignment: Alignment.bottomCenter, child: tabBar),
+          if (showTab) Align(alignment: Alignment.bottomCenter, child: tabBar),
         ],
       ),
     );
@@ -6961,7 +6983,6 @@ class _NativeB2PageState extends State<_NativeB2Page> {
   String _defaultSalesTemplateKey = XflowService.boundTemplateKeyForMenu(
     '/business/proposals/new',
   );
-  final MeetingLiveController _live = MeetingLiveController.instance;
   late final ProfileTourPrefs _profileTourPrefs;
   final GlobalKey _workProfileBtnKey = GlobalKey();
   bool _profileTourOpen = false;
@@ -6980,10 +7001,6 @@ class _NativeB2PageState extends State<_NativeB2Page> {
       defaultSalesTemplateKey: _defaultSalesTemplateKey,
     );
     widget.workbenchRefresh.addListener(_onWorkbenchDataRefresh);
-    _live.active.addListener(_onLiveStateChanged);
-    _live.paused.addListener(_onLiveStateChanged);
-    _live.elapsed.addListener(_onLiveStateChanged);
-    _live.interruptionHint.addListener(_onLiveInterruptionHint);
     unawaited(
       XflowService.hydrateTemplateCache().then((_) {
         if (!mounted) return;
@@ -7002,16 +7019,6 @@ class _NativeB2PageState extends State<_NativeB2Page> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(_maybeAutoStartProfileTour());
     });
-  }
-
-  void _onLiveStateChanged() {
-    if (mounted) setState(() {});
-  }
-
-  void _onLiveInterruptionHint() {
-    final hint = _live.interruptionHint.value?.trim() ?? '';
-    if (hint.isEmpty || !mounted) return;
-    showDunesToast(context, hint);
   }
 
   _NativeB2Profile? _restoreCachedProfile() {
@@ -7072,10 +7079,6 @@ class _NativeB2PageState extends State<_NativeB2Page> {
   void dispose() {
     widget.navigation.removeListener(_onProfileTourNavigation);
     widget.workbenchRefresh.removeListener(_onWorkbenchDataRefresh);
-    _live.active.removeListener(_onLiveStateChanged);
-    _live.paused.removeListener(_onLiveStateChanged);
-    _live.elapsed.removeListener(_onLiveStateChanged);
-    _live.interruptionHint.removeListener(_onLiveInterruptionHint);
     super.dispose();
   }
 
@@ -7114,14 +7117,6 @@ class _NativeB2PageState extends State<_NativeB2Page> {
     try {
       await _profileTourPrefs.markSeen();
     } catch (_) {}
-  }
-
-  String _formatLiveElapsed(Duration duration) {
-    final total = duration.inSeconds.clamp(0, 24 * 60 * 60);
-    final h = (total ~/ 3600).toString().padLeft(2, '0');
-    final m = ((total % 3600) ~/ 60).toString().padLeft(2, '0');
-    final s = (total % 60).toString().padLeft(2, '0');
-    return '$h:$m:$s';
   }
 
   void _onWorkbenchDataRefresh() {
@@ -7791,12 +7786,7 @@ class _NativeB2PageState extends State<_NativeB2Page> {
             ),
           ],
         ),
-        if (_live.active.value && !isWindowsDesktopCommOnly)
-          Positioned(
-            right: 16,
-            bottom: dunesAppBottomNavOverlayExtent(context) + 12,
-            child: _buildLiveTranscribeFab(),
-          ),
+
         if (_profileTourOpen)
           Positioned.fill(
             child: SpotlightTourOverlay(
@@ -7820,68 +7810,6 @@ class _NativeB2PageState extends State<_NativeB2Page> {
         role: DunesColorRole.surface,
       ),
       child: SafeArea(bottom: false, child: body),
-    );
-  }
-
-  Widget _buildLiveTranscribeFab() {
-    final paused = _live.paused.value;
-    final elapsedText = _formatLiveElapsed(_live.elapsed.value);
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(24),
-        onTap: () => widget.navigation.go('MM0'),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          decoration: BoxDecoration(
-            color: paused
-                ? DunesColors.resolve(
-                    context,
-                    DunesColors.text3,
-                    role: DunesColorRole.surface,
-                  )
-                : DunesColors.resolve(
-                    context,
-                    DunesColors.coral,
-                    role: DunesColorRole.surface,
-                  ),
-            borderRadius: BorderRadius.circular(24),
-            boxShadow: [
-              BoxShadow(
-                color: (paused ? DunesColors.text3 : DunesColors.coral)
-                    .withValues(alpha: 0.4),
-                blurRadius: 12,
-                spreadRadius: 1,
-                offset: const Offset(0, 3),
-              ),
-            ],
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                paused ? Icons.pause_rounded : Icons.mic_rounded,
-                color: DunesColors.resolve(context, Colors.white),
-                size: 18,
-              ),
-              const SizedBox(width: 6),
-              Text(
-                MeetingRecordingInterruption.fabLabel(
-                  paused: paused,
-                  pausedByInterruption: _live.pausedByInterruption,
-                  elapsedText: elapsedText,
-                ),
-                style: DunesTypography.sans(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: DunesColors.resolve(context, Colors.white),
-                  context: context,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 

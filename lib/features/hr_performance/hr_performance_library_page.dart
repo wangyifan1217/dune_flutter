@@ -4,6 +4,7 @@ import '../../core/theme/dunes_theme.dart';
 import '../auth/auth_session.dart';
 import '../shell/dunes_toast.dart';
 import 'hr_performance_service.dart';
+import 'hr_performance_search.dart';
 import 'hr_performance_templates_page.dart';
 
 /// 有绩效考核 HR 权限的人在工作台维护可复用指标。
@@ -98,6 +99,7 @@ class _HrPerformanceLibraryPageState extends State<HrPerformanceLibraryPage> {
       widget.service ?? HrPerformanceService(widget.session);
   final List<_Draft> _drafts = [];
   final List<String> _dimensions = [];
+  final _searchController = TextEditingController();
   int _version = 0;
   bool _loading = true;
   bool _saving = false;
@@ -113,6 +115,7 @@ class _HrPerformanceLibraryPageState extends State<HrPerformanceLibraryPage> {
 
   @override
   void dispose() {
+    _searchController.dispose();
     for (final draft in _drafts) {
       draft.dispose();
     }
@@ -497,6 +500,27 @@ class _HrPerformanceLibraryPageState extends State<HrPerformanceLibraryPage> {
         },
       );
     }
+    final searching = _searchController.text.trim().isNotEmpty;
+    final visibleDrafts = _drafts
+        .where(
+          (draft) => hrPerformanceMatchesSearch(_searchController.text, [
+            draft.name.text,
+            draft.dimension.text,
+            draft.standard.text,
+            ...draft.bands.map((band) => band.description.text),
+          ]),
+        )
+        .toList();
+    final visibleDimensions = _dimensions
+        .where(
+          (dimension) =>
+              !searching ||
+              hrPerformanceMatchesSearch(_searchController.text, [dimension]) ||
+              visibleDrafts.any(
+                (draft) => draft.dimension.text.trim() == dimension,
+              ),
+        )
+        .toList();
     return Material(
       color: DunesColors.resolve(context, const Color(0xFFF7F4FC)),
       child: ListView(
@@ -531,16 +555,19 @@ class _HrPerformanceLibraryPageState extends State<HrPerformanceLibraryPage> {
                 spacing: 8,
                 runSpacing: 8,
                 children: [
-                  IconButton.outlined(
-                    tooltip: '考核模板',
-                    onPressed: () {
-                      if (_dirty) {
-                        _toast('请先保存指标库修改');
-                        return;
-                      }
-                      setState(() => _showTemplates = true);
-                    },
-                    icon: const Icon(Icons.view_list_outlined),
+                  Tooltip(
+                    message: '考核模板',
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        if (_dirty) {
+                          _toast('请先保存指标库修改');
+                          return;
+                        }
+                        setState(() => _showTemplates = true);
+                      },
+                      icon: const Icon(Icons.view_list_outlined),
+                      label: const Text('考核模板'),
+                    ),
                   ),
                   IconButton.filled(
                     tooltip: '添加维度',
@@ -552,6 +579,29 @@ class _HrPerformanceLibraryPageState extends State<HrPerformanceLibraryPage> {
             ],
           ),
           const SizedBox(height: 20),
+          TextField(
+            key: const ValueKey('hr-library-search'),
+            controller: _searchController,
+            onChanged: (_) => setState(() {}),
+            decoration: InputDecoration(
+              hintText: '搜索指标、维度或评分说明',
+              prefixIcon: const Icon(Icons.search_rounded),
+              suffixIcon: _searchController.text.isEmpty
+                  ? null
+                  : IconButton(
+                      tooltip: '清空搜索',
+                      icon: const Icon(Icons.close_rounded),
+                      onPressed: () => setState(_searchController.clear),
+                    ),
+              filled: true,
+              fillColor: DunesColors.resolve(context, Colors.white),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide.none,
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 13),
             decoration: BoxDecoration(
@@ -568,7 +618,9 @@ class _HrPerformanceLibraryPageState extends State<HrPerformanceLibraryPage> {
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    '${_dimensions.length} 个维度  ·  ${_drafts.length} 个指标',
+                    searching
+                        ? '找到 ${visibleDrafts.length} / ${_drafts.length} 个指标'
+                        : '${_dimensions.length} 个维度  ·  ${_drafts.length} 个指标',
                     style: const TextStyle(fontWeight: FontWeight.w600),
                   ),
                 ),
@@ -589,14 +641,23 @@ class _HrPerformanceLibraryPageState extends State<HrPerformanceLibraryPage> {
                 style: TextStyle(color: muted),
               ),
             ),
-          for (final dimension in _dimensions)
+          if (searching && visibleDimensions.isEmpty)
+            Padding(
+              padding: const EdgeInsets.all(28),
+              child: Text('没有匹配的指标或维度，试试其他关键词', style: TextStyle(color: muted)),
+            ),
+          for (final dimension in visibleDimensions)
             Padding(
               padding: const EdgeInsets.only(bottom: 10),
               child: Material(
                 color: DunesColors.resolve(context, Colors.white),
                 borderRadius: BorderRadius.circular(14),
                 child: ExpansionTile(
-                  key: ValueKey('dimension-$dimension'),
+                  key: ValueKey(
+                    searching
+                        ? 'dimension-search-$dimension'
+                        : 'dimension-$dimension',
+                  ),
                   initiallyExpanded: true,
                   leading: const Icon(
                     Icons.folder_outlined,
@@ -610,7 +671,9 @@ class _HrPerformanceLibraryPageState extends State<HrPerformanceLibraryPage> {
                     ),
                   ),
                   subtitle: Text(
-                    '${_drafts.where((v) => v.dimension.text.trim() == dimension).length} 个指标',
+                    searching
+                        ? '${visibleDrafts.where((v) => v.dimension.text.trim() == dimension).length} / ${_drafts.where((v) => v.dimension.text.trim() == dimension).length} 个指标'
+                        : '${_drafts.where((v) => v.dimension.text.trim() == dimension).length} 个指标',
                     style: TextStyle(fontSize: 12, color: muted),
                   ),
                   trailing: Wrap(
@@ -652,7 +715,7 @@ class _HrPerformanceLibraryPageState extends State<HrPerformanceLibraryPage> {
                   ),
                   childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
                   children: [
-                    for (final draft in _drafts.where(
+                    for (final draft in visibleDrafts.where(
                       (v) => v.dimension.text.trim() == dimension,
                     )) ...[
                       Padding(

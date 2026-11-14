@@ -38,6 +38,9 @@ import NetworkExtension
   private var streamSink: FlutterEventSink?
   private let streamLock = NSLock()
   private var recorderEventSink: FlutterEventSink?
+  private var capturedBytes: Int64 = 0
+  private var recordingPauseReason = ""
+  private var pendingMeetingNotificationTap = false
   private let recorderEventLock = NSLock()
   private let recorderEventHandler = AudioRecorderEventHandler()
   private var tauVoiceCallAudio: TauVoiceCallAudio?
@@ -113,10 +116,20 @@ import NetworkExtension
       case "cancel":
         self.stopRecord(result: result, deleteFile: true)
       case "status":
+        self.streamLock.lock()
+        let bytes = self.capturedBytes
+        self.streamLock.unlock()
         result([
           "isRecording": self.isRecording,
           "isPaused": self.isPaused,
+          "capturedBytes": bytes,
+          "durationMs": bytes * 1000 / 32000,
+          "pauseReason": self.recordingPauseReason,
+          "pausedBySystemInterruption": self.pausedBySystemInterruption,
         ])
+      case "consumeMeetingNotificationTap":
+        result(self.pendingMeetingNotificationTap)
+        self.pendingMeetingNotificationTap = false
       case "abandonedSession":
         result(self.abandonedSessionPayload())
       case "recoverAbandonedSession":
@@ -243,6 +256,9 @@ import NetworkExtension
   /// 来电等系统音频中断：立即落盘当前片段并暂停，避免 stop 时录音丢失。
   private func autoPauseForInterruption(reason: String, allowAutoResume: Bool = true) {
     guard isRecording else { return }
+    // A later system interruption must not turn a manual/device-error pause into auto-resume.
+    if isPaused && !pausedBySystemInterruption { return }
+    recordingPauseReason = reason
     if !isPaused {
       accumulatedDurationMs += currentSegmentDurationMs()
       activeSegmentStartedAt = nil
@@ -288,13 +304,15 @@ import NetworkExtension
       try engine.start()
     }
     isPaused = false
+    recordingPauseReason = ""
     activeSegmentStartedAt = Date()
   }
 
   private func postRecordingPausedNotification() {
     let content = UNMutableNotificationContent()
     content.title = "会议录音已暂停"
-    content.body = "来电结束后将自动继续，已录部分已保存"
+    content.body = "录音被系统中断，点击返回会议查看恢复状态"
+    content.userInfo = ["dunesMeetingRecording": true]
     content.sound = nil
     let request = UNNotificationRequest(
       identifier: "dunes.meeting.recording.paused",
@@ -576,6 +594,12 @@ import NetworkExtension
     withCompletionHandler completionHandler: @escaping () -> Void
   ) {
     let userInfo = response.notification.request.content.userInfo
+    if userInfo["dunesMeetingRecording"] as? Bool == true {
+      pendingMeetingNotificationTap = true
+      emitRecorderEvent(["kind": "openMeeting"])
+      completionHandler()
+      return
+    }
     if let bridge = tpnsBridge {
       bridge.handleNotificationClicked(userInfo: userInfo)
     } else {
@@ -648,6 +672,10 @@ import NetworkExtension
     sessionTitle = ((args?["title"] as? String) ?? "")
       .trimmingCharacters(in: .whitespacesAndNewlines)
     sessionTracking = args?["persistSession"] as? Bool ?? false
+    streamLock.lock()
+    capturedBytes = 0
+    streamLock.unlock()
+    recordingPauseReason = ""
     let session = AVAudioSession.sharedInstance()
     let permission = session.recordPermission
     if permission == .undetermined {
@@ -823,6 +851,8 @@ import NetworkExtension
   }
 
   private func pauseRecord(result: @escaping FlutterResult) {
+    pausedBySystemInterruption = false
+    recordingPauseReason = "user"
     guard isRecording else {
       result(false)
       return
@@ -1101,6 +1131,7 @@ import NetworkExtension
     m4aWriter?.appendPcmInt16(data)
     crashWav?.write(data)
     streamLock.lock()
+    capturedBytes += Int64(data.count)
     let sink = streamSink
     streamLock.unlock()
 

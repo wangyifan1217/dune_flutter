@@ -57,13 +57,13 @@ class MeetingRecordingInterruption {
       case 'audioRecordGone':
       case 'audioRecordSilent':
       case 'audioRecordException':
-        return '麦克风被其他语音软件占用，录音已自动暂停；对方结束后将自动继续';
+        return '录音采集被中断，已暂停；返回应用或系统恢复后将尝试继续';
       case 'routeDeviceLost':
       case 'routeChange':
         return '音频设备已断开，录音已自动暂停；请重新连接后点击继续';
       case 'interruption':
       case 'mediaServicesReset':
-        return '来电或系统中断，录音已自动暂停；挂断后将自动继续，已录部分已保存';
+        return '来电或系统中断，录音已自动暂停；中断结束后将尝试继续，已录部分已保存';
       default:
         return '录音已自动暂停；恢复后将尝试自动继续，已录部分已保存';
     }
@@ -75,7 +75,7 @@ class MeetingRecordingInterruption {
     required String elapsedText,
   }) {
     if (!paused) return '录音进行中 $elapsedText';
-    if (pausedByInterruption) return '来电已暂停 点此继续';
+    if (pausedByInterruption) return '录音被中断 点此处理';
     return '录音已暂停 $elapsedText';
   }
 

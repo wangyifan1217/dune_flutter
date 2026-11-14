@@ -78,30 +78,33 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('新建模板'));
     await tester.pumpAndSettle();
-    await tester.enterText(find.widgetWithText(TextFormField, '模板名称'), '财务模板');
-    await tester.tap(
-      find.descendant(
-        of: find.ancestor(
-          of: find.text('核心达成 · 质量'),
-          matching: find.byType(Card),
-        ),
-        matching: find.byType(Checkbox),
-      ),
+    await tester.enterText(
+      find.byKey(const ValueKey('hr-template-name')),
+      '财务模板',
     );
+    await tester.tap(find.text('添加指标'));
     await tester.pumpAndSettle();
-    expect(find.text('考核表预览'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('hr-option-a')));
+    await tester.tap(find.text('确认选择'));
+    await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('编辑模板指标'));
     await tester.pumpAndSettle();
-    await tester.enterText(find.widgetWithText(TextFormField, '最高分'), '90');
+    await tester.enterText(find.byKey(const ValueKey('hr-band-max-0')), '90');
     await tester.enterText(
-      find.widgetWithText(TextFormField, '评分标准'),
+      find.byKey(const ValueKey('hr-band-description-0')),
       '本模板专属标准',
     );
     await tester.tap(find.byTooltip('完成模板指标编辑'));
     await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('考核表预览'));
+    await tester.pumpAndSettle();
     expect(find.text('本模板专属标准'), findsOneWidget);
-    await tester.ensureVisible(find.text('财务部'));
+    await tester.tap(find.byTooltip('关闭考核表预览'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('hr-template-departments')));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('财务部'));
+    await tester.tap(find.text('确认选择'));
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('保存模板'));
     await tester.tap(find.text('保存模板'));
@@ -121,7 +124,7 @@ void main() {
     );
     await tester.tap(find.byTooltip('复制模板'));
     await tester.pumpAndSettle();
-    expect(find.widgetWithText(TextFormField, '模板名称'), findsOneWidget);
+    expect(find.byKey(const ValueKey('hr-template-name')), findsOneWidget);
     await tester.ensureVisible(find.text('保存模板'));
     await tester.tap(find.text('保存模板'));
     await tester.pumpAndSettle();

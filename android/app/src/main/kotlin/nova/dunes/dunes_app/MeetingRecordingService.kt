@@ -3,6 +3,7 @@ package nova.dunes.dunes_app
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
@@ -56,6 +57,7 @@ class MeetingRecordingService : Service() {
     }
 
     companion object {
+        const val OPEN_MEETING_ACTION = "nova.dunes.dunes_app.OPEN_MEETING_RECORDING"
         // 新 channel：旧版 IMPORTANCE_LOW 在小米上容易被折叠后冻结。
         private const val CHANNEL_ID = "dunes_meeting_recording_v2"
         private const val NOTIFICATION_ID = 4711
@@ -102,7 +104,17 @@ class MeetingRecordingService : Service() {
         }
 
         private fun buildNotification(context: Context, title: String, text: String): Notification {
+            val openMeeting = PendingIntent.getActivity(
+                context,
+                NOTIFICATION_ID,
+                Intent(context, MainActivity::class.java).apply {
+                    action = OPEN_MEETING_ACTION
+                    flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                },
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
             return NotificationCompat.Builder(context, CHANNEL_ID)
+                .setContentIntent(openMeeting)
                 .setContentTitle(title)
                 .setContentText(text)
                 .setSmallIcon(R.mipmap.ic_launcher)

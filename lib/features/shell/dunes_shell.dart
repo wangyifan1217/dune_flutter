@@ -12,6 +12,8 @@ import '../auth/auth_session.dart';
 import '../chat/im_celebration.dart';
 import '../chat/app_theme_guide.dart';
 import '../native/native_screen_host.dart';
+import '../meeting/meeting_live_controller.dart';
+import '../meeting/meeting_recording_chrome.dart';
 import '../nova/presence/nova_presence_host.dart';
 import '../update/app_update_top_banner.dart';
 
@@ -58,6 +60,7 @@ class _DunesShellState extends State<DunesShell> with WidgetsBindingObserver {
   }
 
   Future<void> _startMobileEggs() async {
+    if (MeetingLiveController.instance.isActive) return;
     if (_startingMobileEggs) return;
     _startingMobileEggs = true;
     try {
@@ -146,16 +149,22 @@ class _DunesShellState extends State<DunesShell> with WidgetsBindingObserver {
                   Expanded(
                     child: NovaPresenceHost(
                       // 换票不换用户，不能销毁工作台并再次触发其入场换票。
-                      key: ValueKey((widget.session.apiBase, widget.session.userId)),
+                      key: ValueKey((
+                        widget.session.apiBase,
+                        widget.session.userId,
+                      )),
                       session: widget.session,
                       handle: _presence,
                       navigation: _navigation,
                       child: Stack(
                         children: [
-                          NativeScreenHost(
-                            session: widget.session,
+                          MeetingRecordingCoordinator(
                             navigation: _navigation,
-                            onLogout: widget.onLogout,
+                            child: NativeScreenHost(
+                              session: widget.session,
+                              navigation: _navigation,
+                              onLogout: widget.onLogout,
+                            ),
                           ),
                           // iOS：从屏幕左边缘向右滑动当作返回（应用为自定义导航栈，需手动实现）。
                           if (_enableEdgeBack && _navigation.canHandleBack)

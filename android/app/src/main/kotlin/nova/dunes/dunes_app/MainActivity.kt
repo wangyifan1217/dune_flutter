@@ -56,6 +56,9 @@ class MainActivity : FlutterActivity() {
     @Volatile private var isRecording = false
     @Volatile private var isPaused = false
     @Volatile private var pausedBySystemInterruption = false
+    @Volatile private var capturedBytes = 0L
+    @Volatile private var pauseReason = ""
+    private var lastSilenceCheckMs = 0L
     @Volatile private var micConflictDetected = false
     private var outputPath: String? = null
     private var startedAtMs: Long = 0L
@@ -110,8 +113,18 @@ class MainActivity : FlutterActivity() {
                         mapOf(
                             "isRecording" to isRecording,
                             "isPaused" to isPaused,
+                            "capturedBytes" to capturedBytes,
+                            "durationMs" to if (sessionTracking) capturedBytes * 1000 / (sampleRate * frameBytes) else accumulatedDurationMs + currentSegmentDurationMs(),
+                            "pauseReason" to pauseReason,
+                            "pausedBySystemInterruption" to pausedBySystemInterruption,
+                            "captureSilenced" to isCaptureSilenced(),
                         )
                     )
+                    "consumeMeetingNotificationTap" -> {
+                        val tapped = intent?.action == MeetingRecordingService.OPEN_MEETING_ACTION
+                        if (tapped) intent.action = Intent.ACTION_MAIN
+                        result.success(tapped)
+                    }
                     "abandonedSession" -> result.success(abandonedSessionPayload())
                     "recoverAbandonedSession" -> recoverAbandonedSession(result)
                     "discardAbandonedSession" -> {
@@ -399,6 +412,9 @@ class MainActivity : FlutterActivity() {
             pruneOldVoiceRecordings()
             sessionTitle = call.argument<String>("title")?.trim().orEmpty()
             sessionTracking = call.argument<Boolean>("persistSession") == true
+            capturedBytes = 0L
+            pauseReason = ""
+            lastSilenceCheckMs = 0L
             MeetingRecordingService.start(this)
             segmentPaths.clear()
             micConflictDetected = false
@@ -515,6 +531,8 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun pauseRecord(result: MethodChannel.Result) {
+        pausedBySystemInterruption = false
+        pauseReason = "user"
         if (!isRecording) {
             result.success(false)
             return
@@ -632,6 +650,7 @@ class MainActivity : FlutterActivity() {
             startNewSegmentEncoder(newVoiceRecordingPath("voice"))
         }
         micConflictDetected = false
+        pauseReason = ""
         consecutiveReadErrors = 0
         audioSourceRecoveries = 0
         isPaused = false
@@ -672,6 +691,14 @@ class MainActivity : FlutterActivity() {
                     handleMicConflict("audioRecordGone")
                     break
                 }
+                if (sessionTracking && System.currentTimeMillis() - lastSilenceCheckMs >= 1000L) {
+                    lastSilenceCheckMs = System.currentTimeMillis()
+                    // System-muted capture still returns bytes; zero-read detection cannot detect it.
+                    if (isCaptureSilenced()) {
+                        handleMicConflict("audioRecordSilent")
+                        break
+                    }
+                }
                 val read = try {
                     record.read(buf, 0, buf.size)
                 } catch (e: Exception) {
@@ -696,6 +723,7 @@ class MainActivity : FlutterActivity() {
                                 streamingEncoder?.writePcm(buf, 0, usable)
                             }
                             emitAudioChunk(buf, usable)
+                            capturedBytes += usable
                         }
                     }
                     read == -6 /* ERROR_DEAD_OBJECT */ ||
@@ -768,6 +796,7 @@ class MainActivity : FlutterActivity() {
             if (!isRecording || isPaused) return@post
             if (pauseRecordInternal(finalizeSegment = true)) {
                 pausedBySystemInterruption = reason != "audioFileWriteError"
+                pauseReason = reason
                 emitRecorderEvent("paused", reason)
                 MeetingRecordingService.update(
                     this,
@@ -1148,6 +1177,21 @@ class MainActivity : FlutterActivity() {
         tryNativeResumeAfterSystemInterruption()
     }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (intent.action == MeetingRecordingService.OPEN_MEETING_ACTION) {
+            emitRecorderEvent("openMeeting")
+        }
+    }
+
+    private fun isCaptureSilenced(): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return false
+        return try {
+            audioRecord?.activeRecordingConfiguration?.isClientSilenced == true
+        } catch (_: Exception) { false }
+    }
+
     override fun onDestroy() {
         MeetingRecordingService.taskRemovedListener = null
         flushLiveSessionForDeath()
@@ -1161,11 +1205,12 @@ class MainActivity : FlutterActivity() {
                 AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
                     if (isRecording && !isPaused && pauseRecordInternal(finalizeSegment = true)) {
                         pausedBySystemInterruption = true
+                        pauseReason = "audioFocusLoss"
                         emitRecorderEvent("paused", "audioFocusLoss")
                         MeetingRecordingService.update(
                             this,
                             title = "沙丘 · 会议录音已暂停",
-                            text = "来电结束后将自动继续，已录部分已保存"
+                            text = "音频被系统中断，返回应用后将尝试继续录音"
                         )
                     }
                 }

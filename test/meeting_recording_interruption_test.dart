@@ -47,7 +47,7 @@ void main() {
           pausedByInterruption: true,
           elapsedText: '12:03',
         ),
-        '来电已暂停 点此继续',
+        '录音被中断 点此处理',
       );
     });
 

@@ -165,6 +165,7 @@ void main() {
     await tester.tap(find.byTooltip('确认维度'));
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.byTooltip('保存指标库'));
+    await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('保存指标库'));
     await tester.pumpAndSettle();
     expect(service.savedDimensions, ['业务成果', '团队协作']);

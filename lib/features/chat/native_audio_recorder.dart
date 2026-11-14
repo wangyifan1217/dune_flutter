@@ -34,10 +34,22 @@ class NativeRecorderStatus {
   const NativeRecorderStatus({
     required this.isRecording,
     required this.isPaused,
+    this.capturedBytes,
+    this.durationMs,
+    this.pauseReason = '',
+    this.pausedBySystemInterruption,
+    this.available = true,
+    this.captureSilenced = false,
   });
 
   final bool isRecording;
   final bool isPaused;
+  final int? capturedBytes;
+  final int? durationMs;
+  final String pauseReason;
+  final bool? pausedBySystemInterruption;
+  final bool available;
+  final bool captureSilenced;
 }
 
 class NativeAudioRecorder {
@@ -45,8 +57,12 @@ class NativeAudioRecorder {
 
   static final NativeAudioRecorder instance = NativeAudioRecorder._();
   static const MethodChannel _channel = MethodChannel('dunes/audio_recorder');
-  static const EventChannel _streamChannel = EventChannel('dunes/audio_recorder_stream');
-  static const EventChannel _eventsChannel = EventChannel('dunes/audio_recorder_events');
+  static const EventChannel _streamChannel = EventChannel(
+    'dunes/audio_recorder_stream',
+  );
+  static const EventChannel _eventsChannel = EventChannel(
+    'dunes/audio_recorder_events',
+  );
 
   /// 由会议录音模块注册：返回 true 时拒绝其它入口占用麦克风。
   static bool Function()? isStartBlocked;
@@ -57,15 +73,10 @@ class NativeAudioRecorder {
       (defaultTargetPlatform == TargetPlatform.android ||
           defaultTargetPlatform == TargetPlatform.iOS);
 
-  Future<void> start({
-    String title = '',
-    bool persistSession = false,
-  }) async {
+  Future<void> start({String title = '', bool persistSession = false}) async {
     if (!isSupported) return;
     if (isStartBlocked?.call() == true) {
-      throw const NativeAudioRecorderBusyException(
-        '会议录音进行中，暂无法发送语音',
-      );
+      throw const NativeAudioRecorderBusyException('会议录音进行中，暂无法发送语音');
     }
     try {
       await _channel.invokeMethod<void>('start', <String, dynamic>{
@@ -101,7 +112,9 @@ class NativeAudioRecorder {
   Future<NativeRecordedAudio?> recoverAbandonedSession() async {
     if (!isSupported) return null;
     try {
-      final res = await _channel.invokeMethod<dynamic>('recoverAbandonedSession');
+      final res = await _channel.invokeMethod<dynamic>(
+        'recoverAbandonedSession',
+      );
       if (res is! Map) return null;
       final data = Map<String, dynamic>.from(res);
       final path = (data['path'] ?? '').toString();
@@ -152,21 +165,27 @@ class NativeAudioRecorder {
 
   Stream<Uint8List> pcmStream() {
     if (!isSupported) return const Stream<Uint8List>.empty();
-    return _streamChannel.receiveBroadcastStream().map((event) {
-      if (event is Uint8List) return event;
-      if (event is ByteData) return event.buffer.asUint8List();
-      if (event is List<int>) return Uint8List.fromList(event);
-      return Uint8List(0);
-    }).where((chunk) => chunk.isNotEmpty);
+    return _streamChannel
+        .receiveBroadcastStream()
+        .map((event) {
+          if (event is Uint8List) return event;
+          if (event is ByteData) return event.buffer.asUint8List();
+          if (event is List<int>) return Uint8List.fromList(event);
+          return Uint8List(0);
+        })
+        .where((chunk) => chunk.isNotEmpty);
   }
 
   /// 原生录音事件：来电/系统中断时自动暂停、中断结束可继续。
   Stream<Map<String, dynamic>> recorderEvents() {
     if (!isSupported) return const Stream<Map<String, dynamic>>.empty();
-    return _eventsChannel.receiveBroadcastStream().map((event) {
-      if (event is Map) return Map<String, dynamic>.from(event);
-      return const <String, dynamic>{};
-    }).where((event) => event.isNotEmpty);
+    return _eventsChannel
+        .receiveBroadcastStream()
+        .map((event) {
+          if (event is Map) return Map<String, dynamic>.from(event);
+          return const <String, dynamic>{};
+        })
+        .where((event) => event.isNotEmpty);
   }
 
   Future<NativeRecordedAudio?> stop() async {
@@ -204,6 +223,20 @@ class NativeAudioRecorder {
     return detail.isRecording;
   }
 
+  Future<bool> consumeMeetingNotificationTap() async {
+    if (!isSupported) return false;
+    try {
+      return await _channel.invokeMethod<bool>(
+            'consumeMeetingNotificationTap',
+          ) ==
+          true;
+    } on MissingPluginException {
+      return false;
+    } on PlatformException {
+      return false;
+    }
+  }
+
   Future<NativeRecorderStatus> readStatus() async {
     if (!isSupported) {
       return const NativeRecorderStatus(isRecording: false, isPaused: false);
@@ -215,13 +248,31 @@ class NativeAudioRecorder {
         return NativeRecorderStatus(
           isRecording: data['isRecording'] == true,
           isPaused: data['isPaused'] == true,
+          capturedBytes: (data['capturedBytes'] as num?)?.toInt(),
+          durationMs: (data['durationMs'] as num?)?.toInt(),
+          pauseReason: (data['pauseReason'] ?? '').toString(),
+          pausedBySystemInterruption:
+              data['pausedBySystemInterruption'] as bool?,
+          captureSilenced: data['captureSilenced'] == true,
         );
       }
     } on MissingPluginException {
-      return const NativeRecorderStatus(isRecording: false, isPaused: false);
+      return const NativeRecorderStatus(
+        isRecording: false,
+        isPaused: false,
+        available: false,
+      );
     } on PlatformException {
-      return const NativeRecorderStatus(isRecording: false, isPaused: false);
+      return const NativeRecorderStatus(
+        isRecording: false,
+        isPaused: false,
+        available: false,
+      );
     }
-    return const NativeRecorderStatus(isRecording: false, isPaused: false);
+    return const NativeRecorderStatus(
+      isRecording: false,
+      isPaused: false,
+      available: false,
+    );
   }
 }

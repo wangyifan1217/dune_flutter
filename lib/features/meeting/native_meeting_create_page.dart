@@ -100,6 +100,7 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
     _live.active.addListener(_onLiveChanged);
     _live.paused.addListener(_onLiveChanged);
     _live.saveFailed.addListener(_onLiveChanged);
+    _live.recovering.addListener(_onLiveChanged);
     _live.elapsed.addListener(_onLiveChanged);
     _live.interruptionHint.addListener(_onLiveInterruptionHint);
     _recordingCtrl.state.addListener(_onLiveChanged);
@@ -141,6 +142,7 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
     _live.active.removeListener(_onLiveChanged);
     _live.paused.removeListener(_onLiveChanged);
     _live.saveFailed.removeListener(_onLiveChanged);
+    _live.recovering.removeListener(_onLiveChanged);
     _live.elapsed.removeListener(_onLiveChanged);
     _live.interruptionHint.removeListener(_onLiveInterruptionHint);
     _recordingCtrl.state.removeListener(_onLiveChanged);
@@ -735,10 +737,7 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
       widget.onCreated(meetingId, isDraft: !generate);
     } catch (e) {
       if (!mounted) return;
-      final msg = friendlyErrorText(
-        e,
-        fallback: '请稍后重试',
-      );
+      final msg = friendlyErrorText(e, fallback: '请稍后重试');
       setState(() => _error = generate ? '提交失败：$msg' : '草稿保存失败：$msg');
       showDunesToast(context, msg, kind: DunesToastKind.error);
     } finally {
@@ -1693,14 +1692,16 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
     }
 
     final systemPaused = paused && _live.pausedByInterruption;
-    final title = systemPaused
-        ? '来电已暂停'
+    final title = _live.recovering.value
+        ? '正在恢复录音'
+        : systemPaused
+        ? '录音被中断'
         : paused
         ? '录音已暂停'
         : '正在录音中';
     final hint = _live.interruptionHint.value?.trim() ?? '';
     final subtitle = systemPaused
-        ? (hint.isNotEmpty ? hint : '挂断后将自动继续，已录部分已保存。也可点「继续录音」。')
+        ? (hint.isNotEmpty ? hint : '系统中断后将尝试继续，已有录音会保留。也可点「继续录音」。')
         : paused
         ? '点击「继续录音」后恢复采集，结束后再转写生成纪要'
         : switch (recorderState) {

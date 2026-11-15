@@ -348,13 +348,20 @@ void main() {
                         navigation.currentScreen == 'MM0' ? '当前会议录音' : '工作台',
                       ),
                     ),
-                    body: const Center(child: Text('产品周会')),
-                    bottomNavigationBar: const SizedBox(
-                      key: Key('composer'),
-                      height: 52,
-                      child: TextField(
-                        decoration: InputDecoration(hintText: '输入消息'),
-                      ),
+                    body: const Column(
+                      children: [
+                        Expanded(child: Center(child: Text('产品周会'))),
+                        SafeArea(
+                          top: false,
+                          child: SizedBox(
+                            key: Key('composer'),
+                            height: 52,
+                            child: TextField(
+                              decoration: InputDecoration(hintText: '输入消息'),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),

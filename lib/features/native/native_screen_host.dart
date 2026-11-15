@@ -6192,7 +6192,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
                   widget.navigation.currentScreen != 'MM0' &&
                   widget.navigation.currentScreen != 'Z4',
               bottomNavigationExtent: showTab
-                  ? dunesAppBottomNavOverlayExtent(context)
+                  ? dunesAppBottomNavVisualExtent(context)
                   : 0,
               onOpen: () => openCurrentMeeting(widget.navigation),
               child: DesktopSectionTransition(

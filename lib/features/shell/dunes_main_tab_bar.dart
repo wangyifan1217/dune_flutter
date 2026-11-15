@@ -31,6 +31,39 @@ const double _kAppTabCapsuleBorderWidth = 1.5;
 /// PC 端左侧导航栏宽度（Win / macOS）。
 const double kDunesMainSideRailWidth = 64;
 
+/// 录音悬浮条叠在页面上时，列表和输入区需要再让出的高度。
+/// 页面本身仍铺满屏幕，条的毛玻璃才能透出内容。
+class MeetingRecordingChromeInset extends InheritedWidget {
+  const MeetingRecordingChromeInset({
+    super.key,
+    required this.extra,
+    required super.child,
+  });
+
+  final double extra;
+
+  static double of(BuildContext context) {
+    return context
+            .dependOnInheritedWidgetOfExactType<MeetingRecordingChromeInset>()
+            ?.extra ??
+        0;
+  }
+
+  @override
+  bool updateShouldNotify(MeetingRecordingChromeInset oldWidget) =>
+      extra != oldWidget.extra;
+}
+
+/// 悬浮底栏实际看得见的高度：胶囊 / AI 按钮贴在安全区上，不含胶囊上方的留白。
+double dunesAppBottomNavVisualExtent(BuildContext context, {bool? appOverlay}) {
+  if (!(appOverlay ?? !isDesktopCommOnly)) return 0;
+  final safeBottom = MediaQuery.viewPaddingOf(context).bottom;
+  final gap = safeBottom > kDunesAppBottomNavMinGap
+      ? safeBottom
+      : kDunesAppBottomNavMinGap;
+  return kDunesMainTabBarHeight + gap;
+}
+
 /// APP 根页把底栏叠在内容上；列表底部需要让出这么高，滑到底才不会被挡住。
 double dunesAppBottomNavOverlayExtent(
   BuildContext context, {
@@ -41,7 +74,9 @@ double dunesAppBottomNavOverlayExtent(
   final gap = safeBottom > kDunesAppBottomNavMinGap
       ? safeBottom
       : kDunesAppBottomNavMinGap;
-  return kDunesAppBottomNavStackHeight + gap;
+  return kDunesAppBottomNavStackHeight +
+      gap +
+      MeetingRecordingChromeInset.of(context);
 }
 
 /// 主 Tab 根页 ListView 的底部 padding。桌面端无悬浮底栏，退回 [fallback]。

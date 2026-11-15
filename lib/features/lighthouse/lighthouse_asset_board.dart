@@ -258,6 +258,7 @@ List<Map<String, dynamic>> lighthouseSupplyProvinceRows(
   List<Map<String, dynamic>> rows,
   LighthouseFundPoolSnapshot snapshot, {
   required bool attachAssets,
+  List<Map<String, dynamic>> previousRows = const [],
   String? assetCategory,
 }) {
   final order = <String>[];
@@ -271,9 +272,16 @@ List<Map<String, dynamic>> lighthouseSupplyProvinceRows(
     (members[k] ??= <Map<String, dynamic>>[]).add(r);
   }
 
+  final previousMembers = <String, List<Map<String, dynamic>>>{};
+  for (final row in previousRows) {
+    final name = row['name']?.toString().trim() ?? '';
+    if (name.isEmpty) continue;
+    final key = lighthouseProvinceKey(name);
+    (previousMembers[key.isEmpty ? name : key] ??= []).add(row);
+  }
   final out = <Map<String, dynamic>>[];
   for (final key in order) {
-    final merged = _mergeSupplyRows(members[key]!);
+    final merged = _mergeSupplyRows(members[key]!, previousMembers[key]);
     if (attachAssets &&
         (assetCategory == null ||
             snapshot.provinceCategory[key] == assetCategory)) {
@@ -312,7 +320,10 @@ List<Map<String, dynamic>> lighthouseSupplyProvinceRows(
   return out;
 }
 
-Map<String, dynamic> _mergeSupplyRows(List<Map<String, dynamic>> rows) {
+Map<String, dynamic> _mergeSupplyRows(
+  List<Map<String, dynamic>> rows,
+  List<Map<String, dynamic>>? previousRows,
+) {
   final first = rows.first;
   final out = <String, dynamic>{
     'name': first['name'],
@@ -365,14 +376,66 @@ Map<String, dynamic> _mergeSupplyRows(List<Map<String, dynamic>> rows) {
   final flag = same('productTradeFlag');
   if (flag != null) out['productTradeFlag'] = flag;
 
-  // 利润环比按合并后的上期利润重算；其余指标的环比不能从百分比加回来，不下发。
-  final profit = (out['profit'] as num?)?.toDouble();
-  final prev = (out['prevProfit'] as num?)?.toDouble();
-  if (profit != null && prev != null && prev > 0) {
-    final pct = (profit - prev) / prev * 100;
-    out['deltaPct'] = pct;
-    out['deltaDir'] = pct > 0 ? 'up' : (pct < 0 ? 'down' : 'flat');
-    out['deltas'] = <String, dynamic>{'profit': pct};
+  // 按相同筛选条件聚合完整上期，包含本期已消失的分类。
+  if (previousRows != null && previousRows.isNotEmpty) {
+    double sum(List<Map<String, dynamic>> source, String key) => source.fold(
+      0.0,
+      (total, row) => total + ((row[key] as num?)?.toDouble() ?? 0),
+    );
+    final deltas = <String, double>{};
+    for (final key in const [
+      'sales',
+      'verifiedSales',
+      'prepaid',
+      'profit',
+      'netProfit',
+      'projectCost',
+      'handlingFee',
+      'platformServiceFee',
+      'gmv',
+      'gmv2',
+      'its',
+      'itsAfter',
+      'spread',
+      'revenue',
+      'cost',
+      'totalCost',
+      'tax',
+      'saasFee',
+    ]) {
+      final previous = sum(previousRows, key);
+      if (previous != 0)
+        deltas[key] = (sum(rows, key) - previous) / previous.abs() * 100;
+    }
+    void rateDelta(String key, String denominator, {double minimum = 50}) {
+      final currentBase = sum(rows, denominator);
+      final previousBase = sum(previousRows, denominator);
+      if (currentBase >= minimum && previousBase >= minimum) {
+        deltas[key] =
+            (sum(rows, 'profit') / currentBase -
+                sum(previousRows, 'profit') / previousBase) *
+            100;
+      }
+    }
+
+    out['prevProfit'] = sum(previousRows, 'profit');
+    rateDelta('rate', 'totalCost');
+    final marginBase = basis == 'gmv' ? 'gmv' : 'verifiedSales';
+    rateDelta('grossMargin', marginBase);
+    final currentAnchor = sum(rows, 'verifiedSales') > 0
+        ? sum(rows, 'verifiedSales')
+        : sum(rows, 'sales');
+    final previousAnchor = sum(previousRows, 'verifiedSales') > 0
+        ? sum(previousRows, 'verifiedSales')
+        : sum(previousRows, 'sales');
+    if (currentAnchor > 0 && previousAnchor > 0) {
+      deltas['spreadRate'] =
+          (sum(rows, 'revenue') / currentAnchor -
+              sum(previousRows, 'revenue') / previousAnchor) *
+          100;
+    }
+    if (deltas.isNotEmpty) out['deltas'] = deltas;
+    if (deltas.containsKey('profit')) out['deltaPct'] = deltas['profit'];
   }
   return out;
 }

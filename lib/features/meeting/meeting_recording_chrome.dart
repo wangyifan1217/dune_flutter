@@ -1,10 +1,12 @@
 import 'dart:async';
+import 'dart:ui';
 
 import 'package:flutter/material.dart';
 
 import '../../core/navigation/navigation_controller.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../chat/native_audio_recorder.dart';
+import '../shell/dunes_main_tab_bar.dart';
 import 'meeting_live_controller.dart';
 
 String meetingRecordingElapsed(Duration duration) {
@@ -213,8 +215,13 @@ class _MeetingRecordingCoordinatorState
   Widget build(BuildContext context) => widget.child;
 }
 
-/// Reserves space for the bar, so page buttons and chat composers remain usable.
-/// Root-page navigation is drawn by the caller, below [bottomNavigationExtent].
+double _meetingRecordingBarHeight(BuildContext context) {
+  final textHeight = MediaQuery.textScalerOf(context).scale(13);
+  return 54 + textHeight * 2 - 16;
+}
+
+/// 悬浮在页面上，不把整页顶出一块底色。
+/// 底栏由调用方绘制在 [bottomNavigationExtent] 以下，这里按看得见的胶囊高度贴上去。
 class MeetingRecordingLayout extends StatelessWidget {
   const MeetingRecordingLayout({
     super.key,
@@ -237,30 +244,46 @@ class MeetingRecordingLayout extends StatelessWidget {
       child: child,
       builder: (context, active, content) {
         final show = visible && active;
-        // Keep the subtree shape stable when starting/stopping recording.
-        final textHeight = MediaQuery.textScalerOf(context).scale(13);
-        final extent = show ? 54 + textHeight * 2 : 0.0;
-        final safe = bottomNavigationExtent > 0
-            ? 0.0
-            : MediaQuery.paddingOf(context).bottom;
-        return Stack(
-          fit: StackFit.expand,
-          children: [
-            Padding(
-              padding: EdgeInsets.only(
-                bottom: show ? extent + safe + bottomNavigationExtent : 0,
-              ),
-              child: content,
-            ),
-            if (show)
-              Positioned(
-                left: 16,
-                right: 16,
-                bottom: bottomNavigationExtent + safe + 8,
-                height: extent - 16,
-                child: MeetingRecordingBar(onOpen: onOpen),
-              ),
-          ],
+        final media = MediaQuery.of(context);
+        final barHeight = show ? _meetingRecordingBarHeight(context) : 0.0;
+        final safe = bottomNavigationExtent > 0 ? 0.0 : media.padding.bottom;
+        final barBottom = show ? bottomNavigationExtent + safe + 8 : 0.0;
+        final clearance = show ? barBottom + barHeight + 8 : 0.0;
+        // 列表原本只让出 96 的底栏堆叠。条贴着 56 的胶囊后，还差出来的一截补进滚动留白。
+        final reserved = bottomNavigationExtent > 0
+            ? kDunesAppBottomNavStackHeight +
+                  (media.viewPadding.bottom > kDunesAppBottomNavMinGap
+                      ? media.viewPadding.bottom
+                      : kDunesAppBottomNavMinGap)
+            : 0.0;
+        final extra = clearance > reserved ? clearance - reserved : 0.0;
+        final liftedBottom = media.padding.bottom >= clearance
+            ? media.padding.bottom
+            : clearance;
+        final page = !show || liftedBottom == media.padding.bottom
+            ? content!
+            : MediaQuery(
+                data: media.copyWith(
+                  padding: media.padding.copyWith(bottom: liftedBottom),
+                ),
+                child: content!,
+              );
+        return MeetingRecordingChromeInset(
+          extra: extra,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              page,
+              if (show)
+                Positioned(
+                  left: 16,
+                  right: 16,
+                  bottom: barBottom,
+                  height: barHeight,
+                  child: MeetingRecordingBar(onOpen: onOpen),
+                ),
+            ],
+          ),
         );
       },
     );
@@ -298,125 +321,142 @@ class MeetingRecordingBar extends StatelessWidget {
             ? '会议录音已暂停'
             : '会议录音中';
         final title = live.meetingTitle.value.trim();
+        final glass = DunesColors.resolve(
+          context,
+          const Color(0xFFF9F8FF),
+          role: DunesColorRole.surface,
+        ).withValues(alpha: 0.28);
         return Semantics(
           label:
               '$label，${meetingRecordingElapsed(live.elapsed.value)}，点击进入当前会议',
           button: true,
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              color: Colors.transparent,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                color: DunesColors.resolve(
-                  context,
-                  DunesColors.brandPurpleLine,
-                  role: DunesColorRole.border,
-                ),
-              ),
-            ),
-            child: Material(
-              key: const Key('meeting-recording-bar'),
-              type: MaterialType.transparency,
-              borderRadius: BorderRadius.circular(16),
-              child: InkWell(
-                onTap: onOpen,
-                borderRadius: BorderRadius.circular(16),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 9,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: glass,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: DunesColors.resolve(
+                      context,
+                      Colors.white,
+                      role: DunesColorRole.border,
+                    ).withValues(alpha: 0.55),
                   ),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 38,
-                        height: 38,
-                        decoration: BoxDecoration(
-                          color: color.withValues(alpha: 0.10),
-                          borderRadius: BorderRadius.circular(11),
-                        ),
-                        child: recovering
-                            ? Padding(
-                                padding: const EdgeInsets.all(10),
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: color,
-                                ),
-                              )
-                            : Icon(
-                                paused
-                                    ? Icons.pause_rounded
-                                    : Icons.graphic_eq_rounded,
-                                color: color,
-                                size: 22,
-                              ),
+                ),
+                child: Material(
+                  key: const Key('meeting-recording-bar'),
+                  type: MaterialType.transparency,
+                  child: InkWell(
+                    onTap: onOpen,
+                    splashColor: color.withValues(alpha: 0.08),
+                    highlightColor: Colors.transparent,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 9,
                       ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              label,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: DunesTypography.sans(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                color: DunesColors.resolve(
-                                  context,
-                                  DunesColors.text,
-                                ),
-                                context: context,
-                              ),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 38,
+                            height: 38,
+                            decoration: BoxDecoration(
+                              color: color.withValues(alpha: 0.10),
+                              borderRadius: BorderRadius.circular(11),
                             ),
-                            const SizedBox(height: 3),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    title.isEmpty ? '现场会议' : title,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: DunesTypography.sans(
-                                      fontSize: 12,
-                                      color: DunesColors.resolve(
-                                        context,
-                                        DunesColors.text2,
-                                      ),
-                                      context: context,
+                            child: recovering
+                                ? Padding(
+                                    padding: const EdgeInsets.all(10),
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: color,
                                     ),
+                                  )
+                                : Icon(
+                                    paused
+                                        ? Icons.pause_rounded
+                                        : Icons.graphic_eq_rounded,
+                                    color: color,
+                                    size: 22,
                                   ),
-                                ),
-                                const SizedBox(width: 8),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
                                 Text(
-                                  meetingRecordingElapsed(live.elapsed.value),
+                                  label,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                   style: DunesTypography.sans(
-                                    fontSize: 12,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
                                     color: DunesColors.resolve(
                                       context,
-                                      DunesColors.text2,
+                                      DunesColors.text,
                                     ),
                                     context: context,
                                   ),
                                 ),
+                                const SizedBox(height: 3),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        title.isEmpty ? '现场会议' : title,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: DunesTypography.sans(
+                                          fontSize: 12,
+                                          color: DunesColors.resolve(
+                                            context,
+                                            DunesColors.text2,
+                                          ),
+                                          context: context,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      meetingRecordingElapsed(
+                                        live.elapsed.value,
+                                      ),
+                                      style: DunesTypography.sans(
+                                        fontSize: 12,
+                                        color: DunesColors.resolve(
+                                          context,
+                                          DunesColors.text2,
+                                        ),
+                                        context: context,
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ],
                             ),
-                          ],
-                        ),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            paused || failed ? '处理' : '查看',
+                            style: DunesTypography.sans(
+                              fontSize: 12,
+                              color: color,
+                              context: context,
+                            ),
+                          ),
+                          Icon(
+                            Icons.chevron_right_rounded,
+                            color: color,
+                            size: 18,
+                          ),
+                        ],
                       ),
-                      const SizedBox(width: 6),
-                      Text(
-                        paused || failed ? '处理' : '查看',
-                        style: DunesTypography.sans(
-                          fontSize: 12,
-                          color: color,
-                          context: context,
-                        ),
-                      ),
-                      Icon(Icons.chevron_right_rounded, color: color, size: 18),
-                    ],
+                    ),
                   ),
                 ),
               ),

@@ -2,6 +2,72 @@ import 'package:dunes_app/features/lighthouse/lighthouse_asset_board.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('供给省份先汇总完整上期再计算各指标环比', () {
+    final rows = lighthouseSupplyProvinceRows(
+      const [
+        {
+          'name': '湖南',
+          'group': '中石油',
+          'sales': 200,
+          'profit': 40,
+          'verifiedSales': 200,
+          'totalCost': 100,
+        },
+        {
+          'name': '湖南',
+          'group': '中石化',
+          'sales': 100,
+          'profit': 20,
+          'verifiedSales': 100,
+          'totalCost': 100,
+        },
+      ],
+      LighthouseFundPoolSnapshot.empty,
+      attachAssets: false,
+      previousRows: const [
+        {
+          'name': '湖南',
+          'group': '中石油',
+          'sales': 100,
+          'profit': -10,
+          'verifiedSales': 100,
+          'totalCost': 100,
+        },
+        {
+          'name': '湖南',
+          'group': '已退出',
+          'sales': 100,
+          'profit': -10,
+          'verifiedSales': 100,
+          'totalCost': 100,
+        },
+      ],
+    );
+    final deltas = rows.single['deltas'] as Map;
+    expect(deltas['sales'], closeTo(50, 0.001));
+    expect(deltas['profit'], closeTo(400, 0.001));
+    expect(deltas['grossMargin'], closeTo(30, 0.001));
+    expect(rows.single['prevProfit'], -20);
+    expect(deltas.containsKey('tax'), isFalse);
+  });
+
+  test('没有上期时不编造供给省份环比', () {
+    final rows = lighthouseSupplyProvinceRows(
+      const [
+        {
+          'name': '湖南',
+          'profit': 100,
+          'prevProfit': 50,
+          'deltas': {'sales': 20},
+        },
+      ],
+      LighthouseFundPoolSnapshot.empty,
+      attachAssets: false,
+    );
+    expect(rows.single['deltas'], isNull);
+    expect(rows.single['deltaPct'], isNull);
+  });
+
   test('资产节点日期可同步匹配其他资产分类', () {
     final trend = LighthouseAssetTrend(
       points: const [

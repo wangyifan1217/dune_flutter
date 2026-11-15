@@ -17535,6 +17535,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
     try {
       late final List<Map<String, dynamic>> rows;
       Map<String, dynamic>? tabUi;
+      List<Map<String, dynamic>>? previousSupplyRows;
       Map<String, dynamic>? netTaMetrics;
       if (tab == 'netTa') {
         final data = await _service.fetchNetTA(
@@ -17563,6 +17564,12 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
             .whereType<Map>()
             .map((e) => Map<String, dynamic>.from(e))
             .toList();
+        if (tab == 'supply' && data['previousRows'] is List) {
+          previousSupplyRows = (data['previousRows'] as List)
+              .whereType<Map>()
+              .map((e) => Map<String, dynamic>.from(e))
+              .toList();
+        }
         final metrics = data['metrics'];
         if (metrics is Map) {
           final m = Map<String, dynamic>.from(metrics);
@@ -17589,6 +17596,9 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
       setState(() {
         var base = _bundle ?? LighthouseDataBundle.empty();
         base = base.withDimension(tab, rows);
+        if (tab == 'supply') {
+          base = base.withDimension('supplyPrevious', previousSupplyRows ?? const []);
+        }
         if (tabUi != null) {
           base = base.withTabUi(tab, tabUi);
         }
@@ -19070,9 +19080,21 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
       // 标签二「全部」：账本行（省 × 供给分类 × 交易标识）按省合并成一行，
       // 挂上资管总资产。HUN / 交易类型筛的是账本，资产跟不过去，
       // 开了这两个筛选就只合并、不挂资产。
+      var previousRows = _bundle!.rowsOf('supplyPrevious');
+      if (_groupFilter != '全部') {
+        previousRows = previousRows.where((r) => r['group']?.toString() == _groupFilter).toList();
+      }
+      if (_hunFilter != '全部') {
+        final match = _hunMatchFor(_hunFilter);
+        previousRows = previousRows.where((r) => _hunOf(r).primary == match).toList();
+      }
+      if (_tradeTypeFilter != '全部') {
+        previousRows = previousRows.where((r) => lighthouseProductTradeFlagOf(r) == _tradeTypeFilter).toList();
+      }
       return lighthouseSupplyProvinceRows(
         rows,
         _fundPoolSnapshot,
+        previousRows: previousRows,
         attachAssets:
             !_hidesSensitiveFinance &&
             _supplyAssetScopeSupported &&

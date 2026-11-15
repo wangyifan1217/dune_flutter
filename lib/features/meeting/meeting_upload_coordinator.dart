@@ -7,6 +7,8 @@ import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 
 import '../auth/auth_session.dart';
+import '../chat/native_audio_recorder.dart';
+
 import 'meeting_audio_converter.dart';
 import 'meeting_upload_storage.dart';
 import 'native_meeting_service.dart';
@@ -179,6 +181,7 @@ class MeetingUploadCoordinator extends ChangeNotifier {
       _runningMeetingIds.add(meetingId);
       await MeetingUploadStorage.save(userId, _jobs);
       jobQueued = true;
+      await NativeAudioRecorder.instance.acknowledgeSavedRecording(src);
       _schedulePendingWatchdog(meetingId);
       unawaited(_startJob(meetingId, alreadyClaimed: true));
       notifyListeners();
@@ -204,6 +207,7 @@ class MeetingUploadCoordinator extends ChangeNotifier {
         );
         _jobs = <MeetingUploadJob>[..._jobs, job];
         await MeetingUploadStorage.save(userId, _jobs);
+        await NativeAudioRecorder.instance.acknowledgeSavedRecording(src);
         notifyListeners();
         _scheduleRetryTimer();
         return localId;

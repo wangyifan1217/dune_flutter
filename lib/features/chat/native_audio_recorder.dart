@@ -130,6 +130,19 @@ class NativeAudioRecorder {
     }
   }
 
+  Future<void> acknowledgeSavedRecording(String path) async {
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return;
+    try {
+      await _channel.invokeMethod<void>('acknowledgeSavedRecording', {
+        'path': path,
+      });
+    } on MissingPluginException {
+      // Older shells retain their existing behavior.
+    } on PlatformException {
+      // A duplicate recovery prompt is preferable to losing the recording.
+    }
+  }
+
   Future<void> discardAbandonedSession() async {
     if (!isSupported) return;
     try {

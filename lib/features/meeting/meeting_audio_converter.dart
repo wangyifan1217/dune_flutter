@@ -6,7 +6,7 @@ import 'package:path_provider/path_provider.dart';
 
 import '../chat/native_audio_recorder.dart';
 
-/// 会议录音上传前将 WAV 压缩为 m4a（兼容旧录音；新录音已边录边编码为 m4a）。
+/// 正常录音直接上传现有 m4a；仅 WAV 兜底录音在上传前尝试压缩。
 abstract final class MeetingAudioConverter {
   static const MethodChannel _channel = MethodChannel('dunes/meeting_audio');
 

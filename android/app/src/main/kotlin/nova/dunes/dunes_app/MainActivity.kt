@@ -15,6 +15,7 @@ import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
 import android.util.Log
+import android.util.AtomicFile
 import android.net.wifi.WifiManager
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.embedding.android.FlutterActivity
@@ -69,6 +70,7 @@ class MainActivity : FlutterActivity() {
     private var ignoreSilentConflictUntilMs: Long = 0L
     /** 小米等机型会掐断 VOICE_RECOGNITION，空读后重开麦克风的次数。 */
     private var audioSourceRecoveries = 0
+    @Volatile private var recorderCleanupPending = false
     private var sessionTracking = false
     private var sessionTitle = ""
     @Volatile private var crashWav: CrashSafeWavWriter? = null
@@ -124,6 +126,11 @@ class MainActivity : FlutterActivity() {
                         val tapped = intent?.action == MeetingRecordingService.OPEN_MEETING_ACTION
                         if (tapped) intent.action = Intent.ACTION_MAIN
                         result.success(tapped)
+                    }
+                    "acknowledgeSavedRecording" -> {
+                        val path = call.argument<String>("path").orEmpty()
+                        if (path.isNotBlank()) AtomicFile(pendingRecordingFile(path)).delete()
+                        result.success(true)
                     }
                     "abandonedSession" -> result.success(abandonedSessionPayload())
                     "recoverAbandonedSession" -> recoverAbandonedSession(result)
@@ -250,8 +257,47 @@ class MainActivity : FlutterActivity() {
         crashWav?.flushHeader()
     }
 
-    private fun readAbandonedSession(): JSONObject? {
+    private fun pendingRecordingFile(path: String): File =
+        File(voiceRecordingDir(), "pending-${File(path).name}.json")
+
+    // Persist the handoff before clearing the live index. Flutter acknowledges only
+    // after a local copy AND its upload job (or explicit local save) are durable.
+    private fun rememberStoppedRecording(path: String, durationMs: Long, title: String = sessionTitle) {
+        val json = JSONObject().apply {
+            put("title", title)
+            put("durationMs", durationMs)
+            put("pendingPath", path)
+            put("segments", JSONArray().put(path))
+            if (path.endsWith(".wav", ignoreCase = true)) put("pcmPath", path)
+        }
+        val atomic = AtomicFile(pendingRecordingFile(path))
+        val stream = atomic.startWrite()
+        try {
+            stream.write(json.toString().toByteArray(Charsets.UTF_8))
+            atomic.finishWrite(stream)
+        } catch (e: Exception) {
+            atomic.failWrite(stream)
+            throw e
+        }
+    }
+
+    private fun pendingRecording(): JSONObject? {
+        for (file in voiceRecordingDir().listFiles().orEmpty().sortedBy { it.lastModified() }) {
+            if (!file.name.startsWith("pending-") || !file.name.endsWith(".json")) continue
+            try {
+                val json = JSONObject(AtomicFile(file).openRead().bufferedReader().use { it.readText() })
+                val path = json.optString("pendingPath")
+                if (path.isNotBlank() && File(path).let { it.exists() && it.length() > 44 }) return json
+            } catch (e: Exception) {
+                Log.w(RECORDER_TAG, "Could not read pending recording", e)
+            }
+        }
+        return null
+    }
+
+    private fun readAbandonedSession(includePending: Boolean = true): JSONObject? {
         if (isRecording && sessionTracking) return null
+        if (includePending) pendingRecording()?.let { return it }
         val file = liveSessionFile()
         if (file.exists()) {
             try {
@@ -313,6 +359,11 @@ class MainActivity : FlutterActivity() {
             result.success(null)
             return
         }
+        val pending = json.optString("pendingPath")
+        if (pending.isNotBlank()) {
+            result.success(mapOf("path" to pending, "durationMs" to json.optLong("durationMs")))
+            return
+        }
         val pcm = abandonedPcmPath(json)
         val segs = existingAbandonedSegments(json)
         if (pcm == null && segs.isEmpty()) {
@@ -327,7 +378,7 @@ class MainActivity : FlutterActivity() {
                     return@Thread
                 }
                 val recovered = try {
-                    detachLivePcm(File(pcm))
+                    detachLivePcm(File(pcm), json.optString("title"))
                 } catch (e: Exception) {
                     Log.e(RECORDER_TAG, "PCM recovery could not preserve file", e)
                     mainHandler.post { result.error("AUDIO_RECOVERY_FAILED", "录音文件暂时无法保存，请检查手机空间后重试", null) }
@@ -338,8 +389,13 @@ class MainActivity : FlutterActivity() {
                     deleteQuietly(File(leftover.optString(i)))
                 }
                 val durationMs = CrashSafeWavWriter.durationMs(recovered)
+                try {
+                    completeStoppedSession(recovered, durationMs.toLong(), json.optString("title"))
+                } catch (e: Exception) {
+                    mainHandler.post { result.error("AUDIO_RECOVERY_FAILED", e.message, null) }
+                    return@Thread
+                }
                 mainHandler.post {
-                    completeStoppedSession()
                     result.success(
                         mapOf(
                             "path" to recovered,
@@ -366,11 +422,16 @@ class MainActivity : FlutterActivity() {
                     }
                 }
             }
+            try {
+                if (!path.isNullOrBlank()) completeStoppedSession(path, durationMs, json.optString("title"))
+            } catch (e: Exception) {
+                mainHandler.post { result.error("AUDIO_RECOVERY_FAILED", e.message, null) }
+                return@Thread
+            }
             mainHandler.post {
                 if (path.isNullOrBlank()) {
                     result.success(null)
                 } else {
-                    completeStoppedSession()
                     result.success(
                         mapOf(
                             "path" to path,
@@ -382,8 +443,14 @@ class MainActivity : FlutterActivity() {
         }.start()
     }
 
-    private fun discardAbandonedSession() {
-        val json = readAbandonedSession()
+    private fun discardAbandonedSession(includePending: Boolean = true) {
+        val json = readAbandonedSession(includePending)
+        if (json != null && json.optString("pendingPath").isNotBlank()) {
+            val path = json.optString("pendingPath")
+            deleteQuietly(File(path))
+            AtomicFile(pendingRecordingFile(path)).delete()
+            return
+        }
         if (json != null) {
             val raw = json.optJSONArray("segments") ?: JSONArray()
             for (i in 0 until raw.length()) {
@@ -407,6 +474,10 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun startRecord(call: MethodCall, result: MethodChannel.Result) {
+        if (recorderCleanupPending) {
+            result.error("AUDIO_BUSY", "上一段录音已保存，麦克风仍在释放，请稍后重试", null)
+            return
+        }
         try {
             stopInternal(deleteFile = true)
             pruneOldVoiceRecordings()
@@ -816,7 +887,105 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    private fun stopMeetingWithFallback(result: MethodChannel.Result) {
+        recorderCleanupPending = true
+        isRecording = false
+        isPaused = true
+        val saveDone = java.util.concurrent.atomic.AtomicBoolean(false)
+        val nativeDone = java.util.concurrent.atomic.AtomicBoolean(false)
+        fun releaseCleanupGuard() {
+            if (saveDone.get() && nativeDone.get()) {
+                recorderCleanupPending = recordThread?.isAlive == true ||
+                    audioRecord != null || streamingEncoder != null
+            }
+        }
+        Thread({
+            var cleanupStarted = false
+            try {
+                closeCrashWav(deleteFile = false)
+                val pcm = livePcmFile()
+                check(CrashSafeWavWriter.repairHeader(pcm.absolutePath)) { "录音文件暂时无法保存，请检查手机空间" }
+                val duration = CrashSafeWavWriter.durationMs(pcm.absolutePath).toLong()
+                val title = sessionTitle
+                val fallback = File(voiceRecordingDir(), "voice-pcm-${System.currentTimeMillis()}.wav")
+                // Renaming on the same filesystem does not copy/re-encode the recording.
+                rememberStoppedRecording(fallback.absolutePath, duration, title)
+                check(pcm.renameTo(fallback)) { "录音文件暂时无法保存，原始录音已保留，请重试" }
+                val gate = MeetingRecordingSaveGate(fallback.absolutePath)
+                Thread({
+                    var encoded: String? = null
+                    try {
+                        // Normal path: finalize the AAC already encoded during capture.
+                        // A vendor stop/release that hangs cannot block the fallback thread.
+                        stopInternal(deleteFile = false)
+                        val candidate = outputPath
+                        if (!meetingEncoderUnavailable && candidate != null &&
+                            isCompleteMeetingAudio(candidate, duration)) {
+                            encoded = candidate
+                        }
+                        completeStoppedSession()
+                    } catch (e: Exception) {
+                        Log.w(RECORDER_TAG, "Native finalization failed; original WAV retained", e)
+                    } finally {
+                        if (!gate.complete(encoded) && encoded != null) {
+                            // Timeout already returned WAV. Never swap/delete that chosen file.
+                            deleteQuietly(File(encoded))
+                        }
+                        nativeDone.set(true)
+                        releaseCleanupGuard()
+                    }
+                }, "dunes-meeting-finalize").start()
+                cleanupStarted = true
+                val selected = gate.awaitPath(3_500)
+                // Usually the latch opens immediately. The deadline applies only to
+                // slow/hung native finalization, not to recording duration.
+                if (selected != fallback.absolutePath) {
+                    rememberStoppedRecording(selected, duration, title)
+                    AtomicFile(pendingRecordingFile(fallback.absolutePath)).delete()
+                    deleteQuietly(fallback)
+                }
+                releaseWakeLock()
+                MeetingRecordingService.stop(this)
+                mainHandler.post { result.success(mapOf("path" to selected, "durationMs" to duration)) }
+            } catch (e: Exception) {
+                mainHandler.post { result.error("AUDIO_STOP_FAILED", e.message, null) }
+            } finally {
+                saveDone.set(true)
+                if (cleanupStarted) releaseCleanupGuard()
+                else recorderCleanupPending = recordThread?.isAlive == true
+            }
+        }, "dunes-meeting-save").start()
+    }
+
+    // A playable prefix is insufficient: a failed segment must not silently truncate
+    // a meeting. PCM byte count is the independent reference duration.
+    private fun isCompleteMeetingAudio(path: String, expectedDurationMs: Long): Boolean {
+        if (!isPlayableAudio(path)) return false
+        val extractor = MediaExtractor()
+        return try {
+            extractor.setDataSource(path)
+            (0 until extractor.trackCount).any { index ->
+                val format = extractor.getTrackFormat(index)
+                format.getString(MediaFormat.KEY_MIME).orEmpty().startsWith("audio/") &&
+                    format.containsKey(MediaFormat.KEY_DURATION) &&
+                    format.getLong(MediaFormat.KEY_DURATION) / 1000 >= expectedDurationMs - 250
+            }
+        } catch (_: Exception) {
+            false
+        } finally {
+            try { extractor.release() } catch (_: Exception) { }
+        }
+    }
+
     private fun stopRecord(result: MethodChannel.Result, deleteFile: Boolean) {
+        if (recorderCleanupPending) {
+            result.error("AUDIO_BUSY", "麦克风仍在释放，请稍后重试", null)
+            return
+        }
+        if (sessionTracking && !deleteFile && livePcmFile().length() > 44) {
+            stopMeetingWithFallback(result)
+            return
+        }
         val meeting = sessionTracking
         Thread({
             try {
@@ -825,7 +994,7 @@ class MainActivity : FlutterActivity() {
                 // 文件已交给 Flutter：清掉引用，避免下次 start/cancel 走 stopInternal(deleteFile = true)
                 // 时把这场会议的录音当成「当前录音」删掉。
                 val usable = !path.isNullOrBlank() && File(path).let { it.exists() && it.length() > 0 }
-                if (usable || deleteFile) completeStoppedSession()
+                if (usable || deleteFile) completeStoppedSession(if (meeting && !deleteFile) path else null, duration)
                 if (!deleteFile && !path.isNullOrBlank() && !usable) {
                     Log.w(RECORDER_TAG, "stop returned missing file path=$path")
                 }
@@ -861,9 +1030,14 @@ class MainActivity : FlutterActivity() {
                 } catch (_: Exception) {
                     null
                 }
+                try {
+                    if (salvaged != null) completeStoppedSession(if (meeting) salvaged.first else null, salvaged.second)
+                } catch (handoffError: Exception) {
+                    mainHandler.post { result.error("AUDIO_STOP_FAILED", handoffError.message, null) }
+                    return@Thread
+                }
                 mainHandler.post {
                     if (salvaged != null) {
-                        completeStoppedSession()
                         result.success(
                             mapOf(
                                 "path" to salvaged.first,
@@ -879,11 +1053,12 @@ class MainActivity : FlutterActivity() {
     }
 
     /** Clear recovery metadata only after a usable file has been selected or explicitly discarded. */
-    private fun completeStoppedSession() {
+    private fun completeStoppedSession(path: String? = null, durationMs: Long = 0, title: String = sessionTitle) {
+        if (path != null) rememberStoppedRecording(path, durationMs, title)
         meetingPcmSink = null
         outputPath = null
         segmentPaths.clear()
-        if (sessionTracking) clearLiveSessionFile()
+        if (sessionTracking || path != null) clearLiveSessionFile()
         sessionTracking = false
         sessionTitle = ""
     }
@@ -894,7 +1069,7 @@ class MainActivity : FlutterActivity() {
         val live = livePcmFile().absolutePath
         try {
             voiceRecordingDir().listFiles()?.forEach { f ->
-                if (f.isFile && f.absolutePath != live && f.name.startsWith("voice") &&
+                if (f.isFile && f.absolutePath != live && !pendingRecordingFile(f.absolutePath).exists() && f.name.startsWith("voice") &&
                     f.lastModified() < cutoff
                 ) {
                     deleteQuietly(f)
@@ -948,8 +1123,9 @@ class MainActivity : FlutterActivity() {
      * 把兜底 PCM 改名成独立文件再交出去。否则 live_pcm.wav 会被下一场录音覆盖，
      * 下次启动还会被误判成「未完成的会议录音」。
      */
-    private fun detachLivePcm(pcm: File): String {
+    private fun detachLivePcm(pcm: File, title: String = sessionTitle): String {
         val dest = File(voiceRecordingDir(), "voice-pcm-${System.currentTimeMillis()}.wav")
+        rememberStoppedRecording(dest.absolutePath, CrashSafeWavWriter.durationMs(pcm.absolutePath).toLong(), title)
         if (pcm.renameTo(dest)) return dest.absolutePath
         // Never hand out live_pcm.wav: the next recording would overwrite it.
         try {
@@ -1040,7 +1216,8 @@ class MainActivity : FlutterActivity() {
                 closeCrashWav(deleteFile = true)
             }
             if (cancelTrackedSession) {
-                discardAbandonedSession()
+                // Cancelling the live capture must not delete a completed handoff.
+                discardAbandonedSession(includePending = false)
             }
             if (stopTrackedSession) {
                 sessionTracking = false

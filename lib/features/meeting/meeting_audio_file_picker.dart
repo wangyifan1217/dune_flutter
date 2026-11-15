@@ -5,6 +5,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 
+import '../chat/native_audio_recorder.dart';
+
 /// 选择会议录音并立刻落到应用目录。
 /// Android 不用 file_selector：它会把整文件读进内存，大录音会 OOM 闪退。
 abstract final class MeetingAudioFilePicker {
@@ -18,7 +20,9 @@ abstract final class MeetingAudioFilePicker {
     final fileName = slash >= 0 ? normalized.substring(slash + 1) : normalized;
     final dot = fileName.lastIndexOf('.');
     if (dot <= 0) return false;
-    return supportedExtensions.contains(fileName.substring(dot + 1).toLowerCase());
+    return supportedExtensions.contains(
+      fileName.substring(dot + 1).toLowerCase(),
+    );
   }
 
   static Future<String?> pick() async {
@@ -110,7 +114,10 @@ abstract final class MeetingAudioFilePicker {
     await dir.create(recursive: true);
     final normalizedSrc = sourcePath.replaceAll('\\', '/');
     final normalizedDir = dir.path.replaceAll('\\', '/');
-    if (normalizedSrc.startsWith('$normalizedDir/')) return sourcePath;
+    if (normalizedSrc.startsWith('$normalizedDir/')) {
+      await NativeAudioRecorder.instance.acknowledgeSavedRecording(sourcePath);
+      return sourcePath;
+    }
     final destPath =
         '${dir.path}/meeting_local_${DateTime.now().millisecondsSinceEpoch}${_extensionOf(sourcePath)}';
     final dest = File(destPath);
@@ -128,9 +135,10 @@ abstract final class MeetingAudioFilePicker {
       await sink.close();
       await raf.close();
     }
-    if (!await dest.exists() || await dest.length() <= 0) {
+    if (!await dest.exists() || await dest.length() != await src.length()) {
       throw Exception('录音文件保存失败');
     }
+    await NativeAudioRecorder.instance.acknowledgeSavedRecording(sourcePath);
     return destPath;
   }
 

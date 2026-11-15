@@ -105,6 +105,7 @@ flutter {
 }
 
 dependencies {
+    testImplementation("junit:junit:4.13.2")
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
     implementation("com.tencent.tpns:tpns:1.4.4.6-release")
     // 华为厂商通道：版本与主 SDK 同系列；需配合 app/agconnect-services.json

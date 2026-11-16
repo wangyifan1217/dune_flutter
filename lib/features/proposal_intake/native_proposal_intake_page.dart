@@ -9365,6 +9365,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       issues.addAll(proposalIntakePurchaseMarketIssues(_form));
       issues.addAll(proposalIntakePurchaseTechIssues(_form));
     } else {
+      if (!proposalIntakeFormHasText(_form, 'channelReceiveAccount')) {
+        issues.add('请填写渠道侧收款账户');
+      }
       issues.addAll(
         proposalIntakeSkuSettleIssues(
           _form,

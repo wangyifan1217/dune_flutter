@@ -29,6 +29,63 @@ Map<String, dynamic> snapshot(
   'remainingInvoiceable': 100,
 };
 void main() {
+  test('审批中刷新账单主体、项目、账期与金额，保留提交表单', () async {
+    final original = {
+      'bills': [
+        {...snapshot(1, 'AP'), 'ourEntityName': '旧主体', 'projectName': '旧项目'},
+        {...snapshot(2, 'AR'), 'ourEntityName': '原主体'},
+      ],
+      'paymentAmount': 30,
+    };
+    final result = await refreshXflowApprovalBills(
+      form: original,
+      fields: [billField('bills', 'AP')],
+      fetch:
+          ({
+            required billDirection,
+            required billTypeCode,
+            required dateStart,
+            required dateEnd,
+            required pageNum,
+          }) async => [
+            if (billDirection == 'AP')
+              {
+                'billId': 1,
+                'billNo': '新单号',
+                'ourEntityName': '新主体',
+                'counterpartyName': '新对方',
+                'projectName': '新项目',
+                'billPeriod': '2026.11',
+                'province': '广东',
+                'billTypeName': '采购款',
+                'billAmount': 120,
+                'paidAmount': 40,
+                'remainingPayable': 80,
+                'reconcileStatus': 'RECONCILED',
+              }
+            else
+              {
+                'billId': 2,
+                'ourEntityName': '应收主体',
+                'projectName': '应收项目',
+                'billAmount': 200,
+                'paidAmount': 60,
+                'remainingPayable': 140,
+              },
+          ],
+    );
+    final rows = result.form['bills'] as List<Map<String, dynamic>>;
+    expect(result.updated, 2);
+    expect(rows[0]['ourEntityName'], '新主体');
+    expect(rows[0]['projectName'], '新项目');
+    expect(rows[0]['provinceName'], '广东');
+    expect(rows[0]['billPeriod'], '2026.11');
+    expect(rows[0]['remainingAmount'], 80);
+    expect(rows[1]['ourEntityName'], '应收主体');
+    expect(rows[1]['remainingAmount'], 140);
+    expect((original['bills'] as List).first['ourEntityName'], '旧主体');
+    expect(original['paymentAmount'], 30);
+  });
   test('刷新跨分页账单并保留原审批快照和失败项', () async {
     final first = snapshot(1, 'AP'),
         second = snapshot(2, 'AP'),

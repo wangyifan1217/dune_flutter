@@ -214,6 +214,17 @@ Future<XflowBillRefreshResult> refreshXflowApprovalBills({
             if (original['_billRefreshState'] == 'updated') continue;
             final merged = <String, dynamic>{...original};
             for (final key in [
+              'billNo',
+              'ourEntityName',
+              'counterpartyName',
+              'billPeriod',
+              'billStartDate',
+              'billEndDate',
+              'projectName',
+              'provinceName',
+              'billTypeCode',
+              'billTypeName',
+              'label',
               'billAmount',
               'paidAmount',
               'invoiceAmount',
@@ -225,7 +236,12 @@ Future<XflowBillRefreshResult> refreshXflowApprovalBills({
               'reconcileStatus',
               'reconcileStatusLabel',
             ]) {
-              if (live[key] != null) merged[key] = live[key];
+              if (live.containsKey(key)) merged[key] = live[key];
+            }
+            if (live.keys.any(
+              (key) => key.toLowerCase().contains('province'),
+            )) {
+              merged['provinceName'] = xflowBillProvinceOf(live);
             }
             final amountKey = target.kind == 'invoice'
                 ? 'remainingInvoiceable'

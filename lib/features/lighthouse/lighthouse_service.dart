@@ -323,6 +323,18 @@ class LighthouseService {
     }, '可见人员加载失败');
   }
 
+  /// 2026-11-13 · 资管损益：[period] = month / quarter / year 时返回该周期按账单所属月份的损益
+  /// （已按当前用户的数据规则过滤）；日 / 周回 applicable=false。见 lighthouse-go internal/lighthouse/pnl.go。
+  Future<Map<String, dynamic>> fetchPnl({
+    required String period,
+    int offset = 0,
+  }) {
+    return _getData('/lighthouse/pnl', {
+      'period': period,
+      'offset': '$offset',
+    }, '资管损益加载失败');
+  }
+
   /// 许正阳在「谁能看到」里开 / 关某人对这一行（坐标全空 = 整个板块）的权限。
   /// [validTo] 为空 = 永久；[reset] 去掉单独设置，回到板块授权 ∩ 数据规则。
   Future<void> putVisibilityOverride({

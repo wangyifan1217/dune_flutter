@@ -15436,6 +15436,681 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
   final List<String> _metricPageStack = [];
   String? _detailKey; // non-null when detail view is open
 
+  // ── 资管损益（2026-11-13）─────────────────────────────────────────────
+  // 账本利润按交易记，不含资管对账后的损益（对方少认 / 多认）。损益按整张月度账单
+  // 对出来，拆不到天，所以只在 本月 / 本季 / 本年 视图把它加进利润、净利润：
+  // 大数和产品行显示「含损益」，下面一条写清 扣前 / 损益。日 / 周 / 自定义区间不动。
+  // 绩效不读这里。
+  Map<String, dynamic>? _pnl;
+  String _pnlKey = '';
+
+  bool get _pnlPeriod =>
+      !_isCustomRange && const {'month', 'quarter', 'year'}.contains(_period);
+
+  Future<void> _loadPnl() async {
+    if (widget.sharedCard != null || !_pnlPeriod) {
+      // 不在 setState 里清：随后的 summary setState 会一起重画。
+      _pnl = null;
+      _pnlKey = '';
+      return;
+    }
+    final key = '$_period|$_periodOffset';
+    if (key != _pnlKey) {
+      _pnl = null;
+      _pnlKey = key;
+    }
+    try {
+      final data = await _service.fetchPnl(
+        period: _period,
+        offset: _periodOffset,
+      );
+      if (!mounted || _pnlKey != key || '$_period|$_periodOffset' != key) {
+        return;
+      }
+      if (!_pnlPeriod) return;
+      setState(() => _pnl = data['applicable'] == true ? data : null);
+    } catch (_) {
+      // 资管损益挂了不影响灯塔主数：保持扣前口径，不弹错。
+    }
+  }
+
+  double get _pnlTotal => (_pnl?['total'] as num?)?.toDouble() ?? 0;
+  double get _pnlUnassigned => (_pnl?['unassigned'] as num?)?.toDouble() ?? 0;
+
+  double _pnlForProduct(String name) {
+    final m = _pnl?['byProduct'];
+    if (m is! Map) return 0;
+    final v = m[name.trim()];
+    return v is num ? v.toDouble() : 0;
+  }
+
+  List<Map<String, dynamic>> get _pnlItems => [
+    for (final it in (_pnl?['items'] as List? ?? const []))
+      if (it is Map) Map<String, dynamic>.from(it),
+  ];
+
+  /// 主 Hero 利润 / 净利润要加的损益；null = 这一屏不扣（大数保持扣前）。
+  double? _heroPnlAdjust(List<Map<String, dynamic>> rows) {
+    if (_pnl == null || _detailKey != null || widget.sharedCard != null) {
+      return null;
+    }
+    if (!const {'product', 'supply', 'channel'}.contains(_tab)) return null;
+    // 「全部」：后端共享 summary + 全部损益（含未归属），和列表合计对得上。
+    if (!_heroFilterActive) return _pnlTotal;
+    // 筛了分类：只有产品维度能按行对上损益；供给 / 渠道筛过就不扣，免得半扣。
+    if (_tab != 'product') return null;
+    final seen = <String>{};
+    var sum = 0.0;
+    for (final r in rows) {
+      final name = r['name']?.toString().trim() ?? '';
+      if (name.isEmpty || !seen.add(name)) continue;
+      sum += _pnlForProduct(name);
+    }
+    return sum;
+  }
+
+  /// 产品一级列表：利润 / 净利润加上该产品的损益，毛利率、ROI 按新利润同比例重算。
+  /// 原值留在 profitBeforePnl，损益留在 pnlImpact，供行下那条「损益」用。
+  List<Map<String, dynamic>> _rowsWithPnl(List<Map<String, dynamic>> rows) {
+    if (_pnl == null ||
+        _tab != 'product' ||
+        _detailKey != null ||
+        widget.sharedCard != null) {
+      return rows;
+    }
+    final seen = <String>{};
+    var changed = false;
+    final out = <Map<String, dynamic>>[];
+    for (final r in rows) {
+      final name = r['name']?.toString().trim() ?? '';
+      final impact = name.isEmpty || seen.contains(name)
+          ? 0.0
+          : _pnlForProduct(name);
+      if (name.isNotEmpty) seen.add(name);
+      if (impact.abs() < 0.005) {
+        out.add(r);
+        continue;
+      }
+      changed = true;
+      final profit = (r['profit'] as num?)?.toDouble() ?? 0;
+      final next = Map<String, dynamic>.from(r);
+      final after = profit + impact;
+      next['profitBeforePnl'] = profit;
+      next['pnlImpact'] = impact;
+      next['profit'] = after;
+      final net = (r['netProfit'] as num?)?.toDouble();
+      if (net != null) next['netProfit'] = net + impact;
+      if (profit.abs() >= 0.005) {
+        final k = after / profit;
+        for (final key in const ['grossMargin', 'rate']) {
+          final v = (r[key] as num?)?.toDouble();
+          if (v != null) next[key] = v * k;
+        }
+      }
+      out.add(next);
+    }
+    return changed ? out : rows;
+  }
+
+  static String _pnlWan(double yuan, {bool signed = false}) {
+    final wan = (yuan / 10000).abs().toStringAsFixed(2);
+    if (!signed) return '${yuan < 0 ? '−' : ''}$wan万';
+    if (yuan.abs() < 50) return '0.00万';
+    return '${yuan > 0 ? '+' : '−'}$wan万';
+  }
+
+  Color _pnlColor(double v) => v.abs() < 50
+      ? LhColors.mute2
+      : (v > 0 ? LhColors.neg : LhColors.pos);
+
+  /// 损益展开状态：'hero' = 大数卡那条；'un' = 未归属；产品 = 'p::名称'。
+  /// 和「细分」一样原地展开，不再弹底部弹层。
+  final Set<String> _expandedPnl = <String>{};
+
+  /// 对平（0.00万）的账单默认收起，点「看看」才露出来。
+  final Set<String> _pnlZeroShown = <String>{};
+
+  static bool _pnlIsZero(Map<String, dynamic> it) =>
+      ((it['impact'] as num?)?.toDouble() ?? 0).abs() < 50;
+
+  List<Map<String, dynamic>> _pnlItemsFor({
+    String? product,
+    bool unassigned = false,
+  }) {
+    final items = _pnlItems.where((it) {
+      final p = it['product']?.toString().trim() ?? '';
+      if (unassigned) return p.isEmpty;
+      if (product != null) return p == product.trim();
+      return true;
+    }).toList();
+    items.sort(
+      (a, b) => ((b['impact'] as num?)?.abs() ?? 0).compareTo(
+        (a['impact'] as num?)?.abs() ?? 0,
+      ),
+    );
+    return items;
+  }
+
+  int _pnlBillCount(List<Map<String, dynamic>> items) =>
+      items.where((it) => !_pnlIsZero(it)).length;
+
+  /// 资管批量导入的对账人是脚本名（ddl-20260907-ar-reconcile-xlsx），显示成「系统导入」。
+  static String _pnlOperator(String raw) {
+    final s = raw.trim();
+    if (s.startsWith('ddl-') ||
+        s.endsWith('xlsx') ||
+        s.contains('-reconcile-')) {
+      return '系统导入';
+    }
+    return s;
+  }
+
+  void _togglePnl(String key, {String? closeL3Key}) {
+    setState(() {
+      if (!_expandedPnl.remove(key)) {
+        _expandedPnl.add(key);
+        if (closeL3Key != null) _expandedProductL3.remove(closeL3Key);
+      }
+    });
+  }
+
+  /// 产品损益条：样子同「细分」，绿色区分；点开账单在卡片里往下长。
+  List<Widget> _buildRowPnlBlock({
+    required String name,
+    required double impact,
+    required double before,
+    required String l3Key,
+  }) {
+    final key = 'p::$name';
+    final open = _expandedPnl.contains(key);
+    final items = _pnlItemsFor(product: name);
+    final n = _pnlBillCount(items);
+    return [
+      _buildProductL3Bar(
+        children: const [],
+        open: open,
+        groupColor: LhColors.pos,
+        kicker: '损益',
+        chipText: n > 0 ? '损益 $n' : '损益',
+        previewText:
+            '${_pnlWan(impact, signed: true)} · 扣前 ${_pnlWan(before)}',
+        semanticsLabel: open ? '收起$name的资管损益' : '展开$name的资管损益账单',
+        onTap: () => _togglePnl(key, closeL3Key: l3Key),
+      ),
+      if (open) _buildPnlBillList(key, items),
+    ];
+  }
+
+  /// 账单列表：左边一根绿色引导线挂在卡片上，一张账单一张小卡。
+  Widget _buildPnlBillList(
+    String key,
+    List<Map<String, dynamic>> items, {
+    bool showProduct = false,
+  }) {
+    final mute = DunesColors.resolve(context, LhColors.mute);
+    final ink = DunesColors.resolve(context, LhColors.ink);
+    final showZero = _pnlZeroShown.contains(key);
+    final nonZero = items.where((it) => !_pnlIsZero(it)).toList();
+    final zeroN = items.length - nonZero.length;
+    final shown = showZero ? items : nonZero;
+    String sideWord(String s) => s == 'AP' ? '应付' : (s == 'AR' ? '应收' : s);
+    String short(String t) {
+      // 2026-11-10 14:22:00 → 11.10
+      final m = RegExp(r'^\d{4}-(\d{2})-(\d{2})').firstMatch(t);
+      return m == null ? t : '${m.group(1)}.${m.group(2)}';
+    }
+
+    Widget bill(Map<String, dynamic> it) {
+      final impact = (it['impact'] as num?)?.toDouble() ?? 0;
+      final amount = (it['billAmount'] as num?)?.toDouble() ?? 0;
+      final rec = (it['reconcileAmount'] as num?)?.toDouble() ?? 0;
+      final head = [
+        it['projectName']?.toString() ?? '',
+        it['billTypeName']?.toString() ?? '',
+      ].where((s) => s.trim().isNotEmpty).join(' · ');
+      final op = _pnlOperator(it['operator']?.toString() ?? '');
+      final when = short(it['reconcileTime']?.toString() ?? '');
+      final reason = it['reason']?.toString().trim() ?? '';
+      final prod = it['product']?.toString().trim() ?? '';
+      final meta = [
+        [
+          when,
+          op.isEmpty || op == '系统导入' ? op : '$op 对账',
+        ].where((s) => s.trim().isNotEmpty).join(' '),
+        if (reason.isNotEmpty) reason,
+        if (showProduct && prod.isNotEmpty) prod,
+      ].where((s) => s.trim().isNotEmpty).join(' · ');
+      return Container(
+        padding: EdgeInsets.fromLTRB(_fs(10), _fs(7), _fs(10), _fs(7)),
+        decoration: BoxDecoration(
+          color: DunesColors.resolve(
+            context,
+            Colors.white,
+            role: DunesColorRole.surface,
+          ),
+          borderRadius: BorderRadius.circular(_fs(9)),
+          border: Border.all(
+            color: DunesColors.resolve(
+              context,
+              _LhPlum.line,
+              role: DunesColorRole.border,
+            ).withAlpha(150),
+            width: 0.7,
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.baseline,
+              textBaseline: TextBaseline.alphabetic,
+              children: [
+                Expanded(
+                  child: Text(
+                    head.isEmpty ? '账单' : head,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: LhTypography.sans(
+                      size: _fs(12),
+                      weight: FontWeight.w600,
+                      color: ink,
+                      context: context,
+                    ),
+                  ),
+                ),
+                SizedBox(width: _fs(8)),
+                Text(
+                  _pnlWan(impact, signed: true),
+                  style: _tabular(
+                    LhTypography.mono(
+                      size: _fs(12),
+                      weight: FontWeight.w700,
+                      color: DunesColors.resolve(context, _pnlColor(impact)),
+                      context: context,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(height: _fs(2)),
+            Text(
+              '${sideWord(it['side']?.toString() ?? '')}'
+              ' · ${it['month'] ?? ''}'
+              ' · 账单 ${_pnlWan(amount)} · 对账 ${_pnlWan(rec)}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: _tabular(
+                LhTypography.mono(
+                  size: _fs(10),
+                  color: mute,
+                  context: context,
+                ),
+              ),
+            ),
+            if (meta.isNotEmpty) ...[
+              SizedBox(height: _fs(1.5)),
+              Text(
+                meta,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: LhTypography.sans(
+                  size: _fs(10),
+                  color: DunesColors.resolve(context, LhColors.mute2),
+                  context: context,
+                ),
+              ),
+            ],
+          ],
+        ),
+      );
+    }
+
+    final children = <Widget>[
+      for (final it in shown) bill(it),
+      if (items.isEmpty)
+        Padding(
+          padding: EdgeInsets.symmetric(vertical: _fs(6)),
+          child: Text(
+            '没有账单明细',
+            style: LhTypography.sans(
+              size: _fs(10.5),
+              color: mute,
+              context: context,
+            ),
+          ),
+        ),
+      if (zeroN > 0)
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => setState(() {
+            if (!_pnlZeroShown.remove(key)) _pnlZeroShown.add(key);
+          }),
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(2, _fs(2), 2, _fs(2)),
+            child: Text(
+              showZero ? '收起对平的账单' : '另有 $zeroN 张对平（0.00万） · 看看',
+              style: LhTypography.sans(
+                size: _fs(10.5),
+                weight: FontWeight.w600,
+                color: DunesColors.resolve(context, _LhPlum.primary),
+                context: context,
+              ),
+            ),
+          ),
+        ),
+    ];
+    return Container(
+      color: DunesColors.resolve(
+        context,
+        const Color(0xFFFBFAFD),
+        role: DunesColorRole.surface,
+      ),
+      padding: EdgeInsets.fromLTRB(_fs(15), _fs(2), _fs(10), _fs(10)),
+      child: Container(
+        decoration: BoxDecoration(
+          border: Border(
+            left: BorderSide(color: LhColors.pos.withAlpha(90), width: 2),
+          ),
+        ),
+        padding: EdgeInsets.only(left: _fs(9), top: _fs(4)),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (var i = 0; i < children.length; i++) ...[
+              if (i > 0) SizedBox(height: _fs(6)),
+              children[i],
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 大数指标栏下面一条：扣前 / 资管损益；点开原地展开按产品排的损益。
+  Widget _buildHeroPnlStrip({
+    required double applied,
+    required double before,
+  }) {
+    final open = _expandedPnl.contains('hero');
+    final byProduct = <MapEntry<String, double>>[
+      for (final e in ((_pnl?['byProduct'] as Map?) ?? const {}).entries)
+        if (e.value is num && (e.value as num).abs() >= 50)
+          MapEntry(e.key.toString(), (e.value as num).toDouble()),
+    ]..sort((a, b) => b.value.abs().compareTo(a.value.abs()));
+    final unassigned = _pnl?['partial'] == true ? 0.0 : _pnlUnassigned;
+    final n = byProduct.length;
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _buildProductL3Bar(
+              children: const [],
+              open: open,
+              groupColor: LhColors.pos,
+              kicker: '损益',
+              chipText: '资管损益',
+              previewText:
+                  '${_pnlWan(applied, signed: true)} · 扣前 ${_pnlWan(before)}'
+                  '${n > 0 ? ' · $n 个产品' : ''}',
+              semanticsLabel: open ? '收起资管损益' : '展开资管损益，按产品看',
+              onTap: () => _togglePnl('hero'),
+            ),
+            if (open)
+              _buildHeroPnlRanking(byProduct, unassigned),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHeroPnlRanking(
+    List<MapEntry<String, double>> byProduct,
+    double unassigned,
+  ) {
+    final mute = DunesColors.resolve(context, LhColors.mute);
+    final rows = <({String name, double v, bool product})>[
+      for (final e in byProduct) (name: e.key, v: e.value, product: true),
+      if (unassigned.abs() >= 50) (name: '未归属', v: unassigned, product: false),
+    ];
+    final maxAbs = rows.fold<double>(0, (m, r) => math.max(m, r.v.abs()));
+    Widget line(({String name, double v, bool product}) r) {
+      final nameText = Text(
+        r.name,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: LhTypography.sans(
+          size: 11.5,
+          weight: FontWeight.w500,
+          color: DunesColors.resolve(
+            context,
+            r.product ? _LhPlum.deep : LhColors.mute,
+          ),
+          context: context,
+        ),
+      );
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: r.product
+                    ? GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        // 点产品名：在下面列表里展开它的账单。不滚过去 ——
+                        // ensureVisible 在 web 上会把嵌套列表卡死（见 _discountFocusKey）。
+                        onTap: () {
+                          setState(() => _expandedPnl.add('p::${r.name}'));
+                          ScaffoldMessenger.maybeOf(context)
+                            ?..hideCurrentSnackBar()
+                            ..showSnackBar(
+                              SnackBar(
+                                content: Text('已在下方列表展开「${r.name}」的损益'),
+                                duration: const Duration(seconds: 2),
+                              ),
+                            );
+                        },
+                        child: nameText,
+                      )
+                    : nameText,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                _pnlWan(r.v, signed: true),
+                style: _tabular(
+                  LhTypography.mono(
+                    size: 11.5,
+                    weight: FontWeight.w700,
+                    color: DunesColors.resolve(context, _pnlColor(r.v)),
+                    context: context,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 3),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(2),
+            child: Container(
+              height: 4,
+              color: DunesColors.resolve(
+                context,
+                const Color(0xFFF0ECF6),
+                role: DunesColorRole.surface,
+              ),
+              alignment: Alignment.centerLeft,
+              child: FractionallySizedBox(
+                widthFactor: maxAbs > 0
+                    ? (r.v.abs() / maxAbs).clamp(0.02, 1.0).toDouble()
+                    : 0.0,
+                child: Container(
+                  color: (r.v < 0 ? LhColors.pos : LhColors.neg).withAlpha(
+                    r.product ? 140 : 80,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
+    return Container(
+      color: DunesColors.resolve(
+        context,
+        const Color(0xFFFBFAFD),
+        role: DunesColorRole.surface,
+      ),
+      padding: const EdgeInsets.fromLTRB(15, 2, 10, 10),
+      child: Container(
+        decoration: BoxDecoration(
+          border: Border(
+            left: BorderSide(color: LhColors.pos.withAlpha(90), width: 2),
+          ),
+        ),
+        padding: const EdgeInsets.only(left: 10, top: 6),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (final r in rows) ...[line(r), const SizedBox(height: 8)],
+            Text(
+              '应收少认 = 减利润，应付少付 = 加利润；按账单所属月份计入，'
+              '重新对账后跟着变。绩效不受影响。',
+              style: LhTypography.sans(
+                size: 10,
+                color: mute,
+                height: 1.5,
+                context: context,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 列表最后一行：资管里有、但对不上任何产品的损益。放在这里列表合计才等于 Hero。
+  Widget? _buildPnlUnassignedRow() {
+    if (_pnl == null ||
+        _tab != 'product' ||
+        _detailKey != null ||
+        widget.sharedCard != null ||
+        _heroFilterActive ||
+        _ledgerSearchActive) {
+      return null;
+    }
+    final v = _pnlUnassigned;
+    if (v.abs() < 50) return null;
+    final items = _pnlItemsFor(unassigned: true);
+    final open = _expandedPnl.contains('un');
+    return Container(
+      margin: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            _LhPlum.line,
+            role: DunesColorRole.border,
+          ),
+          width: 0.7,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Semantics(
+            button: true,
+            label: open ? '收起未归属损益' : '展开未归属损益账单',
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => _togglePnl('un'),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            '未归属损益',
+                            style: LhTypography.sans(
+                              size: 13,
+                              weight: FontWeight.w700,
+                              color: DunesColors.resolve(context, LhColors.ink),
+                              context: context,
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            '对不上具体产品 · ${_pnlBillCount(items)} 张账单 · 已计入汇总',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: LhTypography.sans(
+                              size: 10.5,
+                              color: DunesColors.resolve(context, LhColors.mute),
+                              context: context,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      _pnlWan(v, signed: true),
+                      style: _tabular(
+                        LhTypography.mono(
+                          size: 13,
+                          weight: FontWeight.w700,
+                          color: DunesColors.resolve(context, _pnlColor(v)),
+                          context: context,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      open ? '收起' : '展开',
+                      style: LhTypography.sans(
+                        size: 10.5,
+                        weight: FontWeight.w600,
+                        color: DunesColors.resolve(context, _LhPlum.primary),
+                        context: context,
+                      ),
+                    ),
+                    AnimatedRotation(
+                      turns: open ? 0.5 : 0,
+                      duration: const Duration(milliseconds: 180),
+                      child: Icon(
+                        Icons.keyboard_arrow_down_rounded,
+                        size: 17,
+                        color: DunesColors.resolve(context, _LhPlum.primary),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          if (open) _buildPnlBillList('un', items),
+        ],
+      ),
+    );
+  }
+
   /// 从二级详情点进产品三级详情时记住来路：返回键 / 路径条回到二级，而不是一级列表。
   final List<({String type, String key, String subTab})> _detailReturnStack =
       [];
@@ -17247,6 +17922,8 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
     final requestedEnd = _customEnd;
     final requestedTab = _tab;
     final requestedGroup = _groupFilter;
+    // 资管损益和主数并行，挂了不挡主数。
+    unawaited(_loadPnl());
     final cacheKey =
         '$requestedPeriod|$requestedOffset|${requestedStart?.toIso8601String() ?? ""}|${requestedEnd?.toIso8601String() ?? ""}';
     bool stillCurrent() =>
@@ -29744,6 +30421,8 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
     late final List<double> profitSeries;
     late final double heroMastheadValue;
     late final bool mastheadIsNeg;
+    double? heroPnlApplied;
+    double? heroPnlBefore;
 
     if (totalsOverride != null) {
       totals = totalsOverride;
@@ -29810,13 +30489,20 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
         keys: const ['verifiedSales'],
         rowSum: sumVerifiedSales,
       );
-      final periodProfit = _heroAmountFrom(
+      final periodProfitBeforePnl = _heroAmountFrom(
         metrics: metrics,
         useRowAmounts: useRowAmounts,
         metricsMatch: metricsMatch,
         keys: const ['profit'],
         rowSum: sumProfit,
       );
+      // 本月 / 本季 / 本年：利润含资管损益（毛利率、ROI 跟着按新利润算）。
+      final pnlAdjust = _heroPnlAdjust(rows);
+      if (pnlAdjust != null && pnlAdjust.abs() >= 0.005) {
+        heroPnlApplied = pnlAdjust;
+        heroPnlBefore = periodProfitBeforePnl;
+      }
+      final periodProfit = periodProfitBeforePnl + (heroPnlApplied ?? 0);
       final anchorTotal = _anchor == _LhAnchor.verified && heroVerified > 0
           ? heroVerified
           : heroSales;
@@ -29854,7 +30540,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
         metricsMatch: metricsMatch,
         keys: const ['netProfit'],
         rowSum: sumNetProfit,
-      );
+      ) + (heroPnlApplied ?? 0);
       final heroHandling = _heroAmountFrom(
         metrics: metrics,
         useRowAmounts: useRowAmounts,
@@ -29962,9 +30648,24 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
 
     // 一级 / 二级共用：点住某一天 → 大数、环比、指标栏切到那一天，并出「回本期」。
     // 只认双击落地的点；单击预览只在走势图里变。
-    final pointTotals = _heroPagePointIndex == null
+    var pointTotals = _heroPagePointIndex == null
         ? null
         : _heroTotalsAtPoint(_heroPagePointIndex!, totals);
+    // 双击落地的点就是当前这一期：走势序列是扣前数，补上损益和大数对齐。
+    if (pointTotals != null && heroPnlApplied != null) {
+      final pnl = heroPnlApplied;
+      final before = pointTotals['profit'] ?? 0;
+      final after = before + pnl;
+      pointTotals = {
+        ...pointTotals,
+        'profit': after,
+        if (pointTotals['netProfit'] != null)
+          'netProfit': pointTotals['netProfit']! + pnl,
+        if (before.abs() >= 0.005)
+          for (final k in const ['grossMargin', 'rate'])
+            if (pointTotals[k] != null) k: pointTotals[k]! * after / before,
+      };
+    }
     heroPointActive = pointTotals != null;
     heroTotals = pointTotals ?? totals;
     heroMastheadValue = _mastheadValueForKey(heroTotals, mastheadKey);
@@ -30817,13 +31518,21 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
               handleBuilder: (context, t) => _buildHeroFoldHandle(t),
               // 2026-10-28 · 资金页：规模 / 成本 / 利润下面多一块「账款」（资管账单）。
               // 利润页、专题、二级页都不出；和分区表一起折叠。
-              child: (_heroAssetsEligible && _heroKpiPage == 1)
+              child:
+                  (_heroAssetsEligible && _heroKpiPage == 1) ||
+                      heroPnlApplied != null
                   ? Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         _buildHeroStatRail(heroTotals),
-                        _buildBillPanel(),
+                        if (heroPnlApplied != null)
+                          _buildHeroPnlStrip(
+                            applied: heroPnlApplied,
+                            before: heroPnlBefore ?? 0,
+                          ),
+                        if (_heroAssetsEligible && _heroKpiPage == 1)
+                          _buildBillPanel(),
                       ],
                     )
                   : _buildHeroStatRail(heroTotals),
@@ -42994,7 +43703,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
       );
     }
     final baseRows = _ledgerSearchFiltered(_currentRows);
-    final pointRows = _rowsAtSelectedHeroPoint(baseRows);
+    final pointRows = _rowsWithPnl(_rowsAtSelectedHeroPoint(baseRows));
     // 阶梯冲刺看板：跟分类 / 查找走，不跟阶梯筛选走 —— 它自己的三格就是那个筛选。
     final tierBoard = _buildSupplyTierBoard(pointRows);
     final rows = _tab == 'supply' && _detailKey == null && _supplyTierFilter != 'all'
@@ -43091,6 +43800,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
             !_ledgerSearchActive
         ? _buildSupplyAssetOverview(rows)
         : null;
+    final pnlUnassignedRow = hasMore ? null : _buildPnlUnassignedRow();
     final listBody = Column(
       children: [
         _buildLedger(
@@ -43099,6 +43809,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
           showRowChevron: _tab != 'netTa',
           allowDefaultDetailOpen: _tab != 'netTa',
         ),
+        ?pnlUnassignedRow,
         if (hasMore)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 14),
@@ -55434,6 +56145,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
                             if (opening) {
                               _expandedTrends.remove(trendKey);
                               _expandedLedgerSolo.remove(trendKey);
+                              _expandedPnl.remove('p::$name');
                               _productL3VisibleCount[l3Key] =
                                   _productL3BatchSize;
                             }
@@ -55442,6 +56154,16 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
                             }
                           });
                         },
+                      ),
+                    // 本月 / 本季 / 本年：这一行利润已含资管损益。样子同「细分」，
+                    // 点开账单原地往下长；和细分一次只开一样。
+                    if (r['pnlImpact'] is num)
+                      ..._buildRowPnlBlock(
+                        name: name,
+                        impact: (r['pnlImpact'] as num).toDouble(),
+                        before:
+                            (r['profitBeforePnl'] as num?)?.toDouble() ?? 0,
+                        l3Key: l3Key,
                       ),
                     if (lighthouseLedgerShowsFundPoolPreview(tab) &&
                         _detailKey == null &&
@@ -55776,6 +56498,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
     String? chipText,
     String? previewText,
     String? semanticsLabel,
+    String? actionText,
   }) {
     final real = lighthouseProductL3RealCount(children);
     final preview = lighthouseProductL3Preview(children);
@@ -55876,7 +56599,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
                 ),
                 SizedBox(width: _fs(6)),
                 Text(
-                  open ? '收起' : '展开',
+                  actionText ?? (open ? '收起' : '展开'),
                   style: LhTypography.sans(
                     size: _fs(10.5),
                     weight: FontWeight.w600,
@@ -55885,15 +56608,22 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
                     context: context,
                   ),
                 ),
-                AnimatedRotation(
-                  turns: open ? 0.5 : 0,
-                  duration: const Duration(milliseconds: 180),
-                  child: Icon(
-                    Icons.keyboard_arrow_down_rounded,
+                if (actionText != null)
+                  Icon(
+                    Icons.chevron_right_rounded,
                     size: _fs(17),
                     color: DunesColors.resolve(context, _LhPlum.primary),
+                  )
+                else
+                  AnimatedRotation(
+                    turns: open ? 0.5 : 0,
+                    duration: const Duration(milliseconds: 180),
+                    child: Icon(
+                      Icons.keyboard_arrow_down_rounded,
+                      size: _fs(17),
+                      color: DunesColors.resolve(context, _LhPlum.primary),
+                    ),
                   ),
-                ),
               ],
             ),
           ),

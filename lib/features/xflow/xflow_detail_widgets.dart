@@ -1592,6 +1592,24 @@ class XfDetBillCascadeList extends StatelessWidget {
                     context: context,
                   ),
                 ),
+                if (row['_billRefreshState'] != null) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    row['_billRefreshState'] == 'updated'
+                        ? '账单信息已更新'
+                        : '未更新，显示提交时数据',
+                    style: DunesTypography.sans(
+                      fontSize: 11,
+                      color: DunesColors.resolve(
+                        context,
+                        row['_billRefreshState'] == 'updated'
+                            ? DunesColors.green
+                            : DunesColors.amber,
+                      ),
+                      context: context,
+                    ),
+                  ),
+                ],
                 if (xflowBillTypeProjectLine(row).isNotEmpty) ...[
                   const SizedBox(height: 4),
                   Text(
@@ -1613,7 +1631,8 @@ class XfDetBillCascadeList extends StatelessWidget {
               ],
             ),
           ),
-        if (rows.isNotEmpty)
+        if (rows.isNotEmpty &&
+            !rows.any((row) => row['_billRefreshState'] == 'unavailable'))
           XflowBillAmountSummary(
             rows: rows,
             remainingKind: remainingKind,
@@ -2014,7 +2033,8 @@ class XfDetInvoiceList extends StatelessWidget {
             ),
           ),
         for (final item in items)
-          if (!xflowInvoiceUnrecognized(item) && xflowInvoiceLine(item).isNotEmpty)
+          if (!xflowInvoiceUnrecognized(item) &&
+              xflowInvoiceLine(item).isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(bottom: 4),
               child: Text(
@@ -2390,11 +2410,9 @@ class XfDetTrackTimeline extends StatelessWidget {
       ),
     ];
 
-    ({
-      XflowApprovalFlowStepState state,
-      String comment,
-      String time,
-    }) paintStep(XflowApprovalStep step) {
+    ({XflowApprovalFlowStepState state, String comment, String time}) paintStep(
+      XflowApprovalStep step,
+    ) {
       final decision = step.decision.toUpperCase();
       if (decision == 'APPROVED') {
         return (

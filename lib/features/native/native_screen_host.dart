@@ -360,6 +360,13 @@ class _NativeScreenHostState extends State<NativeScreenHost>
 
   /// Keep 工作台 alive：切到聊天后再回来，提案填写等内页不销毁。
   bool _workbenchMounted = false;
+  // Desktop main-tab switches temporarily hide the current approval screen.
+  String? _desktopApprovalScreen;
+  bool _desktopApprovalParked = false;
+  int _desktopApprovalEntry = 0;
+  final GlobalKey _desktopApprovalKey = GlobalKey(
+    debugLabel: 'desktop-approval-keep-alive',
+  );
   final GlobalKey _workbenchKeepAliveKey = GlobalKey(
     debugLabel: 'workbench-keep-alive',
   );
@@ -3956,6 +3963,31 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     );
   }
 
+  bool _isDesktopApprovalScreen(String? screen) =>
+      const {'XFP', 'XFU', 'XF', 'XFS', 'B10'}.contains(screen);
+
+  Widget _desktopApprovalKeepAlive(
+    BuildContext context, {
+    required bool active,
+  }) {
+    final screen = _desktopApprovalScreen!;
+    return Positioned.fill(
+      child: TickerMode(
+        enabled: active,
+        child: IgnorePointer(
+          ignoring: !active,
+          child: Opacity(
+            opacity: active ? 1 : 0,
+            child: KeyedSubtree(
+              key: _desktopApprovalKey,
+              child: _buildCurrentScreen(context, screenOverride: screen),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   /// 消息页「快速开会」：已有会议在录 → 回到会议页；否则进 MM0 并立即开始录音。
   void _startQuickMeeting() {
     if (!MeetingLiveController.instance.active.value) {
@@ -4151,7 +4183,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     );
   }
 
-  Widget _buildCurrentScreen(BuildContext context) {
+  Widget _buildCurrentScreen(BuildContext context, {String? screenOverride}) {
     if (widget.session.isExternalUser &&
         _isRestrictedForExternalUser(widget.navigation.currentScreen)) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -4163,7 +4195,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       });
       return _buildConversationListPage();
     }
-    switch (widget.navigation.currentScreen) {
+    switch (screenOverride ?? widget.navigation.currentScreen) {
       case 'QJ':
         return _buildQianjiHubPage();
       case 'QJMA':
@@ -5176,6 +5208,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       case 'XFU':
       case 'XF':
         return NativeXflowProposalPage(
+          key: ValueKey('desktop-approval-form-$_desktopApprovalEntry'),
           session: widget.session,
           navigation: widget.navigation,
           templateKey: _xflowTemplateKey,
@@ -5556,6 +5589,15 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     final previousScreen = _lastScreen;
     final isBack = previousScreen != null && depth < _lastHistoryDepth;
 
+    if (isDesktopCommOnly) {
+      if (_isDesktopApprovalScreen(screen)) {
+        _desktopApprovalScreen = screen;
+        _desktopApprovalParked = false;
+      } else if (!_desktopApprovalParked) {
+        _desktopApprovalScreen = null;
+      }
+    }
+
     if (isDesktopCommOnly && _desktopReleaseHistoryOpen) {
       return _wrapWithMainNavigation(
         AppReleaseHistoryPage(
@@ -5694,6 +5736,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
               ),
             ),
           if (_workbenchMounted) _buildWorkbenchKeepAlive(active: false),
+          if (_desktopApprovalScreen != null)
+            _desktopApprovalKeepAlive(context, active: false),
           if (_salesProposalMounted)
             _proposalIntakeKeepAlive(
               sales: true,
@@ -5793,6 +5837,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     final switcherIsQianjiHub = switcherScreenId == 'QJ';
     final switcherIsProposal =
         switcherScreenId == 'B2SALES' || switcherScreenId == 'B2PURCHASE';
+    final switcherIsDesktopApproval =
+        isDesktopCommOnly && _isDesktopApprovalScreen(switcherScreenId);
     final currentScreen = dualNow
         ? const SizedBox.shrink()
         : (isLighthouse ||
@@ -5801,6 +5847,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
               switcherIsMyHub ||
               switcherIsQianjiHub ||
               switcherIsProposal ||
+              switcherIsDesktopApproval ||
               workbenchAsSlideOver ||
               (isWorkbench && isDesktopCommOnly))
         ? const SizedBox.shrink()
@@ -5987,6 +6034,11 @@ class _NativeScreenHostState extends State<NativeScreenHost>
             screen: screen,
             searchOpen: isSearch,
             searchUnderlay: _searchUnderlayScreen,
+          ),
+        if (_desktopApprovalScreen != null)
+          _desktopApprovalKeepAlive(
+            context,
+            active: _isDesktopApprovalScreen(screen),
           ),
         // 须叠在「我的」之上，否则 APP 侧滑展开后仍被 B2 挡住、看起来像点不动。
         if (_workbenchMounted) _buildWorkbenchKeepAlive(active: isWorkbench),
@@ -6295,6 +6347,12 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     }
     final current = widget.navigation.currentScreen;
     final currentTab = _mainTabScreenFor(current);
+    if (isDesktopCommOnly &&
+        currentTab != screen &&
+        _isDesktopApprovalScreen(current)) {
+      _desktopApprovalScreen = current;
+      _desktopApprovalParked = true;
+    }
     if (currentTab != screen) {
       setState(() => _desktopSectionTransitionToken++);
     }
@@ -6489,6 +6547,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   }) {
     final entry = entryCategory?.trim().toLowerCase();
     setState(() {
+      _desktopApprovalEntry++;
+      _desktopApprovalParked = false;
       _xflowTemplateKey = templateKey;
       _xflowEditProposalId = editProposalId;
       _xflowEditBusinessType = editBusinessType;

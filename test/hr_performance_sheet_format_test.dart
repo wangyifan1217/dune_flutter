@@ -46,5 +46,39 @@ void main() {
     expect(find.text('最终得分 85'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+  testWidgets(
+    'compact assessment keeps criteria readable and hides unreleased scores',
+    (tester) async {
+      tester.view.physicalSize = const Size(360, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: HrAssessmentSheet(
+                lines: [
+                  {
+                    'project': '工作成果',
+                    'name': '任务完成',
+                    'weight': 100,
+                    'score': 88,
+                    'bands': [
+                      {'description': '按时完成目标', 'min': 80, 'max': 100},
+                    ],
+                  },
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+      expect(find.text('工作成果 · 维度权重 100%'), findsOneWidget);
+      expect(find.text('按时完成目标'), findsOneWidget);
+      expect(find.textContaining('上级评分'), findsNothing);
+      expect(find.textContaining('88'), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
 }
-

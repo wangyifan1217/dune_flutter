@@ -12,6 +12,8 @@ import 'approval_pending_nav.dart';
 import 'native_b10_page.dart';
 import 'task_todo_actions.dart';
 import 'xflow_detail_comments.dart';
+import 'xflow_bill_refresh.dart';
+import 'xflow_bill_cascade.dart';
 import 'xflow_detail_logic.dart';
 import 'xflow_detail_widgets.dart';
 import 'xflow_form_styles.dart';
@@ -68,6 +70,10 @@ class _NativeXflowSubmissionPageState extends State<NativeXflowSubmissionPage> {
   int _pendingTotal = 0;
   bool _pendingBusy = false;
   bool _taskBusy = false;
+  Map<String, dynamic>? _liveBillForm;
+  bool _billRefreshing = false;
+  int _billTotal = 0, _billUpdated = 0;
+  int _loadEpoch = 0, _billEpoch = 0;
 
   @override
   void initState() {
@@ -76,8 +82,23 @@ class _NativeXflowSubmissionPageState extends State<NativeXflowSubmissionPage> {
     _load();
   }
 
+  @override
+  void didUpdateWidget(covariant NativeXflowSubmissionPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.businessId != widget.businessId ||
+        oldWidget.businessType != widget.businessType) {
+      _load();
+    }
+  }
+
   Future<void> _load() async {
+    final epoch = ++_loadEpoch;
+    _billEpoch++;
     setState(() {
+      _liveBillForm = null;
+      _billRefreshing = false;
+      _billTotal = 0;
+      _billUpdated = 0;
       _loading = true;
       _error = null;
     });
@@ -113,7 +134,7 @@ class _NativeXflowSubmissionPageState extends State<NativeXflowSubmissionPage> {
         trail: trail,
         createdById: detail.createdById,
       );
-      if (!mounted) return;
+      if (!mounted || epoch != _loadEpoch) return;
       final myTodo = results[2] as XflowTodoHint?;
       final myTask = results[3] as XflowProposalItem?;
       final todoEnabled = results[4] == true;
@@ -127,18 +148,68 @@ class _NativeXflowSubmissionPageState extends State<NativeXflowSubmissionPage> {
         _assigneeNames = assigneeNames;
         _loading = false;
       });
+      if (_resolvedStatus.toUpperCase() == 'PENDING') {
+        unawaited(_refreshBills());
+      }
       if (myTodo != null) {
         unawaited(_refreshPendingQueue());
       } else if (mounted) {
         setState(() => _pendingTotal = 0);
       }
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted || epoch != _loadEpoch) return;
       setState(() {
         _error = friendlyErrorText(e);
         _loading = false;
       });
     }
+  }
+
+  Future<void> _refreshBills() async {
+    final detail = _detail, template = _template;
+    if (detail == null ||
+        template == null ||
+        _resolvedStatus.toUpperCase() != 'PENDING')
+      return;
+    final count = template.fields
+        .where((field) => field.type == 'billCascade')
+        .fold<int>(
+          0,
+          (sum, field) =>
+              sum + xflowBillSelectedList(detail.formData[field.key]).length,
+        );
+    if (count == 0) return;
+    final epoch = ++_billEpoch;
+    setState(() {
+      _billRefreshing = true;
+      _billTotal = count;
+    });
+    final result = await refreshXflowApprovalBills(
+      form: detail.formData,
+      fields: template.fields,
+      createdAt: detail.createdAt,
+      fetch:
+          ({
+            required billDirection,
+            required billTypeCode,
+            required dateStart,
+            required dateEnd,
+            required pageNum,
+          }) => _service.fetchAssetBills(
+            billDirection: billDirection,
+            billTypeCode: billTypeCode,
+            dateStart: dateStart,
+            dateEnd: dateEnd,
+            pageNum: pageNum,
+          ),
+    );
+    if (!mounted || epoch != _billEpoch) return;
+    setState(() {
+      _liveBillForm = result.form;
+      _billTotal = result.total;
+      _billUpdated = result.updated;
+      _billRefreshing = false;
+    });
   }
 
   Future<MyOpenApprovalQueue?> _refreshPendingQueue() async {
@@ -647,25 +718,55 @@ class _NativeXflowSubmissionPageState extends State<NativeXflowSubmissionPage> {
                                   myTask: _myTask,
                                 ),
                             ],
+                            if (_billTotal > 0)
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 10),
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        _billRefreshing
+                                            ? '正在更新账单信息…'
+                                            : _billUpdated == _billTotal
+                                            ? '账单信息已更新 · 审批金额以提交时为准'
+                                            : '账单更新 $_billUpdated / $_billTotal，未更新项显示提交时数据',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: DunesColors.resolve(
+                                            context,
+                                            DunesColors.text2,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    if (!_billRefreshing &&
+                                        _billUpdated < _billTotal)
+                                      TextButton(
+                                        onPressed: _refreshBills,
+                                        child: const Text('重试'),
+                                      ),
+                                  ],
+                                ),
+                              ),
                             XflowFormCard(
                               title: titledForm,
                               child: XfDetFormSections(
                                 sections: buildFieldSections(
                                   _template!.fields,
-                                  detail!.formData,
+                                  _liveBillForm ?? detail!.formData,
                                   bundle!.detail,
                                 ),
                                 service: _service,
                                 onOpenLinkedProposal:
                                     (proposalId, source, businessType) {
-                                  openLinkedProposalDetail(
-                                    context: context,
-                                    session: widget.session,
-                                    proposalId: proposalId,
-                                    source: source,
-                                    businessType: businessType,
-                                  );
-                                },
+                                      openLinkedProposalDetail(
+                                        context: context,
+                                        session: widget.session,
+                                        proposalId: proposalId,
+                                        source: source,
+                                        businessType: businessType,
+                                      );
+                                    },
                               ),
                             ),
                             XfDetTaskCompletionCard(

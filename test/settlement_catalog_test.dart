@@ -6,6 +6,22 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
 void main() {
+  test('sales catalog sends login token to configured Go route', () async {
+    final client = MockClient((request) async {
+      expect(request.url.path, '/api/v1/proposal-catalog/out/shaqiu/catalog/channel');
+      expect(request.url.queryParameters['syncSource'], 'POINTS_REBATE');
+      expect(request.headers['authorization'], 'Bearer sales-token');
+      return http.Response(jsonEncode({'code': 200, 'data': [{'id': '2070042866993868843', 'channelName': '渠道'}]}), 200, headers: {'content-type': 'application/json; charset=utf-8'});
+    });
+    final catalog = SettlementCatalogService(
+      client: client,
+      assetBase: 'https://dunes.example/api/v1/proposal-catalog',
+      authToken: 'sales-token',
+    );
+    final rows = await catalog.fetchChannels(syncSource: 'POINTS_REBATE');
+    expect(rows.single.resolvedIdText, '2070042866993868843');
+    client.close();
+  });
   test('promoter names use the documented name endpoint and deduplicate', () async {
     final client = MockClient((request) async {
       expect(request.url.path, endsWith('/out/shaqiu/catalog/promoter-name'));

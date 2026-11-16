@@ -291,11 +291,15 @@ class _BillCascadeSheetState extends State<_BillCascadeSheet> {
       } else {
         _picked = [
           ..._picked,
-          xflowBillSnapshot(
-            row,
-            remainingKind: widget.config.remainingKind,
-            billDirection: widget.config.billDirection,
-          ),
+          {
+            ...xflowBillSnapshot(
+              row,
+              remainingKind: widget.config.remainingKind,
+              billDirection: widget.config.billDirection,
+            ),
+            'lookupDateStart': _dateStart,
+            'lookupDateEnd': _dateEnd,
+          },
         ];
       }
     });
@@ -1060,11 +1064,7 @@ class XflowBillAmountGrid extends StatelessWidget {
           [
             ('对账金额', xflowBillMoney(xflowBillReconcileAmount(row)), false),
             ('损益金额', xflowBillMoney(xflowBillPnlAmount(row)), false),
-            (
-              '对账状态',
-              xflowBillReconcileStatusLabel(row),
-              false,
-            ),
+            ('对账状态', xflowBillReconcileStatusLabel(row), false),
           ],
           labelSize: labelSize,
           valueSize: valueSize,
@@ -1158,10 +1158,10 @@ class XflowBillAmountGrid extends StatelessWidget {
             height: 1.35,
             fontWeight: FontWeight.w600,
             color: label == '对账状态' && value == '未对账'
-              ? DunesColors.resolve(context, DunesColors.coral)
-              : emphasize
-              ? DunesColors.resolve(context, DunesColors.accentDeep)
-              : DunesColors.resolve(context, DunesColors.text),
+                ? DunesColors.resolve(context, DunesColors.coral)
+                : emphasize
+                ? DunesColors.resolve(context, DunesColors.accentDeep)
+                : DunesColors.resolve(context, DunesColors.text),
             context: context,
           ),
         ),

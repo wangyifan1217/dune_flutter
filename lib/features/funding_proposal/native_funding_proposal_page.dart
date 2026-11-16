@@ -334,7 +334,7 @@ class _NativeFundingProposalPageState extends State<NativeFundingProposalPage> {
 
   Widget _editor(FundingProposal open) {
     return RepaintBoundary(
-      child: _FundingEditor(
+      child: FundingProposalEditor(
         key: ValueKey('funding-${open.id}'),
         initial: open,
         service: _service,
@@ -412,7 +412,10 @@ class _NativeFundingProposalPageState extends State<NativeFundingProposalPage> {
     final form = row.form;
     final party = '${form['counterpartyName'] ?? ''}'.trim();
     final ours = '${form['ourPartyName'] ?? ''}'.trim();
-    final financing = _grouped('${form['financingAmount'] ?? ''}');
+    final carrier = '${form['proposalType'] ?? ''}' == 'carrier';
+    final financing = _grouped(
+      '${form[carrier ? 'actualCredit' : 'financingAmount'] ?? ''}',
+    );
     final net = row.estimate.text('netProfit', fallback: '');
     final title = row.title.isEmpty ? '资金提案' : row.title;
     final now = switch (row.status) {
@@ -432,7 +435,7 @@ class _NativeFundingProposalPageState extends State<NativeFundingProposalPage> {
       scale: financing.isEmpty ? '—' : financing,
       mid: [
         ProposalListCardMetric(
-          label: '融资需求',
+          label: carrier ? '实际授信额度' : '融资需求',
           value: financing.isEmpty ? '—' : financing,
           mono: true,
         ),
@@ -444,8 +447,12 @@ class _NativeFundingProposalPageState extends State<NativeFundingProposalPage> {
       ],
       right: [
         ProposalListCardMetric(
-          label: '净收益',
-          value: net.isEmpty || net == '—' ? '—' : net,
+          label: carrier ? '预估授信额度' : '净收益',
+          value: carrier
+              ? (_grouped('${form['estimatedCredit'] ?? ''}').isEmpty
+                    ? '—'
+                    : _grouped('${form['estimatedCredit']}'))
+              : (net.isEmpty || net == '—' ? '—' : net),
           mono: true,
         ),
         ProposalListCardMetric(
@@ -590,8 +597,19 @@ class _NativeFundingProposalPageState extends State<NativeFundingProposalPage> {
         .where((row) => row.status == kFundingStatusApproved)
         .length;
     var financing = 0.0;
+    final onlyCarrier = _list.items.every(
+      (row) => '${row.form['proposalType'] ?? ''}' == 'carrier',
+    );
+    final hasCarrier = _list.items.any(
+      (row) => '${row.form['proposalType'] ?? ''}' == 'carrier',
+    );
     for (final row in _list.items) {
-      final raw = '${row.form['financingAmount'] ?? ''}'.replaceAll(',', '');
+      if (!onlyCarrier && '${row.form['proposalType'] ?? ''}' == 'carrier') {
+        continue;
+      }
+      final raw =
+          '${row.form[onlyCarrier ? 'actualCredit' : 'financingAmount'] ?? ''}'
+              .replaceAll(',', '');
       financing += double.tryParse(raw) ?? 0;
     }
     final text = financing == financing.roundToDouble()
@@ -662,7 +680,15 @@ class _NativeFundingProposalPageState extends State<NativeFundingProposalPage> {
       children: [
         tile('审批中', '$reviewing', ' 份'),
         SizedBox(width: compact ? 6 : 10),
-        tile('融资需求', text.isEmpty ? '0' : text, ' 元'),
+        tile(
+          onlyCarrier
+              ? '实际授信'
+              : hasCarrier
+              ? '能源融资需求'
+              : '融资需求',
+          text.isEmpty ? '0' : text,
+          ' 元',
+        ),
         SizedBox(width: compact ? 6 : 10),
         tile('已通过', '$approved', ' 份'),
       ],
@@ -881,8 +907,8 @@ String _grouped(String raw) {
 // 填写 / 审批
 // ======================================================================
 
-class _FundingEditor extends StatefulWidget {
-  const _FundingEditor({
+class FundingProposalEditor extends StatefulWidget {
+  const FundingProposalEditor({
     super.key,
     required this.initial,
     required this.service,
@@ -892,8 +918,10 @@ class _FundingEditor extends StatefulWidget {
     required this.ourEntities,
     required this.counterparties,
     required this.onBack,
+    this.showBusinessApprovals = true,
   });
 
+  final bool showBusinessApprovals;
   final FundingProposal initial;
   final FundingProposalService service;
   final ProposalIntakeService intake;
@@ -904,13 +932,14 @@ class _FundingEditor extends StatefulWidget {
   final VoidCallback onBack;
 
   @override
-  State<_FundingEditor> createState() => _FundingEditorState();
+  State<FundingProposalEditor> createState() => _FundingEditorState();
 }
 
-class _FundingEditorState extends State<_FundingEditor> {
+class _FundingEditorState extends State<FundingProposalEditor> {
   late FundingProposal _row = widget.initial;
   late Map<String, dynamic> _form = _clone(widget.initial.form);
   late FundingEstimate _est = widget.initial.estimate;
+  late String _lastRateInputs = _carrierRateInputs(_form);
   final Map<String, TextEditingController> _ctls = {};
   final _decisionComment = TextEditingController();
   Timer? _estimateDebounce;
@@ -926,6 +955,7 @@ class _FundingEditorState extends State<_FundingEditor> {
   FundingOptions get _opts => widget.options;
   FundingPermissions get _perm => _row.permissions;
   bool get _editable => _perm.canEdit;
+  bool get _carrier => _text('proposalType') == 'carrier';
 
   /// 业务审批面板沿用销售提案那一块，这里只换来源和「已通过」状态。
   ProposalIntakeRow _asIntake() {
@@ -968,6 +998,8 @@ class _FundingEditorState extends State<_FundingEditor> {
   // ---- 表单读写 ----
 
   String _text(String key) => '${_form[key] ?? ''}'.trim();
+  String _carrierRateInputs(Map<String, dynamic> form) =>
+      '${form['proposalType'] ?? ''}|${form['bankRate'] ?? ''}|${form['serviceFeeRate'] ?? ''}';
 
   List<Map<String, dynamic>> get _funders {
     final raw = _form['funders'];
@@ -1004,7 +1036,7 @@ class _FundingEditorState extends State<_FundingEditor> {
 
   List<Map<String, dynamic>> _filesOf(String key) {
     final raw = _materials[key];
-    if (raw is! List) return const [];
+    if (raw is! List) return [];
     return [
       for (final item in raw)
         if (item is Map) Map<String, dynamic>.from(item),
@@ -1067,9 +1099,13 @@ class _FundingEditorState extends State<_FundingEditor> {
     final seq = ++_estimateSeq;
     setState(() => _estimating = true);
     try {
-      final est = await widget.service.estimate(_clone(_form));
+      final input = _clone(_form);
+      final est = await widget.service.estimate(input);
       if (!mounted || seq != _estimateSeq) return;
-      setState(() => _est = est);
+      setState(() {
+        _est = est;
+        _lastRateInputs = _carrierRateInputs(input);
+      });
     } catch (_) {
       // 测算失败保留上一次结果，提交时后端还会再算。
     } finally {
@@ -1082,6 +1118,7 @@ class _FundingEditorState extends State<_FundingEditor> {
       _row = row;
       _form = _clone(row.form);
       _est = row.estimate;
+      _lastRateInputs = _carrierRateInputs(_form);
       _dirty = false;
     });
   }
@@ -1329,7 +1366,7 @@ class _FundingEditorState extends State<_FundingEditor> {
               children: [
                 _businessSection(context),
                 _financingSection(context),
-                _materialsSection(context),
+                if (!_carrier) _materialsSection(context),
                 _approversSection(context),
                 _noteSection(context),
                 if (_row.events.isNotEmpty || _perm.canDecide)
@@ -1359,7 +1396,9 @@ class _FundingEditorState extends State<_FundingEditor> {
                             children: [
                               _titleBlock(context),
                               const SizedBox(height: 16),
-                              if (wide)
+                              if (_carrier)
+                                form
+                              else if (wide)
                                 Row(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
@@ -1373,17 +1412,21 @@ class _FundingEditorState extends State<_FundingEditor> {
                                 const SizedBox(height: 16),
                                 form,
                               ],
-                              const SizedBox(height: 16),
-                              KeyedSubtree(
-                                key: _bizKey,
-                                child: ProposalBusinessApprovals(
-                                  key: ValueKey('funding-business-${_row.id}'),
-                                  session: widget.service.session,
-                                  proposal: _asIntake(),
-                                  funding: true,
-                                  people: widget.people,
+                              if (widget.showBusinessApprovals) ...[
+                                const SizedBox(height: 16),
+                                KeyedSubtree(
+                                  key: _bizKey,
+                                  child: ProposalBusinessApprovals(
+                                    key: ValueKey(
+                                      'funding-business-${_row.id}',
+                                    ),
+                                    session: widget.service.session,
+                                    proposal: _asIntake(),
+                                    funding: true,
+                                    people: widget.people,
+                                  ),
                                 ),
-                              ),
+                              ],
                             ],
                           ),
                         ),
@@ -1527,11 +1570,7 @@ class _FundingEditorState extends State<_FundingEditor> {
     if (perm.canWithdraw) add('撤回', _busy ? null : _withdraw);
     if (perm.canDelete) add('删除', _busy ? null : _delete);
     if (_row.id > 0) {
-      add(
-        '转发',
-        _forwarding ? null : _forward,
-        loading: _forwarding,
-      );
+      add('转发', _forwarding ? null : _forward, loading: _forwarding);
     }
     if (slots.isEmpty) return const SizedBox.shrink();
     return DecoratedBox(
@@ -1694,114 +1733,213 @@ class _FundingEditorState extends State<_FundingEditor> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _FieldGrid(
-            children: [
-              _Field(
-                label: '我方主体',
-                required: true,
-                child: _entitySelect(
-                  context,
-                  catalog: widget.ourEntities,
-                  code: _text('ourParty'),
-                  name: _text('ourPartyName'),
-                  hint: '选择我方主体',
-                  onPick: (code, name) {
-                    _form['ourParty'] = code;
-                    _form['ourPartyName'] = name;
-                    _changed();
-                  },
-                ),
-              ),
-              _Field(
-                label: '对方主体（合作油企）',
-                required: true,
-                child: _entitySelect(
-                  context,
-                  catalog: widget.counterparties,
-                  code: _text('counterparty'),
-                  name: _text('counterpartyName'),
-                  hint: '选择对方主体',
-                  onPick: (code, name) {
-                    _form['counterparty'] = code;
-                    _form['counterpartyName'] = name;
-                    _changed();
-                  },
-                ),
-              ),
-              _Field(
-                label: '提案名称',
-                hint: '不填按对方主体自动生成',
-                child: _textInput(context, 'proposalName', hint: _row.title),
-              ),
-              _Field(
-                label: '制券面值（元）',
-                required: true,
-                child: _textInput(context, 'faceAmount', number: true),
-              ),
-              _Field(
-                label: '采购折扣率（%）',
-                required: true,
-                child: _textInput(
-                  context,
-                  'purchaseDiscount',
-                  number: true,
-                  hint: '如 97',
-                ),
-              ),
-              _Field(
-                label: '销售折扣率（%）',
-                required: true,
-                child: _textInput(
-                  context,
-                  'salesDiscount',
-                  number: true,
-                  hint: '如 98.8',
-                ),
-              ),
-              _Field(
-                label: '预付打款日',
-                required: true,
-                child: _dateInput(
-                  context,
-                  _text('prepayDate'),
-                  (v) => _set('prepayDate', v),
-                ),
-              ),
-              _Field(
-                label: '客户回款日',
-                required: true,
-                child: _dateInput(
-                  context,
-                  _text('collectDate'),
-                  (v) => _set('collectDate', v),
-                ),
-              ),
-              _Field(
-                label: '预付货款 · 业务毛利',
-                computed: true,
-                child: _computed(
-                  context,
-                  '${_est.text('prepayAmount')} · ${_est.text('grossProfit')}',
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
           _Field(
-            label: '申请说明',
-            child: _textInput(
-              context,
-              'applyNote',
-              hint: '为什么要这笔钱、时间窗口',
-              maxLines: 3,
-            ),
+            label: '提案类型',
+            required: true,
+            child: _editable
+                ? ProposalSelectField<String>(
+                    key: const ValueKey('funding-proposal-type'),
+                    value: _carrier ? 'carrier' : 'energy',
+                    allowClear: false,
+                    options: const [
+                      ProposalSelectOption(value: 'energy', label: '能源'),
+                      ProposalSelectOption(value: 'carrier', label: '运营商'),
+                    ],
+                    onSelected: (value) {
+                      if (value == null || value == _text('proposalType')) {
+                        return;
+                      }
+                      _estimateSeq++;
+                      _set('proposalType', value);
+                    },
+                  )
+                : _readText(context, _carrier ? '运营商' : '能源'),
           ),
+          const SizedBox(height: 12),
+          if (_carrier) ...[
+            _FieldGrid(
+              children: [
+                _Field(
+                  label: '我方主体',
+                  required: true,
+                  child: _entitySelect(
+                    context,
+                    catalog: widget.ourEntities,
+                    code: _text('ourParty'),
+                    name: _text('ourPartyName'),
+                    hint: '选择我方主体',
+                    onPick: (code, name) {
+                      _form['ourParty'] = code;
+                      _form['ourPartyName'] = name;
+                      _changed();
+                    },
+                  ),
+                ),
+                _Field(
+                  label: '对方主体',
+                  required: true,
+                  child: _entitySelect(
+                    context,
+                    catalog: widget.counterparties,
+                    code: _text('counterparty'),
+                    name: _text('counterpartyName'),
+                    hint: '选择对方主体',
+                    onPick: (code, name) {
+                      _form['counterparty'] = code;
+                      _form['counterpartyName'] = name;
+                      _changed();
+                    },
+                  ),
+                ),
+                _Field(
+                  label: '银行利率（%）',
+                  required: true,
+                  child: _textInput(
+                    context,
+                    'bankRate',
+                    number: true,
+                    hint: '请输入银行利率',
+                  ),
+                ),
+                _Field(
+                  label: '服务费率（%）',
+                  required: true,
+                  child: _textInput(
+                    context,
+                    'serviceFeeRate',
+                    number: true,
+                    hint: '没有可填 0',
+                  ),
+                ),
+                _Field(
+                  label: '融资费率（银行利率 + 服务费率）',
+                  computed: true,
+                  child: _computed(
+                    context,
+                    _lastRateInputs == _carrierRateInputs(_form)
+                        ? _est.text('totalRate')
+                        : '—',
+                  ),
+                ),
+                _Field(
+                  label: '服务商',
+                  child: _textInput(context, 'serviceProvider', hint: '选填'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            _carrierAgreement(context),
+          ] else ...[
+            _FieldGrid(
+              children: [
+                _Field(
+                  label: '我方主体',
+                  required: true,
+                  child: _entitySelect(
+                    context,
+                    catalog: widget.ourEntities,
+                    code: _text('ourParty'),
+                    name: _text('ourPartyName'),
+                    hint: '选择我方主体',
+                    onPick: (code, name) {
+                      _form['ourParty'] = code;
+                      _form['ourPartyName'] = name;
+                      _changed();
+                    },
+                  ),
+                ),
+                _Field(
+                  label: '对方主体（合作油企）',
+                  required: true,
+                  child: _entitySelect(
+                    context,
+                    catalog: widget.counterparties,
+                    code: _text('counterparty'),
+                    name: _text('counterpartyName'),
+                    hint: '选择对方主体',
+                    onPick: (code, name) {
+                      _form['counterparty'] = code;
+                      _form['counterpartyName'] = name;
+                      _changed();
+                    },
+                  ),
+                ),
+                _Field(
+                  label: '提案名称',
+                  hint: '不填按对方主体自动生成',
+                  child: _textInput(context, 'proposalName', hint: _row.title),
+                ),
+                _Field(
+                  label: '制券面值（元）',
+                  required: true,
+                  child: _textInput(context, 'faceAmount', number: true),
+                ),
+                _Field(
+                  label: '采购折扣率（%）',
+                  required: true,
+                  child: _textInput(
+                    context,
+                    'purchaseDiscount',
+                    number: true,
+                    hint: '如 97',
+                  ),
+                ),
+                _Field(
+                  label: '销售折扣率（%）',
+                  required: true,
+                  child: _textInput(
+                    context,
+                    'salesDiscount',
+                    number: true,
+                    hint: '如 98.8',
+                  ),
+                ),
+                _Field(
+                  label: '预付打款日',
+                  required: true,
+                  child: _dateInput(
+                    context,
+                    _text('prepayDate'),
+                    (v) => _set('prepayDate', v),
+                  ),
+                ),
+                _Field(
+                  label: '客户回款日',
+                  required: true,
+                  child: _dateInput(
+                    context,
+                    _text('collectDate'),
+                    (v) => _set('collectDate', v),
+                  ),
+                ),
+                _Field(
+                  label: '预付货款 · 业务毛利',
+                  computed: true,
+                  child: _computed(
+                    context,
+                    '${_est.text('prepayAmount')} · ${_est.text('grossProfit')}',
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            _Field(
+              label: '申请说明',
+              child: _textInput(
+                context,
+                'applyNote',
+                hint: '为什么要这笔钱、时间窗口',
+                maxLines: 3,
+              ),
+            ),
+          ],
         ],
       ),
     );
   }
 
   Widget _financingSection(BuildContext context) {
+    if (_carrier) return _carrierFinancingSection(context);
     final funders = _funders;
     return _Section(
       index: '2',
@@ -1910,6 +2048,90 @@ class _FundingEditorState extends State<_FundingEditor> {
       ),
     );
   }
+
+  Widget _carrierAgreement(BuildContext context) {
+    final files = _filesOf('carrierAgreement');
+    final canUpload = _perm.canEditMaterials;
+    return _Field(
+      label: '融资协议',
+      required: true,
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 6,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          for (var i = 0; i < files.length; i++)
+            InputChip(
+              label: Text(
+                '${files[i]['fileName'] ?? '文件'}',
+                overflow: TextOverflow.ellipsis,
+              ),
+              onPressed: () => unawaited(_openFile(files[i])),
+              onDeleted: canUpload
+                  ? () => unawaited(_removeFile('carrierAgreement', i))
+                  : null,
+            ),
+          if (canUpload)
+            TextButton.icon(
+              onPressed: _uploading
+                  ? null
+                  : () => unawaited(_pickFiles('carrierAgreement')),
+              icon: const Icon(Icons.upload_file, size: 18),
+              label: Text(_uploading ? '上传中…' : '上传协议（可多选）'),
+              style: TextButton.styleFrom(
+                foregroundColor: _c(context, ProposalPalette.purpleDeep),
+                minimumSize: const Size(0, 40),
+              ),
+            ),
+          if (files.isEmpty && !canUpload) _readText(context, ''),
+        ],
+      ),
+    );
+  }
+
+  Widget _carrierFinancingSection(BuildContext context) => _Section(
+    index: '2',
+    title: '融资',
+    child: _FieldGrid(
+      children: [
+        _Field(
+          label: '预估授信额度（元）',
+          required: true,
+          child: _textInput(context, 'estimatedCredit', number: true),
+        ),
+        _Field(
+          label: '实际授信额度（元）',
+          required: true,
+          child: _textInput(context, 'actualCredit', number: true),
+        ),
+        _Field(
+          label: '还本付息方式',
+          required: true,
+          child: _optionSelect(context, 'repayMethod', const [
+            FundingOption(value: 'bullet', label: '到期一次性还本付息'),
+            FundingOption(value: 'monthlyInterest', label: '按月付息到期还本'),
+          ]),
+        ),
+        _Field(
+          label: '回款账户',
+          required: true,
+          child: _optionSelect(
+            context,
+            'collectionAccount',
+            _opts.collectionAccounts,
+          ),
+        ),
+        _Field(
+          label: '是否开户',
+          required: true,
+          child: _optionSelect(context, 'accountOpened', const [
+            FundingOption(value: 'yes', label: '是'),
+            FundingOption(value: 'no', label: '否'),
+          ]),
+        ),
+      ],
+    ),
+  );
 
   Widget _funderCard(
     BuildContext context,
@@ -2171,7 +2393,7 @@ class _FundingEditorState extends State<_FundingEditor> {
   Widget _approversSection(BuildContext context) {
     final approvers = _approvers;
     return _Section(
-      index: '4',
+      index: _carrier ? '3' : '4',
       title: '审批人',
       child: _FieldGrid(
         minColumnWidth: 200,
@@ -2203,7 +2425,7 @@ class _FundingEditorState extends State<_FundingEditor> {
 
   Widget _noteSection(BuildContext context) {
     return _Section(
-      index: '5',
+      index: _carrier ? '4' : '5',
       title: '其他说明',
       child: _textInput(
         context,
@@ -2217,7 +2439,7 @@ class _FundingEditorState extends State<_FundingEditor> {
   Widget _historySection(BuildContext context) {
     final events = [..._row.events]..sort((a, b) => b.id.compareTo(a.id));
     return _Section(
-      index: '6',
+      index: _carrier ? '5' : '6',
       title: '审批记录',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -2382,6 +2604,7 @@ class _FundingEditorState extends State<_FundingEditor> {
     final value = _text(key);
     if (!_editable) return _readText(context, number ? _grouped(value) : value);
     return TextField(
+      key: ValueKey('funding-field-$key'),
       controller: _ctl('k:$key', value),
       onTapOutside: (_) => _dismissKeyboard(),
       maxLines: maxLines,

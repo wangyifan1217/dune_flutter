@@ -58,7 +58,11 @@ class HrAssessmentSheet extends StatelessWidget {
     ].join('    ');
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: DunesColors.resolve(context, Colors.white),
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: border),
       ),
@@ -79,112 +83,238 @@ class HrAssessmentSheet extends StatelessWidget {
                   ),
                 ),
               ),
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(minWidth: 980),
-                child: Table(
-                  defaultVerticalAlignment: TableCellVerticalAlignment.top,
-                  columnWidths: const {
-                    0: FixedColumnWidth(88),
-                    1: FixedColumnWidth(72),
-                    2: FixedColumnWidth(160),
-                    3: FixedColumnWidth(72),
-                    4: FlexColumnWidth(),
-                    5: FixedColumnWidth(64),
-                    6: FixedColumnWidth(72),
-                  },
-                  border: TableBorder(
-                    top: heading.isEmpty
-                        ? BorderSide.none
-                        : BorderSide(color: border),
-                    horizontalInside: BorderSide(color: border),
-                    verticalInside: BorderSide(color: border),
-                  ),
-                  children: [
-                    TableRow(
-                      decoration: BoxDecoration(color: headerBg),
-                      children: [
-                        for (final title in columns)
-                          _cell(title, color: muted, weight: FontWeight.w700),
-                      ],
-                    ),
-                    for (final group in groups)
-                      for (var i = 0; i < group.lines.length; i++)
-                        for (var j = 0; j < _bands(group.lines[i]).length; j++)
-                          TableRow(
-                            children: [
-                              _cell(
-                                i == 0 && j == 0 ? group.dimension : '',
-                                color: text,
-                                weight: FontWeight.w600,
-                              ),
-                              _cell(
-                                i == 0 && j == 0 ? _percent(group.weight) : '',
-                                color: text,
-                              ),
-                              _cell(
-                                j == 0 ? '${group.lines[i]['name'] ?? ''}' : '',
-                                color: text,
-                                weight: FontWeight.w600,
-                              ),
-                              _cell(
-                                j == 0
-                                    ? _percent(
-                                        _num(group.lines[i]['weight']) ?? 0,
-                                      )
-                                    : '',
-                                color: text,
-                              ),
-                              _cell(
-                                '${_bands(group.lines[i])[j]['description']}',
-                                color: muted,
-                              ),
-                              _cell(
-                                '${_bands(group.lines[i])[j]['range']}',
-                                color: muted,
-                                align: TextAlign.center,
-                              ),
-                              _cell(
-                                j == 0 ? _supervisor(group.lines[i]) : '',
-                                color: text,
-                                align: TextAlign.center,
-                              ),
-                            ],
+            LayoutBuilder(
+              builder: (context, constraints) => constraints.maxWidth < 640
+                  ? _compactSheet(context, groups, weightTotal, weightedTotal)
+                  : SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(minWidth: 980),
+                        child: Table(
+                          defaultVerticalAlignment:
+                              TableCellVerticalAlignment.top,
+                          columnWidths: const {
+                            0: FixedColumnWidth(88),
+                            1: FixedColumnWidth(72),
+                            2: FixedColumnWidth(160),
+                            3: FixedColumnWidth(72),
+                            4: FlexColumnWidth(),
+                            5: FixedColumnWidth(64),
+                            6: FixedColumnWidth(72),
+                          },
+                          border: TableBorder(
+                            top: heading.isEmpty
+                                ? BorderSide.none
+                                : BorderSide(color: border),
+                            horizontalInside: BorderSide(color: border),
+                            verticalInside: BorderSide(color: border),
                           ),
-                    TableRow(
-                      decoration: BoxDecoration(color: headerBg),
-                      children: [
-                        _cell('合计', color: text, weight: FontWeight.w700),
-                        _cell(
-                          _percent(weightTotal),
-                          color: text,
-                          weight: FontWeight.w700,
+                          children: [
+                            TableRow(
+                              decoration: BoxDecoration(color: headerBg),
+                              children: [
+                                for (final title in columns)
+                                  _cell(
+                                    title,
+                                    color: muted,
+                                    weight: FontWeight.w700,
+                                  ),
+                              ],
+                            ),
+                            for (final group in groups)
+                              for (var i = 0; i < group.lines.length; i++)
+                                for (
+                                  var j = 0;
+                                  j < _bands(group.lines[i]).length;
+                                  j++
+                                )
+                                  TableRow(
+                                    children: [
+                                      _cell(
+                                        i == 0 && j == 0 ? group.dimension : '',
+                                        color: text,
+                                        weight: FontWeight.w600,
+                                      ),
+                                      _cell(
+                                        i == 0 && j == 0
+                                            ? _percent(group.weight)
+                                            : '',
+                                        color: text,
+                                      ),
+                                      _cell(
+                                        j == 0
+                                            ? '${group.lines[i]['name'] ?? ''}'
+                                            : '',
+                                        color: text,
+                                        weight: FontWeight.w600,
+                                      ),
+                                      _cell(
+                                        j == 0
+                                            ? _percent(
+                                                _num(
+                                                      group.lines[i]['weight'],
+                                                    ) ??
+                                                    0,
+                                              )
+                                            : '',
+                                        color: text,
+                                      ),
+                                      _cell(
+                                        '${_bands(group.lines[i])[j]['description']}',
+                                        color: muted,
+                                      ),
+                                      _cell(
+                                        '${_bands(group.lines[i])[j]['range']}',
+                                        color: muted,
+                                        align: TextAlign.center,
+                                      ),
+                                      _cell(
+                                        j == 0
+                                            ? _supervisor(group.lines[i])
+                                            : '',
+                                        color: text,
+                                        align: TextAlign.center,
+                                      ),
+                                    ],
+                                  ),
+                            TableRow(
+                              decoration: BoxDecoration(color: headerBg),
+                              children: [
+                                _cell(
+                                  '合计',
+                                  color: text,
+                                  weight: FontWeight.w700,
+                                ),
+                                _cell(
+                                  _percent(weightTotal),
+                                  color: text,
+                                  weight: FontWeight.w700,
+                                ),
+                                _cell(
+                                  weightedTotal == null
+                                      ? (lines.any(
+                                              (line) =>
+                                                  line['directScore'] == true,
+                                            )
+                                            ? '最终得分 = 各指标得分相加'
+                                            : '最终得分 = 各项加权得分相加')
+                                      : '最终得分 ${_score(weightedTotal)}',
+                                  color: text,
+                                  weight: FontWeight.w700,
+                                ),
+                                _cell(''),
+                                _cell(''),
+                                _cell(''),
+                                _cell(''),
+                              ],
+                            ),
+                          ],
                         ),
-                        _cell(
-                          weightedTotal == null
-                              ? (lines.any(
-                                      (line) => line['directScore'] == true,
-                                    )
-                                    ? '最终得分 = 各指标得分相加'
-                                    : '最终得分 = 各项加权得分相加')
-                              : '最终得分 ${_score(weightedTotal)}',
-                          color: text,
-                          weight: FontWeight.w700,
-                        ),
-                        _cell(''),
-                        _cell(''),
-                        _cell(''),
-                        _cell(''),
-                      ],
+                      ),
                     ),
-                  ],
-                ),
-              ),
             ),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _compactSheet(
+    BuildContext context,
+    List<_DimensionGroup> groups,
+    double weightTotal,
+    double? weightedTotal,
+  ) {
+    final text = DunesColors.resolve(context, DunesColors.text);
+    final muted = DunesColors.resolve(context, DunesColors.text2);
+    final border = DunesColors.resolve(
+      context,
+      const Color(0xFFE4DCEC),
+      role: DunesColorRole.border,
+    );
+    final surface = DunesColors.resolve(
+      context,
+      const Color(0xFFF3EEF8),
+      role: DunesColorRole.surface,
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final group in groups) ...[
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            color: surface,
+            child: Text(
+              "${group.dimension} · 维度权重 ${_percent(group.weight)}",
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: text,
+              ),
+            ),
+          ),
+          for (final line in group.lines)
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                border: Border(bottom: BorderSide(color: border)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    "${line['name'] ?? ''}",
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: text,
+                    ),
+                  ),
+                  const SizedBox(height: 5),
+                  Text(
+                    "指标权重 ${_percent(_num(line['weight']) ?? 0)}${scoresVisible ? ' · 上级评分 ${_supervisor(line).replaceAll("\n", " · ")}' : ''}",
+                    style: TextStyle(fontSize: 12, color: muted),
+                  ),
+                  for (final band in _bands(line))
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              band['description'] ?? '',
+                              style: TextStyle(
+                                fontSize: 13,
+                                height: 1.45,
+                                color: muted,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Text(
+                            band['range'] ?? '',
+                            style: TextStyle(fontSize: 12, color: muted),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            ),
+        ],
+        Padding(
+          padding: const EdgeInsets.all(12),
+          child: Text(
+            "合计 ${_percent(weightTotal)}${weightedTotal == null ? (lines.any((line) => line['directScore'] == true) ? ' · 最终得分 = 各指标得分相加' : ' · 最终得分 = 各项加权得分相加') : ' · 最终得分 ${_score(weightedTotal)}'}",
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: text,
+            ),
+          ),
+        ),
+      ],
     );
   }
 

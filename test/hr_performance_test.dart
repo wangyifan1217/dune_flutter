@@ -107,7 +107,14 @@ void main() {
           await tester.tap(find.text('测试员工'));
           await tester.pumpAndSettle();
         }
+        expect(find.text('已完成任务证据'), findsNothing);
+        await tester.ensureVisible(find.text('任务证据（1）'));
+        await tester.tap(find.text('任务证据（1）'));
+        await tester.pumpAndSettle();
         expect(find.text('已完成任务证据'), findsOneWidget);
+        await tester.tap(find.text('任务证据（1）'));
+        await tester.pumpAndSettle();
+        expect(find.text('已完成任务证据'), findsNothing);
         expect(find.textContaining('88.8'), findsNothing);
         expect(find.textContaining('草稿等级'), findsNothing);
         expect(tester.takeException(), isNull);

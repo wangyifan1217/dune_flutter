@@ -35,54 +35,103 @@ class _HrPerformanceChatCardState extends State<HrPerformanceChatCard> {
     final progress = p['progress'] is Map
         ? Map<String, dynamic>.from(p['progress'])
         : <String, dynamic>{};
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 440),
+    final surface = DunesColors.resolve(
+      context,
+      Colors.white,
+      role: DunesColorRole.surface,
+    );
+    final soft = DunesColors.resolve(
+      context,
+      DunesColors.brandPurpleSoft,
+      role: DunesColorRole.surface,
+    );
+    final border = DunesColors.resolve(
+      context,
+      const Color(0xFFE7DFF0),
+      role: DunesColorRole.border,
+    );
+    final text = DunesColors.resolve(context, DunesColors.text);
+    final muted = DunesColors.resolve(context, DunesColors.text2);
+    final accent = DunesColors.resolve(context, DunesColors.brandPurple);
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 440),
+      child: Container(
+        decoration: BoxDecoration(
+          color: surface,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: border),
+        ),
+        clipBehavior: Clip.antiAlias,
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Container(
-              color: DunesColors.resolve(context, DunesColors.brandPurpleSoft),
-              padding: const EdgeInsets.all(14),
+              color: soft,
+              padding: const EdgeInsets.all(12),
               child: Row(
                 children: [
-                  const Icon(Icons.fact_check_outlined),
+                  Icon(Icons.fact_check_outlined, size: 20, color: accent),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       '$hrPerformanceTitle汇总 · ${p['month'] ?? ''}',
-                      style: const TextStyle(fontWeight: FontWeight.w600),
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: text,
+                      ),
                     ),
                   ),
                 ],
               ),
             ),
-            ...[
-              Padding(
-                padding: const EdgeInsets.all(12),
-                child: Text(
-                  '共 ${rows.length} 人${p['hasScores'] == true ? ' · 已下发结果' : ' · 考核进度'}',
-                ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+              child: Text(
+                '共 ${rows.length} 人${p['hasScores'] == true ? ' · 已下发结果' : ' · 考核进度'}',
+                style: TextStyle(fontSize: 11.5, color: muted),
               ),
+            ),
+            if (progress.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 12),
                 child: Wrap(
-                  spacing: 8,
+                  spacing: 6,
+                  runSpacing: 6,
                   children: [
                     for (final e in progress.entries)
-                      Chip(
-                        label: Text(
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: soft,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
                           '${hrPerformanceStageLabels[e.key] ?? e.key} ${e.value}',
+                          style: TextStyle(fontSize: 11, color: accent),
                         ),
                       ),
                   ],
                 ),
               ),
-              for (final row in _expanded ? rows : rows.take(5))
-                ListTile(
+            for (final row in _expanded ? rows : rows.take(5))
+              Material(
+                color: Colors.transparent,
+                child: ListTile(
                   dense: true,
-                  title: Text('${row['name']} · ${row['department'] ?? ''}'),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+                  title: Text(
+                    '${row['name']} · ${row['department'] ?? ''}',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: text,
+                    ),
+                  ),
                   subtitle: Text(
                     p['hasScores'] == true &&
                             [
@@ -93,28 +142,37 @@ class _HrPerformanceChatCardState extends State<HrPerformanceChatCard> {
                             row['total'] != null
                         ? '${row['total']} 分 · ${row['grade']} · 系数 ${row['coefficient']}'
                         : hrPerformanceStageLabels['${row['stage']}'] ?? '考核中',
+                    style: TextStyle(fontSize: 11.5, color: muted),
                   ),
-                  trailing: const Icon(Icons.chevron_right),
+                  trailing: Icon(
+                    Icons.chevron_right_rounded,
+                    size: 20,
+                    color: muted,
+                  ),
                   onTap: () => openHrPerformanceRecord(
                     context,
                     widget.session,
-                    int.tryParse('${row['id']}')??0,
+                    int.tryParse('${row['id']}') ?? 0,
                   ),
                 ),
-              if (rows.length > 5)
-                TextButton(
-                  onPressed: () => setState(() => _expanded = !_expanded),
-                  child: Text(_expanded ? '收起' : '展开全部 ${rows.length} 人'),
+              ),
+            if (rows.length > 5)
+              TextButton(
+                style: TextButton.styleFrom(
+                  foregroundColor: accent,
+                  textStyle: DunesTypography.sans(fontSize: 12),
                 ),
-              if (p['createdAt'] != null)
-                Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Text(
-                    '发送时快照 · ${hrDate(p['createdAt'])}',
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
+                onPressed: () => setState(() => _expanded = !_expanded),
+                child: Text(_expanded ? '收起' : '展开全部 ${rows.length} 人'),
+              ),
+            if (p['createdAt'] != null)
+              Padding(
+                padding: const EdgeInsets.all(12),
+                child: Text(
+                  '发送时快照 · ${hrDate(p['createdAt'])}',
+                  style: TextStyle(fontSize: 11, color: muted),
                 ),
-            ],
+              ),
           ],
         ),
       ),

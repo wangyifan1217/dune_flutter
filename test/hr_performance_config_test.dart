@@ -13,6 +13,18 @@ final session = AuthSession(
 );
 
 class LibraryService extends HrPerformanceService {
+  @override
+  Future<Map<String, dynamic>> catalog() async => {
+    'departments': [
+      {'id': 7, 'name': '财务部'},
+      {'id': 8, 'name': '运营中心'},
+    ],
+    'positions': [
+      {'id': 11, 'name': '出纳'},
+      {'id': 12, 'name': '运营专员'},
+    ],
+  };
+
   LibraryService({this.initial = const []}) : super(session);
   final List<Map<String, dynamic>> initial;
   List<String>? savedDimensions;
@@ -164,7 +176,16 @@ void main() {
     await tester.enterText(find.widgetWithText(TextFormField, '维度名称'), '团队协作');
     await tester.tap(find.byTooltip('确认维度'));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.byTooltip('保存指标库'));
+    await tester.scrollUntilVisible(
+      find.byTooltip('保存指标库'),
+      300,
+      scrollable: find
+          .descendant(
+            of: find.byType(HrPerformanceLibraryPage),
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('保存指标库'));
     await tester.pumpAndSettle();

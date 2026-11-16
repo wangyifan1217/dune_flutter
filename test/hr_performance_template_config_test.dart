@@ -15,6 +15,18 @@ final session = AuthSession(
 );
 
 class TemplateService extends HrPerformanceService {
+  @override
+  Future<Map<String, dynamic>> catalog() async => {
+    'departments': [
+      {'id': 7, 'name': '财务部'},
+      {'id': 8, 'name': '运营中心'},
+    ],
+    'positions': [
+      {'id': 11, 'name': '出纳'},
+      {'id': 12, 'name': '运营专员'},
+    ],
+  };
+
   TemplateService() : super(session);
   List<Map<String, dynamic>>? saved;
   final indicators = <Map<String, dynamic>>[
@@ -214,7 +226,9 @@ void main() {
     await tester.pump(kPressTimeout);
     await dimensionDrag.moveBy(const Offset(0, 20));
     await tester.pump();
-    await dimensionDrag.moveBy(Offset(0, dimensionTo.dy - dimensionFrom.dy + 36));
+    await dimensionDrag.moveBy(
+      Offset(0, dimensionTo.dy - dimensionFrom.dy + 36),
+    );
     await tester.pump();
     await dimensionDrag.up();
     await tester.pumpAndSettle();
@@ -248,6 +262,18 @@ void main() {
 }
 
 class GroupedTemplateService extends HrPerformanceService {
+  @override
+  Future<Map<String, dynamic>> catalog() async => {
+    'departments': [
+      {'id': 7, 'name': '财务部'},
+      {'id': 8, 'name': '运营中心'},
+    ],
+    'positions': [
+      {'id': 11, 'name': '出纳'},
+      {'id': 12, 'name': '运营专员'},
+    ],
+  };
+
   GroupedTemplateService() : super(session);
   List<Map<String, dynamic>>? saved;
   final indicators = <Map<String, dynamic>>[

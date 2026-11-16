@@ -3721,7 +3721,12 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         ? ProposalIntakeNavSection.toc
         : (_taskSection ?? ProposalIntakeNavSection.market);
     _ownsCatalog = widget.catalog == null;
-    _catalog = widget.catalog ?? SettlementCatalogService();
+    _catalog = widget.catalog ?? (_isPurchase
+        ? SettlementCatalogService()
+        : SettlementCatalogService(
+            assetBase: '${widget.session.apiBase.replaceAll(RegExp(r'/+$'), '')}/proposal-catalog',
+            authToken: widget.session.token,
+          ));
     unawaited(_loadMarketCatalog());
     unawaited(_loadChannelCategories());
     unawaited(_loadSupplierCategories());

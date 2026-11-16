@@ -1,9 +1,12 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/theme/dunes_theme.dart';
 import '../auth/auth_session.dart';
 import '../shell/dunes_toast.dart';
 import 'hr_performance_service.dart';
+import 'hr_performance_category.dart';
+import 'hr_performance_template_ui.dart';
 import 'hr_performance_search.dart';
 import 'hr_performance_templates_page.dart';
 
@@ -37,11 +40,13 @@ class _Draft {
     List<Map<String, dynamic>> bands = const [],
     this.enabled = true,
     this.taskSuggestion = false,
+    Map<String, dynamic>? category,
   }) : dimension = TextEditingController(text: dimension),
        name = TextEditingController(text: name),
        standard = TextEditingController(text: standard),
        weight = TextEditingController(text: weight),
-       bands = bands.map(_BandDraft.fromJson).toList();
+       bands = bands.map(_BandDraft.fromJson).toList(),
+       category = hrCategory(category);
 
   String id;
   final TextEditingController dimension;
@@ -51,6 +56,7 @@ class _Draft {
   final List<_BandDraft> bands;
   bool enabled;
   bool taskSuggestion;
+  Map<String, dynamic> category;
 
   factory _Draft.fromJson(Map<String, dynamic> json) {
     final weight = json['weight'];
@@ -66,6 +72,7 @@ class _Draft {
           .toList(),
       enabled: json['enabled'] != false,
       taskSuggestion: json['taskSuggestion'] == true,
+      category: hrCategory(json['category']),
     );
   }
 
@@ -104,6 +111,65 @@ class _HrPerformanceLibraryPageState extends State<HrPerformanceLibraryPage> {
   final List<_Draft> _drafts = [];
   final List<String> _dimensions = [];
   final _searchController = TextEditingController();
+  final _scrollController = ScrollController();
+  final Set<String> _loadedDimensions = {};
+  final Set<_Draft> _selected = {};
+  HrCatalog? _catalog;
+  int? _departmentFilter, _positionFilter;
+  bool _uncategorizedOnly = false;
+
+  Future<HrCatalog?> _getCatalog({bool silent = false}) async {
+    if (_catalog != null) return _catalog;
+    try {
+      final catalog = HrCatalog(await _service.catalog());
+      if (mounted) setState(() => _catalog = catalog);
+      return catalog;
+    } catch (_) {
+      if (mounted && !silent) _toast('部门和岗位加载失败，请检查网络后重试');
+      return null;
+    }
+  }
+
+  Future<void> _filterCategory(bool department) async {
+    final catalog = await _getCatalog();
+    if (!mounted || catalog == null) return;
+    final value = await hrChooseFilter(
+      context,
+      department ? '选择部门' : '选择岗位',
+      department ? catalog.departments : catalog.positions,
+      department ? _departmentFilter : _positionFilter,
+      catalog: department ? catalog : null,
+    );
+    if (mounted) {
+      setState(() {
+        if (department) {
+          _departmentFilter = value;
+        } else {
+          _positionFilter = value;
+        }
+      });
+    }
+  }
+
+  Future<void> _batchCategory() async {
+    if (_selected.isEmpty) return;
+    final catalog = await _getCatalog();
+    if (!mounted || catalog == null) return;
+    final value = await showHrCategoryEditor(
+      context,
+      catalog,
+      hrCategory(null),
+    );
+    if (value == null || !mounted) return;
+    setState(() {
+      for (final draft in _selected) {
+        draft.category = hrCategory(value);
+      }
+      _selected.clear();
+      _dirty = true;
+    });
+  }
+
   int _version = 0;
   bool _loading = true;
   bool _saving = false;
@@ -121,6 +187,7 @@ class _HrPerformanceLibraryPageState extends State<HrPerformanceLibraryPage> {
   @override
   void dispose() {
     _searchController.dispose();
+    _scrollController.dispose();
     for (final draft in _drafts) {
       draft.dispose();
     }
@@ -135,6 +202,7 @@ class _HrPerformanceLibraryPageState extends State<HrPerformanceLibraryPage> {
     try {
       final data = await _service.library();
       if (!mounted) return;
+      _selected.clear();
       for (final draft in _drafts) {
         draft.dispose();
       }
@@ -154,11 +222,15 @@ class _HrPerformanceLibraryPageState extends State<HrPerformanceLibraryPage> {
           _dimensions.add(name);
         }
       }
+      _loadedDimensions
+        ..clear()
+        ..addAll(_dimensions);
       setState(() {
         _version = (data['version'] as num?)?.toInt() ?? 0;
         _loading = false;
         _dirty = false;
       });
+      _getCatalog(silent: true);
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -208,6 +280,7 @@ class _HrPerformanceLibraryPageState extends State<HrPerformanceLibraryPage> {
         'bands': bands,
         'taskSuggestion': draft.taskSuggestion,
         'enabled': draft.enabled,
+        'category': draft.category,
       });
     }
     setState(() => _saving = true);
@@ -218,6 +291,7 @@ class _HrPerformanceLibraryPageState extends State<HrPerformanceLibraryPage> {
         dimensions: _dimensions,
       );
       if (!mounted) return;
+      _selected.clear();
       for (final draft in _drafts) {
         draft.dispose();
       }
@@ -293,6 +367,7 @@ class _HrPerformanceLibraryPageState extends State<HrPerformanceLibraryPage> {
     );
     if (confirmed != true || !mounted) return;
     setState(() {
+      _selected.remove(draft);
       _drafts.remove(draft);
       _dirty = true;
     });
@@ -310,6 +385,7 @@ class _HrPerformanceLibraryPageState extends State<HrPerformanceLibraryPage> {
             weight: original.weight.text,
             enabled: original.enabled,
             taskSuggestion: original.taskSuggestion,
+            category: original.category,
             bands: [
               for (final band in original.bands)
                 {
@@ -319,78 +395,70 @@ class _HrPerformanceLibraryPageState extends State<HrPerformanceLibraryPage> {
                 },
             ],
           );
-    final accepted = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (context, update) => Dialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(18),
+    final accepted = await showHrConfigPanel<bool>(
+      context,
+      StatefulBuilder(
+        builder: (dialogContext, update) => HrConfigPanel(
+          title: original == null ? '新建指标' : '编辑指标',
+          footer: Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              IconButton(
+                tooltip: '取消编辑',
+                onPressed: () => Navigator.pop(dialogContext, false),
+                icon: const Icon(Icons.close_rounded),
+              ),
+              const SizedBox(width: 8),
+              IconButton.filled(
+                tooltip: '完成编辑',
+                onPressed: () {
+                  final error = _validateIndicator(draft);
+                  if (error != null) {
+                    showDunesToast(
+                      dialogContext,
+                      error,
+                      kind: DunesToastKind.error,
+                    );
+                    return;
+                  }
+                  Navigator.pop(dialogContext, true);
+                },
+                icon: const Icon(Icons.check_rounded),
+              ),
+            ],
           ),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 760, maxHeight: 760),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(24, 20, 16, 12),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          original == null ? '新建指标' : '编辑指标',
-                          style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                      IconButton(
-                        tooltip: '关闭编辑',
-                        onPressed: () => Navigator.pop(dialogContext, false),
-                        icon: const Icon(Icons.close_rounded),
-                      ),
-                    ],
-                  ),
+                _IndicatorEditor(
+                  draft: draft,
+                  onChanged: () => update(() {}),
+                  onDelete: null,
                 ),
-                Flexible(
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    child: _IndicatorEditor(
-                      draft: draft,
-                      onChanged: () => update(() {}),
-                      onDelete: null,
-                    ),
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      IconButton(
-                        tooltip: '取消编辑',
-                        onPressed: () => Navigator.pop(dialogContext, false),
-                        icon: const Icon(Icons.close_rounded),
-                      ),
-                      const SizedBox(width: 8),
-                      IconButton.filled(
-                        tooltip: '完成编辑',
-                        onPressed: () {
-                          final error = _validateIndicator(draft);
-                          if (error != null) {
-                            showDunesToast(
-                              context,
-                              error,
-                              kind: DunesToastKind.error,
-                            );
-                            return;
-                          }
-                          Navigator.pop(dialogContext, true);
-                        },
-                        icon: const Icon(Icons.check_rounded),
-                      ),
-                    ],
+                OutlinedButton.icon(
+                  key: const ValueKey('hr-indicator-category'),
+                  onPressed: () async {
+                    final catalog = await _getCatalog();
+                    if (!dialogContext.mounted || catalog == null) return;
+                    final category = await showHrCategoryEditor(
+                      dialogContext,
+                      catalog,
+                      draft.category,
+                    );
+                    if (category != null && dialogContext.mounted) {
+                      update(() => draft.category = hrCategory(category));
+                    }
+                  },
+                  icon: const Icon(Icons.category_outlined),
+                  label: Text(
+                    '适用范围：${_catalog == null ? (draft.category['mode'] == 'common'
+                              ? '通用指标'
+                              : draft.category['mode'] == 'scoped'
+                              ? '已设置'
+                              : '未分类') : hrCategoryLabel(draft.category, _catalog!)}',
                   ),
                 ),
               ],
@@ -398,6 +466,7 @@ class _HrPerformanceLibraryPageState extends State<HrPerformanceLibraryPage> {
           ),
         ),
       ),
+      maxWidth: 760,
     );
     if (!mounted || accepted != true) {
       // The route exit animation still builds the editor after Navigator.pop.
@@ -408,6 +477,8 @@ class _HrPerformanceLibraryPageState extends State<HrPerformanceLibraryPage> {
       if (original == null) {
         _drafts.add(draft);
       } else {
+        final wasSelected = _selected.remove(original);
+        if (wasSelected) _selected.add(draft);
         final index = _drafts.indexOf(original);
         if (index >= 0) {
           _drafts[index] = draft;
@@ -510,377 +581,531 @@ class _HrPerformanceLibraryPageState extends State<HrPerformanceLibraryPage> {
         ),
       );
     }
-    final searching = _searchController.text.trim().isNotEmpty;
+    final searching =
+        _searchController.text.trim().isNotEmpty ||
+        _departmentFilter != null ||
+        _positionFilter != null ||
+        _uncategorizedOnly;
     final visibleDrafts = _drafts
         .where(
-          (draft) => hrPerformanceMatchesSearch(_searchController.text, [
-            draft.name.text,
-            draft.dimension.text,
-            draft.standard.text,
-            ...draft.bands.map((band) => band.description.text),
-          ]),
+          (draft) =>
+              (!_uncategorizedOnly ||
+                  draft.category['mode'] == 'uncategorized') &&
+              hrCategoryMatches(
+                draft.category,
+                department: _departmentFilter,
+                position: _positionFilter,
+                catalog: _catalog,
+              ) &&
+              hrPerformanceMatchesSearch(_searchController.text, [
+                draft.name.text,
+                draft.dimension.text,
+                draft.standard.text,
+                ...draft.bands.map((band) => band.description.text),
+              ]),
         )
         .toList();
     final visibleDimensions = _dimensions
         .where(
           (dimension) =>
               !searching ||
-              hrPerformanceMatchesSearch(_searchController.text, [dimension]) ||
+              (_departmentFilter == null &&
+                  _positionFilter == null &&
+                  !_uncategorizedOnly &&
+                  _searchController.text.trim().isNotEmpty &&
+                  hrPerformanceMatchesSearch(_searchController.text, [
+                    dimension,
+                  ])) ||
               visibleDrafts.any(
                 (draft) => draft.dimension.text.trim() == dimension,
               ),
         )
         .toList();
-    return Material(
-      color: DunesColors.resolve(context, const Color(0xFFF7F4FC)),
-      child: ListView(
-        padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
-        children: [
-          Wrap(
-            alignment: WrapAlignment.spaceBetween,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            spacing: 16,
-            runSpacing: 12,
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    '指标库',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w700,
-                      color: text,
-                    ),
-                  ),
-                  const SizedBox(height: 5),
-                  Text(
-                    '管理可复用的考核指标和评分标准',
-                    style: TextStyle(fontSize: 13, color: muted),
-                  ),
-                ],
-              ),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  Tooltip(
-                    message: '考核模板',
-                    child: OutlinedButton.icon(
-                      onPressed: () {
-                        if (_dirty) {
-                          _toast('请先保存指标库修改');
-                          return;
-                        }
-                        setState(() => _showTemplates = true);
-                      },
-                      icon: const Icon(Icons.view_list_outlined),
-                      label: const Text('考核模板'),
-                    ),
-                  ),
-                  IconButton.filled(
-                    tooltip: '添加维度',
-                    onPressed: _saving ? null : () => _editDimension(),
-                    icon: const Icon(Icons.add_rounded),
-                  ),
-                ],
-              ),
-            ],
+    return Theme(
+      data: hrConfigTheme(context),
+      child: Material(
+        color: DunesColors.resolve(context, const Color(0xFFF7F4FC)),
+        child: ScrollConfiguration(
+          behavior: ScrollConfiguration.of(context).copyWith(
+            scrollbars: false,
+            dragDevices: {
+              PointerDeviceKind.touch,
+              PointerDeviceKind.mouse,
+              PointerDeviceKind.trackpad,
+              PointerDeviceKind.stylus,
+              PointerDeviceKind.unknown,
+            },
           ),
-          const SizedBox(height: 20),
-          TextField(
-            key: const ValueKey('hr-library-search'),
-            controller: _searchController,
-            onChanged: (_) => setState(() {}),
-            decoration: InputDecoration(
-              hintText: '搜索指标、维度或评分说明',
-              prefixIcon: const Icon(Icons.search_rounded),
-              suffixIcon: _searchController.text.isEmpty
-                  ? null
-                  : IconButton(
-                      tooltip: '清空搜索',
-                      icon: const Icon(Icons.close_rounded),
-                      onPressed: () => setState(_searchController.clear),
-                    ),
-              filled: true,
-              fillColor: DunesColors.resolve(context, Colors.white),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide.none,
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 13),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF1ECFB),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Row(
+          child: Scrollbar(
+            controller: _scrollController,
+            thumbVisibility: MediaQuery.sizeOf(context).width >= 640,
+            child: ListView(
+              controller: _scrollController,
+              primary: false,
+              physics: const ClampingScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
               children: [
-                const Icon(
-                  Icons.tune_rounded,
-                  size: 18,
-                  color: Color(0xFF7853CF),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    searching
-                        ? '找到 ${visibleDrafts.length} / ${_drafts.length} 个指标'
-                        : '${_dimensions.length} 个维度  ·  ${_drafts.length} 个指标',
-                    style: const TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                ),
-                Text(
-                  _dirty ? '有未保存的修改' : '已保存',
-                  style: TextStyle(fontSize: 12, color: muted),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 10),
-          if (_dimensions.isEmpty)
-            Container(
-              padding: const EdgeInsets.all(40),
-              alignment: Alignment.center,
-              child: Text(
-                '还没有考核维度，点击右上角加号开始配置',
-                style: TextStyle(color: muted),
-              ),
-            ),
-          if (searching && visibleDimensions.isEmpty)
-            Padding(
-              padding: const EdgeInsets.all(28),
-              child: Text('没有匹配的指标或维度，试试其他关键词', style: TextStyle(color: muted)),
-            ),
-          for (final dimension in visibleDimensions)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: Material(
-                color: DunesColors.resolve(context, Colors.white),
-                borderRadius: BorderRadius.circular(14),
-                child: ExpansionTile(
-                  key: ValueKey(
-                    searching
-                        ? 'dimension-search-$dimension'
-                        : 'dimension-$dimension',
-                  ),
-                  initiallyExpanded: true,
-                  leading: const Icon(
-                    Icons.folder_outlined,
-                    color: Color(0xFF7853CF),
-                  ),
-                  title: Text(
-                    dimension,
-                    style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  subtitle: Text(
-                    searching
-                        ? '${visibleDrafts.where((v) => v.dimension.text.trim() == dimension).length} / ${_drafts.where((v) => v.dimension.text.trim() == dimension).length} 个指标'
-                        : '${_drafts.where((v) => v.dimension.text.trim() == dimension).length} 个指标',
-                    style: TextStyle(fontSize: 12, color: muted),
-                  ),
-                  trailing: Wrap(
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    spacing: 2,
-                    children: [
-                      IconButton(
-                        tooltip: '添加指标到$dimension',
-                        onPressed: _saving
-                            ? null
-                            : () => _editIndicator(null, dimension),
-                        icon: const Icon(Icons.add_circle_outline_rounded),
-                      ),
-                      IconButton(
-                        tooltip: '编辑维度$dimension',
-                        onPressed: _saving
-                            ? null
-                            : () => _editDimension(dimension),
-                        icon: const Icon(Icons.edit_outlined, size: 19),
-                      ),
-                      if (!_drafts.any(
-                        (v) => v.dimension.text.trim() == dimension,
-                      ))
-                        IconButton(
-                          tooltip: '删除维度$dimension',
-                          onPressed: _saving
-                              ? null
-                              : () => setState(() {
-                                  _dimensions.remove(dimension);
-                                  _dirty = true;
-                                }),
-                          icon: const Icon(
-                            Icons.delete_outline_rounded,
-                            size: 19,
+                Wrap(
+                  alignment: WrapAlignment.spaceBetween,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 16,
+                  runSpacing: 12,
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          '指标库',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w700,
+                            color: text,
                           ),
                         ),
-                      const Icon(Icons.expand_more_rounded),
+                        const SizedBox(height: 5),
+                        Text(
+                          '管理可复用的考核指标和评分标准',
+                          style: TextStyle(fontSize: 13, color: muted),
+                        ),
+                      ],
+                    ),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        Tooltip(
+                          message: '考核模板',
+                          child: OutlinedButton.icon(
+                            onPressed: () {
+                              if (_dirty) {
+                                _toast('请先保存指标库修改');
+                                return;
+                              }
+                              setState(() => _showTemplates = true);
+                            },
+                            icon: const Icon(Icons.view_list_outlined),
+                            label: const Text('考核模板'),
+                          ),
+                        ),
+                        IconButton.filled(
+                          tooltip: '添加维度',
+                          onPressed: _saving ? null : () => _editDimension(),
+                          icon: const Icon(Icons.add_rounded),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 20),
+                TextField(
+                  key: const ValueKey('hr-library-search'),
+                  controller: _searchController,
+                  onChanged: (_) => setState(() {}),
+                  decoration: InputDecoration(
+                    hintText: '搜索指标、维度或评分说明',
+                    prefixIcon: const Icon(Icons.search_rounded),
+                    suffixIcon: _searchController.text.isEmpty
+                        ? null
+                        : IconButton(
+                            tooltip: '清空搜索',
+                            icon: const Icon(Icons.close_rounded),
+                            onPressed: () => setState(_searchController.clear),
+                          ),
+                    filled: true,
+                    fillColor: DunesColors.resolve(context, Colors.white),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 4,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    FilterChip(
+                      label: const Text('未分类'),
+                      selected: _uncategorizedOnly,
+                      onSelected: (value) =>
+                          setState(() => _uncategorizedOnly = value),
+                    ),
+                    HrFilterButton(
+                      label: _departmentFilter == null
+                          ? '全部部门'
+                          : _catalog!.departmentName(_departmentFilter!),
+                      onTap: () => _filterCategory(true),
+                      onClear: _departmentFilter == null
+                          ? null
+                          : () => setState(() => _departmentFilter = null),
+                    ),
+                    HrFilterButton(
+                      label: _positionFilter == null
+                          ? '全部岗位'
+                          : _catalog!.name(
+                              _catalog!.positions,
+                              _positionFilter!,
+                            ),
+                      onTap: () => _filterCategory(false),
+                      onClear: _positionFilter == null
+                          ? null
+                          : () => setState(() => _positionFilter = null),
+                    ),
+                    TextButton.icon(
+                      onPressed: _saving || visibleDrafts.isEmpty
+                          ? null
+                          : () => setState(() {
+                              if (visibleDrafts.every(_selected.contains)) {
+                                _selected.removeAll(visibleDrafts);
+                              } else {
+                                _selected.addAll(visibleDrafts);
+                              }
+                            }),
+                      icon: const Icon(Icons.select_all, size: 18),
+                      label: Text(
+                        visibleDrafts.isNotEmpty &&
+                                visibleDrafts.every(_selected.contains)
+                            ? '取消全选'
+                            : '选择当前结果',
+                      ),
+                    ),
+                    if (_selected.isNotEmpty)
+                      TextButton.icon(
+                        key: const ValueKey('hr-batch-category'),
+                        onPressed: _saving ? null : _batchCategory,
+                        icon: const Icon(Icons.category_outlined, size: 18),
+                        label: Text('设置分类（${_selected.length}）'),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 18,
+                    vertical: 13,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF1ECFB),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.tune_rounded,
+                        size: 18,
+                        color: Color(0xFF7853CF),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          searching
+                              ? '找到 ${visibleDrafts.length} / ${_drafts.length} 个指标'
+                              : '${_dimensions.length} 个维度  ·  ${_drafts.length} 个指标',
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                      Text(
+                        _dirty ? '有未保存的修改' : '已保存',
+                        style: TextStyle(fontSize: 12, color: muted),
+                      ),
                     ],
                   ),
-                  childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-                  children: [
-                    for (final draft in visibleDrafts.where(
-                      (v) => v.dimension.text.trim() == dimension,
-                    )) ...[
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: Material(
-                          color: DunesColors.resolve(context, Colors.white),
-                          borderRadius: BorderRadius.circular(12),
-                          child: InkWell(
-                            borderRadius: BorderRadius.circular(12),
-                            onTap: _saving ? null : () => _editIndicator(draft),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 14,
+                ),
+                const SizedBox(height: 10),
+                if (_dimensions.isEmpty)
+                  Container(
+                    padding: const EdgeInsets.all(40),
+                    alignment: Alignment.center,
+                    child: Text(
+                      '还没有考核维度，点击右上角加号开始配置',
+                      style: TextStyle(color: muted),
+                    ),
+                  ),
+                if (searching && visibleDimensions.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.all(28),
+                    child: Text(
+                      '没有匹配的指标或维度，试试其他关键词',
+                      style: TextStyle(color: muted),
+                    ),
+                  ),
+                for (final dimension in visibleDimensions)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: Material(
+                      color: DunesColors.resolve(context, Colors.white),
+                      borderRadius: BorderRadius.circular(14),
+                      child: ExpansionTile(
+                        key: ValueKey(
+                          searching
+                              ? 'dimension-search-$dimension'
+                              : 'dimension-$dimension',
+                        ),
+                        initiallyExpanded:
+                            searching ||
+                            MediaQuery.sizeOf(context).width < 640 ||
+                            _drafts.length <= 20 ||
+                            !_loadedDimensions.contains(dimension),
+                        leading: const Icon(
+                          Icons.folder_outlined,
+                          color: Color(0xFF7853CF),
+                        ),
+                        title: Text(
+                          dimension,
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        subtitle: Text(
+                          searching
+                              ? '${visibleDrafts.where((v) => v.dimension.text.trim() == dimension).length} / ${_drafts.where((v) => v.dimension.text.trim() == dimension).length} 个指标'
+                              : '${_drafts.where((v) => v.dimension.text.trim() == dimension).length} 个指标',
+                          style: TextStyle(fontSize: 12, color: muted),
+                        ),
+                        trailing: Wrap(
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          spacing: 2,
+                          children: [
+                            IconButton(
+                              tooltip: '添加指标到$dimension',
+                              onPressed: _saving
+                                  ? null
+                                  : () => _editIndicator(null, dimension),
+                              icon: const Icon(
+                                Icons.add_circle_outline_rounded,
                               ),
-                              child: Row(
-                                children: [
-                                  Container(
-                                    width: 40,
-                                    height: 40,
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFFF1EBFF),
-                                      borderRadius: BorderRadius.circular(10),
+                            ),
+                            IconButton(
+                              tooltip: '编辑维度$dimension',
+                              onPressed: _saving
+                                  ? null
+                                  : () => _editDimension(dimension),
+                              icon: const Icon(Icons.edit_outlined, size: 19),
+                            ),
+                            if (!_drafts.any(
+                              (v) => v.dimension.text.trim() == dimension,
+                            ))
+                              IconButton(
+                                tooltip: '删除维度$dimension',
+                                onPressed: _saving
+                                    ? null
+                                    : () => setState(() {
+                                        _dimensions.remove(dimension);
+                                        _dirty = true;
+                                      }),
+                                icon: const Icon(
+                                  Icons.delete_outline_rounded,
+                                  size: 19,
+                                ),
+                              ),
+                            const Icon(Icons.expand_more_rounded),
+                          ],
+                        ),
+                        childrenPadding: const EdgeInsets.fromLTRB(
+                          12,
+                          0,
+                          12,
+                          8,
+                        ),
+                        children: [
+                          for (final draft in visibleDrafts.where(
+                            (v) => v.dimension.text.trim() == dimension,
+                          )) ...[
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 8),
+                              child: Material(
+                                color: DunesColors.resolve(
+                                  context,
+                                  Colors.white,
+                                ),
+                                borderRadius: BorderRadius.circular(12),
+                                child: InkWell(
+                                  borderRadius: BorderRadius.circular(12),
+                                  onTap: _saving
+                                      ? null
+                                      : () => _editIndicator(draft),
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                      vertical: 14,
                                     ),
-                                    child: const Icon(
-                                      Icons.assessment_outlined,
-                                      color: Color(0xFF7853CF),
-                                      size: 21,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
+                                    child: Row(
                                       children: [
-                                        Text(
-                                          draft.name.text.isEmpty
-                                              ? '未命名指标'
-                                              : draft.name.text,
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: TextStyle(
-                                            fontSize: 14,
-                                            fontWeight: FontWeight.w600,
-                                            color: text,
+                                        Checkbox(
+                                          visualDensity: VisualDensity.compact,
+                                          value: _selected.contains(draft),
+                                          onChanged: _saving
+                                              ? null
+                                              : (value) => setState(() {
+                                                  if (value == true) {
+                                                    _selected.add(draft);
+                                                  } else {
+                                                    _selected.remove(draft);
+                                                  }
+                                                }),
+                                        ),
+                                        if (MediaQuery.sizeOf(context).width >=
+                                            640)
+                                          Container(
+                                            width: 40,
+                                            height: 40,
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFFF1EBFF),
+                                              borderRadius:
+                                                  BorderRadius.circular(10),
+                                            ),
+                                            child: const Icon(
+                                              Icons.assessment_outlined,
+                                              color: Color(0xFF7853CF),
+                                              size: 21,
+                                            ),
+                                          ),
+                                        if (MediaQuery.sizeOf(context).width >=
+                                            640)
+                                          const SizedBox(width: 12),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                draft.name.text.isEmpty
+                                                    ? '未命名指标'
+                                                    : draft.name.text,
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: TextStyle(
+                                                  fontSize: 14,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: text,
+                                                ),
+                                              ),
+                                              const SizedBox(height: 5),
+                                              Text(
+                                                '${draft.dimension.text}${draft.enabled ? '' : ' · 已停用'}  ·  默认权重 ${draft.weight.text}%  ·  ${draft.bands.length} 个评分分档  ·  ${_catalog == null ? (draft.category['mode'] == 'common'
+                                                          ? '通用指标'
+                                                          : draft.category['mode'] == 'scoped'
+                                                          ? '已分类'
+                                                          : '未分类') : hrCategoryLabel(draft.category, _catalog!)}',
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: TextStyle(
+                                                  fontSize: 12,
+                                                  color: muted,
+                                                ),
+                                              ),
+                                            ],
                                           ),
                                         ),
-                                        const SizedBox(height: 5),
-                                        Text(
-                                          '${draft.dimension.text}  ·  默认权重 ${draft.weight.text}%  ·  ${draft.bands.length} 个评分分档',
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            color: muted,
+                                        const SizedBox(width: 8),
+                                        if (MediaQuery.sizeOf(context).width >=
+                                            640)
+                                          Text(
+                                            draft.enabled ? '启用' : '停用',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: draft.enabled
+                                                  ? const Color(0xFF32836C)
+                                                  : muted,
+                                            ),
+                                          ),
+                                        IconButton(
+                                          visualDensity: VisualDensity.compact,
+                                          tooltip: '编辑指标',
+                                          onPressed: _saving
+                                              ? null
+                                              : () => _editIndicator(draft),
+                                          icon: const Icon(
+                                            Icons.edit_outlined,
+                                            size: 19,
+                                          ),
+                                        ),
+                                        IconButton(
+                                          visualDensity: VisualDensity.compact,
+                                          tooltip: '删除指标',
+                                          onPressed: _saving
+                                              ? null
+                                              : () => _removeIndicator(draft),
+                                          icon: const Icon(
+                                            Icons.delete_outline_rounded,
+                                            size: 19,
                                           ),
                                         ),
                                       ],
                                     ),
                                   ),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    draft.enabled ? '启用' : '停用',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: draft.enabled
-                                          ? const Color(0xFF32836C)
-                                          : muted,
-                                    ),
-                                  ),
-                                  IconButton(
-                                    tooltip: '编辑指标',
-                                    onPressed: _saving
-                                        ? null
-                                        : () => _editIndicator(draft),
-                                    icon: const Icon(
-                                      Icons.edit_outlined,
-                                      size: 19,
-                                    ),
-                                  ),
-                                  IconButton(
-                                    tooltip: '删除指标',
-                                    onPressed: _saving
-                                        ? null
-                                        : () => _removeIndicator(draft),
-                                    icon: const Icon(
-                                      Icons.delete_outline_rounded,
-                                      size: 19,
-                                    ),
-                                  ),
-                                ],
+                                ),
                               ),
                             ),
-                          ),
-                        ),
+                            for (final band in draft.bands)
+                              Padding(
+                                padding: const EdgeInsets.fromLTRB(
+                                  64,
+                                  0,
+                                  16,
+                                  8,
+                                ),
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                        vertical: 3,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFF1ECFB),
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Text(
+                                        '${band.min.text}–${band.max.text} 分',
+                                        style: const TextStyle(
+                                          fontSize: 12,
+                                          color: Color(0xFF7853CF),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: Text(
+                                        band.description.text,
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          height: 1.4,
+                                          color: muted,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                          ],
+                        ],
                       ),
-                      for (final band in draft.bands)
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(64, 0, 16, 8),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 3,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFF1ECFB),
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                child: Text(
-                                  '${band.min.text}–${band.max.text} 分',
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    color: Color(0xFF7853CF),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Text(
-                                  band.description.text,
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    height: 1.4,
-                                    color: muted,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                    ],
-                  ],
+                    ),
+                  ),
+                const SizedBox(height: 16),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: IconButton.filled(
+                    tooltip: '保存指标库',
+                    onPressed: _saving || !_dirty ? null : _save,
+                    icon: _saving
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.save_outlined),
+                  ),
                 ),
-              ),
-            ),
-          const SizedBox(height: 16),
-          Align(
-            alignment: Alignment.centerRight,
-            child: IconButton.filled(
-              tooltip: '保存指标库',
-              onPressed: _saving || !_dirty ? null : _save,
-              icon: _saving
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.save_outlined),
+              ],
             ),
           ),
-        ],
+        ),
       ),
     );
   }

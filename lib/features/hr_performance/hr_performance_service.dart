@@ -226,6 +226,10 @@ class HrPerformanceService {
     await _post('/hr-performance/alerts', {'id': id, 'resolution': resolution});
   }
 
+  Future<Map<String, dynamic>> catalog() async => Map<String, dynamic>.from(
+    _unwrap(await dunesHttpGet(session, '/hr-performance/catalog')) as Map,
+  );
+
   Future<Map<String, dynamic>> library() async => Map<String, dynamic>.from(
     _unwrap(await dunesHttpGet(session, '/hr-performance/library')) as Map,
   );

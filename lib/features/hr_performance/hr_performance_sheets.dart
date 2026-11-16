@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../contacts/contact_models.dart';
 import 'hr_performance_service.dart';
+import 'hr_performance_template_ui.dart';
 
 List<Map<String, dynamic>> hrMaps(dynamic value) =>
     (value is List ? value : const [])
@@ -31,76 +32,79 @@ Future<Map<String, dynamic>?> hrFormSheet(
     isScrollControlled: true,
     useSafeArea: true,
     constraints: const BoxConstraints(maxWidth: 800),
-    builder: (context) => StatefulBuilder(
-      builder: (context, update) => Padding(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.viewInsetsOf(context).bottom,
-        ),
-        child: SizedBox(
-          height: MediaQuery.sizeOf(context).height * .86,
-          child: Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        title,
-                        style: Theme.of(context).textTheme.titleLarge,
-                      ),
-                    ),
-                    IconButton(
-                      onPressed: () => Navigator.pop(context),
-                      icon: const Icon(Icons.close),
-                    ),
-                  ],
-                ),
-              ),
-              Expanded(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
+    builder: (context) => Theme(
+      data: hrConfigTheme(context),
+      child: StatefulBuilder(
+        builder: (context, update) => Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.viewInsetsOf(context).bottom,
+          ),
+          child: SizedBox(
+            height: MediaQuery.sizeOf(context).height * .86,
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
                     children: [
-                      if (message != null)
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 16),
-                          child: Text(message),
+                      Expanded(
+                        child: Text(
+                          title,
+                          style: Theme.of(context).textTheme.titleLarge,
                         ),
-                      ...fields(values, update),
-                      if (error != null)
-                        Padding(
-                          padding: const EdgeInsets.all(12),
-                          child: Text(
-                            error!,
-                            style: TextStyle(
-                              color: Theme.of(context).colorScheme.error,
-                            ),
-                          ),
-                        ),
+                      ),
+                      IconButton(
+                        onPressed: () => Navigator.pop(context),
+                        icon: const Icon(Icons.close),
+                      ),
                     ],
                   ),
                 ),
-              ),
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: FilledButton(
-                  key: const ValueKey('hr-sheet-submit'),
-                  onPressed: () {
-                    try {
-                      final result = submit(values);
-                      Navigator.pop(context, result);
-                    } on FormatException catch (e) {
-                      update(() => error = e.message);
-                    } catch (e) {
-                      update(() => error = '$e');
-                    }
-                  },
-                  child: Text(submitLabel),
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        if (message != null)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 16),
+                            child: Text(message),
+                          ),
+                        ...fields(values, update),
+                        if (error != null)
+                          Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Text(
+                              error!,
+                              style: TextStyle(
+                                color: Theme.of(context).colorScheme.error,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
                 ),
-              ),
-            ],
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: FilledButton(
+                    key: const ValueKey('hr-sheet-submit'),
+                    onPressed: () {
+                      try {
+                        final result = submit(values);
+                        Navigator.pop(context, result);
+                      } on FormatException catch (e) {
+                        update(() => error = e.message);
+                      } catch (e) {
+                        update(() => error = '$e');
+                      }
+                    },
+                    child: Text(submitLabel),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),

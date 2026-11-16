@@ -9,6 +9,7 @@ import '../contacts/contact_service.dart';
 import '../conversation/conversation_service.dart';
 import '../shell/dunes_toast.dart';
 import 'hr_performance_search.dart';
+import 'hr_performance_category.dart';
 import 'hr_performance_service.dart';
 import 'hr_performance_sheet.dart';
 import 'hr_performance_template_item_editor.dart';
@@ -39,7 +40,9 @@ class _State extends State<HrPerformanceTemplatesPage> {
   String? error;
   final templateSearch = TextEditingController();
   final indicatorSearch = TextEditingController();
+  final scrollController = ScrollController();
   List<Map<String, dynamic>> templates = [], indicators = [];
+  HrCatalog? categoryCatalog;
   List<NativeDepartment> departments = [];
   List<NativeContact> users = [];
   Map<String, dynamic>? editing;
@@ -58,6 +61,7 @@ class _State extends State<HrPerformanceTemplatesPage> {
   void dispose() {
     templateSearch.dispose();
     indicatorSearch.dispose();
+    scrollController.dispose();
     super.dispose();
   }
 
@@ -194,21 +198,31 @@ class _State extends State<HrPerformanceTemplatesPage> {
     final d = editing!;
     final items = maps(d['items']);
     final selected = items.map((i) => '${i['indicatorId']}').toSet();
-    final result = await showHrConfigPicker<String>(
+    if (categoryCatalog == null) {
+      try {
+        categoryCatalog = HrCatalog(await widget.service.catalog());
+      } catch (_) {
+        if (mounted) {
+          showDunesToast(
+            context,
+            '部门和岗位加载失败，请检查网络后重试',
+            kind: DunesToastKind.error,
+          );
+        }
+        return;
+      }
+    }
+    if (!ctx.mounted) return;
+    final departments = (d['departmentIds'] as List? ?? [])
+        .whereType<num>()
+        .map((v) => v.toInt())
+        .toList();
+    final result = await showHrIndicatorPicker(
       ctx,
-      title: '选择考核指标',
+      catalog: categoryCatalog!,
+      indicators: indicators,
       selected: selected,
-      options: [
-        for (final i in indicators.where(
-          (i) => i['enabled'] == true || selected.contains('${i['id']}'),
-        ))
-          HrConfigOption(
-            '${i['id']}',
-            '${i['name']}',
-            subtitle:
-                '${i['project']} · 默认权重 ${i['weight']}% · ${i['instructions'] ?? ''} ${maps(i['bands']).map((b) => b['description']).join(' ')}',
-          ),
-      ],
+      department: departments.length == 1 ? departments.first : null,
     );
     if (result == null || !mounted) return;
     // Filtering and cancellation never replace the selected items' snapshots.
@@ -1256,116 +1270,143 @@ class _State extends State<HrPerformanceTemplatesPage> {
           child: Column(
             children: [
               Expanded(
-                child: SingleChildScrollView(
-                  padding: EdgeInsets.all(
-                    MediaQuery.sizeOf(ctx).width < 640 ? 16 : 24,
+                child: ScrollConfiguration(
+                  behavior: ScrollConfiguration.of(ctx).copyWith(
+                    scrollbars: false,
+                    dragDevices: {
+                      PointerDeviceKind.touch,
+                      PointerDeviceKind.mouse,
+                      PointerDeviceKind.trackpad,
+                      PointerDeviceKind.stylus,
+                      PointerDeviceKind.unknown,
+                    },
                   ),
-                  child: Center(
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 1240),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Row(
+                  child: Scrollbar(
+                    controller: scrollController,
+                    thumbVisibility: MediaQuery.sizeOf(ctx).width >= 640,
+                    child: SingleChildScrollView(
+                      controller: scrollController,
+                      primary: false,
+                      physics: const ClampingScrollPhysics(),
+                      padding: EdgeInsets.all(
+                        MediaQuery.sizeOf(ctx).width < 640 ? 16 : 24,
+                      ),
+                      child: Center(
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 1240),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              IconButton(
-                                tooltip: d == null
-                                    ? widget.listBackTooltip
-                                    : '返回模板列表',
-                                onPressed: saving ? null : leave,
-                                icon: const Icon(
-                                  Icons.arrow_back_rounded,
-                                  size: 21,
-                                ),
-                              ),
-                              const SizedBox(width: 4),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      d == null ? '考核模板' : '编辑考核模板',
-                                      style: TextStyle(
-                                        fontSize: 20,
-                                        fontWeight: FontWeight.w700,
-                                        color: hrConfigColor(
-                                          ctx,
-                                          const Color(0xFF302B39),
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(height: 5),
-                                    Text(
-                                      d == null
-                                          ? '组装考核指标，为不同岗位配置适用量表'
-                                          : '设置考核内容、评分标准与适用人员',
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: hrConfigColor(
-                                          ctx,
-                                          const Color(0xFF8C8298),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              if (d == null)
-                                FilledButton.icon(
-                                  onPressed: () => edit(null),
-                                  icon: const Icon(Icons.add_rounded, size: 18),
-                                  label: const Text('新建模板'),
-                                )
-                              else
-                                Tooltip(
-                                  message: '考核表预览',
-                                  child: OutlinedButton.icon(
-                                    onPressed: () => preview(ctx),
+                              Row(
+                                children: [
+                                  IconButton(
+                                    tooltip: d == null
+                                        ? widget.listBackTooltip
+                                        : '返回模板列表',
+                                    onPressed: saving ? null : leave,
                                     icon: const Icon(
-                                      Icons.visibility_outlined,
-                                      size: 18,
+                                      Icons.arrow_back_rounded,
+                                      size: 21,
                                     ),
-                                    label: const Text('预览'),
                                   ),
+                                  const SizedBox(width: 4),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          d == null ? '考核模板' : '编辑考核模板',
+                                          style: TextStyle(
+                                            fontSize: 20,
+                                            fontWeight: FontWeight.w700,
+                                            color: hrConfigColor(
+                                              ctx,
+                                              const Color(0xFF302B39),
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(height: 5),
+                                        Text(
+                                          d == null
+                                              ? '组装考核指标，为不同岗位配置适用量表'
+                                              : '设置考核内容、评分标准与适用人员',
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: hrConfigColor(
+                                              ctx,
+                                              const Color(0xFF8C8298),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  if (d == null)
+                                    FilledButton.icon(
+                                      onPressed: () => edit(null),
+                                      icon: const Icon(
+                                        Icons.add_rounded,
+                                        size: 18,
+                                      ),
+                                      label: const Text('新建模板'),
+                                    )
+                                  else
+                                    Tooltip(
+                                      message: '考核表预览',
+                                      child: OutlinedButton.icon(
+                                        onPressed: () => preview(ctx),
+                                        icon: const Icon(
+                                          Icons.visibility_outlined,
+                                          size: 18,
+                                        ),
+                                        label: const Text('预览'),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                              const SizedBox(height: 24),
+                              if (d == null)
+                                catalog(ctx)
+                              else
+                                LayoutBuilder(
+                                  builder: (ctx, box) {
+                                    final main = Column(
+                                      children: [
+                                        basicSection(ctx),
+                                        gap(),
+                                        indicatorSection(ctx),
+                                      ],
+                                    );
+                                    if (box.maxWidth >= 980) {
+                                      return Row(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Expanded(child: main),
+                                          const SizedBox(width: 20),
+                                          SizedBox(
+                                            width: 300,
+                                            child: scopeSection(ctx),
+                                          ),
+                                        ],
+                                      );
+                                    }
+                                    return Column(
+                                      children: [
+                                        main,
+                                        gap(),
+                                        scopeSection(ctx),
+                                      ],
+                                    );
+                                  },
                                 ),
                             ],
                           ),
-                          const SizedBox(height: 24),
-                          if (d == null)
-                            catalog(ctx)
-                          else
-                            LayoutBuilder(
-                              builder: (ctx, box) {
-                                final main = Column(
-                                  children: [
-                                    basicSection(ctx),
-                                    gap(),
-                                    indicatorSection(ctx),
-                                  ],
-                                );
-                                if (box.maxWidth >= 980) {
-                                  return Row(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Expanded(child: main),
-                                      const SizedBox(width: 20),
-                                      SizedBox(
-                                        width: 300,
-                                        child: scopeSection(ctx),
-                                      ),
-                                    ],
-                                  );
-                                }
-                                return Column(
-                                  children: [main, gap(), scopeSection(ctx)],
-                                );
-                              },
-                            ),
-                        ],
+                        ),
                       ),
                     ),
                   ),

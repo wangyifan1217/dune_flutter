@@ -8,6 +8,7 @@ import 'package:dunes_app/features/contacts/contact_models.dart';
 import 'package:dunes_app/features/hr_performance/hr_performance_library_page.dart';
 import 'package:dunes_app/features/hr_performance/hr_performance_service.dart';
 import 'package:dunes_app/features/hr_performance/hr_performance_templates_page.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -51,6 +52,18 @@ const _org = ContactOrgData(
 );
 
 class _Service extends HrPerformanceService {
+  @override
+  Future<Map<String, dynamic>> catalog() async => {
+    'departments': [
+      {'id': 7, 'name': '财务部'},
+      {'id': 8, 'name': '运营中心'},
+    ],
+    'positions': [
+      {'id': 11, 'name': '出纳'},
+      {'id': 12, 'name': '运营专员'},
+    ],
+  };
+
   _Service() : super(_session);
   List<Map<String, dynamic>>? savedIndicators, savedTemplates;
   final indicators = <Map<String, dynamic>>[
@@ -193,6 +206,117 @@ void main() {
       await (FontLoader(family)..addFont(rootBundle.load(asset))).load();
     }
   });
+  testWidgets('PC 大型指标库可滚轮滚动并搜索折叠的指标', (tester) async {
+    final service = _Service();
+    service.indicators
+      ..clear()
+      ..addAll(
+        List.generate(
+          84,
+          (i) => {
+            'id': 'indicator-$i',
+            'name': '指标$i',
+            'project': '维度${i ~/ 12}',
+            'weight': 10,
+            'enabled': true,
+          },
+        ),
+      );
+    await _mount(
+      tester,
+      HrPerformanceLibraryPage(session: _session, service: service),
+      1100,
+      height: 600,
+    );
+    expect(find.text('维度0'), findsOneWidget);
+    expect(find.text('指标0'), findsNothing);
+    final list = find
+        .descendant(
+          of: find.byType(HrPerformanceLibraryPage),
+          matching: find.byType(ListView),
+        )
+        .first;
+    final controller = tester.widget<ListView>(list).controller!;
+    expect(controller.position.maxScrollExtent, greaterThan(0));
+    final point = tester.getCenter(list);
+    tester.binding.handlePointerEvent(
+      PointerScrollEvent(
+        position: point,
+        scrollDelta: const Offset(0, 1200),
+        kind: PointerDeviceKind.mouse,
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(controller.offset, greaterThan(0));
+    controller.jumpTo(controller.position.maxScrollExtent);
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('保存指标库'), findsOneWidget);
+    controller.jumpTo(0);
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('hr-library-search')),
+      '指标83',
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.byWidgetPredicate(
+        (widget) => widget is Text && widget.data == '指标83',
+      ),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+  });
+  for (final width in [360.0, 1100.0]) {
+    testWidgets('批量标记部门岗位并保存 $width', (tester) async {
+      final service = _Service();
+      await _mount(
+        tester,
+        HrPerformanceLibraryPage(session: _session, service: service),
+        width,
+        height: 900,
+      );
+      await tester.tap(find.text('选择当前结果'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('hr-batch-category')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('指定部门 / 岗位'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('选择部门（可多选）'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('hr-option-7')));
+      await tester.tap(find.text('确认选择'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('选择岗位（可多选）'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('hr-option-11')));
+      await tester.tap(find.text('确认选择'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('确定'));
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.byTooltip('保存指标库'),
+        300,
+        scrollable: find
+            .descendant(
+              of: find.byType(HrPerformanceLibraryPage),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
+      await tester.tap(find.byTooltip('保存指标库'));
+      await tester.pumpAndSettle();
+      expect(service.savedIndicators, hasLength(3));
+      for (final item in service.savedIndicators!) {
+        expect(item['category'], {
+          'mode': 'scoped',
+          'departmentIds': [7],
+          'positionIds': [11],
+        });
+      }
+      expect(tester.takeException(), isNull);
+      await tester.pump(const Duration(seconds: 3));
+    });
+  }
   for (final width in [360.0, 1100.0]) {
     testWidgets('指标搜索按维度、说明、分档匹配且保留全部草稿 $width', (tester) async {
       final service = _Service();

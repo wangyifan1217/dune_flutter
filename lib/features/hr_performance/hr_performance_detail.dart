@@ -485,69 +485,77 @@ class _HrPerformanceDetailState extends State<HrPerformanceDetail> {
             ],
           ],
           const SizedBox(height: 8),
-          _HrSectionTitle('任务证据（${r.evidence.length}）'),
-          const SizedBox(height: 8),
-          if (r.evidence.isEmpty)
-            const _HrPanel(
-              child: Text(
-                '暂无已纳入的任务证据',
-                style: TextStyle(fontSize: 13, color: Color(0xFF8A8494)),
-              ),
-            )
-          else
-            for (final t in r.evidence) ...[
-              _HrPanel(
-                child: InkWell(
-                  onTap: _missing.contains((t['id'] as num).toInt())
-                      ? null
-                      : () => Navigator.of(context).push(
-                          MaterialPageRoute<void>(
-                            builder: (context) => Scaffold(
-                              appBar: AppBar(title: const Text('任务证据')),
-                              body: NativeTaskDetailView(
-                                session: widget.session,
-                                taskId: (t['id'] as num).toInt(),
-                                onBack: () => Navigator.pop(context),
-                                backLabel: '考核表',
-                                forceReadOnly: true,
+          _HrPanel(
+            padding: EdgeInsets.zero,
+            child: ExpansionTile(
+              key: ValueKey('hr-evidence-${r.id}'),
+              title: _HrSectionTitle('任务证据（${r.evidence.length}）'),
+              childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
+              children: [
+                if (r.evidence.isEmpty)
+                  const _HrPanel(
+                    child: Text(
+                      '暂无已纳入的任务证据',
+                      style: TextStyle(fontSize: 13, color: Color(0xFF8A8494)),
+                    ),
+                  )
+                else
+                  for (final t in r.evidence) ...[
+                    _HrPanel(
+                      child: InkWell(
+                        onTap: _missing.contains((t['id'] as num).toInt())
+                            ? null
+                            : () => Navigator.of(context).push(
+                                MaterialPageRoute<void>(
+                                  builder: (context) => Scaffold(
+                                    appBar: AppBar(title: const Text('任务证据')),
+                                    body: NativeTaskDetailView(
+                                      session: widget.session,
+                                      taskId: (t['id'] as num).toInt(),
+                                      onBack: () => Navigator.pop(context),
+                                      backLabel: '考核表',
+                                      forceReadOnly: true,
+                                    ),
+                                  ),
+                                ),
                               ),
-                            ),
-                          ),
-                        ),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                        child: Row(
                           children: [
-                            Text(
-                              '${t['title']}',
-                              style: const TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    '${t['title']}',
+                                    style: const TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    '${hrDate(t['completedAt'])}${_missing.contains((t['id'] as num).toInt()) ? ' · 原任务已不存在' : ''}',
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      color: Color(0xFF8A8494),
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
-                            const SizedBox(height: 2),
-                            Text(
-                              '${hrDate(t['completedAt'])}${_missing.contains((t['id'] as num).toInt()) ? ' · 原任务已不存在' : ''}',
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: Color(0xFF8A8494),
-                              ),
+                            const Icon(
+                              Icons.chevron_right_rounded,
+                              color: Color(0xFF8A8494),
                             ),
                           ],
                         ),
                       ),
-                      const Icon(
-                        Icons.chevron_right_rounded,
-                        color: Color(0xFF8A8494),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 8),
-            ],
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+              ],
+            ),
+          ),
           const SizedBox(height: 8),
           const _HrSectionTitle('调整与申诉记录'),
           const SizedBox(height: 8),
@@ -979,7 +987,10 @@ class _HrActionButton extends StatelessWidget {
         minimumSize: const Size(0, 36),
         padding: const EdgeInsets.symmetric(horizontal: 14),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+        textStyle: DunesTypography.sans(
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
+        ),
       ),
       child: Text(label),
     );

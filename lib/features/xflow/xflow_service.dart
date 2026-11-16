@@ -1817,6 +1817,7 @@ class XflowService {
     required String dateEnd,
     String projectName = '',
     String query = '',
+    int pageNum = 1,
   }) async {
     final dir = billDirection.trim().toUpperCase();
     final code = billTypeCode.trim();
@@ -1834,6 +1835,7 @@ class XflowService {
       'dateStart=${Uri.encodeQueryComponent(start)}',
       'dateEnd=${Uri.encodeQueryComponent(end)}',
       'pageSize=200',
+      if (pageNum > 1) 'pageNum=$pageNum',
     ];
     final project = projectName.trim();
     if (project.isNotEmpty) {

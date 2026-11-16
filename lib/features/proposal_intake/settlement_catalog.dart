@@ -808,6 +808,7 @@ class SettlementCatalogService {
     http.Client? client,
     this.enabled = true,
     String? assetBase,
+    this.authToken = '',
   }) : _ownsClient = client == null,
        _client = client ?? http.Client(),
        _assetBase = (assetBase ?? kProposalImportTemplateAssetBase).replaceAll(
@@ -822,6 +823,7 @@ class SettlementCatalogService {
   final bool _ownsClient;
   final bool enabled;
   final String _assetBase;
+  final String authToken;
 
   void dispose() {
     if (_ownsClient) _client.close();
@@ -1201,7 +1203,11 @@ class SettlementCatalogService {
         '$_assetBase$path',
       ).replace(queryParameters: query == null || query.isEmpty ? null : query);
       final resp = await _client
-          .get(uri, headers: const {'Accept': 'application/json'})
+          .get(uri, headers: {
+            'Accept': 'application/json',
+            if (authToken.trim().isNotEmpty)
+              'Authorization': 'Bearer ${authToken.trim()}',
+          })
           .timeout(const Duration(seconds: 12));
       final decoded = jsonDecode(utf8.decode(resp.bodyBytes));
       if (decoded is! Map) return null;

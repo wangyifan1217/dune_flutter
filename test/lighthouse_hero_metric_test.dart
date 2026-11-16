@@ -913,7 +913,7 @@ void main() {
     );
     expect(
       lighthouseGrossMarginDenominatorKey(product: '民营加油（交易）', group: '能源'),
-      'verifiedSales',
+      'gmv',
     );
     expect(
       lighthouseLedgerSummaryMetricRowsForEntity(

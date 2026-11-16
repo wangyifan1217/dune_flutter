@@ -9,11 +9,12 @@ bool lighthouseProductUsesGmv(String? product) => const {
   '满减券(交易)',
   '中石化满减券(交易)',
   '中石化普惠现金券(交易)',
+  '民营加油(交易)',
 }.contains(lighthouseProductKey(product));
 
-/// 金刚位核销额换成 GMV：满减/中石化（毛利率也走 GMV）+ 点播 / 会员套餐订阅 / 民营加油。
-/// 点播、订阅、民营加油的毛利率不进 [lighthouseProductUsesGmv]。
-/// 「点播（积分）」「民营加油（交易）」是线上现行名。
+/// 金刚位核销额换成 GMV：满减/中石化、民营加油（交易）的毛利率也走 GMV。
+/// 点播、订阅、不带「交易」的民营加油只换金刚位，毛利率仍按核销额。
+/// 「点播（积分）」是线上现行名。
 bool lighthouseProductReplacesVerifiedHeroWithGmv(String? product) {
   if (lighthouseProductUsesGmv(product)) return true;
   // 2026-10-26 · 渠道「抖音」：GMV 才是它的规模口径，挪到外面六个金刚位上。

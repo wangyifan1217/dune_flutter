@@ -641,10 +641,10 @@ class ProposalEstimateAudit extends StatelessWidget {
       if (key == kProposalCostCategoryBusiness && _businessSealed) {
         costSteps.add(const ProposalEstimateCalcStep(
           '业务成本',
-          '仅财务部负责人一、总裁可见',
+          '仅授权人员可见',
           '—',
           sub: true,
-          detail: '业务成本只有财务部负责人一和总裁能看到金额和算法。',
+          detail: '业务成本金额和算法仅授权人员可见。',
         ));
         continue;
       }
@@ -657,7 +657,7 @@ class ProposalEstimateAudit extends StatelessWidget {
           sub: true,
           detail: key == kProposalCostCategoryProject
               ? '产品结算里没有项目成本（应付）这一类，所以项目成本是 0。'
-              : (key == kProposalCostCategoryBusiness ? '财务部负责人一还没选业务成本公式，所以是 0。' : '没有选税目，所以是 0。'),
+              : (key == kProposalCostCategoryBusiness ? '市场部负责人一还没选业务成本公式，所以是 0。' : '没有选税目，所以是 0。'),
         ));
         continue;
       }
@@ -839,7 +839,7 @@ class ProposalEstimateAudit extends StatelessWidget {
                 _Section(
                   no: '4',
                   title: '成本',
-                  hint: '项目成本来自产品结算里的项目成本；业务成本是财务部负责人一选的公式；税务成本按整份提案算一次。',
+                  hint: '项目成本来自产品结算里的项目成本；业务成本是市场部负责人一选的公式；税务成本按整份提案算一次。',
                   child: _costTable(),
                 ),
                 _Section(
@@ -965,7 +965,7 @@ class ProposalEstimateAudit extends StatelessWidget {
     final rows = <_Row>[];
     for (final (key, label) in _bucketOrder) {
       if (key == kProposalCostCategoryBusiness && _businessSealed) {
-        rows.add(_Row([label, '仅财务部负责人一、总裁可见', '', '', '—'], tone: _Tone.muted));
+        rows.add(_Row([label, '仅授权人员可见', '', '', '—'], tone: _Tone.muted));
         continue;
       }
       final bucket = total.bucket(key);
@@ -1031,7 +1031,7 @@ class ProposalEstimateAudit extends StatelessWidget {
         _Row(['电子券采购款', '收入下面挂的电子券采购款合计', coupon == 0 ? '0' : '−${_n(coupon)}']),
         _Row(['收入', '${_n(revenue + coupon)} − ${_n(coupon)}', _n(revenue)], strong: true),
         _Row(['项目成本', '产品结算里的项目成本合计', _n(project)]),
-        _Row(['业务成本', _businessSealed ? '仅财务部负责人一、总裁可见' : '所选业务成本公式合计', _businessSealed ? '—' : _n(business)]),
+        _Row(['业务成本', _businessSealed ? '仅授权人员可见' : '所选业务成本公式合计', _businessSealed ? '—' : _n(business)]),
         _Row(['税务成本', '增值税及附加、印花税等', _n(tax)]),
         _Row([
           '成本合计',

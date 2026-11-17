@@ -673,7 +673,7 @@ ProposalFinanceFormulaCatalog _buildFallbackCatalog() {
         amountsKey: 'businessCostItemAmounts',
         totalKey: 'businessCost',
         formulasKey: 'businessCostItemFormulas',
-        filler: '财务部负责人一从资管业务成本名单多选，并为每一项填写比例；仅财务部负责人一和最终审批人可见',
+        filler: '市场部负责人一从资管业务成本名单多选，并为每一项填写比例；仅授权人员可见',
         hint: '名单来自资管账单三级、类别为业务成本。选中后填写比例，按（收入 − 项目成本）× 该比例计算。',
         items: [
           for (final name in _kDefaultBusinessCostNames)
@@ -2367,7 +2367,7 @@ ProposalFinanceBucket proposalBusinessCostBucket({
             formula: _businessFormulaFor(form, category, name),
             amount: 0,
             pending: true,
-            substitution: '业务成本仅财务部负责人一和最终审批人可查看',
+            substitution: '业务成本仅授权人员可查看',
           )
         else
           _evaluateBusinessCostLine(
@@ -2527,7 +2527,7 @@ ProposalFinanceEvaluation _evaluateFinanceScope(
             formula: proposalFinanceItemFormula(form, category, name),
             amount: 0,
             pending: true,
-            substitution: '应税基数含受限业务成本，仅财务部负责人一和最终审批人可查看金额',
+            substitution: '应税基数含受限业务成本，仅授权人员可查看金额',
           ),
         );
         continue;

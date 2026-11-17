@@ -2393,10 +2393,7 @@ bool proposalIntakeCanPatchDraft(
   if (row.createdBy == userId) return true;
   if (isOwner('technologyOwner') || isOwner('financeOwner2')) return true;
   if (viewAll) return true;
-  return isOwner(
-        proposalIntakeIsPurchase(row.kind) ? 'marketOwner1' : 'financeOwner1',
-      ) &&
-      row.status == 'reviewing';
+  return isOwner('marketOwner1') && row.status == 'reviewing';
 }
 
 /// 返回列表时是否自动保存。已完成 / 待最终确认只读，不能再 PATCH 草稿。
@@ -2655,7 +2652,8 @@ List<String> proposalIntakeOwedActions(ProposalIntakeRow row, int userId) {
   final purchase = proposalIntakeIsPurchase(row.kind);
   final techOwner = proposalIntakeOwnerUserId(row.form, 'technologyOwner');
   final out = <String>[];
-  if (!done('marketCompleted') && _proposalOwnerIs(row, userId, 'marketOwner1')) {
+  if (!done('marketCompleted') &&
+      _proposalOwnerIs(row, userId, 'marketOwner1')) {
     out.add('review_market');
   }
   if (!done('technologyCompleted') &&

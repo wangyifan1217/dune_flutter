@@ -43,6 +43,7 @@ import 'proposal_product_card.dart';
 import 'proposal_intake_unreviewed.dart';
 import 'proposal_intake_select.dart';
 import 'proposal_intake_service.dart';
+import 'proposal_business_cost_access.dart';
 import 'proposal_intake_ui.dart';
 import 'proposal_meeting_minutes.dart';
 import 'proposal_list_card.dart';
@@ -4047,15 +4048,17 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
 
   bool get _businessCostSealed =>
       _form['businessCostRedacted'] == true ||
-      (_isPurchase
+      (_form['businessCostCanView'] is bool
+          ? _form['businessCostCanView'] != true
+          : _isPurchase
           ? (_isAnyOwner2 && !_isMarketOwner1)
-          : !(_isOwner('financeOwner1') || _isPresident));
+          : !(_isMarketOwner1 || _isOwner('financeOwner1') || _isPresident));
 
   bool get _canEditBusinessCost =>
       !_isLocked &&
-      (_isPurchase ? _isMarketOwner1 : _isOwner('financeOwner1')) &&
+      _isMarketOwner1 &&
       _stage == 'reviewing' &&
-      !_moduleReviewed('financeCompleted');
+      (_isPurchase || !_moduleReviewed('financeCompleted'));
 
   bool get _canSave {
     if (widget.changeEdit != null) return _changeEditing && !widget.saving;
@@ -6629,7 +6632,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       ProposalIntakeNavSection.tech =>
         '$sub 填（含业务平台产品）· 科技部负责人 ${owner('technologyOwner')} 复核 · 财务技术接口由财务部负责人二填',
       ProposalIntakeNavSection.finance =>
-        '$sub 填产品结算、收入公式、项目 / 税务成本与周转 · 财务部负责人二 ${owner('financeOwner2')} 逐条复核 · 财务部负责人一 ${owner('financeOwner1')} 复核时选业务成本并填写比例，再整板块复核',
+        '$sub 填产品结算、收入公式、项目 / 税务成本与周转 · 财务部负责人二 ${owner('financeOwner2')} 逐条复核 · 市场部负责人一 ${owner('marketOwner1')} 填写业务成本 · 财务部负责人一 ${owner('financeOwner1')} 整板块复核',
       ProposalIntakeNavSection.flow => '四流不用填：由市场、科技、财务三部分自动串联，只读',
       _ => '$sub 填 · 市场部负责人一 ${owner('marketOwner1')} 整板块复核',
     };
@@ -12058,7 +12061,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           (
             section: ProposalIntakeNavSection.finance,
             no: '三',
-            desc: '填产品结算、收入与项目 / 税务成本；业务成本由财务部负责人一在复核时选择并填写比例',
+            desc: '填产品结算、收入与项目 / 税务成本；业务成本由市场部负责人一在复核阶段选择并填写比例',
             flag: 'financeCompleted',
           ),
           if (!_isPurchase)
@@ -14961,23 +14964,62 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       ? 'financeItem:children:$key'
       : 'financeItem:$key';
 
+  Widget? _businessCostAccessButton() {
+    if (_form['businessCostAccessInfo'] is! Map || _row.id <= 0) return null;
+    return SizedBox(
+      width: 26,
+      height: 28,
+      child: IconButton(
+        key: const ValueKey('business-cost-access-info'),
+        tooltip: '管理业务成本查看权限',
+        padding: EdgeInsets.zero,
+        iconSize: 16,
+        icon: Icon(
+          Icons.info_outline_rounded,
+          color: DunesColors.resolve(context, ProposalPalette.purple),
+        ),
+        onPressed: () {
+          if (_dirty) {
+            widget.onError('请先保存提案修改后再管理查看权限');
+            return;
+          }
+          showDialog<void>(
+            context: context,
+            builder: (_) => ProposalBusinessCostAccessDialog(
+              session: widget.session,
+              service: widget.service,
+              row: _row,
+              onUpdated: (updated) {
+                if (!mounted) return;
+                setState(() {
+                  _row = updated;
+                  _serverForm = proposalIntakeCloneForm(updated.form);
+                });
+                _emitChanged(updated);
+              },
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   /// 「测算」顶部一句话：当前用户在这块能做什么、看不到什么。
   String get _financeRoleNote {
     if (_isLocked || _showSelectedAsText) return '';
     final notes = <String>[];
     if (_canEditAsSubmitter) {
-      notes.add('填写人：按产品选好收入公式和项目 / 税务成本，并填周转。业务成本不用填，财务复核时由财务部负责人一选择并填写比例。');
+      notes.add('填写人：按产品选好收入公式和项目 / 税务成本，并填周转。业务成本由市场部负责人一在复核阶段填写。');
     } else if (_isOwner('financeOwner2')) {
-      notes.add(
-        _canEditUnreviewedFinance
-            ? '财务部负责人二：可按产品调整收入公式和项目 / 税务成本，并逐条复核。业务成本和利润对你加密，整行不展示。'
-            : '财务部负责人二：业务成本和利润对你加密，整行不展示。',
-      );
+      if (_canEditUnreviewedFinance) {
+        notes.add('财务部负责人二：可按产品调整收入公式和项目 / 税务成本，并逐条复核。');
+      }
+      if (_businessCostSealed) notes.add('业务成本和利润仅授权人员可查看。');
     }
     if (_canEditBusinessCost) {
-      notes.add('财务部负责人一：请在下面「业务成本」从资管名单里多选，并为每一项填写比例；仅你和最终审批人可查看金额。');
-    } else if (_isOwner('financeOwner1') && _stage != 'reviewing') {
-      notes.add('财务部负责人一：进入财务复核后，在成本里选择业务成本并填写比例。');
+      notes.add('市场部负责人一：请在下面「业务成本」从资管名单里多选，并为每一项填写比例。');
+    } else if (_isMarketOwner1 && _stage != 'reviewing') {
+      notes.add('市场部负责人一：进入复核阶段后，在成本里选择业务成本并填写比例。');
     }
     if (_isOwner('financeOwner1') && _stage == 'reviewing') {
       notes.add('负责人二逐条复核完成后，在本板块底部整板块复核。');
@@ -15118,7 +15160,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       },
       productEditable: _productFormulaEditable,
       businessSealed: businessSealed ?? _businessCostSealed,
-      businessWaitingText: _isPurchase ? '财务复核时由市场部负责人一选择' : '财务复核时由财务部负责人一选择',
+      businessWaitingText: '复核阶段由市场部负责人一选择并填写比例',
+      businessAccessButton: _businessCostAccessButton(),
       roleNote: readOnly ? '' : _financeRoleNote,
       onPromotionPlans: (skuId, plans) => _writeProductFormula(
         skuId,
@@ -20231,7 +20274,10 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               ProposalField(
                 label: '供应商产品编码',
                 required: true,
-                footer: _proposalConfigNote(context, _supplierProductMissingNote),
+                footer: _proposalConfigNote(
+                  context,
+                  _supplierProductMissingNote,
+                ),
                 child: SupplierProductPickerField(
                   value: row.supplierCodes,
                   readOnly: locked,
@@ -28536,7 +28582,10 @@ class _SkuProductEditorDialogState extends State<_SkuProductEditorDialog> {
             children: [
               Align(
                 alignment: Alignment.centerLeft,
-                child: _proposalConfigNote(context, _proposalPlatformConfigNote),
+                child: _proposalConfigNote(
+                  context,
+                  _proposalPlatformConfigNote,
+                ),
               ),
               const SizedBox(height: 10),
               if (!widget.childProduct) ...[
@@ -28609,7 +28658,10 @@ class _SkuProductEditorDialogState extends State<_SkuProductEditorDialog> {
                 ProposalField(
                   label: '供应商产品编码',
                   required: true,
-                  footer: _proposalConfigNote(context, _supplierProductMissingNote),
+                  footer: _proposalConfigNote(
+                    context,
+                    _supplierProductMissingNote,
+                  ),
                   child: SupplierProductPickerField(
                     value: _suppliers.text,
                     search: widget.searchSupplierProducts,

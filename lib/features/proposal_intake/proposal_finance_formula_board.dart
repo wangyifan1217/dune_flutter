@@ -33,7 +33,8 @@ class ProposalFinanceBoardConfig {
     this.categoryEditable = const {},
     this.productEditable,
     this.businessSealed = false,
-    this.businessWaitingText = '财务复核时由财务部负责人一选择并填写比例',
+    this.businessWaitingText = '复核阶段由市场部负责人一选择并填写比例',
+    this.businessAccessButton,
     this.roleNote = '',
     this.reviewToggle,
     this.reviewStatus,
@@ -95,6 +96,7 @@ class ProposalFinanceBoardConfig {
   /// 业务成本对当前用户加密（财务部负责人二）。利润、毛利率同样不显示。
   final bool businessSealed;
   final String businessWaitingText;
+  final Widget? businessAccessButton;
 
   /// 一句话说明当前用户在这块能做什么。
   final String roleNote;
@@ -432,6 +434,7 @@ class ProposalFinanceRow extends StatefulWidget {
     this.forceOpen = false,
     this.titleWidth = 132,
     this.summaryStrong = false,
+    this.titleTrailing,
   });
 
   /// 摘要是这一行的重点（如结算规则）：深色加粗、可两行，而不是灰色小字。
@@ -444,6 +447,7 @@ class ProposalFinanceRow extends StatefulWidget {
   final Color? accent;
   final Color valueColor;
   final Widget? tag;
+  final Widget? titleTrailing;
   final Widget? review;
 
   /// 收起时代替 [review] 显示的复核状态。传了它，复核按钮只在展开后出现。
@@ -491,6 +495,7 @@ class _ProposalFinanceRowState extends State<ProposalFinanceRow> {
           style: _sans(context, size: 12.5, weight: FontWeight.w700),
           ),
         ),
+        if (widget.titleTrailing != null) ...[const SizedBox(width: 4), widget.titleTrailing!],
         if (widget.tag != null) ...[const SizedBox(width: 6), widget.tag!],
       ],
     );
@@ -834,6 +839,7 @@ class ProposalFinanceCostPanel extends StatelessWidget {
       return ProposalFinanceRow(
         key: const ValueKey('finance-proposal-business'),
         title: category.name,
+        titleTrailing: config.businessAccessButton,
         initiallyOpen: bucket.names.isEmpty,
         forceOpen: config.focusKeys.contains('businessCost'),
         summary: bucket.names.isEmpty
@@ -880,7 +886,7 @@ class ProposalFinanceCostPanel extends StatelessWidget {
             (sum, p) => sum + (p.evaluation.bucket(key)?.total ?? 0),
           );
     final summary = sealed
-        ? '仅财务部负责人一和最终审批人可查看'
+        ? '仅授权人员可查看'
         : products.isEmpty
         ? '请先在科技部添加业务产品'
         : key == kProposalCostCategoryProject && config.settleSummary != null
@@ -3046,7 +3052,7 @@ class ProposalFinanceProfitPanel extends StatelessWidget {
         const SizedBox(height: 4),
         Text(
           sealed
-              ? '利润含业务成本，负责人二不可查看'
+              ? '利润含业务成本，仅授权人员可查看'
               : '= 收入 ${_wan(revenue.amount)} − 成本 ${_wan(eval.costTotal)}',
           style: _mono(
             context,

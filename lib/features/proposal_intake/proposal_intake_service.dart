@@ -82,6 +82,24 @@ class ProposalIntakeService {
     return ProposalIntakeOptions.fromJson(_asMap(data));
   }
 
+  Future<ProposalIntakeRow> setBusinessCostViewers(
+    int proposalId,
+    List<int> userIds, {
+    required bool enabled,
+  }) async {
+    final response = await http
+        .put(
+          _uri('/proposal-intakes/$proposalId/business-cost-access'),
+          headers: _headers,
+          body: jsonEncode({
+            'userIds': [for (final id in userIds) '$id'],
+            'enabled': enabled,
+          }),
+        )
+        .timeout(const Duration(seconds: 20));
+    return ProposalIntakeRow.fromJson(_asMap(_unwrap(response)));
+  }
+
   Future<List<ProposalPerson>> fetchPeople({http.Client? client}) async {
     final response = client == null
         ? await http.get(_uri('/org/users'), headers: _headers)

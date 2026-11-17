@@ -161,7 +161,7 @@ class ProposalEstimateSummaryData {
     this.stakeholders = const [],
   });
 
-  /// 业务成本仅财务部负责人一和总裁可见；其他人看到「仅授权可见」。
+  /// 业务成本由市场部负责人一、最终审核人及指定人员查看。
   final bool businessCostHidden;
   final List<ProposalStakeholderLine> stakeholders;
 
@@ -1889,7 +1889,7 @@ class _CompactEstimateState extends State<_CompactEstimate> {
         _Bar('税务成本', d.taxCost, _C.purpleLight),
       ],
       d.businessCostHidden
-          ? '成本构成 · 年化 · 业务成本仅财务部负责人一、总裁可见'
+          ? '成本构成 · 年化 · 业务成本仅授权人员可见'
           : '成本构成 · 年化 · 电子券采购款已从收入里扣',
     );
     switch (metric) {
@@ -2634,7 +2634,7 @@ class _CompactEstimateState extends State<_CompactEstimate> {
           '业务成本',
           d.businessCostHidden ? '仅授权' : proposalEstimateWan(d.businessCost),
           d.businessCostHidden ? '' : '万',
-          d.businessCostHidden ? '财务部负责人一、总裁可见' : '',
+          d.businessCostHidden ? '填写人、终审及授权人员可见' : '',
         ),
         _cell(
           '周转资金',

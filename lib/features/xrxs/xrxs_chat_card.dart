@@ -7,6 +7,7 @@ class XrxsChatCard {
   const XrxsChatCard({
     required this.sid,
     required this.title,
+    this.sidConfirmed = false,
     this.subtitle = '审批待办',
     this.statusLabel = '待审批',
     this.eventType = '',
@@ -16,6 +17,7 @@ class XrxsChatCard {
   });
 
   final String sid;
+  final bool sidConfirmed;
   final String title;
   final String subtitle;
   final String statusLabel;
@@ -26,7 +28,8 @@ class XrxsChatCard {
 
   bool get opensAttendanceConfirm => eventType == 'attendance_confirm';
 
-  bool get canOpenDetail => sid.trim().isNotEmpty || opensAttendanceConfirm;
+  bool get canOpenDetail =>
+      (sidConfirmed && sid.trim().isNotEmpty) || opensAttendanceConfirm;
 
   static XrxsChatCard? fromPayload(Map<String, dynamic>? payload) {
     if (payload == null) return null;
@@ -41,6 +44,7 @@ class XrxsChatCard {
     final role = '${map['roleHint'] ?? 'approver'}'.trim();
     return XrxsChatCard(
       sid: '${map['sid'] ?? ''}'.trim(),
+      sidConfirmed: map['sidConfirmed'] == true,
       title: title.isEmpty ? '薪人薪事审批' : title,
       subtitle: '${map['subtitle'] ?? '审批待办'}'.trim(),
       statusLabel: '${map['statusLabel'] ?? ''}'.trim(),
@@ -54,11 +58,7 @@ class XrxsChatCard {
 
 /// 可复用的名片外观（对齐审批助手）。
 class ChatXrxsCard extends StatelessWidget {
-  const ChatXrxsCard({
-    super.key,
-    required this.card,
-    required this.onTap,
-  });
+  const ChatXrxsCard({super.key, required this.card, required this.onTap});
 
   final XrxsChatCard card;
   final VoidCallback onTap;

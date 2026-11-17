@@ -7,6 +7,7 @@ void main() {
       'type': 'xrxsApprovalCard',
       'xrxsCard': {
         'sid': 'sid-1',
+        'sidConfirmed': true,
         'title': '张三的请假',
         'subtitle': '审批待办',
         'statusLabel': '待审批',
@@ -41,5 +42,12 @@ void main() {
 
   test('XrxsChatCard rejects unrelated payload', () {
     expect(XrxsChatCard.fromPayload({'type': 'driveEvent'}), isNull);
+  });
+  test('unconfirmed approval ID does not open a detail directly', () {
+    final card = XrxsChatCard.fromPayload({
+      'type': 'xrxsApprovalCard',
+      'xrxsCard': {'sid': 'unconfirmed'},
+    });
+    expect(card!.canOpenDetail, isFalse);
   });
 }

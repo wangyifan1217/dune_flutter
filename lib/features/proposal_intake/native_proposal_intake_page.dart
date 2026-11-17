@@ -48,8 +48,21 @@ import 'proposal_meeting_minutes.dart';
 import 'proposal_list_card.dart';
 import 'proposal_sla_widgets.dart';
 import 'settlement_catalog.dart';
+import 'supplier_product_picker.dart';
 
 enum _ProposalPage { list, form }
+
+const _proposalPlatformConfigNote = '请准确填写内容，审核通过后业务平台将自动上线产品配置和结算规则。';
+const _supplierProductMissingNote = '若找不到供应商产品，请联系业务侧添加。';
+
+Widget _proposalConfigNote(BuildContext context, String text) => Text(
+  text,
+  style: TextStyle(
+    fontSize: 12,
+    height: 1.45,
+    color: DunesColors.resolve(context, const Color(0xFF99651D)),
+  ),
+);
 
 /// 「我的」里的销售/采购提案。列表返回「我的」；填写中的返回先回到列表。
 /// [active] 为 false 时页面仍留着（切去别的页再回来还在填写页），但不拦截返回键。
@@ -3721,12 +3734,15 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         ? ProposalIntakeNavSection.toc
         : (_taskSection ?? ProposalIntakeNavSection.market);
     _ownsCatalog = widget.catalog == null;
-    _catalog = widget.catalog ?? (_isPurchase
-        ? SettlementCatalogService()
-        : SettlementCatalogService(
-            assetBase: '${widget.session.apiBase.replaceAll(RegExp(r'/+$'), '')}/proposal-catalog',
-            authToken: widget.session.token,
-          ));
+    _catalog =
+        widget.catalog ??
+        (_isPurchase
+            ? SettlementCatalogService()
+            : SettlementCatalogService(
+                assetBase:
+                    '${widget.session.apiBase.replaceAll(RegExp(r'/+$'), '')}/proposal-catalog',
+                authToken: widget.session.token,
+              ));
     unawaited(_loadMarketCatalog());
     unawaited(_loadChannelCategories());
     unawaited(_loadSupplierCategories());
@@ -7724,7 +7740,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       ('sync', sync),
       (
         'supplier',
-        t(sku.supplierCodes).isEmpty ? '' : '供应商编码 ${t(sku.supplierCodes)}',
+        t(sku.supplierCodes).isEmpty ? '' : '供应商产品编码 ${t(sku.supplierCodes)}',
       ),
       ('rollback', t(sku.rollback).isEmpty ? '' : '回滚 ${t(sku.rollback)}'),
       (
@@ -8432,6 +8448,10 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       title: '产品结算',
       band: band,
       rows: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+          child: _proposalConfigNote(context, _proposalPlatformConfigNote),
+        ),
         if (editing)
           ProposalFinanceRow(
             title: '负责人',
@@ -15098,9 +15118,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       },
       productEditable: _productFormulaEditable,
       businessSealed: businessSealed ?? _businessCostSealed,
-      businessWaitingText: _isPurchase
-          ? '财务复核时由市场部负责人一选择'
-          : '财务复核时由财务部负责人一选择',
+      businessWaitingText: _isPurchase ? '财务复核时由市场部负责人一选择' : '财务复核时由财务部负责人一选择',
       roleNote: readOnly ? '' : _financeRoleNote,
       onPromotionPlans: (skuId, plans) => _writeProductFormula(
         skuId,
@@ -15174,32 +15192,32 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             ),
           );
         } else if (category.key == kProposalCostCategoryBusiness) {
-          _writeFinanceFormula(
-            kProposalProductFinanceMain,
-            (form) {
-              final selected = proposalFinanceWriteSelection(
-                form,
-                category,
-                names,
-              );
-              final fromAsset = widget.options.businessCostItemOptions;
-              return proposalSyncCostSelection(
-                form: selected,
-                names: names,
-                catalog: fromAsset.isNotEmpty
-                    ? fromAsset
-                    : [
-                        for (final item in category.items)
-                          ProposalCostItemOption(code: item.code, name: item.name),
-                      ],
-                namesKey: 'businessCostItems',
-                codesKey: 'businessCostItemCodes',
-                amountsKey: 'businessCostItemAmounts',
-                totalKey: 'businessCost',
-                settleTermsKey: 'businessCostItemSettleTerms',
-              );
-            },
-          );
+          _writeFinanceFormula(kProposalProductFinanceMain, (form) {
+            final selected = proposalFinanceWriteSelection(
+              form,
+              category,
+              names,
+            );
+            final fromAsset = widget.options.businessCostItemOptions;
+            return proposalSyncCostSelection(
+              form: selected,
+              names: names,
+              catalog: fromAsset.isNotEmpty
+                  ? fromAsset
+                  : [
+                      for (final item in category.items)
+                        ProposalCostItemOption(
+                          code: item.code,
+                          name: item.name,
+                        ),
+                    ],
+              namesKey: 'businessCostItems',
+              codesKey: 'businessCostItemCodes',
+              amountsKey: 'businessCostItemAmounts',
+              totalKey: 'businessCost',
+              settleTermsKey: 'businessCostItemSettleTerms',
+            );
+          });
         } else {
           _writeProductFormula(
             skuId,
@@ -15221,7 +15239,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         } else if (category.key == kProposalCostCategoryBusiness) {
           _writeFinanceFormula(
             kProposalProductFinanceMain,
-            (form) => proposalFinanceWriteItemFormula(form, category, name, code),
+            (form) =>
+                proposalFinanceWriteItemFormula(form, category, name, code),
           );
         } else {
           _writeProductFormula(
@@ -17395,6 +17414,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         mainAxisSize: MainAxisSize.min,
                         children: [
+                          _proposalConfigNote(ctx, _proposalPlatformConfigNote),
+                          const SizedBox(height: 10),
                           // 线上原版结算弹窗：销售（收入）+ 项目成本（采购成本），每条一张表格。
                           _skuSettleProductCard(
                             skuId: current.id,
@@ -17877,6 +17898,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         rollbackOptions: widget.options.rollbackOptions,
         productTypes: widget.options.resolvedProductTypes,
         readOnly: !_canEditProducts,
+        searchSupplierProducts: _catalog.searchSupplierProductCodes,
         proposalTitle: _row.title,
         syncSource: _selectedBusinessPlatform(
           proposalIntakeFormSyncSourceRef(_form),
@@ -18402,6 +18424,10 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             ],
           ),
         ),
+        Padding(
+          padding: const EdgeInsets.only(top: 6, bottom: 4),
+          child: _proposalConfigNote(context, _proposalPlatformConfigNote),
+        ),
         if (rows.isNotEmpty) ...[
           if (kProposalExistingBuiltEnabled) ...[
             const SizedBox(height: 8),
@@ -18540,6 +18566,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               toggle,
           ],
         ),
+        const SizedBox(height: 6),
+        _proposalConfigNote(context, _proposalPlatformConfigNote),
         const SizedBox(height: 10),
         if (_canEditProducts)
           Align(
@@ -19016,7 +19044,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       'institution': '机构',
       'platform': '业务平台',
       'valid': '有效期',
-      'supplier': '供应商编码',
+      'supplier': '供应商产品编码',
       'remark': '备注',
     };
     final texts = {for (final (key, text) in _skuFieldTexts(sku)) key: text};
@@ -19043,7 +19071,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         '库存数量',
         sku.inventoryQty.trim().isEmpty ? '未填' : sku.inventoryQty.trim(),
       ),
-      ('供应商编码', value('supplier').isEmpty ? '未填' : value('supplier')),
+      ('供应商产品编码', value('supplier').isEmpty ? '未填' : value('supplier')),
       ('回滚', proposalIntakeSkuRollbackValue(sku, form: _form)),
       (
         '中油好客',
@@ -20200,18 +20228,18 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                   ),
                 ),
               ],
-              _skuTextCell(
-                rowId: row.id,
-                label: '供应商编码',
-                value: row.supplierCodes,
-                fieldKey: 'suppliers',
-                hint: '多个用 | 分隔，越前面的排名越高，例如 A|B|C',
-                locked: locked,
+              ProposalField(
+                label: '供应商产品编码',
                 required: true,
-                onChanged: (value) => patch(
-                  row.id,
-                  (current) => current.copyWith(supplierCodes: value),
-                  rebuild: false,
+                footer: _proposalConfigNote(context, _supplierProductMissingNote),
+                child: SupplierProductPickerField(
+                  value: row.supplierCodes,
+                  readOnly: locked,
+                  search: _catalog.searchSupplierProductCodes,
+                  onChanged: (value) => patch(
+                    row.id,
+                    (current) => current.copyWith(supplierCodes: value),
+                  ),
                 ),
               ),
               if (!kProposalSkuChannelSettingsEnabled)
@@ -28008,6 +28036,7 @@ class _SkuProductEditorDialog extends StatefulWidget {
     required this.rollbackOptions,
     this.productTypes = const [],
     required this.readOnly,
+    required this.searchSupplierProducts,
     this.proposalTitle = '',
     this.initialLinked = const [],
     this.syncSource,
@@ -28023,6 +28052,7 @@ class _SkuProductEditorDialog extends StatefulWidget {
   final List<String> rollbackOptions;
   final List<ProposalProductType> productTypes;
   final bool readOnly;
+  final SupplierProductSearch searchSupplierProducts;
   final String proposalTitle;
   final List<_SkuProductDraft> initialLinked;
   final CatalogRef? syncSource;
@@ -28115,7 +28145,7 @@ class _SkuProductEditorDialogState extends State<_SkuProductEditorDialog> {
     if (!widget.childProduct && _name.text.trim().isEmpty) return;
     if (widget.childProduct && _parentSkuId.trim().isEmpty) return;
     if (_suppliers.text.trim().isEmpty) {
-      showProposalCenterToast(context, '请填写供应商编码', error: true);
+      showProposalCenterToast(context, '请选择供应商产品编码', error: true);
       return;
     }
     if (!widget.childProduct &&
@@ -28129,7 +28159,7 @@ class _SkuProductEditorDialogState extends State<_SkuProductEditorDialog> {
         final name = item.row.displayName.trim().isEmpty
             ? '关联产品'
             : item.row.displayName.trim();
-        showProposalCenterToast(context, '$name请填写供应商编码', error: true);
+        showProposalCenterToast(context, '$name请选择供应商产品编码', error: true);
         return;
       }
     }
@@ -28160,7 +28190,9 @@ class _SkuProductEditorDialogState extends State<_SkuProductEditorDialog> {
           parentSkuId: widget.childProduct ? _parentSkuId : '',
           rollback: _rollback,
           remark: _remark.text.trim(),
-          province: widget.childProduct ? widget.initial.province : _province.trim(),
+          province: widget.childProduct
+              ? widget.initial.province
+              : _province.trim(),
         ),
         quantity: quantity < 1 ? 1 : quantity,
         linked: proposalIntakeProductTypeIsBenefit(couponKind, _productTypes)
@@ -28191,6 +28223,7 @@ class _SkuProductEditorDialogState extends State<_SkuProductEditorDialog> {
         rollbackOptions: widget.rollbackOptions,
         productTypes: widget.productTypes,
         readOnly: widget.readOnly,
+        searchSupplierProducts: widget.searchSupplierProducts,
         syncSource: widget.syncSource,
         channel: widget.channel,
       ),
@@ -28501,6 +28534,11 @@ class _SkuProductEditorDialogState extends State<_SkuProductEditorDialog> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              Align(
+                alignment: Alignment.centerLeft,
+                child: _proposalConfigNote(context, _proposalPlatformConfigNote),
+              ),
+              const SizedBox(height: 10),
               if (!widget.childProduct) ...[
                 _pair(
                   _textField(
@@ -28568,11 +28606,17 @@ class _SkuProductEditorDialogState extends State<_SkuProductEditorDialog> {
                   hint: '数字',
                   keyboardType: TextInputType.number,
                 ),
-                _textField(
-                  label: '供应商编码',
-                  controller: _suppliers,
-                  hint: '多个用 | 分隔，越前面的排名越高，例如 A|B|C',
+                ProposalField(
+                  label: '供应商产品编码',
                   required: true,
+                  footer: _proposalConfigNote(context, _supplierProductMissingNote),
+                  child: SupplierProductPickerField(
+                    value: _suppliers.text,
+                    search: widget.searchSupplierProducts,
+                    readOnly: widget.readOnly,
+                    onChanged: (value) =>
+                        setState(() => _suppliers.text = value),
+                  ),
                 ),
               ),
               const SizedBox(height: 10),

@@ -720,15 +720,49 @@ class _HrPerformanceLibraryPageState extends State<HrPerformanceLibraryPage> {
                     ),
                   ),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 12),
                 Wrap(
                   spacing: 8,
-                  runSpacing: 4,
+                  runSpacing: 8,
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
                     FilterChip(
                       label: const Text('未分类'),
                       selected: _uncategorizedOnly,
+                      showCheckmark: false,
+                      avatar: Icon(
+                        Icons.category_outlined,
+                        size: 16,
+                        color: _uncategorizedOnly
+                            ? hrConfigColor(context, hrConfigPurple)
+                            : hrConfigColor(context, const Color(0xFF746C80)),
+                      ),
+                      labelStyle: TextStyle(
+                        fontSize: 13,
+                        fontWeight: _uncategorizedOnly
+                            ? FontWeight.w600
+                            : FontWeight.w500,
+                        color: _uncategorizedOnly
+                            ? hrConfigColor(context, hrConfigPurple)
+                            : hrConfigColor(context, const Color(0xFF746C80)),
+                      ),
+                      backgroundColor: hrConfigSurface(context, Colors.white),
+                      selectedColor: hrConfigSurface(
+                        context,
+                        const Color(0xFFF0EAFB),
+                      ),
+                      side: BorderSide(
+                        color: hrConfigBorder(
+                          context,
+                          _uncategorizedOnly
+                              ? const Color(0xFFCDBBEF)
+                              : const Color(0xFFE5DDEF),
+                        ),
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
                       onSelected: (value) =>
                           setState(() => _uncategorizedOnly = value),
                     ),
@@ -753,6 +787,13 @@ class _HrPerformanceLibraryPageState extends State<HrPerformanceLibraryPage> {
                           ? null
                           : () => setState(() => _positionFilter = null),
                     ),
+                  ],
+                ),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 4,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
                     TextButton.icon(
                       onPressed: _saving || visibleDrafts.isEmpty
                           ? null

@@ -14,6 +14,7 @@ import '../conversation/conversation_service.dart';
 import '../conversation/inbox_format.dart';
 import '../shell/dunes_toast.dart';
 import 'xrxs_chat_card.dart';
+import 'xrxs_opening_indicator.dart';
 import 'xrxs_service.dart';
 
 /// 临时静态预览开关；正式联调请保持 false。
@@ -137,7 +138,8 @@ class NativeXrxsAssistantPage extends StatefulWidget {
     String page,
     String url,
     String pcUrl,
-  })? onOpenDetail;
+  })?
+  onOpenDetail;
   final bool showBackButton;
   final VoidCallback? onBack;
   final ValueChanged<int>? onConversationRead;
@@ -304,7 +306,24 @@ class _NativeXrxsAssistantPageState extends State<NativeXrxsAssistantPage> {
   Future<void> _openCard(XrxsChatCard card) async {
     if (_opening) return;
     if (!card.canOpenDetail) {
-      widget.onOpenHome();
+      final openHome = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('无法直接打开审批'),
+          content: const Text('这条消息没有可靠的审批详情信息，请前往薪人薪事的审批列表查看。'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('取消'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('打开薪人薪事'),
+            ),
+          ],
+        ),
+      );
+      if (openHome == true && mounted) widget.onOpenHome();
       return;
     }
     final onOpenDetail = widget.onOpenDetail;
@@ -417,6 +436,7 @@ class _NativeXrxsAssistantPageState extends State<NativeXrxsAssistantPage> {
   }
 
   Widget _buildBody() {
+    if (_opening) return const XrxsOpeningIndicator();
     if (_loading) return const Center(child: CircularProgressIndicator());
     if (_error != null) {
       return Center(

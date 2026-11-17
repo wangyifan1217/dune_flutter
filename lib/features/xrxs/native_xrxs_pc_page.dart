@@ -8,6 +8,7 @@ import '../../core/theme/dunes_theme.dart';
 import '../auth/auth_session.dart';
 import '../tasks/native_task_home_pane.dart';
 import 'xrxs_service.dart';
+import 'xrxs_opening_indicator.dart';
 
 /// 桌面端薪人薪事 PC 免登入口：取一次性 URL 后在系统浏览器打开。
 class NativeXrxsPCPage extends StatefulWidget {
@@ -230,14 +231,7 @@ class _NativeXrxsPCPageState extends State<NativeXrxsPCPage> {
 
   Widget _buildBody() {
     if (_loading) {
-      return ColoredBox(
-        color: DunesColors.resolve(
-          context,
-          Colors.white,
-          role: DunesColorRole.surface,
-        ),
-        child: Center(child: CircularProgressIndicator(strokeWidth: 2.4)),
-      );
+      return const XrxsOpeningIndicator();
     }
     if (_error != null) {
       return _buildMessage(

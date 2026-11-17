@@ -1048,6 +1048,44 @@ class SettlementCatalogService {
     ].where((item) => item.isNotEmpty).toList(growable: false);
   }
 
+  /// 销售产品选择供给产品编码；只在输入关键字后查询全部业务平台。
+  Future<List<ChannelProductHit>> searchSupplierProductCodes(
+    String keyword,
+  ) async {
+    final query = keyword.trim();
+    if (query.isEmpty) return const [];
+    if (!enabled) throw StateError('供应商产品查询暂不可用');
+    final uri = Uri.parse(
+      '$_assetBase/out/shaqiu/catalog/supplier-product',
+    ).replace(queryParameters: {'keyword': query});
+    final response = await _client
+        .get(
+          uri,
+          headers: {
+            'Accept': 'application/json',
+            if (authToken.trim().isNotEmpty)
+              'Authorization': 'Bearer ${authToken.trim()}',
+          },
+        )
+        .timeout(const Duration(seconds: 12));
+    final decoded = jsonDecode(utf8.decode(response.bodyBytes));
+    if (decoded is! Map ||
+        response.statusCode < 200 ||
+        response.statusCode >= 300 ||
+        (decoded['code'] is num &&
+            decoded['code'] != 200 &&
+            decoded['code'] != 0) ||
+        decoded['data'] is! List) {
+      throw StateError('供应商产品查询失败，请重试');
+    }
+    return [
+          for (final item in decoded['data'] as List)
+            if (item is Map) ChannelProductHit.fromJson(item),
+        ]
+        .where((item) => item.productCode.trim().isNotEmpty)
+        .toList(growable: false);
+  }
+
   String _catalogIdQuery({int? id, String idText = ''}) {
     final text = idText.trim();
     if (text.isNotEmpty && text != '0' && text != 'null') return text;
@@ -1203,11 +1241,14 @@ class SettlementCatalogService {
         '$_assetBase$path',
       ).replace(queryParameters: query == null || query.isEmpty ? null : query);
       final resp = await _client
-          .get(uri, headers: {
-            'Accept': 'application/json',
-            if (authToken.trim().isNotEmpty)
-              'Authorization': 'Bearer ${authToken.trim()}',
-          })
+          .get(
+            uri,
+            headers: {
+              'Accept': 'application/json',
+              if (authToken.trim().isNotEmpty)
+                'Authorization': 'Bearer ${authToken.trim()}',
+            },
+          )
           .timeout(const Duration(seconds: 12));
       final decoded = jsonDecode(utf8.decode(resp.bodyBytes));
       if (decoded is! Map) return null;
@@ -1275,9 +1316,7 @@ List<CatalogRef> proposalAssetCodeOptions(
       if (item.code.trim().isNotEmpty) item,
   ];
   if (fromCatalog.isNotEmpty) return fromCatalog;
-  return [
-    for (final code in fallbackCodes) CatalogRef(code: code, name: code),
-  ];
+  return [for (final code in fallbackCodes) CatalogRef(code: code, name: code)];
 }
 
 /// 财务板块默认结算模式；后台「提案录入选项」未配置时使用。

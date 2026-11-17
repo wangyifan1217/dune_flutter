@@ -341,13 +341,44 @@ class HrFilterButton extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback? onClear;
   @override
-  Widget build(BuildContext context) => InputChip(
-    label: Text(label, overflow: TextOverflow.ellipsis),
-    avatar: const Icon(Icons.tune_rounded, size: 16),
-    onPressed: onTap,
-    onDeleted: onClear,
-    deleteIcon: const Icon(Icons.close, size: 16),
-  );
+  Widget build(BuildContext context) {
+    final active = onClear != null;
+    final accent = hrConfigColor(context, hrConfigPurple);
+    final muted = hrConfigColor(context, const Color(0xFF746C80));
+    return ConstrainedBox(
+      constraints: BoxConstraints(
+        maxWidth: MediaQuery.sizeOf(context).width - 48,
+      ),
+      child: InputChip(
+        label: Text(label, overflow: TextOverflow.ellipsis),
+        labelStyle: TextStyle(
+          color: active ? accent : muted,
+          fontSize: 13,
+          fontWeight: active ? FontWeight.w600 : FontWeight.w500,
+        ),
+        avatar: Icon(
+          Icons.keyboard_arrow_down_rounded,
+          size: 18,
+          color: active ? accent : muted,
+        ),
+        backgroundColor: hrConfigSurface(
+          context,
+          active ? const Color(0xFFF0EAFB) : Colors.white,
+        ),
+        side: BorderSide(
+          color: hrConfigBorder(
+            context,
+            active ? const Color(0xFFCDBBEF) : const Color(0xFFE5DDEF),
+          ),
+        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        onPressed: onTap,
+        onDeleted: onClear,
+        deleteIcon: Icon(Icons.close_rounded, size: 16, color: accent),
+      ),
+    );
+  }
 }
 
 Future<Set<String>?> showHrIndicatorPicker(

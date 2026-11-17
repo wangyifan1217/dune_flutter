@@ -12,6 +12,7 @@ import '../auth/auth_session.dart';
 import '../tasks/native_task_home_pane.dart';
 import 'xrxs_h5_browser.dart';
 import 'xrxs_service.dart';
+import 'xrxs_opening_indicator.dart';
 
 const _xrxsNavHandler = 'xrxsNav';
 
@@ -550,15 +551,7 @@ class _NativeXrxsH5PageState extends State<NativeXrxsH5Page> {
           },
           shouldOverrideUrlLoading: (_, action) => _handleNavigation(action),
         ),
-        if (_loading)
-          ColoredBox(
-            color: DunesColors.resolve(
-              context,
-              Colors.white,
-              role: DunesColorRole.surface,
-            ),
-            child: Center(child: CircularProgressIndicator(strokeWidth: 2.4)),
-          ),
+        if (_loading) const XrxsOpeningIndicator(),
         if (_error != null && !_pageReady) _buildErrorBody(_error!),
       ],
     );
@@ -566,14 +559,7 @@ class _NativeXrxsH5PageState extends State<NativeXrxsH5Page> {
 
   Widget _buildWebFallback() {
     if (_error != null) return _buildErrorBody(_error!);
-    return ColoredBox(
-      color: DunesColors.resolve(
-        context,
-        Colors.white,
-        role: DunesColorRole.surface,
-      ),
-      child: Center(child: CircularProgressIndicator(strokeWidth: 2.4)),
-    );
+    return const XrxsOpeningIndicator();
   }
 
   Widget _buildErrorBody(String message) {

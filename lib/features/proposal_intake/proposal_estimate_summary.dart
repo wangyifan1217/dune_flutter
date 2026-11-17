@@ -161,7 +161,7 @@ class ProposalEstimateSummaryData {
     this.stakeholders = const [],
   });
 
-  /// 业务成本由市场部负责人一、最终审核人及指定人员查看。
+  /// 业务成本由市场部负责人一、最终审核人、默认可查看人员及指定人员查看。
   final bool businessCostHidden;
   final List<ProposalStakeholderLine> stakeholders;
 

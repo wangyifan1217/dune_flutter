@@ -377,22 +377,22 @@ class ProposalFinanceBlockShell extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 if (!inSplit) ...[
-                Row(
-                  children: [
-                    Icon(icon, size: 15, color: _c(context, _K.heroInk)),
-                    const SizedBox(width: 6),
-                    Text(
-                      title,
-                      style: _sans(
-                        context,
-                        size: 13,
-                        weight: FontWeight.w700,
-                        color: _K.heroInk,
+                  Row(
+                    children: [
+                      Icon(icon, size: 15, color: _c(context, _K.heroInk)),
+                      const SizedBox(width: 6),
+                      Text(
+                        title,
+                        style: _sans(
+                          context,
+                          size: 13,
+                          weight: FontWeight.w700,
+                          color: _K.heroInk,
+                        ),
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 6),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
                 ],
                 band,
               ],
@@ -489,13 +489,16 @@ class _ProposalFinanceRowState extends State<ProposalFinanceRow> {
         ],
         Flexible(
           child: Text(
-          widget.title,
+            widget.title,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-          style: _sans(context, size: 12.5, weight: FontWeight.w700),
+            style: _sans(context, size: 12.5, weight: FontWeight.w700),
           ),
         ),
-        if (widget.titleTrailing != null) ...[const SizedBox(width: 4), widget.titleTrailing!],
+        if (widget.titleTrailing != null) ...[
+          const SizedBox(width: 4),
+          widget.titleTrailing!,
+        ],
         if (widget.tag != null) ...[const SizedBox(width: 6), widget.tag!],
       ],
     );
@@ -518,9 +521,9 @@ class _ProposalFinanceRowState extends State<ProposalFinanceRow> {
     final value = widget.value.isEmpty
         ? const SizedBox.shrink()
         : Text(
-      widget.value,
-      style: _mono(context, size: 13.5, color: widget.valueColor),
-    );
+            widget.value,
+            style: _mono(context, size: 13.5, color: widget.valueColor),
+          );
     // 收起时只显示复核状态，点开这一行才出现复核 / 驳回按钮。
     final review = widget.collapsedReview != null && canOpen && !_open
         ? widget.collapsedReview
@@ -671,16 +674,16 @@ class ProposalFinanceCostPanel extends StatelessWidget {
           band: config.roleNote.trim().isEmpty
               ? band
               : Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
                     band,
                     const SizedBox(height: 6),
-              Text(
+                    Text(
                       config.roleNote.trim(),
                       style: _sans(context, size: 11.5, color: _K.text2),
-              ),
-          ],
-        ),
+                    ),
+                  ],
+                ),
           rows: [
             if (mode == ProposalFinanceCostPanelMode.cost)
               config.wrap(
@@ -693,7 +696,9 @@ class ProposalFinanceCostPanel extends StatelessWidget {
               kProposalCostCategoryTax,
             ])
               if (config.catalog.category(key) != null &&
-                  !(sealed && key == kProposalCostCategoryBusiness))
+                  !(sealed &&
+                      key == kProposalCostCategoryBusiness &&
+                      config.businessAccessButton == null))
                 config.wrap(
                   proposalFinanceCategoryAnchor(key),
                   _categoryRow(
@@ -718,7 +723,9 @@ class ProposalFinanceCostPanel extends StatelessWidget {
         kProposalCostCategoryTax,
       ])
         if (config.catalog.category(key) != null &&
-            !(sealed && key == kProposalCostCategoryBusiness))
+            !(sealed &&
+                key == kProposalCostCategoryBusiness &&
+                config.businessAccessButton == null))
           config.wrap(
             proposalFinanceCategoryAnchor(key),
             _categoryRow(context, key),
@@ -728,7 +735,7 @@ class ProposalFinanceCostPanel extends StatelessWidget {
     ];
     return config.wrapAll(
       [
-      kProposalFinanceCostAnchor,
+        kProposalFinanceCostAnchor,
         // 利润块屏蔽时，hero 跳「利润 / 毛利率」落到这里。
         if (!config.showEstimates || !kProposalFinanceShowProfit) ...[
           kProposalFinanceProfitAnchor,
@@ -810,7 +817,8 @@ class ProposalFinanceCostPanel extends StatelessWidget {
               allowItemEdit: editable,
               showEstimates: config.showEstimates,
               onItemsChanged: editable && config.onCostItemsChanged != null
-                  ? (names) => config.onCostItemsChanged!('', taxCategory, names)
+                  ? (names) =>
+                        config.onCostItemsChanged!('', taxCategory, names)
                   : null,
               onFormula: editable && config.onCostFormula != null
                   ? (name, code) =>
@@ -840,12 +848,17 @@ class ProposalFinanceCostPanel extends StatelessWidget {
         key: const ValueKey('finance-proposal-business'),
         title: category.name,
         titleTrailing: config.businessAccessButton,
-        initiallyOpen: bucket.names.isEmpty,
+        initiallyOpen: bucket.names.isEmpty && !config.businessSealed,
         forceOpen: config.focusKeys.contains('businessCost'),
-        summary: bucket.names.isEmpty
+        summary: config.businessSealed
+            ? '仅授权人员可查看'
+            : bucket.names.isEmpty
             ? (editable ? '点开选择业务成本' : config.businessWaitingText)
             : '整份提案 · ${bucket.names.join('、')}',
-        value: config.showEstimates && bucket.names.isNotEmpty
+        value:
+            config.showEstimates &&
+                bucket.names.isNotEmpty &&
+                !config.businessSealed
             ? '${_wan(bucket.total)} 万'
             : '',
         tag: waiting
@@ -932,7 +945,7 @@ class ProposalFinanceCostPanel extends StatelessWidget {
           : config.reviewStatus?.call('kind:$reviewKind'),
       forceOpen: config.focusKeys.contains(proposalFinanceCategoryAnchor(key)),
       detail: sealed || products.isEmpty
-                  ? null
+          ? null
           : Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -1159,24 +1172,26 @@ class _CategoryDetail extends StatelessWidget {
       ?table,
       for (final line in bucket.lines)
         if (!isSimple(line))
-        _CostLine(
-          category: category,
-          line: line,
-          onRemove: allowItemEdit && !line.locked && onItemsChanged != null
-              ? () => onItemsChanged!([
-                  for (final name in bucket.names)
-                    if (name != line.name) name,
-                ])
-              : null,
-          onFormula: onFormula == null || line.locked
-              ? null
-              : (code) => onFormula!(line.name, code),
-          ratio: ratios[line.name] ?? '',
-          onRatio: onRatio == null ? null : (value) => onRatio!(line.name, value),
-          showEstimates: showEstimates,
-          promotionPlans: promotionPlans,
-          onPromotionPlans: onPromotionPlans,
-        ),
+          _CostLine(
+            category: category,
+            line: line,
+            onRemove: allowItemEdit && !line.locked && onItemsChanged != null
+                ? () => onItemsChanged!([
+                    for (final name in bucket.names)
+                      if (name != line.name) name,
+                  ])
+                : null,
+            onFormula: onFormula == null || line.locked
+                ? null
+                : (code) => onFormula!(line.name, code),
+            ratio: ratios[line.name] ?? '',
+            onRatio: onRatio == null
+                ? null
+                : (value) => onRatio!(line.name, value),
+            showEstimates: showEstimates,
+            promotionPlans: promotionPlans,
+            onPromotionPlans: onPromotionPlans,
+          ),
       if (bucket.lines.isEmpty && !allowItemEdit)
         Padding(
           padding: const EdgeInsets.only(top: 4),
@@ -1216,15 +1231,15 @@ class _PickButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return OutlinedButton.icon(
       onPressed: () => unawaited(onPressed()),
-              icon: const Icon(Icons.add_rounded, size: 16),
+      icon: const Icon(Icons.add_rounded, size: 16),
       label: Text(label),
-              style: OutlinedButton.styleFrom(
-                visualDensity: VisualDensity.compact,
-                foregroundColor: _c(context, ProposalPalette.purpleDeep),
-                side: BorderSide(color: _border(context, ProposalPalette.border)),
-                textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-              ),
+      style: OutlinedButton.styleFrom(
+        visualDensity: VisualDensity.compact,
+        foregroundColor: _c(context, ProposalPalette.purpleDeep),
+        side: BorderSide(color: _border(context, ProposalPalette.border)),
+        textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+      ),
     );
   }
 }
@@ -1278,8 +1293,8 @@ class _ProductCategorySection extends StatelessWidget {
     final Widget? body = settle != null && shownBucket.lines.isEmpty
         ? null
         : bucket.lines.isEmpty &&
-            !editable &&
-            key == kProposalCostCategoryBusiness
+              !editable &&
+              key == kProposalCostCategoryBusiness
         ? Padding(
             padding: const EdgeInsets.only(top: 4),
             child: Text(
@@ -1453,10 +1468,7 @@ class _ProductSection extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Container(
-            color: _surface(context, ProposalPalette.app),
-            child: head,
-          ),
+          Container(color: _surface(context, ProposalPalette.app), child: head),
           if (leading != null) ...[Container(height: 1, color: line), leading!],
           if (child != null) ...[
             Container(height: 1, color: line),
@@ -1528,17 +1540,20 @@ Widget proposalFinanceRevenueRow(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       _RevenueFormulaPicker(
-                    config: config,
-                    evaluation: products[i].evaluation,
-                    onRevenueFormula:
-                        config.canEditProduct(products[i].skuId, 'revenue') &&
-                            config.onRevenueFormula != null
-                        ? (group, code) => config.onRevenueFormula!(
-                            products[i].skuId,
-                            group,
-                            code,
-                          )
-                        : null,
+                        config: config,
+                        evaluation: products[i].evaluation,
+                        onRevenueFormula:
+                            config.canEditProduct(
+                                  products[i].skuId,
+                                  'revenue',
+                                ) &&
+                                config.onRevenueFormula != null
+                            ? (group, code) => config.onRevenueFormula!(
+                                products[i].skuId,
+                                group,
+                                code,
+                              )
+                            : null,
                       ),
                     ],
                   ),
@@ -1659,7 +1674,10 @@ class _CostLine extends StatelessWidget {
           ),
           Expanded(
             child: onRatio == null
-                ? Text(shown, style: _mono(context, size: 12.5, weight: FontWeight.w600))
+                ? Text(
+                    shown,
+                    style: _mono(context, size: 12.5, weight: FontWeight.w600),
+                  )
                 : _PromotionTextField(
                     value: ratio,
                     hint: '如 0.12 或 12%',
@@ -1718,7 +1736,11 @@ class _CostLine extends StatelessWidget {
                       line.name,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: _sans(context, size: 12.5, weight: FontWeight.w600),
+                      style: _sans(
+                        context,
+                        size: 12.5,
+                        weight: FontWeight.w600,
+                      ),
                     ),
                   ),
                   if (line.locked) ...[
@@ -1761,16 +1783,16 @@ class _CostLine extends StatelessWidget {
       children: [
         Expanded(
           child: Row(
-      children: [
-        Flexible(
-          child: Text(
-            line.name,
-            overflow: TextOverflow.ellipsis,
-            style: _sans(context, size: 12.5, weight: FontWeight.w600),
-          ),
-        ),
-        const SizedBox(width: 6),
-        if (line.locked)
+            children: [
+              Flexible(
+                child: Text(
+                  line.name,
+                  overflow: TextOverflow.ellipsis,
+                  style: _sans(context, size: 12.5, weight: FontWeight.w600),
+                ),
+              ),
+              const SizedBox(width: 6),
+              if (line.locked)
                 const ProposalFinanceTag(
                   '产品结算',
                   color: ProposalPalette.green,
@@ -1801,13 +1823,13 @@ class _CostLine extends StatelessWidget {
         ),
         if (showEstimates) ...[
           const SizedBox(width: 8),
-        Text(
-          line.pending ? '—' : '${_wan(line.amount)} 万',
+          Text(
+            line.pending ? '—' : '${_wan(line.amount)} 万',
             style: _mono(
               context,
               size: 12.5,
               color: line.pending ? _K.grey : _K.ink,
-        ),
+            ),
           ),
         ],
         if (onRemove != null)
@@ -1874,7 +1896,8 @@ class _CostLine extends StatelessWidget {
                 style: _sans(context, size: 11, color: _K.grey),
               ),
             ),
-          if (category.key == kProposalCostCategoryBusiness) _businessRatio(context),
+          if (category.key == kProposalCostCategoryBusiness)
+            _businessRatio(context),
           if (canChoose &&
               category.key == kProposalCostCategoryTax &&
               line.name == kProposalStampTaxName &&
@@ -1887,13 +1910,13 @@ class _CostLine extends StatelessWidget {
               ),
             ),
           if (showEstimates)
-          _Trace(
-            // 产品结算带出的不再写公式（出处已经说明），只写代入。
+            _Trace(
+              // 产品结算带出的不再写公式（出处已经说明），只写代入。
               formula: formula == null || formula.expression == formula.name
-                ? ''
-                : formula.expression,
-            substitution: line.substitution,
-          ),
+                  ? ''
+                  : formula.expression,
+              substitution: line.substitution,
+            ),
           if (item.tiered && !line.locked)
             _PromotionPlansEditor(
               plans: promotionPlans,
@@ -2002,7 +2025,7 @@ class _PromotionPlansEditor extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         if (plan == null && !editable)
-            Padding(
+          Padding(
             padding: const EdgeInsets.only(top: 6),
             child: Text(
               '未配置推广商方案',
@@ -2878,16 +2901,16 @@ class _CostItemPickerDialogState extends State<_CostItemPickerDialog> {
   }
 
   void _toggle(String name, bool on) {
-            setState(() {
-              if (!on) {
+    setState(() {
+      if (!on) {
         _picked.remove(name);
-                return;
-              }
+        return;
+      }
       final group = widget.category.itemOf(name)?.exclusiveGroup ?? '';
-              if (group.isNotEmpty) {
+      if (group.isNotEmpty) {
         _picked.removeWhere(
-                  (other) =>
-                      other != name &&
+          (other) =>
+              other != name &&
               widget.category.itemOf(other)?.exclusiveGroup == group,
         );
       }
@@ -2911,8 +2934,8 @@ class _CostItemPickerDialogState extends State<_CostItemPickerDialog> {
     if (widget.category.itemOf(name) == null) return '自行新增，只记类型';
     if (item.tiered) return '按推广商配置 · 选中后填写推广商、年阶梯或月份折扣';
     if (widget.category.key == kProposalCostCategoryProject) {
-              return '产品结算里还没有，需在上方补一行应付';
-            }
+      return '产品结算里还没有，需在上方补一行应付';
+    }
     if (widget.category.key == kProposalCostCategoryBusiness) {
       final formula = item.defaultFormulaRef;
       final code = item.code == name ? '' : item.code;
@@ -2921,28 +2944,28 @@ class _CostItemPickerDialogState extends State<_CostItemPickerDialog> {
         if (formula != null) formula.name,
       ].join(' · ');
     }
-            final parts = [
-              if (item.hint.isNotEmpty) item.hint,
-              if (item.formulas.isNotEmpty)
-                '公式：${item.formulas.map((f) => f.name).join(' / ')}',
-            ];
-            return parts.isEmpty ? null : parts.join(' · ');
-          }
+    final parts = [
+      if (item.hint.isNotEmpty) item.hint,
+      if (item.formulas.isNotEmpty)
+        '公式：${item.formulas.map((f) => f.name).join(' / ')}',
+    ];
+    return parts.isEmpty ? null : parts.join(' · ');
+  }
 
   @override
   Widget build(BuildContext context) {
     final category = widget.category;
-          return AlertDialog(
-            title: Text('选择${category.name}项'),
-            contentPadding: const EdgeInsets.fromLTRB(8, 12, 8, 0),
-            content: SizedBox(
-              width: 420,
-              child: ListView(
-                shrinkWrap: true,
-                children: [
-                  if (category.hint.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+    return AlertDialog(
+      title: Text('选择${category.name}项'),
+      contentPadding: const EdgeInsets.fromLTRB(8, 12, 8, 0),
+      content: SizedBox(
+        width: 420,
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            if (category.hint.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
                 child: Text(
                   category.hint,
                   style: _sans(context, size: 12, color: _K.grey),
@@ -2969,27 +2992,27 @@ class _CostItemPickerDialogState extends State<_CostItemPickerDialog> {
                 ),
               ),
             for (final name in _names)
-                    CheckboxListTile(
-                      dense: true,
+              CheckboxListTile(
+                dense: true,
                 value: _picked.contains(name),
                 onChanged: widget.locked.contains(name)
-                          ? null
+                    ? null
                     : (on) => _toggle(name, on == true),
-                      controlAffinity: ListTileControlAffinity.leading,
-                      title: Text(name),
+                controlAffinity: ListTileControlAffinity.leading,
+                title: Text(name),
                 subtitle: _subtitleOf(name) == null
                     ? null
                     : Text(_subtitleOf(name)!),
-                    ),
-                ],
               ),
-            ),
-            actions: [
-              TextButton(
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
           onPressed: () => Navigator.of(context).pop(),
-                child: const Text('取消'),
-              ),
-              FilledButton(
+          child: const Text('取消'),
+        ),
+        FilledButton(
           onPressed: () => Navigator.of(context).pop([
             for (final name in _names)
               if (_picked.contains(name)) name,
@@ -3359,10 +3382,7 @@ class ProposalFinanceSplit extends StatelessWidget {
                   children: [
                     for (var i = 0; i < tabs.length; i++) ...[
                       if (i > 0) const SizedBox(width: 8),
-                      SizedBox(
-                        width: 148,
-                        child: tile(tabs[i], dense: true),
-                      ),
+                      SizedBox(width: 148, child: tile(tabs[i], dense: true)),
                     ],
                   ],
                 ),

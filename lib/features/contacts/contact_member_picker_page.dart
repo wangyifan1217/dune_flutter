@@ -463,12 +463,20 @@ class ContactMemberPickerPage extends StatelessWidget {
     this.title = '选择成员',
     this.excludeIds = const <int>{},
     this.initialSelected = const <int>{},
+    this.pickerKey,
+    this.onConfirm,
   });
 
   final AuthSession session;
   final String title;
   final Set<int> excludeIds;
   final Set<int> initialSelected;
+
+  /// 调用方需要已选同事姓名时传入。
+  final GlobalKey<ContactMemberPickerPanelState>? pickerKey;
+
+  /// 传入后由调用方决定怎么关闭页面。不传时直接带回用户编号。
+  final ValueChanged<List<int>>? onConfirm;
 
   @override
   Widget build(BuildContext context) {
@@ -492,11 +500,13 @@ class ContactMemberPickerPage extends StatelessWidget {
         ),
       ),
       body: ContactMemberPickerPanel(
+        key: pickerKey,
         session: session,
+        title: title,
         excludeIds: excludeIds,
         initialSelected: initialSelected,
         onCancel: () => Navigator.pop(context),
-        onConfirm: (ids) => Navigator.pop(context, ids),
+        onConfirm: onConfirm ?? (ids) => Navigator.pop(context, ids),
       ),
     );
   }

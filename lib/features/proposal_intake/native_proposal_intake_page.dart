@@ -4046,13 +4046,26 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   bool get _isAnyOwner2 =>
       _isOwner('financeOwner2') || _isOwner('marketOwner2');
 
+  bool get _isDefaultBusinessCostViewer => kProposalBusinessCostDefaultViewers
+      .contains((widget.session.displayName ?? '').trim());
+
+  /// 手机上给指定的人看名单。电脑端不开放，也不能改权限。
+  bool get _peekBusinessCostAccess =>
+      !isDesktopCommOnly &&
+      kProposalBusinessCostAccessPeekNames.contains(
+        (widget.session.displayName ?? '').trim(),
+      );
+
   bool get _businessCostSealed =>
       _form['businessCostRedacted'] == true ||
       (_form['businessCostCanView'] is bool
           ? _form['businessCostCanView'] != true
           : _isPurchase
-          ? (_isAnyOwner2 && !_isMarketOwner1)
-          : !(_isMarketOwner1 || _isOwner('financeOwner1') || _isPresident));
+          ? (_isAnyOwner2 && !_isMarketOwner1 && !_isDefaultBusinessCostViewer)
+          : !(_isMarketOwner1 ||
+                _isOwner('financeOwner1') ||
+                _isPresident ||
+                _isDefaultBusinessCostViewer));
 
   bool get _canEditBusinessCost =>
       !_isLocked &&
@@ -14964,14 +14977,52 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       ? 'financeItem:children:$key'
       : 'financeItem:$key';
 
+  Map<String, dynamic> _peekBusinessCostForm() {
+    final form = proposalIntakeCloneForm(_row.form);
+    final viewers = <Map<String, dynamic>>[];
+    void addRequired(String name, String role, String userId) {
+      final trimmed = name.trim();
+      if (trimmed.isEmpty || viewers.any((item) => item['name'] == trimmed)) {
+        return;
+      }
+      viewers.add({
+        'userId': userId,
+        'name': trimmed,
+        'role': role,
+        'enabled': true,
+        'required': true,
+      });
+    }
+
+    addRequired(
+      _ownerName('marketOwner1'),
+      '市场部负责人一',
+      '${_form['marketOwner1UserId'] ?? ''}',
+    );
+    addRequired(
+      _ownerName('president'),
+      '最终审核人',
+      '${_form['presidentUserId'] ?? ''}',
+    );
+    for (final name in kProposalBusinessCostDefaultViewers) {
+      addRequired(name, '默认可查看', name);
+    }
+    form['businessCostAccessInfo'] = {'lastEditorName': '', 'viewers': viewers};
+    return form;
+  }
+
   Widget? _businessCostAccessButton() {
-    if (_form['businessCostAccessInfo'] is! Map || _row.id <= 0) return null;
+    final peek =
+        _peekBusinessCostAccess && _form['businessCostAccessInfo'] is! Map;
+    if ((_form['businessCostAccessInfo'] is! Map && !peek) || _row.id <= 0) {
+      return null;
+    }
     return SizedBox(
       width: 26,
       height: 28,
       child: IconButton(
         key: const ValueKey('business-cost-access-info'),
-        tooltip: '管理业务成本查看权限',
+        tooltip: peek ? '查看谁可以看业务成本' : '管理业务成本查看权限',
         padding: EdgeInsets.zero,
         iconSize: 16,
         icon: Icon(
@@ -14979,7 +15030,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           color: DunesColors.resolve(context, ProposalPalette.purple),
         ),
         onPressed: () {
-          if (_dirty) {
+          if (!peek && _dirty) {
             widget.onError('请先保存提案修改后再管理查看权限');
             return;
           }
@@ -14988,7 +15039,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             builder: (_) => ProposalBusinessCostAccessDialog(
               session: widget.session,
               service: widget.service,
-              row: _row,
+              readOnly: peek,
+              row: peek ? _row.copyWith(form: _peekBusinessCostForm()) : _row,
               onUpdated: (updated) {
                 if (!mounted) return;
                 setState(() {

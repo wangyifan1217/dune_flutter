@@ -62,6 +62,7 @@ class _Service extends HrPerformanceService {
       {'id': 11, 'name': '出纳'},
       {'id': 12, 'name': '运营专员'},
     ],
+    'assessmentCategories': ['出纳序列', '运营序列（制券）'],
   };
 
   _Service() : super(_session);
@@ -279,16 +280,16 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('hr-batch-category')));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('指定部门 / 岗位'));
+      await tester.tap(find.text('指定部门 / 考核分类'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('选择部门（可多选）'));
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('hr-option-7')));
       await tester.tap(find.text('确认选择'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('选择岗位（可多选）'));
+      await tester.tap(find.text('选择考核分类（可多选）'));
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('hr-option-11')));
+      await tester.tap(find.byKey(const ValueKey('hr-option-出纳序列')));
       await tester.tap(find.text('确认选择'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('确定'));
@@ -310,7 +311,8 @@ void main() {
         expect(item['category'], {
           'mode': 'scoped',
           'departmentIds': [7],
-          'positionIds': [11],
+          'positionIds': <int>[],
+          'categoryNames': ['出纳序列'],
         });
       }
       expect(tester.takeException(), isNull);

@@ -3586,6 +3586,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   int _businessProductVisible = _productFoldPreview;
   int _financeSettleVisible = _productFoldPreview;
   bool _productMultiSelect = false;
+  bool _onlyUnfilledProductScales = false;
   final Set<String> _selectedProductIds = {};
   bool _jumping = false;
   List<String> _issues = const [];
@@ -8119,7 +8120,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       final related = proposalIntakeChildProducts(
         _form,
       ).where((child) => child.parentSkuId == sku.id).toList(growable: false);
-      final scale = proposalIntakeSkuScaleTotal(sku);
+      final scale = proposalProductScaleManual(_form)
+          ? proposalManualAnnualScale(sku)
+          : proposalIntakeSkuScaleTotal(sku);
       final fields = <(String, Widget)>[
         ('产品名称', _kvText(sku.displayName)),
         for (final (label, value) in _skuFieldKv(sku)) (label, _kvText(value)),
@@ -9010,6 +9013,47 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     });
   }
 
+  void _reportProposalError(Object error) {
+    final text = friendlyErrorText(error);
+    widget.onError(text);
+    if (text.contains('年化规模')) {
+      _focusProductScaleBar(onlyEmpty: text.contains('没填年化规模'));
+    }
+  }
+
+  void _showIssues(List<String> issues) {
+    final scale = issues.any((item) => item.contains('年化规模'));
+    setState(() => _issues = issues);
+    if (!scale) {
+      _scrollToTop();
+      return;
+    }
+    _focusProductScaleBar(
+      onlyEmpty: issues.any((item) => item.contains('没填年化规模')),
+    );
+  }
+
+  void _focusProductScaleBar({required bool onlyEmpty}) {
+    setState(() {
+      _visibleSection = ProposalIntakeNavSection.tech;
+      _contentOpenOverride = true;
+      if (onlyEmpty) _onlyUnfilledProductScales = true;
+      _flashFieldKeys
+        ..clear()
+        ..add('productScaleManual');
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final key = _activeFieldAnchor('productScaleManual');
+      final target = key?.currentContext?.findRenderObject();
+      if (key != null && target != null && target.attached) {
+        _jumpToKey(key, ProposalIntakeNavSection.tech);
+      } else {
+        _scrollToContentBox();
+      }
+    });
+  }
+
   void _scrollToTop() {
     if (!_scroll.hasClients) return;
     unawaited(
@@ -9389,6 +9433,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           '销售规模不得低于 ${widget.options.minimumScale.toStringAsFixed(0)} 万元',
         );
       }
+      issues.addAll(proposalProductScaleManualIssues(_form));
     }
     if (_text('hasRdCost').trim() == '是' && _number('rdAmount') <= 0) {
       issues.add('已选择涉及研发费用，金额必须大于 0');
@@ -9410,6 +9455,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           productTypes: widget.options.resolvedProductTypes,
         ),
       );
+      issues.addAll(proposalProductScaleManualIssues(_form));
     }
     return issues;
   }
@@ -9459,6 +9505,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           productTypes: widget.options.resolvedProductTypes,
         ),
       );
+      issues.addAll(proposalProductScaleManualIssues(_form));
     }
     final reviewFlags = <String, String>{
       'marketCompleted': '市场部',
@@ -9504,9 +9551,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       return;
     }
     final issues = _validate();
-    setState(() => _issues = issues);
     if (issues.isNotEmpty) {
-      _scrollToTop();
+      _showIssues(issues);
       return;
     }
     final recipients = proposalIntakeNotifyRecipients(
@@ -9529,7 +9575,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       widget.onSubmit(submitted.row);
       _toastNotified(submitted.notified, fallback: '已通知最终人');
     } catch (error) {
-      widget.onError(friendlyErrorText(error));
+      _reportProposalError(error);
     }
   }
 
@@ -9591,8 +9637,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         if (seen.add(issue)) unique.add(issue);
       }
       if (unique.isNotEmpty) {
-        setState(() => _issues = unique);
-        _scrollToTop();
+        _showIssues(unique);
         widget.onError(unique.first);
         return;
       }
@@ -9658,7 +9703,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         fallback: action == 'remind' ? '已催办' : '已通知',
       );
     } catch (error) {
-      widget.onError(friendlyErrorText(error));
+      _reportProposalError(error);
     }
   }
 
@@ -15402,10 +15447,16 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         final sku = _sellableSkuById(skuId);
         if (sku == null) return '';
         final face = sku.faceValue.trim();
-        final scale = proposalIntakeSkuScaleTotal(sku);
+        final manualScale = proposalProductScaleManual(_form);
+        final scale = manualScale
+            ? proposalManualAnnualScale(sku)
+            : proposalIntakeSkuScaleTotal(sku);
         return [
           if (face.isNotEmpty) '面值 $face',
-          if (scale > 0) '规模 ${proposalFormatWan(scale)} 万',
+          if (manualScale && sku.annualScale.trim().isEmpty)
+            '规模未填'
+          else if (scale > 0)
+            '规模 ${proposalFormatWan(scale)} 万',
           if (proposalIntakeChildProducts(_form).any((c) => c.id == skuId)) ...[
             _relatedProductStockText(sku),
             '数量 ${proposalIntakeChildProductQuantity(_form, skuId)}',
@@ -17979,6 +18030,20 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       rollback: proposalIntakeSkuRollbackValue(seed, form: _form),
       parentSkuId: child ? boundParent : seed.parentSkuId,
     );
+    final manualScale = proposalProductScaleManual(_form);
+    final exclude = <String>{initial.id};
+    if (!child) {
+      for (final item in proposalIntakeChildProducts(_form)) {
+        if (item.parentSkuId == initial.id) exclude.add(item.id);
+      }
+    }
+    var otherAnnualScale = 0.0;
+    if (manualScale) {
+      for (final sku in proposalIntakeAllSellableSkus(_form)) {
+        if (exclude.contains(sku.id)) continue;
+        otherAnnualScale += proposalManualAnnualScale(sku);
+      }
+    }
     final result = await showDialog<_SkuProductDraft>(
       context: context,
       barrierDismissible: false,
@@ -17986,6 +18051,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         childProduct: child,
         creating: existing == null,
         initial: initial,
+        annualScaleEnabled: manualScale,
+        proposalScale: _number('salesScale'),
+        otherAnnualScale: otherAnnualScale,
         quantity: child
             ? proposalIntakeChildProductQuantity(_form, initial.id)
             : 1,
@@ -18401,10 +18469,154 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   }
 
   /// 原型填写页的「业务平台产品」：标题、数量、说明、新增 / 多选在同一行，下面一行一个产品。
-  Widget _protoSkuDetailsBlock(
-    List<ProposalSkuDetailRow> rows,
-    int visibleCount,
-  ) {
+  bool _productScaleNeedsFill(ProposalSkuDetailRow row) {
+    if (row.annualScale.trim().isEmpty) return true;
+    return proposalIntakeChildProducts(_form).any(
+      (child) =>
+          child.parentSkuId == row.id && child.annualScale.trim().isEmpty,
+    );
+  }
+
+  void _toggleProductScaleManual() {
+    if (!_canEditProducts || _isPurchase) return;
+    final on = !proposalProductScaleManual(_form);
+    var mains = proposalIntakeSkuDetails(_form);
+    var children = proposalIntakeChildProducts(_form);
+    if (on) {
+      final filled = proposalPrefillAnnualScales(_form);
+      mains = [
+        for (final sku in mains)
+          sku.copyWith(annualScale: filled[sku.id] ?? sku.annualScale),
+      ];
+      children = [
+        for (final sku in children)
+          sku.copyWith(annualScale: filled[sku.id] ?? sku.annualScale),
+      ];
+    }
+    var form = Map<String, dynamic>.from(_form)
+      ..['productScaleManual'] = on
+      ..['skuDetails'] = [for (final row in mains) row.toJson()]
+      ..['childProducts'] = [for (final row in children) row.toJson()];
+    form = proposalIntakeSyncChildProductMeta(form);
+    form = _withEstimatedFinanceCosts(form);
+    final review = _reviewAfterProductEdit('technologyCompleted')
+      ..['financeCompleted'] = false;
+    _markFormDirty();
+    _commitKeepingPlace(() {
+      setState(() {
+        _row = _row.copyWith(
+          status: _statusAfterEdit,
+          form: form,
+          review: review,
+        );
+        if (!on) _onlyUnfilledProductScales = false;
+      });
+    });
+    _emitChanged(_row);
+  }
+
+  Widget _productScaleManualToggle() {
+    final on = proposalProductScaleManual(_form);
+    final enabled = _canEditProducts;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SizedBox(
+          width: 18,
+          height: 18,
+          child: Checkbox(
+            value: on,
+            onChanged: enabled ? (_) => _toggleProductScaleManual() : null,
+            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            visualDensity: VisualDensity.compact,
+            activeColor: const Color(0xFF6B4FD8),
+            side: const BorderSide(color: Color(0xFF8A8499)),
+          ),
+        ),
+        const SizedBox(width: 4),
+        GestureDetector(
+          onTap: enabled ? _toggleProductScaleManual : null,
+          child: Text(
+            '按产品填规模',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: DunesColors.resolve(context, const Color(0xFF3F2A9A)),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _productScaleDeltaBar() {
+    final gap = proposalProductScaleGap(_form);
+    final filtering = _onlyUnfilledProductScales;
+    final String text;
+    if (gap.productCount == 0) {
+      text = '已按产品填规模。先添加产品，每个产品再填年化规模。';
+    } else if (gap.aligned) {
+      text = '产品年化规模合计和提案总规模一致，都是 ${proposalFormatWan(gap.total)} 万';
+    } else {
+      final diff = gap.delta == 0
+          ? ''
+          : (gap.delta > 0
+                ? '，还差 ${proposalFormatWan(gap.delta)} 万'
+                : '，多了 ${proposalFormatWan(gap.delta.abs())} 万');
+      final empty = gap.emptyCount > 0 ? '，${gap.emptyCount} 个产品没填' : '';
+      text =
+          '提案总规模 ${proposalFormatWan(gap.total)} 万，产品合计 ${proposalFormatWan(gap.filled)} 万$diff$empty';
+    }
+    final canFilter = gap.emptyCount > 0 || filtering;
+    final hint = !canFilter
+        ? ''
+        : (filtering ? '点击看全部产品' : '点击只看没填的产品');
+    final ok = gap.aligned;
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Material(
+        color: DunesColors.resolve(
+          context,
+          Color(ok ? 0xFFF3F8F4 : 0xFFFFF6F0),
+          role: DunesColorRole.surface,
+        ),
+        borderRadius: BorderRadius.circular(8),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(8),
+          onTap: canFilter
+              ? () => setState(() => _onlyUnfilledProductScales = !filtering)
+              : null,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: DunesColors.resolve(
+                  context,
+                  Color(ok ? 0xFFD5E8DC : 0xFFF0D2C2),
+                  role: DunesColorRole.border,
+                ),
+              ),
+            ),
+            child: Text(
+              hint.isEmpty ? text : '$text。$hint',
+              style: TextStyle(
+                fontSize: 12,
+                height: 1.4,
+                fontWeight: FontWeight.w600,
+                color: DunesColors.resolve(
+                  context,
+                  Color(ok ? 0xFF2D6E47 : 0xFF9A4A0C),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _protoSkuDetailsBlock(List<ProposalSkuDetailRow> rows) {
     Color c(int v, [DunesColorRole role = DunesColorRole.foreground]) =>
         DunesColors.resolve(context, Color(v), role: role);
     final allSelected =
@@ -18416,6 +18628,13 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
       ),
     );
+    final shown =
+        _onlyUnfilledProductScales &&
+            !_isPurchase &&
+            proposalProductScaleManual(_form)
+        ? [for (final row in rows) if (_productScaleNeedsFill(row)) row]
+        : rows;
+    final shownCount = _foldedCount(shown.length, _businessProductVisible);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -18447,6 +18666,10 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                       '共 ${rows.length} 个',
                       style: TextStyle(color: c(0xFF5B556A), fontSize: 12),
                     ),
+                    if (!_isPurchase &&
+                        (_canEditProducts ||
+                            proposalProductScaleManual(_form)))
+                      _productScaleManualToggle(),
                     if (_canEditProducts) ...[
                       FilledButton.icon(
                         key: const ValueKey('proposal-new-product'),
@@ -18519,6 +18742,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             ],
           ),
         ),
+        if (!_isPurchase && proposalProductScaleManual(_form))
+          _anchor('productScaleManual', _productScaleDeltaBar()),
         Padding(
           padding: const EdgeInsets.only(top: 6, bottom: 4),
           child: _proposalConfigNote(context, _proposalPlatformConfigNote),
@@ -18531,26 +18756,37 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             ),
           ],
           const SizedBox(height: 8),
-          // 主产品和关联产品都用共用产品卡，科技部的编辑操作保留在卡内。
-          for (var i = 0; i < visibleCount; i++) ...[
-            _productCard(
-              rows[i],
-              i,
-              side: ProposalProductCardSide.tech,
-              techAction: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  ?_productSelectBox(rows[i].id),
-                  _skuRowActions(rows[i], child: false),
-                ],
+          if (shown.isEmpty)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Text(
+                '没有未填规模的产品',
+                style: TextStyle(color: c(0xFF8A8499), fontSize: 12),
               ),
+            )
+          else ...[
+            // 主产品和关联产品都用共用产品卡，科技部的编辑操作保留在卡内。
+            for (var i = 0; i < shownCount; i++) ...[
+              _productCard(
+                shown[i],
+                rows.indexOf(shown[i]),
+                side: ProposalProductCardSide.tech,
+                techAction: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    ?_productSelectBox(shown[i].id),
+                    _skuRowActions(shown[i], child: false),
+                  ],
+                ),
+              ),
+            ],
+            _foldedListActions(
+              total: shown.length,
+              visible: _businessProductVisible,
+              onVisible: (next) =>
+                  setState(() => _businessProductVisible = next),
             ),
           ],
-          _foldedListActions(
-            total: rows.length,
-            visible: _businessProductVisible,
-            onVisible: (next) => setState(() => _businessProductVisible = next),
-          ),
         ],
       ],
     );
@@ -18622,7 +18858,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   Widget _skuDetailsBlock(bool wide) {
     final rows = proposalIntakeSkuDetails(_form);
     final visibleCount = _foldedCount(rows.length, _businessProductVisible);
-    if (_protoForm) return _protoSkuDetailsBlock(rows, visibleCount);
+    if (_protoForm) return _protoSkuDetailsBlock(rows);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -19151,9 +19387,10 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           : text;
     }
 
-    final ownScale = proposalIntakeSkuScaleTotal(sku);
-    final scale = ownScale > 0
-        ? ownScale
+    final manualScale = proposalProductScaleManual(_form);
+    final scaleMissing = manualScale && sku.annualScale.trim().isEmpty;
+    final scale = manualScale
+        ? proposalManualAnnualScale(sku)
         : proposalSkuFaceShareScale(sku, form: _form);
     final province = proposalSkuResolvedProvince(_form, sku);
     return [
@@ -19161,7 +19398,14 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       if (province.isNotEmpty) ('省份', province),
       ('面值', value('face')),
       ('业务平台', value('platform')),
-      ('年化规模', scale > 0 ? '${proposalFormatWan(scale)} 万' : ''),
+      (
+        '年化规模',
+        scaleMissing
+            ? '未填'
+            : (scale > 0 || (manualScale && sku.annualScale.trim().isNotEmpty)
+                  ? '${proposalFormatWan(scale)} 万'
+                  : ''),
+      ),
       (
         '库存数量',
         sku.inventoryQty.trim().isEmpty ? '未填' : sku.inventoryQty.trim(),
@@ -19276,7 +19520,14 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     ];
     final costs = settlements.length - income.length;
     final first = income.isEmpty ? null : income.first.terms;
-    final scale = product == null ? 0.0 : proposalIntakeSkuScaleTotal(product);
+    final manualScale = proposalProductScaleManual(_form);
+    final scaleMissing =
+        manualScale && product != null && product.annualScale.trim().isEmpty;
+    final scale = product == null
+        ? 0.0
+        : (manualScale
+              ? proposalManualAnnualScale(product)
+              : proposalIntakeSkuScaleTotal(product));
     final ratio = first == null
         ? ''
         : (first.displayRatio.trim().isNotEmpty
@@ -19294,7 +19545,13 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       _ => 0xFF9A4A0C,
     };
     final meta = [
-      if (scale > 0) '规模 ${proposalFormatWan(scale)} 万',
+      if (scaleMissing)
+        '规模未填'
+      else if (scale > 0 ||
+          (manualScale &&
+              product != null &&
+              product.annualScale.trim().isNotEmpty))
+        '规模 ${proposalFormatWan(scale)} 万',
       if (ratio.isNotEmpty) ratio,
       if (costs > 0) '应付 $costs 条',
     ];
@@ -21677,7 +21934,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     required VoidCallback refresh,
   }) {
     final settlements = proposalIntakeSkuSettlements(product);
-    final scale = proposalIntakeSkuScaleTotal(product);
+    final scale = proposalProductScaleManual(_form)
+        ? proposalManualAnnualScale(product)
+        : proposalIntakeSkuScaleTotal(product);
     final face = proposalIntakeSkuSettleFace(product);
     final legacyPromotion = _settleLegacyPromotion(product.id, settlements);
     final syncSource = _skuSyncSource(product);
@@ -28140,6 +28399,9 @@ class _SkuProductEditorDialog extends StatefulWidget {
     this.syncSource,
     this.channel,
     this.provinceOptions = const [],
+    this.annualScaleEnabled = false,
+    this.proposalScale = 0,
+    this.otherAnnualScale = 0,
   });
 
   final bool childProduct;
@@ -28159,6 +28421,13 @@ class _SkuProductEditorDialog extends StatefulWidget {
   /// 市场部标签二已选的省份。下拉只出现这些，默认第一项。
   final List<String> provinceOptions;
 
+  /// 提案勾选了「按产品填规模」时，基础信息里才出现年化规模。
+  final bool annualScaleEnabled;
+  final double proposalScale;
+
+  /// 不在这个弹窗里编辑的其他产品已经填上的年化规模。
+  final double otherAnnualScale;
+
   @override
   State<_SkuProductEditorDialog> createState() =>
       _SkuProductEditorDialogState();
@@ -28173,6 +28442,7 @@ class _SkuProductEditorDialogState extends State<_SkuProductEditorDialog> {
   late final TextEditingController _qty;
   late final TextEditingController _suppliers;
   late final TextEditingController _quantity;
+  late final TextEditingController _annualScale;
   late String _syncZhongyouHaoke;
   late String _parentSkuId;
   late String _rollback;
@@ -28200,6 +28470,10 @@ class _SkuProductEditorDialogState extends State<_SkuProductEditorDialog> {
     _qty = TextEditingController(text: widget.initial.inventoryQty);
     _suppliers = TextEditingController(text: widget.initial.supplierCodes);
     _quantity = TextEditingController(text: '${widget.quantity}');
+    _annualScale = TextEditingController(text: widget.initial.annualScale);
+    _annualScale.addListener(() {
+      if (mounted) setState(() {});
+    });
     _syncZhongyouHaoke = widget.initial.syncZhongyouHaoke;
     _parentSkuId = widget.initial.parentSkuId;
     _rollback = proposalIntakeSkuRollbackValue(widget.initial);
@@ -28228,6 +28502,7 @@ class _SkuProductEditorDialogState extends State<_SkuProductEditorDialog> {
     _qty.dispose();
     _suppliers.dispose();
     _quantity.dispose();
+    _annualScale.dispose();
     super.dispose();
   }
 
@@ -28291,6 +28566,9 @@ class _SkuProductEditorDialogState extends State<_SkuProductEditorDialog> {
           province: widget.childProduct
               ? widget.initial.province
               : _province.trim(),
+          annualScale: widget.annualScaleEnabled
+              ? _annualScale.text.trim()
+              : widget.initial.annualScale,
         ),
         quantity: quantity < 1 ? 1 : quantity,
         linked: proposalIntakeProductTypeIsBenefit(couponKind, _productTypes)
@@ -28307,6 +28585,9 @@ class _SkuProductEditorDialogState extends State<_SkuProductEditorDialog> {
       builder: (ctx) => _SkuProductEditorDialog(
         childProduct: true,
         creating: true,
+        annualScaleEnabled: widget.annualScaleEnabled,
+        proposalScale: widget.proposalScale,
+        otherAnnualScale: _otherAnnualScaleExcept(null),
         initial: ProposalSkuDetailRow(
           id: proposalIntakeNewChildSkuId(),
           existingBuilt: widget.initial.existingBuilt,
@@ -28374,6 +28655,51 @@ class _SkuProductEditorDialogState extends State<_SkuProductEditorDialog> {
     });
   }
 
+  double _otherAnnualScaleExcept(String? exceptId) {
+    var sum =
+        widget.otherAnnualScale + proposalCostAmountValue(_annualScale.text);
+    for (final item in _linked) {
+      if (exceptId != null && item.row.id == exceptId) continue;
+      sum += proposalManualAnnualScale(item.row);
+    }
+    return sum;
+  }
+
+  String _annualScaleGapText() {
+    final delta = proposalRoundWan(
+      widget.proposalScale - _otherAnnualScaleExcept(null),
+    );
+    final total = proposalFormatWan(widget.proposalScale);
+    if (delta.abs() < 0.01) return '按现在填写，和提案总规模 $total 万一致';
+    if (delta > 0) {
+      return '提案总规模 $total 万，按现在填写还差 ${proposalFormatWan(delta)} 万';
+    }
+    return '提案总规模 $total 万，按现在填写多了 ${proposalFormatWan(delta.abs())} 万';
+  }
+
+  Widget _annualScaleField() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _textField(
+          label: '年化规模（万元）',
+          controller: _annualScale,
+          hint: '数字',
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          _annualScaleGapText(),
+          style: TextStyle(
+            fontSize: 12,
+            height: 1.4,
+            color: DunesColors.resolve(context, const Color(0xFF9A4A0C)),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _linkedPreview(int index) {
     final item = _linked[index];
     final row = item.row;
@@ -28384,6 +28710,10 @@ class _SkuProductEditorDialogState extends State<_SkuProductEditorDialog> {
       if (row.resolvedCouponKind.isNotEmpty && row.resolvedCouponKind != name)
         row.resolvedCouponKind,
       if (row.faceValue.trim().isNotEmpty) '面值 ${row.faceValue.trim()}',
+      if (widget.annualScaleEnabled)
+        row.annualScale.trim().isEmpty
+            ? '年化规模未填'
+            : '年化规模 ${row.annualScale.trim()} 万',
       if (row.inventoryQty.trim().isNotEmpty) '库存 ${row.inventoryQty.trim()}',
       if (row.supplierCodes.trim().isNotEmpty)
         '供应商 ${row.supplierCodes.trim()}',
@@ -28699,6 +29029,10 @@ class _SkuProductEditorDialogState extends State<_SkuProductEditorDialog> {
                 ),
                 face,
               ),
+              if (widget.annualScaleEnabled) ...[
+                const SizedBox(height: 10),
+                _pair(_annualScaleField(), const SizedBox.shrink()),
+              ],
               const SizedBox(height: 10),
               _pair(
                 _textField(

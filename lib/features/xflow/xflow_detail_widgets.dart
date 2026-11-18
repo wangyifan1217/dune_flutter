@@ -2220,7 +2220,10 @@ class _FileItemState extends State<_FileItem> {
     final name = _fileName;
     final size = item['size'];
     final showPreview = !kIsWeb && !isDesktopCommOnly && (_isImage || _isPdf);
+    final invoiceLine = xflowInvoiceLine(item);
     final metaParts = <String>[
+      if (invoiceLine.isNotEmpty && invoiceLine != '正在识别发票…') invoiceLine,
+      if (invoiceLine.isEmpty && item['invoiceUnrecognized'] == true) '未能识别金额',
       if (size != null) _formatSize(size),
       if (_statusChecked && _downloaded) '已下载',
     ];

@@ -272,7 +272,7 @@ class HrAssessmentSheet extends StatelessWidget {
                   ),
                   const SizedBox(height: 5),
                   Text(
-                    "指标权重 ${_percent(_num(line['weight']) ?? 0)}${scoresVisible ? ' · 上级评分 ${_supervisor(line).replaceAll("\n", " · ")}' : ''}",
+                    "指标权重 ${_percent(_num(line['weight']) ?? 0)}${_num(line['selfScore']) == null ? '' : ' · 自评分 ${_score(_num(line['selfScore'])!)}'}${scoresVisible ? ' · 上级评分 ${_supervisor(line).replaceAll("\n", " · ")}' : ''}",
                     style: TextStyle(fontSize: 12, color: muted),
                   ),
                   for (final band in _bands(line))

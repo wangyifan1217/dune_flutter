@@ -66,6 +66,42 @@ class _Service extends HrPerformanceService {
 }
 
 void main() {
+  test('数字化解决方案中心及其下级不纳入考核', () {
+    const parents = <int, int?>{2: 1, 3: 1, 5: 4};
+    const names = <int, String>{
+      1: '数字化解决方案中心',
+      2: '能源板块',
+      3: '通信板块',
+      4: '研发部',
+    };
+    expect(
+      hrPerformanceDepartmentExcluded(
+        departmentId: 3,
+        departmentName: '通信板块',
+        parents: parents,
+        names: names,
+      ),
+      isTrue,
+    );
+    expect(
+      hrPerformanceDepartmentExcluded(
+        departmentId: 1,
+        departmentName: '数字化解决方案中心',
+        parents: parents,
+        names: names,
+      ),
+      isTrue,
+    );
+    expect(
+      hrPerformanceDepartmentExcluded(
+        departmentId: 4,
+        departmentName: '研发部',
+        parents: parents,
+        names: names,
+      ),
+      isFalse,
+    );
+  });
   test('new access flags preserve old defaults and session round trip', () {
     expect(_session.hrPerformanceHrAccess, isFalse);
     final session = _session.copyWith(

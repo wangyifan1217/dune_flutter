@@ -634,11 +634,147 @@ List<ProposalSkuDetailRow> _proposalSkuScalePeers(
   return [sku];
 }
 
+/// 勾选「按产品填规模」后，收入、成本和套档金额用产品基础信息里的年化规模。
+/// 结算行上另填的规模不再相加。未勾选时保持原来的分摊。
+bool proposalProductScaleManual(Map<String, dynamic> form) {
+  final value = form['productScaleManual'];
+  if (value == true) return true;
+  final text = '$value'.trim().toLowerCase();
+  return text == 'true' || text == '1' || text == '是';
+}
+
+double proposalManualAnnualScale(ProposalSkuDetailRow sku) {
+  if (sku.annualScale.trim().isEmpty) return 0;
+  return proposalCostAmountValue(sku.annualScale);
+}
+
+class ProposalProductScaleGap {
+  const ProposalProductScaleGap({
+    required this.total,
+    required this.filled,
+    required this.emptyCount,
+    required this.productCount,
+  });
+
+  final double total;
+  final double filled;
+  final int emptyCount;
+  final int productCount;
+
+  /// 正数是还差，负数是多了。
+  double get delta => proposalRoundWan(total - filled);
+
+  bool get aligned =>
+      productCount > 0 && emptyCount == 0 && delta.abs() < 0.01;
+}
+
+ProposalProductScaleGap proposalProductScaleGap(Map<String, dynamic> form) {
+  final products = [
+    for (final sku in proposalIntakeAllSellableSkus(form))
+      if (sku.id.isNotEmpty) sku,
+  ];
+  var filled = 0.0;
+  var empty = 0;
+  for (final sku in products) {
+    if (sku.annualScale.trim().isEmpty) {
+      empty++;
+      continue;
+    }
+    filled += proposalManualAnnualScale(sku);
+  }
+  return ProposalProductScaleGap(
+    total: proposalFinanceAmount(form, kProposalSalesScaleKey),
+    filled: proposalRoundWan(filled),
+    emptyCount: empty,
+    productCount: products.length,
+  );
+}
+
+/// 提交和提交复核用。保存草稿不调用。未勾选时返回空。
+List<String> proposalProductScaleManualIssues(Map<String, dynamic> form) {
+  if (!proposalProductScaleManual(form)) return const [];
+  final gap = proposalProductScaleGap(form);
+  if (gap.productCount == 0) return const ['已按产品填规模，请先添加产品'];
+  if (gap.emptyCount > 0) return ['还有 ${gap.emptyCount} 个产品没填年化规模'];
+  if (!gap.aligned) {
+    final word = gap.delta > 0 ? '还差' : '多了';
+    return [
+      '产品年化规模合计 ${proposalFormatWan(gap.filled)} 万元，提案总规模 ${proposalFormatWan(gap.total)} 万元，$word ${proposalFormatWan(gap.delta.abs())} 万元',
+    ];
+  }
+  return const [];
+}
+
+/// 勾选时写入一次：已有结算规模的产品留原数，剩下的按面值分；没有面值的再平分分不走的部分。
+/// 主产品和关联产品共用这一份提案总规模。之后改其中一个数，不再重分其他产品。
+Map<String, String> proposalPrefillAnnualScales(Map<String, dynamic> form) {
+  final products = [
+    for (final sku in proposalIntakeAllSellableSkus(form))
+      if (sku.id.isNotEmpty) sku,
+  ];
+  final total = proposalFinanceAmount(form, kProposalSalesScaleKey);
+  final ids = <String>[];
+  final fixed = <String, double>{};
+  final open = <String>[];
+  final faces = <String, double>{};
+  for (final sku in products) {
+    ids.add(sku.id);
+    final local = proposalIntakeSkuScaleTotal(sku);
+    if (local > 0) {
+      fixed[sku.id] = local;
+    } else {
+      open.add(sku.id);
+      faces[sku.id] = proposalIntakeSkuSettleFace(sku);
+    }
+  }
+  final values = <String, double>{...fixed};
+  var owned = 0.0;
+  for (final value in fixed.values) {
+    owned += value;
+  }
+  final pool = math.max(0.0, total - owned);
+  final faced = [for (final id in open) if ((faces[id] ?? 0) > 0) id];
+  final faceless = [for (final id in open) if ((faces[id] ?? 0) <= 0) id];
+  if (faced.isNotEmpty) {
+    var weight = 0.0;
+    for (final id in faced) {
+      weight += faces[id] ?? 0;
+    }
+    for (final id in faced) {
+      values[id] = weight <= 0 ? 0 : pool * (faces[id] ?? 0) / weight;
+    }
+    for (final id in faceless) {
+      values[id] = 0;
+    }
+  } else {
+    final each = faceless.isEmpty ? 0.0 : pool / faceless.length;
+    for (final id in faceless) {
+      values[id] = each;
+    }
+  }
+  for (final id in ids) {
+    values[id] = proposalRoundWan(values[id] ?? 0);
+  }
+  final receivers = faced.isNotEmpty ? faced : faceless;
+  if (receivers.isNotEmpty && owned <= total + 0.001) {
+    var sum = 0.0;
+    for (final id in ids) {
+      sum += values[id] ?? 0;
+    }
+    final last = receivers.last;
+    values[last] = proposalRoundWan(
+      (values[last] ?? 0) + (proposalRoundWan(total) - sum),
+    );
+  }
+  return {for (final id in ids) id: proposalFormatWan(values[id] ?? 0)};
+}
+
 /// 没有本产品规模时，把总规模按面值分给各产品。已有规模的产品不参与分摊。
 double proposalSkuFaceShareScale(
   ProposalSkuDetailRow sku, {
   required Map<String, dynamic> form,
 }) {
+  if (proposalProductScaleManual(form)) return proposalManualAnnualScale(sku);
   final local = proposalIntakeSkuScaleTotal(sku);
   if (local > 0) return local;
   final face = proposalIntakeSkuSettleFace(sku);
@@ -685,6 +821,23 @@ double? _faceWeightedIncomeShare(Map<String, dynamic> form) {
 ProposalProductScaleRollup? proposalProductScaleRollup(
   Map<String, dynamic> form,
 ) {
+  if (proposalProductScaleManual(form)) {
+    final scale = proposalFinanceAmount(form, kProposalSalesScaleKey);
+    if (scale <= 0) return null;
+    var revenue = 0.0;
+    var anyShare = false;
+    for (final sku in proposalIntakeSkuDetails(form)) {
+      revenue += proposalSkuTierIncomeAmount(sku, form);
+      final share = proposalSkuIncomeShare(sku);
+      if (share <= 0) continue;
+      anyShare = true;
+      revenue += proposalManualAnnualScale(sku) * share;
+    }
+    return ProposalProductScaleRollup(
+      salesScale: proposalRoundWan(scale),
+      revenue: proposalRoundWan(anyShare ? revenue : 0),
+    );
+  }
   final explicitTotal = proposalIntakeFormHasText(form, kProposalSalesScaleKey);
   final legacyScale = proposalIntakeLegacyProductScaleTotal(form);
   final hydrated = proposalIntakeHydrateMarketSalesScale(form);
@@ -804,6 +957,14 @@ double proposalProvinceProductScale(
   if (target.isEmpty) return 0;
   final skus = proposalIntakeSkuDetails(form);
   if (skus.isEmpty) return 0;
+  if (proposalProductScaleManual(form)) {
+    var manualSum = 0.0;
+    for (final sku in skus) {
+      if (proposalSkuResolvedProvince(form, sku) != target) continue;
+      manualSum += proposalManualAnnualScale(sku);
+    }
+    return proposalRoundWan(manualSum);
+  }
   final own = [for (final sku in skus) proposalIntakeSkuScaleTotal(sku)];
   var owned = 0.0;
   var missing = 0;
@@ -879,12 +1040,17 @@ double proposalSkuTierIncomeAmount(
     form,
     province: proposalSkuResolvedProvince(form, sku),
   );
-  final local = proposalIntakeSkuScaleTotal(sku);
-  final charge = local > 0
+  final manual = proposalProductScaleManual(form);
+  final local = manual
+      ? proposalManualAnnualScale(sku)
+      : proposalIntakeSkuScaleTotal(sku);
+  final charge = manual
       ? local
-      : (proposalIntakeFormHasText(form, kProposalSalesScaleKey)
-            ? proposalSkuFaceShareScale(sku, form: form)
-            : 0.0);
+      : (local > 0
+            ? local
+            : (proposalIntakeFormHasText(form, kProposalSalesScaleKey)
+                  ? proposalSkuFaceShareScale(sku, form: form)
+                  : 0.0));
   if (charge <= 0) return 0;
   final volume = lookup > 0 ? lookup : charge;
   final split = (volume - charge).abs() > 0.001;
@@ -1126,6 +1292,7 @@ double _proposalVatScale(
   ProposalSkuDetailRow sku,
   ProposalFinanceSettleTerms terms,
 ) {
+  if (proposalProductScaleManual(form)) return proposalManualAnnualScale(sku);
   if (terms.scale.trim().isNotEmpty) return proposalAnnualizedScale(terms);
   final local = proposalIntakeSkuScaleTotal(sku);
   if (local > 0) return local;
@@ -1442,9 +1609,14 @@ double? proposalEstimatedProcurementCost(Map<String, dynamic> form) {
   }
   for (final sku in proposalIntakeSkuDetails(form)) {
     if (covered.contains(sku.id)) continue;
-    final local = proposalIntakeSkuScaleTotal(sku);
+    final local = proposalProductScaleManual(form)
+        ? proposalManualAnnualScale(sku)
+        : proposalIntakeSkuScaleTotal(sku);
     sum +=
-        (local > 0 ? local : proposalEffectiveSalesScale(form)) * fallbackRatio;
+        (proposalProductScaleManual(form)
+            ? local
+            : (local > 0 ? local : proposalEffectiveSalesScale(form))) *
+        fallbackRatio;
     break;
   }
   if (sum <= 0) {
@@ -1474,6 +1646,14 @@ double proposalAssociatedSalesScale(
 ) {
   if (skuIds.isEmpty) return proposalEffectiveSalesScale(form);
   final want = skuIds.toSet();
+  if (proposalProductScaleManual(form)) {
+    var manualSum = 0.0;
+    for (final sku in proposalIntakeAllSellableSkus(form)) {
+      if (!want.contains(sku.id)) continue;
+      manualSum += proposalManualAnnualScale(sku);
+    }
+    return proposalRoundWan(manualSum);
+  }
   var sum = 0.0;
   var anyLegacy = false;
   for (final sku in proposalIntakeAllSellableSkus(form)) {
@@ -1798,6 +1978,14 @@ double _proposalAllocatedScale(
 ) {
   if (skuIds.isEmpty) return 0;
   final want = skuIds.toSet();
+  if (proposalProductScaleManual(form)) {
+    var manualSum = 0.0;
+    for (final sku in proposalIntakeAllSellableSkus(form)) {
+      if (!want.contains(sku.id)) continue;
+      manualSum += proposalManualAnnualScale(sku);
+    }
+    return proposalRoundWan(manualSum);
+  }
   final skus = proposalIntakeSkuDetails(form);
   final own = [for (final sku in skus) proposalIntakeSkuScaleTotal(sku)];
   var owned = 0.0;
@@ -2071,7 +2259,9 @@ String proposalProjectCostFormulaSubstitution(
     for (final id in hit.skuIds) {
       final sku = skus[id];
       if (sku == null) continue;
-      final scale = proposalIntakeSkuScaleTotal(sku);
+      final scale = proposalProductScaleManual(form)
+          ? proposalManualAnnualScale(sku)
+          : proposalIntakeSkuScaleTotal(sku);
       if (scale > 0) (grouped[label] ??= []).add(scale);
     }
   }

@@ -2,15 +2,16 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/dunes_theme.dart';
 import '../auth/auth_session.dart';
-import '../contacts/contact_service.dart';
 import '../shell/dunes_toast.dart';
 import '../tasks/native_task_detail_page.dart';
 import 'hr_performance_service.dart';
+import 'hr_performance_department_final.dart';
 import 'hr_performance_sheet.dart';
 import 'hr_performance_sheets.dart';
 
 const hrActionLabels = <String, String>{
   'confirm_indicators': '确认无误',
+  'submit_self': '提交自评',
   'request_adjustment': '申请调整',
   'approve_adjustment': '通过调整',
   'reject_adjustment': '驳回调整',
@@ -29,16 +30,18 @@ const hrActionLabels = <String, String>{
   'add_bonus': '录入加减分',
   'remove_bonus': '移除加减分',
   'exempt': '免考核',
+  'undo_exempt': '撤销免考核',
   'resign': '离职归档',
   'assign_snapshot': '补配考核表',
   'verify_history': '核对月末资料',
   'urge': '督办',
-  'initialize': '初始化',
+  'initialize': '生成考核表',
   'assign': '补配快照',
   'auto_indicators': '窗口结束自动确认',
   'auto_result': '超时视为确认',
   'expire_adjustment': '调整超时未批',
   'skip_self_hr': '跳过本人 HR 审核',
+  'skip_executive_calibration': '跳过分管校准',
   'close_alert': '处理预警',
 };
 String hrDate(dynamic value) {
@@ -54,11 +57,13 @@ class HrPerformanceDetail extends StatefulWidget {
     required this.session,
     required this.record,
     required this.service,
+    this.monthStarted = true,
     this.onChanged,
   });
   final AuthSession session;
   final HrPerformanceRecord record;
   final HrPerformanceService service;
+  final bool monthStarted;
   final VoidCallback? onChanged;
   @override
   State<HrPerformanceDetail> createState() => _HrPerformanceDetailState();
@@ -70,6 +75,14 @@ class _HrPerformanceDetailState extends State<HrPerformanceDetail> {
   Set<int> _missing = {};
   bool _busy = false;
   Future<List<Map<String, dynamic>>>? _logs;
+  bool get _skipExecutiveCalibration => const {
+    '许正阳',
+    '郑咏熹',
+  }.contains('${_record.snapshot['divisionSupervisorName'] ?? ''}'.trim());
+  String _actionLabel(String action) =>
+      action == 'return_hr' && _skipExecutiveCalibration
+      ? '退回初评'
+      : hrActionLabels[action] ?? action;
   @override
   void initState() {
     super.initState();
@@ -105,7 +118,32 @@ class _HrPerformanceDetailState extends State<HrPerformanceDetail> {
     }
   }
 
-  Future<void> _perform(String action, {String? requestId}) async {
+  String _resultConfirmationHint(HrPerformanceRecord record) {
+    final rawDue = record.workflow['dueAt'];
+    final due = rawDue == null ? null : DateTime.tryParse('$rawDue');
+    final deadline = due == null ? '确认截止时间：未设置' : '确认截止：${hrDate(due)}（北京时间）';
+    final config = _options?['config'];
+    final rules = config is Map ? config['rules'] : null;
+    final autoConfirm = rules is Map ? rules['autoConfirm'] : null;
+    if (autoConfirm is! bool) return '$deadline\n逾期处理规则暂不可用，请稍后刷新查看。';
+    if (due == null) return '$deadline\n未设置截止时间，不会按截止时间自动确认。';
+    final pendingAppeal = record.requests.any(
+      (r) => r['kind'] == 'appeal' && r['status'] == 'pending',
+    );
+    final policy = autoConfirm
+        ? '到期后没有待处理申诉时，系统会自动确认结果。'
+        : '到期后不会自动确认，请主动确认或提出申诉。';
+    final appeal = pendingAppeal
+        ? (autoConfirm ? '\n当前申诉处理中，自动确认暂缓。' : '\n当前申诉处理中。')
+        : '';
+    return '$deadline\n$policy$appeal';
+  }
+
+  Future<void> _perform(
+    String action, {
+    String? requestId,
+    bool adjustFinal = false,
+  }) async {
     if (_busy) return;
     Map<String, dynamic>? data;
     try {
@@ -117,30 +155,57 @@ class _HrPerformanceDetailState extends State<HrPerformanceDetail> {
       final rules = Map<String, dynamic>.from(config['rules'] as Map? ?? {});
       if (!mounted) return;
       switch (action) {
+        case 'submit_self':
         case 'submit_review':
         case 'save_calibration':
-        case 'approve_final':
           data = await showHrScoreSheet(
             context,
             _record,
             config,
             title: hrActionLabels[action]!,
-            initial: action == 'submit_review',
+            initial: action == 'submit_review' || action == 'submit_self',
+            self: action == 'submit_self',
           );
+        case 'approve_final':
+          if (adjustFinal) {
+            data = await showHrScoreSheet(
+              context,
+              _record,
+              config,
+              title: '调整分数后通过',
+              initial: false,
+            );
+          } else {
+            final confirmed = await showDialog<bool>(
+              context: context,
+              builder: (context) => AlertDialog(
+                title: const Text('确认终审通过'),
+                content: Text(
+                  '确认通过 ${_record.name} 的绩效考核？\n当前得分 ${_record.snapshot['total'] ?? '—'} · 等级 ${_record.snapshot['grade'] ?? '—'} · 系数 ${_record.snapshot['coefficient'] ?? '—'}\n通过后结果立即下发给员工。',
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context, false),
+                    child: const Text('取消'),
+                  ),
+                  FilledButton(
+                    onPressed: () => Navigator.pop(context, true),
+                    child: const Text('确认通过并下发'),
+                  ),
+                ],
+              ),
+            );
+            data = confirmed == true ? <String, dynamic>{} : null;
+          }
         case 'request_adjustment':
           data = await showHrAdjustmentSheet(context, _record, _options!);
         case 'add_bonus':
           data = await showHrBonusSheet(context, config);
         case 'assign_snapshot':
-          final contacts = await ContactService(
-            session: widget.session,
-          ).fetchContacts();
-          if (!mounted) return;
           data = await showHrAssignmentSheet(
             context,
             _record,
             config,
-            contacts,
             departments: hrMaps(_options!['departments']),
             positions: hrMaps(_options!['positions']),
           );
@@ -148,7 +213,7 @@ class _HrPerformanceDetailState extends State<HrPerformanceDetail> {
           data = await showHrReasonSheet(
             context,
             title: '免考核',
-            message: '免考核人员保留在名单，不产生等级与系数；以后周期暂停生成，HR 可在后台恢复参与。',
+            message: '免考核人员保留在名单，不产生等级与系数；以后周期暂停生成。HR 可在本条考核表中撤销误操作。',
             targets: (config['exemptionReasons'] as List)
                 .map((x) => '$x')
                 .toList(),
@@ -180,7 +245,12 @@ class _HrPerformanceDetailState extends State<HrPerformanceDetail> {
           data = await showHrReasonSheet(
             context,
             title: '处理绩效申诉',
-            targets: ['review', 'calibration', 'hr', 'reject'],
+            targets: [
+              'review',
+              if (!_skipExecutiveCalibration) 'calibration',
+              'hr',
+              'reject',
+            ],
             minLength: 1,
             message: '先提交的处理结果生效。退回后，该节点及后续审核作废。',
           );
@@ -201,20 +271,29 @@ class _HrPerformanceDetailState extends State<HrPerformanceDetail> {
                 'complete_interview',
                 'verify_history',
                 'urge',
+                'undo_exempt',
                 'remove_bonus',
               ].contains(action) ||
               (['approve_hr', 'approve_department_hr'].contains(action) &&
                   _record.warnings.any((w) => !w.contains('不阻断提交')));
           data = await showHrReasonSheet(
             context,
-            title: hrActionLabels[action] ?? action,
+            title: _actionLabel(action),
             minLength: requiredReason ? 1 : 0,
-            message: action == 'confirm_indicators'
+            message: action == 'return_hr' && _skipExecutiveCalibration
+                ? '该考核跳过分管校准，将退回直属主管初评。'
+                : action == 'confirm_indicators'
                 ? '确认后将进入主管初评，调整窗口内也不能再次改动。'
+                : action == 'submit_self'
+                ? '提交自评后进入主管初评。自评分数会保留给主管查看。'
                 : action == 'submit_calibration'
                 ? '本部门符合条件的人员全部到达校准后，将一并提交 HR；已进入后续节点的人员保持原节点。'
+                : action == 'undo_exempt'
+                ? '将恢复本月免考核前的考核内容和节点，并取消本次免考核造成的后续暂停。原有截止时间保持不变，若已到期可能自动推进；已开始的其他月份不会自动补生成。'
+                : action == 'urge'
+                ? '向该考核当前节点的办理人发送督办消息，请填写具体提醒内容。'
                 : action == 'confirm_result'
-                ? '确认后直属主管将收到面谈待办。'
+                ? '请核对得分 ${_record.snapshot['total'] ?? '—'}、等级 ${_record.snapshot['grade'] ?? '—'}、系数 ${_record.snapshot['coefficient'] ?? '—'}。确认后直属主管将收到面谈待办。'
                 : _record.warnings.isNotEmpty
                 ? _record.warnings.join('；')
                 : null,
@@ -238,7 +317,7 @@ class _HrPerformanceDetailState extends State<HrPerformanceDetail> {
       widget.onChanged?.call();
       await _loadOptions();
       if (mounted) {
-        showDunesToast(context, '${hrActionLabels[action] ?? '操作'}已完成');
+        showDunesToast(context, '${_actionLabel(action)}已完成');
       }
     } catch (e) {
       if (mounted) showDunesToast(context, '$e', kind: DunesToastKind.error);
@@ -258,11 +337,14 @@ class _HrPerformanceDetailState extends State<HrPerformanceDetail> {
             'reject_adjustment',
             'resolve_appeal',
             'remove_bonus',
+            'assign_snapshot',
+            'verify_history',
           ].contains(a),
         )
         .toList();
     final primaryActions = {
       'confirm_indicators',
+      'submit_self',
       'submit_review',
       'submit_calibration',
       'approve_hr',
@@ -312,16 +394,110 @@ class _HrPerformanceDetailState extends State<HrPerformanceDetail> {
                   ],
                 ),
                 const SizedBox(height: 12),
+                if (r.snapshot['selfTotal'] != null)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Text(
+                      '自评 ${r.snapshot['selfTotal']}',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: DunesColors.resolve(context, DunesColors.text2),
+                      ),
+                    ),
+                  ),
                 if (r.scoresVisible && r.snapshot['total'] != null)
-                  Text(
-                    '得分 ${r.snapshot['total']} · ${r.snapshot['grade']} · 系数 ${r.snapshot['coefficient']}',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
                       color: DunesColors.resolve(
                         context,
-                        DunesColors.brandPurpleDeep,
+                        DunesColors.brandPurpleSoft,
+                        role: DunesColorRole.surface,
                       ),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          r.stage == 'result' ? '请核对考核结果' : '考核结果',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.text2,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            for (final item in [
+                              ('得分', '${r.snapshot['total']}'),
+                              ('等级', '${r.snapshot['grade'] ?? '—'}'),
+                              ('系数', '${r.snapshot['coefficient'] ?? '—'}'),
+                            ])
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      item.$1,
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: DunesColors.resolve(
+                                          context,
+                                          DunesColors.text2,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 3),
+                                    Text(
+                                      item.$2,
+                                      style: TextStyle(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.w700,
+                                        color: DunesColors.resolve(
+                                          context,
+                                          DunesColors.brandPurpleDeep,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                          ],
+                        ),
+                        if (r.actions.contains('confirm_result'))
+                          const Padding(
+                            padding: EdgeInsets.only(top: 8),
+                            child: Text(
+                              '请查看下方指标明细，确认后进入面谈。',
+                              style: TextStyle(fontSize: 12),
+                            ),
+                          ),
+                        if (r.stage == 'result' &&
+                            r.userId == widget.session.userId)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 10),
+                            child: Text(
+                              _resultConfirmationHint(r),
+                              key: const ValueKey(
+                                'hr-result-confirmation-policy',
+                              ),
+                              style: TextStyle(
+                                fontSize: 12,
+                                height: 1.5,
+                                fontWeight: FontWeight.w600,
+                                color: DunesColors.resolve(
+                                  context,
+                                  DunesColors.brandPurpleDeep,
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
                   )
                 else if (r.stage == 'exempt')
@@ -354,20 +530,22 @@ class _HrPerformanceDetailState extends State<HrPerformanceDetail> {
               children: [
                 _HrMetaRow(
                   label: '调整截止',
-                  value: '${hrDate(r.adjustmentDueAt)}（北京时间）',
+                  value: widget.monthStarted
+                      ? '${hrDate(r.adjustmentDueAt)}（北京时间）'
+                      : '开始考核后起算',
                 ),
-                if (r.workflow['dueAt'] != null)
+                if (widget.monthStarted && r.workflow['dueAt'] != null)
                   _HrMetaRow(
                     label: '当前节点截止',
                     value: hrDate(r.workflow['dueAt']),
                   ),
                 _HrMetaRow(
                   label: '直属主管',
-                  value: '${r.snapshot['directSupervisorName'] ?? '待补配'}',
+                  value: '${r.snapshot['directSupervisorName'] ?? '未设置'}',
                 ),
                 _HrMetaRow(
                   label: '分管主管',
-                  value: '${r.snapshot['divisionSupervisorName'] ?? '待补配'}',
+                  value: '${r.snapshot['divisionSupervisorName'] ?? '未设置'}',
                   last: true,
                 ),
               ],
@@ -407,12 +585,51 @@ class _HrPerformanceDetailState extends State<HrPerformanceDetail> {
               spacing: 8,
               runSpacing: 8,
               children: [
+                if (r.actions.contains('approve_final'))
+                  _HrActionButton(
+                    label: '部门终审',
+                    onPressed: _busy
+                        ? null
+                        : () async {
+                            await showHrDepartmentFinal(
+                              context,
+                              widget.service,
+                              r.id,
+                            );
+                            widget.onChanged?.call();
+                            try {
+                              final latest = await widget.service.detail(r.id);
+                              if (!mounted) return;
+                              setState(() {
+                                _record = latest;
+                                _options = null;
+                                _logs = null;
+                              });
+                              await _loadOptions();
+                            } catch (e) {
+                              if (mounted) {
+                                showDunesToast(
+                                  this.context,
+                                  '刷新考核表失败：$e',
+                                  kind: DunesToastKind.error,
+                                );
+                              }
+                            }
+                          },
+                  ),
                 for (final a in visibleActions)
                   _HrActionButton(
                     key: ValueKey('hr-action-$a'),
-                    label: hrActionLabels[a] ?? a,
+                    label: _actionLabel(a),
                     primary: primaryActions.contains(a),
                     onPressed: _busy ? null : () => _perform(a),
+                  ),
+                if (r.actions.contains('approve_final'))
+                  _HrActionButton(
+                    label: '调整分数后通过',
+                    onPressed: _busy
+                        ? null
+                        : () => _perform('approve_final', adjustFinal: true),
                   ),
               ],
             ),

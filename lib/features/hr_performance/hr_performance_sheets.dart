@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../contacts/contact_models.dart';
 import 'hr_performance_service.dart';
 import 'hr_performance_template_ui.dart';
 
@@ -131,6 +130,95 @@ Widget hrReasonField(
   ),
 );
 
+Future<Map<String, dynamic>?> showHrUrgeSheet(
+  BuildContext context, {
+  required List<HrPerformanceRecord> targets,
+  required List<HrPerformanceRecord> skipped,
+}) => hrFormSheet(
+  context,
+  title: '发送督办',
+  submitLabel: '发送督办',
+  message: '将向所列考核的当前节点办理人发送提醒，请确认名单并填写督办内容。',
+  values: {'reason': ''},
+  fields: (v, update) => [
+    Text(
+      '发送 ${targets.length} 人${skipped.isEmpty ? '' : ' · 跳过 ${skipped.length} 人'}',
+      style: TextStyle(
+        fontSize: 13,
+        fontWeight: FontWeight.w600,
+        color: hrConfigColor(context, hrConfigPurple),
+      ),
+    ),
+    const SizedBox(height: 8),
+    for (final r in targets)
+      Padding(
+        padding: const EdgeInsets.only(bottom: 6),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            color: hrConfigSurface(context, const Color(0xFFF7F6FA)),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  '${r.name} · ${r.department}',
+                  style: const TextStyle(fontSize: 13),
+                ),
+              ),
+              Text(
+                r.stageLabel,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: hrConfigColor(context, hrConfigPurple),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    if (skipped.isNotEmpty)
+      Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Text(
+          '已跳过无权督办或不在办理中的人员：${skipped.map((r) => r.name).join('、')}',
+          style: const TextStyle(fontSize: 12),
+        ),
+      ),
+    const SizedBox(height: 8),
+    Text(
+      '督办内容（必填）',
+      style: TextStyle(
+        fontSize: 12,
+        color: hrConfigColor(context, const Color(0xFF827A8C)),
+      ),
+    ),
+    const SizedBox(height: 5),
+    ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 500),
+      child: TextFormField(
+        key: const ValueKey('hr-reason'),
+        initialValue: hrText(v['reason']),
+        minLines: 1,
+        maxLines: 4,
+        style: const TextStyle(fontSize: 13),
+        decoration: const InputDecoration(
+          hintText: '填写需要提醒的内容',
+          isDense: true,
+          contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        ),
+        onChanged: (value) => v['reason'] = value,
+      ),
+    ),
+  ],
+  submit: (v) {
+    final reason = hrText(v['reason']);
+    if (reason.isEmpty) throw const FormatException('请填写督办内容');
+    return {'reason': reason};
+  },
+);
+
 Future<Map<String, dynamic>?> showHrReasonSheet(
   BuildContext context, {
   required String title,
@@ -180,55 +268,222 @@ Future<Map<String, dynamic>?> showHrScoreSheet(
   Map<String, dynamic> config, {
   required String title,
   required bool initial,
+  bool self = false,
 }) {
   final lines = [
     for (final line in record.lines)
       {
         ...line,
-        'score': '${line['score'] ?? line['suggestedScore'] ?? ''}',
-        'remark': '${line['remark'] ?? ''}',
+        'score':
+            '${(self ? line['selfScore'] : line['score']) ?? line['suggestedScore'] ?? ''}',
+        'remark': '${(self ? line['selfRemark'] : line['remark']) ?? ''}',
       },
   ];
   final rules = Map<String, dynamic>.from(config['rules'] as Map? ?? {});
+  String? scoreError(Map<String, dynamic> line) {
+    final value = hrText(line['score']);
+    if (value.isEmpty) return '请填写得分';
+    final score = double.tryParse(value);
+    final max = line['directScore'] == true
+        ? ((line['weight'] as num?)?.toDouble() ?? 0)
+        : 100.0;
+    if (score == null || !score.isFinite || score < 0 || score > max) {
+      return '请输入 0–$max 的得分';
+    }
+    final decimal = (rules['decimalPlaces'] as num?)?.toInt() ?? 1;
+    final multiplier = decimal == 0 ? 1 : 10;
+    if ((score * multiplier - (score * multiplier).round()).abs() > 0.00001) {
+      return '最多 $decimal 位小数';
+    }
+    return null;
+  }
+
+  bool needsRemark(Map<String, dynamic> line) {
+    if (!initial || scoreError(line) != null) return false;
+    final score = double.parse(hrText(line['score']));
+    final max = line['directScore'] == true
+        ? ((line['weight'] as num?)?.toDouble() ?? 0)
+        : 100.0;
+    final suggested = (line['suggestedScore'] as num?)?.toDouble();
+    return suggested == null ||
+        (suggested - score).abs() > 0.00001 ||
+        (line['directScore'] == true && max > 0 ? score * 100 / max : score) <
+            ((rules['remarkBelow'] as num?)?.toDouble() ?? 60);
+  }
+
   return hrFormSheet(
     context,
     title: title,
     values: {'lines': lines, 'reason': ''},
-    submitLabel: initial ? '提交初评' : '保存并提交',
+    submitLabel: self ? '提交自评' : (initial ? '提交初评' : '保存并提交'),
     message: initial
         ? '按每项满分填写得分；无建议分、与建议分不一致或低于备注线时须填写备注。'
         : '改动任何分数都须填写改分理由。',
     fields: (v, update) => [
+      Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Text(
+          '共 ${lines.length} 项 · ${lines.where((l) => scoreError(l) == null && (!needsRemark(l) || hrText(l['remark']).isNotEmpty)).length} 项已填写完整',
+          style: TextStyle(
+            fontSize: 13,
+            color: hrConfigColor(context, hrConfigPurple),
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
       for (final line in lines)
         Card(
+          color: hrConfigSurface(context, Colors.white),
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(
+              color: hrConfigBorder(context, const Color(0xFFECE7F3)),
+            ),
+          ),
           child: Padding(
             padding: const EdgeInsets.all(12),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('${line['name']} · 权重 ${line['weight']}%'),
-                Text('建议分：${line['suggestedScore'] ?? '无'}'),
+                Text(
+                  '${line['name']}',
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '权重 ${line['weight']}% · 建议分 ${line['suggestedScore'] ?? '无'}',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: Color(0xFF827A8C),
+                  ),
+                ),
+                if (hrText(line['instructions']).isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Text(
+                      hrText(line['instructions']),
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                  ),
                 for (final band in hrMaps(line['bands']))
                   Text(
                     '${band['min']}–${band['max']} 分：${band['description']}',
+                    style: const TextStyle(fontSize: 12, height: 1.4),
                   ),
-                TextFormField(
-                  key: ValueKey('hr-score-${line['indicatorId']}'),
-                  initialValue: hrText(line['score']),
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
+                const SizedBox(height: 8),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 500),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SizedBox(
+                        width: 100,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '指标得分',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: hrConfigColor(
+                                  context,
+                                  const Color(0xFF827A8C),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 5),
+                            TextFormField(
+                              key: ValueKey('hr-score-${line['indicatorId']}'),
+                              initialValue: hrText(line['score']),
+                              keyboardType:
+                                  const TextInputType.numberWithOptions(
+                                    decimal: true,
+                                  ),
+                              style: const TextStyle(fontSize: 13),
+                              decoration: const InputDecoration(
+                                hintText: '填写得分',
+                                suffixText: '分',
+                                isDense: true,
+                                contentPadding: EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 10,
+                                ),
+                              ),
+                              onChanged: (x) => update(() => line['score'] = x),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (initial) ...[
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                needsRemark(line) ? '评分备注（必填）' : '评分备注（选填）',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: hrConfigColor(
+                                    context,
+                                    const Color(0xFF827A8C),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 5),
+                              TextFormField(
+                                key: ValueKey(
+                                  'hr-remark-${line['indicatorId']}',
+                                ),
+                                initialValue: hrText(line['remark']),
+                                style: const TextStyle(fontSize: 13),
+                                decoration: const InputDecoration(
+                                  hintText: '填写评分说明',
+                                  isDense: true,
+                                  contentPadding: EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 10,
+                                  ),
+                                ),
+                                minLines: 1,
+                                maxLines: 3,
+                                onChanged: (x) =>
+                                    update(() => line['remark'] = x),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
-                  decoration: const InputDecoration(labelText: '指标得分'),
-                  onChanged: (x) => update(() => line['score'] = x),
                 ),
-                if (initial)
-                  TextFormField(
-                    key: ValueKey('hr-remark-${line['indicatorId']}'),
-                    initialValue: hrText(line['remark']),
-                    decoration: const InputDecoration(labelText: '评分备注'),
-                    minLines: 1,
-                    maxLines: 3,
-                    onChanged: (x) => line['remark'] = x,
+                if (scoreError(line) != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 5),
+                    child: Text(
+                      scoreError(line)!,
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                    ),
+                  ),
+                if (initial &&
+                    needsRemark(line) &&
+                    hrText(line['remark']).isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 5),
+                    child: Text(
+                      '无建议分、与建议分不同或低于备注线时需要说明',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: hrConfigColor(context, const Color(0xFF827A8C)),
+                      ),
+                    ),
                   ),
               ],
             ),
@@ -240,6 +495,17 @@ Future<Map<String, dynamic>?> showHrScoreSheet(
       if (!initial) hrReasonField(v, label: '改分理由（改动时必填）'),
     ],
     submit: (v) {
+      final incomplete = lines
+          .where(
+            (l) =>
+                scoreError(l) != null ||
+                (needsRemark(l) && hrText(l['remark']).isEmpty),
+          )
+          .map((l) => '${l['name']}')
+          .toList();
+      if (incomplete.isNotEmpty) {
+        throw FormatException('请检查 ${incomplete.join('、')} 的得分或必填备注');
+      }
       final result = <Map<String, dynamic>>[];
       for (final l in lines) {
         final score = hrNumber(l['score']);
@@ -463,14 +729,13 @@ Future<Map<String, dynamic>?> showHrBonusSheet(
 Future<Map<String, dynamic>?> showHrAssignmentSheet(
   BuildContext context,
   HrPerformanceRecord record,
-  Map<String, dynamic> config,
-  List<NativeContact> contacts, {
+  Map<String, dynamic> config, {
   List<Map<String, dynamic>> departments = const [],
   List<Map<String, dynamic>> positions = const [],
 }) => hrFormSheet(
   context,
   title: '补配本周期考核表',
-  message: '仅修改本周期快照。请同时核对组织用户里的岗位与汇报关系，避免下月再次缺失。',
+  message: '直属主管和分管主管取组织用户的当前关系。这里只补本周期的模板和人员资料。',
   values: {'reason': ''},
   fields: (v, update) => [
     if (['opening', 'indicators'].contains(record.stage)) ...[
@@ -522,36 +787,12 @@ Future<Map<String, dynamic>?> showHrAssignmentSheet(
         onChanged: (x) => v['templateId'] = x,
       ),
     ],
-    _HrSelect<int>(
-      decoration: const InputDecoration(labelText: '直属主管（留空保持）'),
-      items: contacts
-          .where((u) => u.enabled && u.userId != record.userId)
-          .map(
-            (u) =>
-                DropdownMenuItem(value: u.userId, child: Text(u.displayName)),
-          )
-          .toList(),
-      onChanged: (x) => v['directSupervisorId'] = x,
-    ),
-    _HrSelect<int>(
-      decoration: const InputDecoration(labelText: '分管主管（留空保持）'),
-      items: contacts
-          .where((u) => u.enabled)
-          .map(
-            (u) =>
-                DropdownMenuItem(value: u.userId, child: Text(u.displayName)),
-          )
-          .toList(),
-      onChanged: (x) => v['divisionSupervisorId'] = x,
-    ),
     hrReasonField(v),
   ],
   submit: (v) {
     if (hrText(v['reason']).isEmpty) throw const FormatException('请填写修改原因');
     if ([
       'templateId',
-      'directSupervisorId',
-      'divisionSupervisorId',
       'departmentId',
       'positionId',
       'hiredAt',

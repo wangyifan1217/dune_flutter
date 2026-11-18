@@ -2079,6 +2079,9 @@ List<double> _skuScales(
   Map<String, dynamic> scope,
   List<ProposalSkuDetailRow> skus,
 ) {
+  if (proposalProductScaleManual(scope)) {
+    return [for (final sku in skus) proposalManualAnnualScale(sku)];
+  }
   final own = [for (final sku in skus) proposalIntakeSkuScaleTotal(sku)];
   final ownSum = own.fold<double>(0, (sum, v) => sum + (v > 0 ? v : 0));
   final groupScale = proposalEffectiveSalesScale(scope);

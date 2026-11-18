@@ -115,7 +115,8 @@ class _HrPerformanceLibraryPageState extends State<HrPerformanceLibraryPage> {
   final Set<String> _loadedDimensions = {};
   final Set<_Draft> _selected = {};
   HrCatalog? _catalog;
-  int? _departmentFilter, _positionFilter;
+  int? _departmentFilter;
+  String? _categoryFilter;
   bool _uncategorizedOnly = false;
 
   Future<HrCatalog?> _getCatalog({bool silent = false}) async {
@@ -125,7 +126,7 @@ class _HrPerformanceLibraryPageState extends State<HrPerformanceLibraryPage> {
       if (mounted) setState(() => _catalog = catalog);
       return catalog;
     } catch (_) {
-      if (mounted && !silent) _toast('部门和岗位加载失败，请检查网络后重试');
+      if (mounted && !silent) _toast('部门和考核分类加载失败，请检查网络后重试');
       return null;
     }
   }
@@ -133,20 +134,27 @@ class _HrPerformanceLibraryPageState extends State<HrPerformanceLibraryPage> {
   Future<void> _filterCategory(bool department) async {
     final catalog = await _getCatalog();
     if (!mounted || catalog == null) return;
-    final value = await hrChooseFilter(
-      context,
-      department ? '选择部门' : '选择岗位',
-      department ? catalog.departments : catalog.positions,
-      department ? _departmentFilter : _positionFilter,
-      catalog: department ? catalog : null,
-    );
+    if (department) {
+      final value = await hrChooseFilter(
+        context,
+        '选择部门',
+        catalog.departments,
+        _departmentFilter,
+        catalog: catalog,
+      );
+      if (mounted) setState(() => _departmentFilter = value);
+      return;
+    }
+    final names = catalog.assessmentCategories;
+    final current = _categoryFilter == null
+        ? null
+        : names.indexOf(_categoryFilter!) + 1;
+    final value = await hrChooseFilter(context, '选择考核分类', [
+      for (var i = 0; i < names.length; i++) {'id': i + 1, 'name': names[i]},
+    ], current == 0 ? null : current);
     if (mounted) {
       setState(() {
-        if (department) {
-          _departmentFilter = value;
-        } else {
-          _positionFilter = value;
-        }
+        _categoryFilter = value == null ? null : names[value - 1];
       });
     }
   }
@@ -584,7 +592,7 @@ class _HrPerformanceLibraryPageState extends State<HrPerformanceLibraryPage> {
     final searching =
         _searchController.text.trim().isNotEmpty ||
         _departmentFilter != null ||
-        _positionFilter != null ||
+        _categoryFilter != null ||
         _uncategorizedOnly;
     final visibleDrafts = _drafts
         .where(
@@ -594,7 +602,7 @@ class _HrPerformanceLibraryPageState extends State<HrPerformanceLibraryPage> {
               hrCategoryMatches(
                 draft.category,
                 department: _departmentFilter,
-                position: _positionFilter,
+                assessmentCategory: _categoryFilter,
                 catalog: _catalog,
               ) &&
               hrPerformanceMatchesSearch(_searchController.text, [
@@ -610,7 +618,7 @@ class _HrPerformanceLibraryPageState extends State<HrPerformanceLibraryPage> {
           (dimension) =>
               !searching ||
               (_departmentFilter == null &&
-                  _positionFilter == null &&
+                  _categoryFilter == null &&
                   !_uncategorizedOnly &&
                   _searchController.text.trim().isNotEmpty &&
                   hrPerformanceMatchesSearch(_searchController.text, [
@@ -776,16 +784,11 @@ class _HrPerformanceLibraryPageState extends State<HrPerformanceLibraryPage> {
                           : () => setState(() => _departmentFilter = null),
                     ),
                     HrFilterButton(
-                      label: _positionFilter == null
-                          ? '全部岗位'
-                          : _catalog!.name(
-                              _catalog!.positions,
-                              _positionFilter!,
-                            ),
+                      label: _categoryFilter ?? '全部考核分类',
                       onTap: () => _filterCategory(false),
-                      onClear: _positionFilter == null
+                      onClear: _categoryFilter == null
                           ? null
-                          : () => setState(() => _positionFilter = null),
+                          : () => setState(() => _categoryFilter = null),
                     ),
                   ],
                 ),
@@ -1200,7 +1203,9 @@ class _IndicatorEditor extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           _field(draft.standard, '评分说明（可选）', onChanged, maxLines: 3),
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
+          const Divider(height: 1, thickness: 1, color: Color(0xFFE4DEEC)),
+          const SizedBox(height: 8),
           Row(
             children: [
               const Expanded(
@@ -1225,39 +1230,82 @@ class _IndicatorEditor extends StatelessWidget {
           if (draft.bands.isEmpty)
             const Align(
               alignment: Alignment.centerLeft,
-              child: Text(
-                '可逐档设置得分范围与评分标准',
-                style: TextStyle(fontSize: 12, color: Colors.grey),
+              child: Padding(
+                padding: EdgeInsets.only(bottom: 4),
+                child: Text(
+                  '可逐档设置得分范围与评分标准',
+                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                ),
               ),
             ),
-          for (final band in draft.bands)
-            Padding(
-              key: ObjectKey(band),
-              padding: const EdgeInsets.only(bottom: 8),
+          for (var index = 0; index < draft.bands.length; index++)
+            Container(
+              key: ObjectKey(draft.bands[index]),
+              margin: const EdgeInsets.only(top: 10),
+              padding: const EdgeInsets.fromLTRB(12, 2, 8, 12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFCFBFD),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFE4DEEC)),
+              ),
               child: Column(
                 children: [
                   Row(
                     children: [
-                      Expanded(
-                        child: _field(band.min, '最低分', onChanged, number: true),
+                      Text(
+                        '分档 ${index + 1}',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF625C70),
+                        ),
                       ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: _field(band.max, '最高分', onChanged, number: true),
-                      ),
+                      const Spacer(),
                       IconButton(
                         tooltip: '删除分档',
                         onPressed: () {
-                          draft.bands.remove(band);
+                          final band = draft.bands.removeAt(index);
                           band.dispose();
                           onChanged();
                         },
-                        icon: const Icon(Icons.delete_outline),
+                        icon: const Icon(Icons.delete_outline, size: 18),
+                      ),
+                    ],
+                  ),
+                  const Divider(
+                    height: 1,
+                    thickness: 1,
+                    color: Color(0xFFE4DEEC),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _field(
+                          draft.bands[index].min,
+                          '最低分',
+                          onChanged,
+                          number: true,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: _field(
+                          draft.bands[index].max,
+                          '最高分',
+                          onChanged,
+                          number: true,
+                        ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 6),
-                  _field(band.description, '评分标准', onChanged, maxLines: 2),
+                  _field(
+                    draft.bands[index].description,
+                    '评分标准',
+                    onChanged,
+                    maxLines: 2,
+                  ),
                 ],
               ),
             ),

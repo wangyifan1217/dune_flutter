@@ -5,6 +5,9 @@ import '../../core/theme/dunes_theme.dart';
 import '../auth/auth_session.dart';
 import 'hr_performance_detail.dart';
 import 'hr_performance_sheets.dart';
+import '../chat/user_avatar_widget.dart';
+import '../contacts/contact_models.dart';
+import '../contacts/contact_service.dart';
 import '../conversation/conversation_service.dart';
 import '../conversation/conversation_picker_sheet.dart';
 import '../shell/dunes_toast.dart';
@@ -16,6 +19,82 @@ import 'hr_performance_service.dart';
 const _hrPageBg = Color(0xFFF7F4FC);
 const _hrLine = Color(0xFFECE7F3);
 const _hrTabular = <FontFeature>[FontFeature.tabularFigures()];
+const _hrStageFlow = [
+  'opening',
+  'self',
+  'indicators',
+  'review',
+  'calibration',
+  'hr',
+  'final',
+  'result',
+  'interview',
+];
+const _hrStageAside = ['archived', 'exempt'];
+const _hrStageShort = <String, String>{
+  'opening': '待补配',
+  'self': '自评',
+  'indicators': '指标确认',
+  'review': '主管初评',
+  'calibration': '绩效校准',
+  'hr': 'HR 审核',
+  'final': '终审',
+  'result': '结果确认',
+  'interview': '面谈',
+  'archived': '已归档',
+  'exempt': '免考核',
+};
+const _hrStageColors = <String, Color>{
+  'opening': Color(0xFF8E7CC3),
+  'self': Color(0xFF5B6EE1),
+  'indicators': Color(0xFF4C86E0),
+  'review': Color(0xFF7B5CD8),
+  'calibration': Color(0xFF2F9E8F),
+  'hr': Color(0xFF3E8E5A),
+  'final': Color(0xFFD0892B),
+  'result': Color(0xFFE06A4A),
+  'interview': Color(0xFFC45B8A),
+  'archived': Color(0xFF8B8794),
+  'exempt': Color(0xFFA08A62),
+};
+const _hrStageFallback = Color(0xFF7A8494);
+
+bool hrPerformanceExcludedLeader(String name) {
+  switch (name.replaceAll(RegExp(r'\s'), '')) {
+    case '许正阳':
+    case '郑咏熹':
+      return true;
+    default:
+      return false;
+  }
+}
+
+bool hrPerformanceExcludedDepartmentName(String name) =>
+    name.replaceAll(RegExp(r'\s'), '') == '数字化解决方案中心';
+
+bool hrPerformanceDepartmentExcluded({
+  required int? departmentId,
+  required String departmentName,
+  required Map<int, int?> parents,
+  required Map<int, String> names,
+}) {
+  if (hrPerformanceExcludedDepartmentName(departmentName)) return true;
+  var id = departmentId;
+  final seen = <int>{};
+  while (id != null && seen.add(id)) {
+    if (hrPerformanceExcludedDepartmentName(names[id] ?? '')) return true;
+    id = parents[id];
+  }
+  return false;
+}
+
+String _hrStageName(String id) =>
+    _hrStageShort[id] ?? hrPerformanceStageLabels[id] ?? id;
+
+String? _hrStageTooltip(String id) {
+  final full = hrPerformanceStageLabels[id] ?? id;
+  return full == _hrStageName(id) ? null : full;
+}
 
 class NativeHrPerformancePage extends StatefulWidget {
   const NativeHrPerformancePage({
@@ -38,7 +117,14 @@ class NativeHrPerformancePage extends StatefulWidget {
 
 class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
   late final _service = widget.service ?? HrPerformanceService(widget.session);
+  late final _avatars = ConversationService(session: widget.session);
   late DateTime _month;
+  List<NativeDepartment> _orgDepartments = const [];
+  Map<int, NativeContact> _orgPeople = const {};
+  final Map<int, int?> _deptParent = {};
+  final Map<int, String> _deptName = {};
+  final Map<int, int> _userDept = {};
+  final Set<String> _collapsedRoster = {};
   HrPerformanceAccess _access = const HrPerformanceAccess();
   List<HrPerformanceRecord> _records = [];
   HrPerformanceRecord? _selected;
@@ -53,7 +139,9 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
   String? _tag;
   String? _error;
   bool _loading = true;
+  bool _monthStarted = true;
   int _epoch = 0;
+  final Map<String, GlobalKey> _stageChipKeys = {};
 
   String get _monthKey =>
       '${_month.year}-${_month.month.toString().padLeft(2, '0')}';
@@ -68,10 +156,7 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
       r'^(\d{4})-(\d{2})$',
     ).firstMatch(widget.initialMonth ?? '');
     if (month != null) {
-      _month = DateTime(
-        int.parse(month.group(1)!),
-        int.parse(month.group(2)!),
-      );
+      _month = DateTime(int.parse(month.group(1)!), int.parse(month.group(2)!));
     }
     _pendingSelectId = widget.initialRecordId;
     _load();
@@ -89,10 +174,51 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
         _service.records(_monthKey, _scope),
         _service.alerts(),
       ]);
+      final access = results[0] as HrPerformanceAccess;
+      var scope = _scope;
+      var fetched = results[1] as List<HrPerformanceRecord>;
+      final pendingId = _pendingSelectId;
+      if (pendingId != null && !fetched.any((r) => r.id == pendingId)) {
+        for (final candidate in [
+          if (access.all) 'all',
+          if (access.team) 'team',
+          if (access.allowed) 'todo',
+        ]) {
+          if (candidate == scope) continue;
+          final candidates = await _service.records(_monthKey, candidate);
+          if (candidates.any((r) => r.id == pendingId)) {
+            scope = candidate;
+            fetched = candidates;
+            break;
+          }
+        }
+      }
+      var started = true;
+      if (widget.service == null) {
+        try {
+          started = await _service.monthStarted(_monthKey);
+        } catch (_) {
+          started = false;
+        }
+        await _loadOrg();
+      }
       if (!mounted || epoch != _epoch) return;
-      final rows = results[1] as List<HrPerformanceRecord>;
+      final rows = fetched
+          .where(
+            (r) =>
+                !hrPerformanceExcludedLeader(r.name) &&
+                !hrPerformanceDepartmentExcluded(
+                  departmentId: _userDept[r.userId],
+                  departmentName: r.department,
+                  parents: _deptParent,
+                  names: _deptName,
+                ),
+          )
+          .toList();
       setState(() {
-        _access = results[0] as HrPerformanceAccess;
+        _access = access;
+        _scope = scope;
+        _monthStarted = started;
         _records = rows;
         _alerts = results[2] as List<Map<String, dynamic>>;
         _selectedIds.removeWhere((id) => !rows.any((r) => r.id == id));
@@ -109,10 +235,114 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
       setState(() {
         _error = '$e';
         _loading = false;
+        _monthStarted = true;
         _records = [];
         _selected = null;
       });
     }
+  }
+
+  Future<void> _loadOrg() async {
+    try {
+      final org = await ContactService(
+        session: widget.session,
+      ).fetchOrgContacts();
+      final people = <int, NativeContact>{};
+      _deptParent.clear();
+      _deptName.clear();
+      _userDept.clear();
+      void walk(NativeDepartment department, int? parent) {
+        _deptParent[department.id] = parent;
+        _deptName[department.id] = department.name.trim();
+        for (final user in department.users) {
+          people[user.userId] = user;
+          _userDept[user.userId] = department.id;
+        }
+        for (final child in department.children) {
+          walk(child, department.id);
+        }
+      }
+
+      for (final department in org.departments) {
+        walk(department, null);
+      }
+      _orgDepartments = org.departments;
+      _orgPeople = people;
+    } catch (_) {}
+  }
+
+  bool _supervisorInPresidentOffice(int? supervisorId) {
+    var department = supervisorId == null ? null : _userDept[supervisorId];
+    final seen = <int>{};
+    while (department != null && seen.add(department)) {
+      if (_deptName[department] == '总裁办') return true;
+      department = _deptParent[department];
+    }
+    return false;
+  }
+
+  List<_HrRosterDept> _rosterTree(List<HrPerformanceRecord> rows) {
+    final pending = {for (final row in rows) row.userId: row};
+    _HrRosterDept? take(NativeDepartment department) {
+      final people = <HrPerformanceRecord>[];
+      for (final user in department.users) {
+        final record = pending.remove(user.userId);
+        if (record != null) people.add(record);
+      }
+      people.sort((a, b) => a.name.compareTo(b.name));
+      final children = <_HrRosterDept>[];
+      for (final child in department.children) {
+        final node = take(child);
+        if (node != null) children.add(node);
+      }
+      if (people.isEmpty && children.isEmpty) return null;
+      return _HrRosterDept(
+        'dept-${department.id}',
+        department.name,
+        people,
+        children,
+      );
+    }
+
+    final roots = <_HrRosterDept>[];
+    for (final department in _orgDepartments) {
+      final node = take(department);
+      if (node != null) roots.add(node);
+    }
+    if (pending.isNotEmpty) {
+      final grouped = <String, List<HrPerformanceRecord>>{};
+      for (final record in pending.values) {
+        final name = record.department.trim().isEmpty
+            ? '未分配部门'
+            : record.department.trim();
+        grouped.putIfAbsent(name, () => []).add(record);
+      }
+      final names = grouped.keys.toList()..sort();
+      for (final name in names) {
+        final people = grouped[name]!..sort((a, b) => a.name.compareTo(b.name));
+        roots.add(_HrRosterDept('name-$name', name, people, const []));
+      }
+    }
+    return roots;
+  }
+
+  List<Object> get _rosterItems {
+    final items = <Object>[];
+    void walk(_HrRosterDept node, int depth) {
+      items.add(_HrRosterHeader(node, depth));
+      if (_query.isEmpty && _collapsedRoster.contains(node.key)) return;
+      for (final child in node.children) {
+        walk(child, depth + 1);
+      }
+      for (final person in node.people) {
+        items.add(_HrRosterPerson(person, depth + 1));
+      }
+    }
+
+    for (final node in _rosterTree(_visible)) {
+      walk(node, 0);
+    }
+    return items;
   }
 
   void _shiftMonth(int delta) {
@@ -129,26 +359,334 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
     _load();
   }
 
+  void _selectStage(String? stage) {
+    final next = stage != null && stage == _stage ? null : stage;
+    setState(() => _stage = next);
+    final id = next ?? 'all';
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final target = _stageChipKeys[id]?.currentContext;
+      if (target == null) return;
+      Scrollable.ensureVisible(
+        target,
+        alignment: 0.15,
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOut,
+      );
+    });
+  }
+
+  GlobalKey _stageChipKey(String id) =>
+      _stageChipKeys.putIfAbsent(id, GlobalKey.new);
+
   Color get _purple => DunesColors.resolve(context, DunesColors.brandPurple);
-  List<HrPerformanceRecord> get _visible => _records
-      .where(
-        (r) =>
-            (_query.isEmpty ||
-                '${r.name} ${r.department} ${r.position}'.contains(_query)) &&
-            (_stage == null || r.stage == _stage) &&
-            (_grade == null ||
-                (r.scoresVisible && r.snapshot['grade'] == _grade)) &&
-            (_department == null || r.department == _department) &&
-            (_tag == null ||
-                (_tag == 'probation' && r.probation) ||
-                (_tag == 'eligible' && r.exemptionEligible) ||
-                (_tag == 'blocked' && r.blockers.isNotEmpty)),
-      )
-      .toList();
+  bool _matchesStagePool(HrPerformanceRecord r) =>
+      (_query.isEmpty ||
+          '${r.name} ${r.department} ${r.position}'.contains(_query)) &&
+      (_grade == null || (r.scoresVisible && r.snapshot['grade'] == _grade)) &&
+      (_department == null || r.department == _department) &&
+      (_tag == null ||
+          (_tag == 'probation' && r.probation) ||
+          (_tag == 'eligible' && r.exemptionEligible) ||
+          (_tag == 'blocked' && r.blockers.isNotEmpty));
+  List<HrPerformanceRecord> get _stagePool =>
+      _records.where(_matchesStagePool).toList();
+  List<HrPerformanceRecord> get _visible =>
+      _stagePool.where((r) => _stage == null || r.stage == _stage).toList();
 
   List<HrPerformanceRecord> get _operationRows => _selectedIds.isEmpty
       ? _visible
       : _visible.where((r) => _selectedIds.contains(r.id)).toList();
+
+  List<HrPerformanceRecord> _deptRecords(_HrRosterDept node) {
+    final people = <HrPerformanceRecord>[...node.people];
+    for (final child in node.children) {
+      people.addAll(_deptRecords(child));
+    }
+    return people;
+  }
+
+  bool? _deptChecked(_HrRosterDept node) {
+    final ids = _deptRecords(node).map((r) => r.id).toList();
+    if (ids.isEmpty) return false;
+    final selected = ids.where(_selectedIds.contains).length;
+    if (selected == 0) return false;
+    if (selected == ids.length) return true;
+    return null;
+  }
+
+  void _toggleDept(_HrRosterDept node) {
+    final ids = _deptRecords(node).map((r) => r.id);
+    final clear = _deptChecked(node) == true;
+    setState(() {
+      if (clear) {
+        _selectedIds.removeAll(ids);
+      } else {
+        _selectedIds.addAll(ids);
+      }
+    });
+  }
+
+  Widget _rosterHeader(_HrRosterHeader item) {
+    final collapsed =
+        _query.isEmpty && _collapsedRoster.contains(item.dept.key);
+    final indent = (item.depth.clamp(0, 4)) * 16.0;
+    return Padding(
+      padding: EdgeInsets.only(left: indent, top: item.depth == 0 ? 8 : 2),
+      child: Row(
+        children: [
+          if (_access.allowed)
+            Checkbox(
+              key: ValueKey('hr-dept-select-${item.dept.key}'),
+              tristate: true,
+              value: _deptChecked(item.dept),
+              activeColor: _purple,
+              visualDensity: VisualDensity.compact,
+              semanticLabel: '选择${item.dept.name}及下级',
+              onChanged: _busy ? null : (_) => _toggleDept(item.dept),
+            ),
+          Expanded(
+            child: InkWell(
+              borderRadius: BorderRadius.circular(8),
+              onTap: () => setState(() {
+                if (_collapsedRoster.contains(item.dept.key)) {
+                  _collapsedRoster.remove(item.dept.key);
+                } else {
+                  _collapsedRoster.add(item.dept.key);
+                }
+              }),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+                child: Row(
+                  children: [
+                    Icon(
+                      collapsed
+                          ? Icons.chevron_right_rounded
+                          : Icons.expand_more_rounded,
+                      size: 18,
+                      color: DunesColors.resolve(context, DunesColors.text2),
+                    ),
+                    const SizedBox(width: 2),
+                    Expanded(
+                      child: Text.rich(
+                        TextSpan(
+                          children: [
+                            TextSpan(
+                              text: item.dept.name,
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: DunesColors.resolve(
+                                  context,
+                                  DunesColors.text,
+                                ),
+                              ),
+                            ),
+                            TextSpan(
+                              text: '  ${item.dept.total}',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontFeatures: _hrTabular,
+                                color: DunesColors.resolve(
+                                  context,
+                                  DunesColors.text3,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _rosterPerson(_HrRosterPerson item, bool wide) {
+    final r = item.record;
+    final selected = wide && _selected?.id == r.id;
+    final contact = _orgPeople[r.userId];
+    final indent = (item.depth.clamp(0, 5)) * 16.0;
+    final initial = r.name.trim().isEmpty ? '?' : r.name.trim().substring(0, 1);
+    final subtitle = [
+      if (r.todoGroups.isNotEmpty) r.todoGroups.join(' / ') else r.stageLabel,
+      if (r.stage != 'self' &&
+          _supervisorInPresidentOffice(r.directSupervisorId))
+        '启动后先自评',
+      if (r.position.isNotEmpty) r.position,
+      if (r.probation) '试用期',
+    ].join(' · ');
+    return Padding(
+      padding: EdgeInsets.only(left: indent, bottom: 6),
+      child: Material(
+        color: DunesColors.resolve(
+          context,
+          selected ? const Color(0xFFF4EFFB) : Colors.white,
+          role: DunesColorRole.surface,
+        ),
+        borderRadius: BorderRadius.circular(12),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: () {
+            setState(() => _selected = r);
+            if (!wide) {
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => Scaffold(
+                    appBar: AppBar(title: const Text(hrPerformanceTitle)),
+                    body: HrPerformanceDetail(
+                      session: widget.session,
+                      record: r,
+                      service: _service,
+                      monthStarted: _monthStarted,
+                      onChanged: () => _load(),
+                    ),
+                  ),
+                ),
+              );
+            }
+          },
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: DunesColors.resolve(
+                  context,
+                  selected ? DunesColors.brandPurpleLine : _hrLine,
+                  role: DunesColorRole.border,
+                ),
+              ),
+            ),
+            padding: const EdgeInsets.fromLTRB(4, 8, 8, 8),
+            child: Row(
+              children: [
+                if (_access.allowed)
+                  Checkbox(
+                    value: _selectedIds.contains(r.id),
+                    activeColor: _purple,
+                    visualDensity: VisualDensity.compact,
+                    onChanged: _busy
+                        ? null
+                        : (checked) => setState(() {
+                            if (checked == true) {
+                              _selectedIds.add(r.id);
+                            } else {
+                              _selectedIds.remove(r.id);
+                            }
+                          }),
+                  ),
+                ImUserAvatar(
+                  initial: initial,
+                  seed: r.userId,
+                  size: 36,
+                  borderRadius: 10,
+                  avatarPreset: contact?.avatarPreset,
+                  avatarObjectKey: contact?.avatarObjectKey,
+                  avatarService: _avatars,
+                  fallbackBackground: const Color(0xFF7B5CD8),
+                  fallbackForeground: Colors.white,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        r.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: DunesColors.resolve(context, DunesColors.text),
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 12,
+                          height: 1.3,
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.text3,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(
+                  Icons.chevron_right_rounded,
+                  color: DunesColors.resolve(context, DunesColors.text3),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<bool> _askStart(String title, String message, String submit) async {
+    final answer = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(title),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(submit),
+          ),
+        ],
+      ),
+    );
+    return answer == true;
+  }
+
+  Future<void> _startMonth() async {
+    final label = '${_month.year}年${_month.month}月';
+    final first = await _askStart(
+      '确认开始当月绩效考核',
+      '准备开始$label绩效考核。系统会按已保存的规则、模板和组织关系生成考核表。没有模板或上级的人员会留在待补配，补齐后才进入指标确认。',
+      '继续',
+    );
+    if (!first || !mounted) return;
+    final second = await _askStart(
+      '再次确认',
+      '确认开始$label绩效考核？开启后系统会通知相关人员并按流程推进，此操作不能撤回。',
+      '确认开始',
+    );
+    if (!second || !mounted) return;
+    setState(() => _busy = true);
+    try {
+      await _service.startMonth(_monthKey);
+      if (!mounted) return;
+      showDunesToast(context, '已开始$label绩效考核');
+      await _load();
+    } catch (e) {
+      if (mounted) {
+        showDunesToast(context, '开始失败：$e', kind: DunesToastKind.error);
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   Future<void> _forward() async {
     final rows = _operationRows;
     if (rows.isEmpty) return;
@@ -249,28 +787,45 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
   }
 
   Future<void> _batch(String action) async {
-    final rows = _operationRows;
-    if (rows.isEmpty) return;
+    final selected = _operationRows;
+    final rows = action == 'urge'
+        ? selected.where((r) => r.actions.contains(action)).toList()
+        : selected;
+    if (rows.isEmpty) {
+      if (action == 'urge') showDunesToast(context, '当前范围没有可督办的人员');
+      return;
+    }
     if (rows.any((r) => !r.actions.contains(action))) {
       showDunesToast(context, '选中名单包含当前无权办理的人员，请调整选择');
       return;
     }
-    final reason = await showHrReasonSheet(
-      context,
-      title: action == 'urge' ? '批量督办' : '批量驳回至初评',
-      minLength: 1,
-    );
+    final reason = action == 'urge'
+        ? await showHrUrgeSheet(
+            context,
+            targets: rows,
+            skipped: selected
+                .where((r) => !r.actions.contains(action))
+                .toList(),
+          )
+        : await showHrReasonSheet(
+            context,
+            title: action == 'urge' ? '批量督办' : '批量驳回至初评',
+            minLength: 1,
+          );
     if (reason == null || !mounted) return;
     setState(() => _busy = true);
     try {
       final result = await _service.batch(rows, action, '${reason['reason']}');
       final failed = result.where((r) => r['success'] != true).toList();
+      final names = {for (final r in rows) r.id: r.name};
       if (mounted) {
         showDunesToast(
           context,
           failed.isEmpty
-              ? '已完成 ${result.length} 人'
-              : '完成 ${result.length - failed.length} 人；${failed.map((r) => r['message']).join('；')}',
+              ? action == 'urge'
+                    ? '已提交 ${result.length} 条督办，等待消息发送'
+                    : '已完成 ${result.length} 人'
+              : '完成 ${result.length - failed.length} 人；${failed.map((r) => '${names[r['id']] ?? r['id']}：${r['message']}').join('；')}',
         );
       }
       await _load();
@@ -306,10 +861,6 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
         .toSet()
         .map((d) => (d, d.isEmpty ? '未分配' : d)),
   ];
-  List<(String?, String)> get _stageOptions => [
-    (null, '全部节点'),
-    ...hrPerformanceStageLabels.entries.map((e) => (e.key, e.value)),
-  ];
   List<(String?, String)> get _tagOptions => const [
     (null, '全部标签'),
     ('probation', '试用期'),
@@ -337,12 +888,6 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
         items: _departmentOptions,
         expanded: expanded,
         onChanged: (v) => setState(() => _department = v),
-      ),
-      _HrFilterMenu(
-        value: _stage,
-        items: _stageOptions,
-        expanded: expanded,
-        onChanged: (v) => setState(() => _stage = v),
       ),
       _HrFilterMenu(
         value: _tag,
@@ -454,15 +999,83 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
     _load();
   }
 
+  Widget _stageStrip() {
+    final pool = _stagePool;
+    final counts = <String, int>{};
+    for (final row in pool) {
+      counts[row.stage] = (counts[row.stage] ?? 0) + 1;
+    }
+    final known = {..._hrStageFlow, ..._hrStageAside};
+    final extras = counts.keys.where((id) => !known.contains(id)).toList()
+      ..sort();
+    bool shown(String id) => (counts[id] ?? 0) > 0 || _stage == id;
+    final flowIds = [..._hrStageFlow, ...extras].where(shown).toList();
+    final asideIds = _hrStageAside.where(shown).toList();
+    final segments = [
+      for (final id in flowIds)
+        if ((counts[id] ?? 0) > 0)
+          (counts[id]!, _hrStageColors[id] ?? _hrStageFallback, false),
+      for (final id in asideIds)
+        if ((counts[id] ?? 0) > 0)
+          (counts[id]!, _hrStageColors[id] ?? _hrStageFallback, true),
+    ];
+    Widget chip(String id) => Padding(
+      key: _stageChipKey(id),
+      padding: const EdgeInsets.only(right: 8),
+      child: _HrStageChip(
+        key: ValueKey('hr-stage-$id'),
+        label: _hrStageName(id),
+        count: counts[id] ?? 0,
+        color: _hrStageColors[id] ?? _hrStageFallback,
+        tooltip: _hrStageTooltip(id),
+        selected: _stage == id,
+        onTap: () => _selectStage(id),
+      ),
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (segments.length > 1) ...[
+          _HrStageDistribution(segments: segments),
+          const SizedBox(height: 8),
+        ],
+        SizedBox(
+          height: 36,
+          child: SingleChildScrollView(
+            key: const ValueKey('hr-stage-strip'),
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                Padding(
+                  key: _stageChipKey('all'),
+                  padding: const EdgeInsets.only(right: 8),
+                  child: _HrStageChip(
+                    key: const ValueKey('hr-stage-all'),
+                    label: '全部',
+                    count: pool.length,
+                    selected: _stage == null,
+                    onTap: () => _selectStage(null),
+                  ),
+                ),
+                for (final id in flowIds) chip(id),
+                if (flowIds.isNotEmpty && asideIds.isNotEmpty)
+                  const _HrStageDivider(),
+                for (final id in asideIds) chip(id),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) {
       final wide = constraints.maxWidth >= 640;
+      final mine = _scope == 'mine';
       final rows = _visible;
-      final rosterItems=<Object>[];
-      if(_scope=='todo'){
-        for(final group in const ['调整审批','初评','校准','HR 审核','终审','申诉','面谈','待补人','超时督办']){final people=rows.where((r)=>r.todoGroups.isNotEmpty&&r.todoGroups.first==group).toList();if(people.isNotEmpty){rosterItems.add('$group · ${people.length} 人');rosterItems.addAll(people);}}
-      }else{rosterItems.addAll(rows);}
+      final rosterItems = _rosterItems;
 
       final scored = rows
           .where(
@@ -476,10 +1089,6 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
       for (final r in scored) {
         final g = '${r.snapshot['grade'] ?? ''}';
         if (g.isNotEmpty) grades[g] = (grades[g] ?? 0) + 1;
-      }
-      final progress = <String, int>{};
-      for (final r in rows) {
-        progress[r.stageLabel] = (progress[r.stageLabel] ?? 0) + 1;
       }
       final average = scored.isEmpty
           ? null
@@ -510,7 +1119,7 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
           label: '导出',
           onTap: _busy || rows.isEmpty ? null : _export,
         ),
-        if (_access.allowed)
+        if (_access.allowed && !mine)
           _HrAction(
             icon: Icons.notifications_active_outlined,
             label: '督办',
@@ -521,6 +1130,12 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
           label: '刷新',
           onTap: _loading ? null : _load,
         ),
+        if (_access.hr && !_monthStarted)
+          _HrAction(
+            icon: Icons.play_circle_outline,
+            label: '开始考核',
+            onTap: _busy || _loading ? null : _startMonth,
+          ),
       ];
       return Material(
         color: DunesColors.resolve(
@@ -541,46 +1156,60 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
                   onPrev: _loading ? null : () => _shiftMonth(-1),
                   onNext: _loading ? null : () => _shiftMonth(1),
                 ),
-                stats: _loading ? '加载中…' : stats,
+                stats: _loading
+                    ? '加载中…'
+                    : mine
+                    ? ''
+                    : stats,
                 actions: actions,
               ),
-              const SizedBox(height: 10),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: _HrScopeTabs(
-                  value: _scope,
-                  expand: !wide && scopes.length > 1,
-                  options: scopes,
-                  onChanged: _loading ? null : _selectScope,
-                ),
-              ),
-              const SizedBox(height: 8),
-              _HrSearchField(
-                hint: '搜索姓名、部门或岗位',
-                onChanged: (v) => setState(() => _query = v),
-                trailing: wide
-                    ? null
-                    : IconButton(
-                        tooltip: '筛选',
-                        onPressed: _openFilters,
-                        icon: Icon(
-                          Icons.filter_list_rounded,
-                          size: 20,
-                          color: DunesColors.resolve(context, DunesColors.text2),
-                        ),
-                      ),
-              ),
-              if (wide) ...[const SizedBox(height: 8), _filters()],
-              if (progress.isNotEmpty) ...[
+              if (!_loading && _access.hr && !_monthStarted) ...[
                 const SizedBox(height: 8),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
-                  children: [
-                    for (final e in progress.entries)
-                      _HrCountPill(label: '${e.key} ${e.value}'),
-                  ],
+                Text(
+                  '本月尚未开启。确认开始后，系统按已保存的规则和模板生成考核表并通知相关人员。没有模板或上级的人员留在待补配。',
+                  style: TextStyle(
+                    fontSize: 12,
+                    height: 1.4,
+                    color: DunesColors.resolve(context, DunesColors.text2),
+                  ),
                 ),
+              ],
+              const SizedBox(height: 10),
+              if (scopes.length > 1)
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: _HrScopeTabs(
+                    value: _scope,
+                    expand: !wide && scopes.length > 1,
+                    options: scopes,
+                    onChanged: _loading ? null : _selectScope,
+                  ),
+                ),
+              if (!mine) ...[
+                const SizedBox(height: 8),
+                _HrSearchField(
+                  hint: '搜索姓名、部门或岗位',
+                  onChanged: (v) => setState(() => _query = v),
+                  trailing: wide
+                      ? null
+                      : IconButton(
+                          tooltip: '筛选',
+                          onPressed: _openFilters,
+                          icon: Icon(
+                            Icons.filter_list_rounded,
+                            size: 20,
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.text2,
+                            ),
+                          ),
+                        ),
+                ),
+                if (wide) ...[const SizedBox(height: 8), _filters()],
+                if (_stagePool.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  _stageStrip(),
+                ],
               ],
               if (_scope == 'todo' && _alerts.isNotEmpty) ...[
                 const SizedBox(height: 8),
@@ -599,9 +1228,7 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
                   ),
                 ),
               ],
-              if (_records.any(
-                (r) => r.blockers.any((b) => b.contains('未配置')),
-              ))
+              if (_records.any((r) => r.blockers.any((b) => b.contains('未配置'))))
                 Padding(
                   padding: const EdgeInsets.only(top: 8),
                   child: Text(
@@ -629,7 +1256,7 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
                           _loading
                               ? '加载中…'
                               : _error == null
-                              ? '本月暂无符合条件的考核表'
+                              ? (mine ? '本月暂无您的考核表' : '本月暂无符合条件的考核表')
                               : '加载失败，请重试',
                           style: TextStyle(
                             fontSize: 13,
@@ -640,171 +1267,51 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
                           ),
                         ),
                       )
+                    : mine
+                    ? HrPerformanceDetail(
+                        key: ValueKey('hr-mine-${rows.first.id}'),
+                        session: widget.session,
+                        record: rows.first,
+                        service: _service,
+                        monthStarted: _monthStarted,
+                        onChanged: () => _load(),
+                      )
                     : Row(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           SizedBox(
-                            width: wide ? 300 : constraints.maxWidth - 24,
+                            width: wide ? 360 : constraints.maxWidth - 24,
                             child: ListView.builder(
                               key: PageStorageKey('hr-$_monthKey-$_scope'),
-                              padding: const EdgeInsets.fromLTRB(0, 10, 0, 12),
+                              padding: const EdgeInsets.fromLTRB(0, 6, 0, 12),
                               itemCount: rosterItems.length,
                               itemBuilder: (context, i) {
                                 final item = rosterItems[i];
-                                if (item is String) {
-                                  return Padding(
-                                    padding: const EdgeInsets.fromLTRB(
-                                      4,
-                                      12,
-                                      4,
-                                      6,
-                                    ),
-                                    child: Text(
-                                      item,
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w600,
-                                        color: DunesColors.resolve(
-                                          context,
-                                          DunesColors.text3,
-                                        ),
-                                      ),
-                                    ),
-                                  );
+                                if (item is _HrRosterHeader) {
+                                  return _rosterHeader(item);
                                 }
-                                final r = item as HrPerformanceRecord;
-                                final selected =
-                                    wide && _selected?.id == r.id;
-                                return Padding(
-                                  padding: const EdgeInsets.only(bottom: 8),
-                                  child: Material(
-                                    color: DunesColors.resolve(
-                                      context,
-                                      selected
-                                          ? const Color(0xFFF4EFFB)
-                                          : Colors.white,
-                                      role: DunesColorRole.surface,
-                                    ),
-                                    borderRadius: BorderRadius.circular(12),
-                                    child: InkWell(
-                                      borderRadius: BorderRadius.circular(12),
-                                      onTap: () {
-                                        setState(() => _selected = r);
-                                        if (!wide) {
-                                          Navigator.of(context).push(
-                                            MaterialPageRoute<void>(
-                                              builder: (_) => Scaffold(
-                                                appBar: AppBar(
-                                                  title: const Text(hrPerformanceTitle),
-                                                ),
-                                                body: HrPerformanceDetail(
-                                                  session: widget.session,
-                                                  record: r,
-                                                  service: _service,
-                                                  onChanged: () => _load(),
-                                                ),
-                                              ),
-                                            ),
-                                          );
-                                        }
-                                      },
-                                      child: Container(
-                                        decoration: BoxDecoration(
-                                          borderRadius: BorderRadius.circular(
-                                            12,
-                                          ),
-                                          border: Border.all(
-                                            color: DunesColors.resolve(
-                                              context,
-                                              selected
-                                                  ? DunesColors.brandPurpleLine
-                                                  : _hrLine,
-                                              role: DunesColorRole.border,
-                                            ),
-                                          ),
-                                        ),
-                                        child: ListTile(
-                                          contentPadding:
-                                              const EdgeInsets.symmetric(
-                                                horizontal: 12,
-                                                vertical: 2,
-                                              ),
-                                          leading: _access.allowed
-                                              ? Checkbox(
-                                                  value: _selectedIds.contains(
-                                                    r.id,
-                                                  ),
-                                                  activeColor: _purple,
-                                                  onChanged: _busy
-                                                      ? null
-                                                      : (checked) => setState(
-                                                          () {
-                                                            if (checked ==
-                                                                true) {
-                                                              _selectedIds.add(
-                                                                r.id,
-                                                              );
-                                                            } else {
-                                                              _selectedIds
-                                                                  .remove(r.id);
-                                                            }
-                                                          },
-                                                        ),
-                                                )
-                                              : null,
-                                          title: Text(
-                                            r.name,
-                                            style: TextStyle(
-                                              fontSize: 14,
-                                              fontWeight: FontWeight.w600,
-                                              color: DunesColors.resolve(
-                                                context,
-                                                DunesColors.text,
-                                              ),
-                                            ),
-                                          ),
-                                          subtitle: Text(
-                                            '${r.department.isEmpty ? '未分配部门' : r.department} · ${r.todoGroups.isEmpty ? r.stageLabel : r.todoGroups.join(' / ')}${r.probation ? ' · 试用期' : ''}',
-                                            style: TextStyle(
-                                              fontSize: 12,
-                                              height: 1.35,
-                                              color: DunesColors.resolve(
-                                                context,
-                                                DunesColors.text3,
-                                              ),
-                                            ),
-                                          ),
-                                          trailing: Icon(
-                                            Icons.chevron_right_rounded,
-                                            color: DunesColors.resolve(
-                                              context,
-                                              DunesColors.text3,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                );
+                                final person = item as _HrRosterPerson;
+                                return _rosterPerson(person, wide);
                               },
                             ),
                           ),
-                        if (wide)
-                          Expanded(
-                            child:
-                                _selected != null &&
-                                    rows.any((r) => r.id == _selected!.id)
-                                ? HrPerformanceDetail(
-                                    key: ValueKey(_selected!.id),
-                                    session: widget.session,
-                                    record: _selected!,
-                                    service: _service,
-                                    onChanged: () => _load(),
-                                  )
-                                : const Center(child: Text('选择一位员工查看考核表')),
-                          ),
-                      ],
-                    ),
+                          if (wide)
+                            Expanded(
+                              child:
+                                  _selected != null &&
+                                      rows.any((r) => r.id == _selected!.id)
+                                  ? HrPerformanceDetail(
+                                      key: ValueKey(_selected!.id),
+                                      session: widget.session,
+                                      record: _selected!,
+                                      service: _service,
+                                      monthStarted: _monthStarted,
+                                      onChanged: () => _load(),
+                                    )
+                                  : const Center(child: Text('选择一位员工查看考核表')),
+                            ),
+                        ],
+                      ),
               ),
               if (_selectedIds.isNotEmpty)
                 Container(
@@ -816,14 +1323,14 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
                   decoration: BoxDecoration(
                     color: DunesColors.resolve(
                       context,
-                      Colors.white,
+                      DunesColors.brandPurpleSoft,
                       role: DunesColorRole.surface,
                     ),
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
                       color: DunesColors.resolve(
                         context,
-                        _hrLine,
+                        DunesColors.brandPurpleLine,
                         role: DunesColorRole.border,
                       ),
                     ),
@@ -837,15 +1344,52 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
                         '已选 ${_selectedIds.length} 人',
                         style: TextStyle(
                           fontSize: 13,
-                          color: DunesColors.resolve(context, DunesColors.text2),
+                          fontWeight: FontWeight.w600,
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.brandPurpleDeep,
+                          ),
                         ),
                       ),
                       TextButton(
                         onPressed: () => setState(() => _selectedIds.clear()),
+                        style: TextButton.styleFrom(
+                          foregroundColor: DunesColors.resolve(
+                            context,
+                            DunesColors.brandPurpleDeep,
+                          ),
+                          textStyle: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
                         child: const Text('取消选择'),
                       ),
-                      FilledButton.tonal(
+                      FilledButton(
                         onPressed: _busy ? null : () => _batch('urge'),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: DunesColors.resolve(
+                            context,
+                            DunesColors.brandPurple,
+                            role: DunesColorRole.surface,
+                          ),
+                          foregroundColor: Colors.white,
+                          disabledBackgroundColor: DunesColors.resolve(
+                            context,
+                            const Color(0xFFE4D8F5),
+                            role: DunesColorRole.surface,
+                          ),
+                          disabledForegroundColor: Colors.white,
+                          minimumSize: const Size(0, 36),
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          textStyle: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
                         child: const Text('批量督办'),
                       ),
                       if (_operationRows.any(
@@ -855,6 +1399,19 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
                           onPressed: _busy
                               ? null
                               : () => _batch('reject_final'),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: DunesColors.resolve(
+                              context,
+                              DunesColors.coral,
+                              role: DunesColorRole.surface,
+                            ),
+                            foregroundColor: Colors.white,
+                            minimumSize: const Size(0, 36),
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                          ),
                           child: const Text('驳回选中人员'),
                         ),
                     ],
@@ -1012,7 +1569,10 @@ class _HrControlCard extends StatelessWidget {
             child: busy
                 ? LinearProgressIndicator(
                     minHeight: 2,
-                    color: DunesColors.resolve(context, DunesColors.brandPurple),
+                    color: DunesColors.resolve(
+                      context,
+                      DunesColors.brandPurple,
+                    ),
                     backgroundColor: Colors.transparent,
                   )
                 : null,
@@ -1100,7 +1660,9 @@ class _HrActionTile extends StatelessWidget {
                 shape: BoxShape.circle,
                 color: DunesColors.resolve(
                   context,
-                  enabled ? DunesColors.brandPurpleSoft : const Color(0xFFF3F1F6),
+                  enabled
+                      ? DunesColors.brandPurpleSoft
+                      : const Color(0xFFF3F1F6),
                   role: DunesColorRole.surface,
                 ),
               ),
@@ -1145,7 +1707,10 @@ class _HrActionButton extends StatelessWidget {
           Colors.white,
           role: DunesColorRole.surface,
         ),
-        disabledForegroundColor: DunesColors.resolve(context, DunesColors.text3),
+        disabledForegroundColor: DunesColors.resolve(
+          context,
+          DunesColors.text3,
+        ),
         disabledBackgroundColor: DunesColors.resolve(
           context,
           const Color(0xFFF3F1F6),
@@ -1270,7 +1835,11 @@ class _HrSearchField extends StatelessWidget {
     final border = OutlineInputBorder(
       borderRadius: BorderRadius.circular(10),
       borderSide: BorderSide(
-        color: DunesColors.resolve(context, _hrLine, role: DunesColorRole.border),
+        color: DunesColors.resolve(
+          context,
+          _hrLine,
+          role: DunesColorRole.border,
+        ),
       ),
     );
     return TextField(
@@ -1290,9 +1859,15 @@ class _HrSearchField extends StatelessWidget {
           size: 18,
           color: DunesColors.resolve(context, DunesColors.text3),
         ),
-        prefixIconConstraints: const BoxConstraints(minWidth: 38, minHeight: 36),
+        prefixIconConstraints: const BoxConstraints(
+          minWidth: 38,
+          minHeight: 36,
+        ),
         suffixIcon: trailing,
-        suffixIconConstraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+        suffixIconConstraints: const BoxConstraints(
+          minWidth: 36,
+          minHeight: 36,
+        ),
         isDense: true,
         filled: true,
         fillColor: DunesColors.resolve(
@@ -1342,14 +1917,22 @@ class _HrFilterMenu extends StatelessWidget {
       alignmentOffset: const Offset(0, 6),
       style: MenuStyle(
         backgroundColor: WidgetStatePropertyAll(
-          DunesColors.resolve(context, Colors.white, role: DunesColorRole.surface),
+          DunesColors.resolve(
+            context,
+            Colors.white,
+            role: DunesColorRole.surface,
+          ),
         ),
         elevation: const WidgetStatePropertyAll(8),
-        shadowColor: WidgetStatePropertyAll(Colors.black.withValues(alpha: 0.12)),
+        shadowColor: WidgetStatePropertyAll(
+          Colors.black.withValues(alpha: 0.12),
+        ),
         shape: WidgetStatePropertyAll(
           RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         ),
-        padding: const WidgetStatePropertyAll(EdgeInsets.symmetric(vertical: 6)),
+        padding: const WidgetStatePropertyAll(
+          EdgeInsets.symmetric(vertical: 6),
+        ),
       ),
       builder: (context, controller, child) {
         final open = controller.isOpen;
@@ -1390,7 +1973,9 @@ class _HrFilterMenu extends StatelessWidget {
                           fontWeight: open ? FontWeight.w600 : FontWeight.w500,
                           color: DunesColors.resolve(
                             context,
-                            open ? DunesColors.brandPurpleDeep : DunesColors.text,
+                            open
+                                ? DunesColors.brandPurpleDeep
+                                : DunesColors.text,
                           ),
                         ),
                       ),
@@ -1453,7 +2038,9 @@ class _HrFilterMenu extends StatelessWidget {
               item.$2,
               style: TextStyle(
                 fontSize: 13,
-                fontWeight: item.$1 == value ? FontWeight.w600 : FontWeight.w400,
+                fontWeight: item.$1 == value
+                    ? FontWeight.w600
+                    : FontWeight.w400,
                 color: DunesColors.resolve(
                   context,
                   item.$1 == value
@@ -1468,36 +2055,171 @@ class _HrFilterMenu extends StatelessWidget {
   }
 }
 
-class _HrCountPill extends StatelessWidget {
-  const _HrCountPill({required this.label});
-  final String label;
+class _HrStageDistribution extends StatelessWidget {
+  const _HrStageDistribution({required this.segments});
+  final List<(int, Color, bool)> segments;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: DunesColors.resolve(
-          context,
-          Colors.white,
-          role: DunesColorRole.surface,
+    final total = segments.fold<int>(0, (sum, segment) => sum + segment.$1);
+    if (total == 0) return const SizedBox.shrink();
+    return ExcludeSemantics(
+      child: SizedBox(
+        height: 6,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final gapBefore = <double>[];
+            for (var i = 0; i < segments.length; i++) {
+              if (i == 0) {
+                gapBefore.add(0);
+              } else if (segments[i].$3 && !segments[i - 1].$3) {
+                gapBefore.add(8);
+              } else {
+                gapBefore.add(3);
+              }
+            }
+            final gaps = gapBefore.fold<double>(0, (sum, gap) => sum + gap);
+            final width = constraints.maxWidth - gaps;
+            final usable = width > 0 ? width : 0.0;
+            var minSeg = 4.0;
+            if (segments.isNotEmpty && minSeg * segments.length > usable) {
+              minSeg = usable / segments.length;
+            }
+            final extra = usable - minSeg * segments.length;
+            return Row(
+              children: [
+                for (var i = 0; i < segments.length; i++) ...[
+                  if (gapBefore[i] > 0) SizedBox(width: gapBefore[i]),
+                  SizedBox(
+                    width: minSeg + extra * (segments[i].$1 / total),
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: segments[i].$2,
+                        borderRadius: BorderRadius.circular(3),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            );
+          },
         ),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(
-          color: DunesColors.resolve(
-            context,
-            _hrLine,
-            role: DunesColorRole.border,
+      ),
+    );
+  }
+}
+
+class _HrStageDivider extends StatelessWidget {
+  const _HrStageDivider();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: Center(
+        child: SizedBox(
+          width: 1,
+          height: 16,
+          child: ColoredBox(
+            color: DunesColors.resolve(
+              context,
+              _hrLine,
+              role: DunesColorRole.border,
+            ),
           ),
         ),
       ),
-      child: Text(
-        label,
-        style: TextStyle(
-          fontSize: 11,
-          color: DunesColors.resolve(context, DunesColors.text2),
+    );
+  }
+}
+
+class _HrStageChip extends StatelessWidget {
+  const _HrStageChip({
+    super.key,
+    required this.label,
+    required this.count,
+    required this.selected,
+    required this.onTap,
+    this.color,
+    this.tooltip,
+  });
+  final String label;
+  final int count;
+  final bool selected;
+  final VoidCallback onTap;
+  final Color? color;
+  final String? tooltip;
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = color ?? DunesColors.brandPurple;
+    final border = selected ? accent : _hrLine;
+    final fill = selected ? accent.withValues(alpha: 0.12) : Colors.white;
+    final chip = Material(
+      color: DunesColors.resolve(context, fill, role: DunesColorRole.surface),
+      borderRadius: BorderRadius.circular(999),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(999),
+        onTap: onTap,
+        child: Container(
+          height: 36,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(
+              color: DunesColors.resolve(
+                context,
+                border,
+                role: DunesColorRole.border,
+              ),
+              width: selected ? 1.5 : 1,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (color != null) ...[
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    color: color,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 6),
+              ],
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                  color: DunesColors.resolve(
+                    context,
+                    selected ? DunesColors.text : DunesColors.text2,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                '$count',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  fontFeatures: _hrTabular,
+                  color: DunesColors.resolve(context, DunesColors.text),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
+    );
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: '$label $count 人',
+      child: tooltip == null ? chip : Tooltip(message: tooltip!, child: chip),
     );
   }
 }
@@ -1562,4 +2284,26 @@ class _HrAlertTile extends StatelessWidget {
       ),
     );
   }
+}
+
+class _HrRosterDept {
+  _HrRosterDept(this.key, this.name, this.people, this.children);
+  final String key;
+  final String name;
+  final List<HrPerformanceRecord> people;
+  final List<_HrRosterDept> children;
+  int get total =>
+      people.length + children.fold<int>(0, (sum, child) => sum + child.total);
+}
+
+class _HrRosterHeader {
+  const _HrRosterHeader(this.dept, this.depth);
+  final _HrRosterDept dept;
+  final int depth;
+}
+
+class _HrRosterPerson {
+  const _HrRosterPerson(this.record, this.depth);
+  final HrPerformanceRecord record;
+  final int depth;
 }

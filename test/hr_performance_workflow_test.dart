@@ -2,6 +2,7 @@ import 'package:dunes_app/features/auth/auth_session.dart';
 import 'package:dunes_app/features/conversation/conversation_models.dart';
 import 'package:dunes_app/features/conversation/conversation_service.dart';
 import 'package:dunes_app/features/hr_performance/hr_performance_chat_card.dart';
+import 'package:dunes_app/features/hr_performance/hr_performance_detail.dart';
 import 'package:dunes_app/features/hr_performance/hr_performance_service.dart';
 import 'package:dunes_app/features/hr_performance/native_hr_performance_page.dart';
 import 'package:flutter/material.dart';
@@ -57,8 +58,7 @@ Map<String, dynamic> sample({
 };
 
 class FakeHR extends HrPerformanceService {
-  FakeHR(AuthSession actor, this.rows, {this.hr = false, this.manager = false})
-    : super(actor);
+  FakeHR(super.session, this.rows, {this.hr = false, this.manager = false});
   final bool hr, manager;
   List<Map<String, dynamic>> rows;
   Map<String, dynamic>? lastCommand;
@@ -165,6 +165,23 @@ class FakeConversations extends ConversationService {
   }
 }
 
+class FakeUrge extends FakeHR {
+  FakeUrge(super.session, super.rows) : super(hr: true);
+  List<int> sentIds = [];
+  @override
+  Future<List<Map<String, dynamic>>> batch(
+    List<HrPerformanceRecord> records,
+    String action,
+    String reason,
+  ) async {
+    sentIds = records.map((r) => r.id).toList();
+    lastCommand = {'action': action, 'reason': reason};
+    return [
+      for (final r in records) {'id': r.id, 'success': true},
+    ];
+  }
+}
+
 Future<void> mount(
   WidgetTester tester,
   double width,
@@ -197,13 +214,101 @@ Future<void> openRow(WidgetTester tester, double width, String name) async {
 }
 
 void main() {
+  testWidgets('HR can revoke exemption with a reason', (tester) async {
+    final record = sample(stage: 'exempt', actions: ['undo_exempt']);
+    final service = FakeHR(testSession(4), [record], hr: true);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: HrPerformanceDetail(
+            session: service.session,
+            service: service,
+            record: HrPerformanceRecord.fromJson(record),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('撤销免考核'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('原有截止时间保持不变'), findsOneWidget);
+    await tester.enterText(find.byKey(const ValueKey('hr-reason')), '误操作，恢复考核');
+    await tester.tap(find.byKey(const ValueKey('hr-sheet-submit')));
+    await tester.pumpAndSettle();
+    expect(service.lastCommand?['action'], 'undo_exempt');
+    expect(service.lastCommand?['reason'], '误操作，恢复考核');
+    await tester.pump(const Duration(seconds: 4));
+  });
+  testWidgets('urge previews eligible people and excludes others', (
+    tester,
+  ) async {
+    final service = FakeUrge(testSession(4), [
+      sample(id: 1, name: '员工甲', stage: 'review', actions: ['urge']),
+      sample(id: 2, userId: 2, name: '员工乙', stage: 'exempt'),
+    ]);
+    await mount(tester, 360, service);
+    await tester.tap(find.text('全员'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('督办'));
+    await tester.pumpAndSettle();
+    expect(find.text('发送 1 人 · 跳过 1 人'), findsOneWidget);
+    expect(find.textContaining('已跳过无权督办或不在办理中的人员：员工乙'), findsOneWidget);
+    await tester.enterText(find.byKey(const ValueKey('hr-reason')), '请及时完成评分');
+    await tester.tap(find.byKey(const ValueKey('hr-sheet-submit')));
+    await tester.pumpAndSettle();
+    expect(service.sentIds, [1]);
+    expect(service.lastCommand?['reason'], '请及时完成评分');
+    await tester.pump(const Duration(seconds: 4));
+  });
   for (final width in [360.0, 900.0]) {
+    testWidgets('executive skip shows HR return to initial review at $width', (
+      tester,
+    ) async {
+      tester.view.physicalSize = Size(width, 1100);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final data = sample(stage: 'hr', actions: ['return_hr'], draft: true);
+      (data['snapshot'] as Map<String, dynamic>)['divisionSupervisorName'] =
+          '许正阳';
+      final service = FakeHR(testSession(4), [data], hr: true);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: HrPerformanceDetail(
+              session: service.session,
+              record: HrPerformanceRecord.fromJson(data),
+              service: service,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('退回初评'), findsOneWidget);
+      expect(find.text('退回校准'), findsNothing);
+      await tester.tap(find.byKey(const ValueKey('hr-action-return_hr')));
+      await tester.pumpAndSettle();
+      expect(find.text('该考核跳过分管校准，将退回直属主管初评。'), findsOneWidget);
+      await tester.enterText(
+        find.byKey(const ValueKey('hr-reason')),
+        '请重新核对评分',
+      );
+      await tester.tap(find.byKey(const ValueKey('hr-sheet-submit')));
+      await tester.pumpAndSettle();
+      expect(service.lastCommand?['action'], 'return_hr');
+      await tester.pump(const Duration(seconds: 4));
+      expect(tester.takeException(), isNull);
+    });
     testWidgets('employee confirms indicators at $width', (tester) async {
       final service = FakeHR(testSession(1), [
         sample(actions: ['confirm_indicators', 'request_adjustment']),
       ]);
       await mount(tester, width, service);
-      await openRow(tester, width, '员工甲');
+      expect(
+        find.byKey(const ValueKey('hr-action-confirm_indicators')),
+        findsOneWidget,
+      );
+      expect(find.text('搜索姓名、部门或岗位'), findsNothing);
       await tester.tap(
         find.byKey(const ValueKey('hr-action-confirm_indicators')),
       );
@@ -216,6 +321,58 @@ void main() {
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
     });
+    testWidgets(
+      'my tab directly shows own record and switches back from team at $width',
+      (tester) async {
+        final service = FakeHR(testSession(1), [
+          sample(name: '员工甲'),
+          sample(id: 2, userId: 2, name: '员工乙'),
+        ], hr: true);
+        await mount(tester, width, service);
+        expect(find.byKey(const ValueKey('hr-mine-1')), findsOneWidget);
+        expect(
+          find.byKey(const ValueKey('hr-dept-select-name-研发部')),
+          findsNothing,
+        );
+        await tester.tap(find.text('全员'));
+        await tester.pumpAndSettle();
+        expect(find.text('员工乙'), findsWidgets);
+        await tester.tap(find.text('我的'));
+        await tester.pumpAndSettle();
+        expect(find.byKey(const ValueKey('hr-mine-1')), findsOneWidget);
+        expect(find.text('员工乙'), findsNothing);
+      },
+    );
+    testWidgets(
+      'record link opens another person rather than my record at $width',
+      (tester) async {
+        tester.view.physicalSize = Size(width, 1100);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        final service = FakeHR(testSession(1), [
+          sample(),
+          sample(id: 2, userId: 2, name: '员工乙'),
+        ], hr: true);
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: NativeHrPerformancePage(
+                session: service.session,
+                service: service,
+                initialRecordId: 2,
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('员工乙'), findsWidgets);
+        expect(find.byKey(const ValueKey('hr-mine-1')), findsNothing);
+        if (width >= 640) {
+          expect(find.byType(HrPerformanceDetail), findsOneWidget);
+        }
+      },
+    );
     testWidgets('manager scores with a reason at $width', (tester) async {
       final service = FakeHR(testSession(2), [
         sample(
@@ -271,6 +428,28 @@ void main() {
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
     });
+    testWidgets('department checkbox selects everyone below at $width', (
+      tester,
+    ) async {
+      final service = FakeHR(testSession(4), [
+        sample(id: 1, userId: 1, name: '员工甲', department: '研发部'),
+        sample(id: 2, userId: 6, name: '员工乙', department: '研发部'),
+        sample(id: 3, userId: 7, name: '员工丙', department: '财务部'),
+      ], hr: true);
+      await mount(tester, width, service);
+      await tester.tap(find.text('全员'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('hr-dept-select-name-研发部')));
+      await tester.pumpAndSettle();
+      expect(find.text('已选 2 人'), findsOneWidget);
+      expect(find.text('员工丙'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('hr-dept-select-name-研发部')));
+      await tester.pumpAndSettle();
+      expect(find.text('已选 2 人'), findsNothing);
+      await tester.pump(const Duration(seconds: 4));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+    });
     testWidgets('HR filters the roster at $width', (tester) async {
       final service = FakeHR(testSession(4), [
         sample(name: '员工甲', department: '研发部'),
@@ -293,6 +472,43 @@ void main() {
       }
       expect(find.text('员工甲'), findsNothing);
       expect(find.text('员工乙'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 4));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+    });
+    testWidgets('stage chips filter the roster at $width', (tester) async {
+      final service = FakeHR(testSession(4), [
+        sample(name: '员工甲', stage: 'review'),
+        sample(id: 2, userId: 6, name: '员工乙', stage: 'hr', department: '财务部'),
+        sample(
+          id: 3,
+          userId: 7,
+          name: '员工丙',
+          stage: 'exempt',
+          department: '财务部',
+        ),
+      ], hr: true);
+      await mount(tester, width, service);
+      await tester.tap(find.text('全员'));
+      await tester.pumpAndSettle();
+      expect(find.text('全部节点'), findsNothing);
+      expect(find.byKey(const ValueKey('hr-stage-review')), findsOneWidget);
+      expect(find.byKey(const ValueKey('hr-stage-exempt')), findsOneWidget);
+      await tester.ensureVisible(find.byKey(const ValueKey('hr-stage-hr')));
+      await tester.tap(find.byKey(const ValueKey('hr-stage-hr')));
+      await tester.pumpAndSettle();
+      expect(find.text('员工甲'), findsNothing);
+      expect(find.text('员工乙'), findsWidgets);
+      expect(find.text('员工丙'), findsNothing);
+      await tester.ensureVisible(find.byKey(const ValueKey('hr-stage-hr')));
+      await tester.tap(find.byKey(const ValueKey('hr-stage-hr')));
+      await tester.pumpAndSettle();
+      expect(find.text('员工甲'), findsWidgets);
+      expect(find.text('员工丙'), findsWidgets);
+      await tester.ensureVisible(find.byKey(const ValueKey('hr-stage-all')));
+      await tester.tap(find.byKey(const ValueKey('hr-stage-all')));
+      await tester.pumpAndSettle();
+      expect(find.text('员工乙'), findsWidgets);
       await tester.pump(const Duration(seconds: 4));
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);

@@ -10,6 +10,7 @@ import 'package:mime/mime.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
 import '../shell/dunes_toast.dart';
+import 'issue_invoice_todo.dart';
 import 'xflow_models.dart';
 import 'xflow_service.dart';
 import 'task_todo_fields.dart';
@@ -139,7 +140,7 @@ TaskTodoConfirmCopy taskTodoConfirmCopy(
           : '提交实付金额和支付凭证后，按先票/先款进入核验或补票。不重审。',
     'UPLOAD_INVOICE' => '请上传发票文件（可多张，电脑可拖拽）。提交后核验人会收到「核验发票」。不重审。',
     'URGE' => '只会提醒申请人上传发票，并保留申请人的「补传发票」待办。本条催办不办结，回票流程不会因此结束。',
-    'ISSUE_INVOICE' => '请上传已开具的发票文件（可多张，电脑可拖拽）。提交后写入原单，不重新走审批。',
+    'ISSUE_INVOICE' => '请上传已开具的发票文件。确认后写入原单，这条待办不会结束，之后还可以继续开票。',
     'SEAL' => '确认盖章后，合同用印进入「填写快递单号」。不重审。',
     'REPAY' => loan ? '提交还款金额后冲减资金借调剩余未还。不重审。' : '提交还款金额和凭证后关闭本条待办。不重审。',
     'OPEN_ACCOUNT' => '请回填开户信息到本单。提交后抄送出纳，不重审。',
@@ -163,6 +164,13 @@ Future<bool> confirmAndCompleteTaskTodo({
   final todoId = item.todoHint?.id ?? 0;
   if (todoId <= 0) return false;
   final action = (item.primaryAction ?? '').toUpperCase();
+  if (action == 'ISSUE_INVOICE') {
+    return confirmIssueInvoiceBatch(
+      context: context,
+      service: service,
+      item: item,
+    );
+  }
   final extra = <String, dynamic>{};
   if (action == 'VERIFY_INVOICE') {
     extra['verifyResult'] = (verifyPassed ?? false) ? '通过' : '失败';

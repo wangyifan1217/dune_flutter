@@ -1676,6 +1676,40 @@ class XflowService {
     );
   }
 
+  /// 发票申请「开具发票」：先按最新账单预览分摊，确认后追加这一批，待办保持未完成。
+  Future<Map<String, dynamic>> previewIssuedInvoices({
+    required int todoId,
+    required double invoiceAmount,
+  }) {
+    return _request(
+      '/todos/$todoId/issue-invoice-preview',
+      method: 'POST',
+      body: <String, dynamic>{
+        'payload': <String, dynamic>{'invoiceAmount': invoiceAmount},
+      },
+    );
+  }
+
+  Future<Map<String, dynamic>> appendIssuedInvoices({
+    required int todoId,
+    required List<Map<String, dynamic>> invoiceFiles,
+    required double invoiceAmount,
+    String comment = '',
+  }) async {
+    return _request(
+      '/todos/$todoId/issue-invoice',
+      method: 'POST',
+      body: <String, dynamic>{
+        'action': 'ISSUE_INVOICE',
+        'payload': <String, dynamic>{
+          'invoiceFiles': invoiceFiles,
+          'invoiceAmount': invoiceAmount,
+        },
+        'comment': comment,
+      },
+    );
+  }
+
   Future<List<Map<String, dynamic>>> searchOrgUsers(
     String keyword, {
     String? roleCode,
@@ -1937,6 +1971,8 @@ class XflowService {
     required String fileName,
     String objectKey = '',
     String templateKey = '',
+    String businessType = '',
+    String businessId = '',
   }) async {
     final req = http.MultipartRequest(
       'POST',
@@ -1945,6 +1981,8 @@ class XflowService {
     req.headers['Authorization'] = 'Bearer ${session.token}';
     if (objectKey.isNotEmpty) req.fields['objectKey'] = objectKey;
     if (templateKey.isNotEmpty) req.fields['templateKey'] = templateKey;
+    if (businessType.isNotEmpty) req.fields['businessType'] = businessType;
+    if (businessId.isNotEmpty) req.fields['businessId'] = businessId;
     req.files.add(
       http.MultipartFile.fromBytes('file', bytes, filename: fileName),
     );

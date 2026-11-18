@@ -6955,6 +6955,7 @@ class ProposalSkuDetailRow {
     this.platformMessage = '',
     this.remark = '',
     this.province = '',
+    this.annualScale = '',
     this.settlements = const [],
   });
 
@@ -6999,6 +7000,9 @@ class ProposalSkuDetailRow {
 
   /// 这个产品归属的省份，取市场部标签二里已选的一项。
   final String province;
+
+  /// 勾选「按产品填规模」后，这个产品自己的年化规模（万元）。未勾选时不参与测算。
+  final String annualScale;
   final List<ProposalSkuSettleRow> settlements;
 
   String get syncSourceCode => (syncSourceRef?.code ?? '').trim();
@@ -7053,7 +7057,8 @@ class ProposalSkuDetailRow {
       (assetProduct == null || assetProduct!.isEmpty) &&
       parentSkuId.isEmpty &&
       remark.isEmpty &&
-      province.isEmpty;
+      province.isEmpty &&
+      annualScale.isEmpty;
 
   ProposalSkuDetailRow copyWith({
     String? id,
@@ -7083,6 +7088,7 @@ class ProposalSkuDetailRow {
     String? platformMessage,
     String? remark,
     String? province,
+    String? annualScale,
     List<ProposalSkuSettleRow>? settlements,
   }) => ProposalSkuDetailRow(
     id: id ?? this.id,
@@ -7124,6 +7130,7 @@ class ProposalSkuDetailRow {
     platformMessage: platformMessage ?? this.platformMessage,
     remark: remark ?? this.remark,
     province: province ?? this.province,
+    annualScale: annualScale ?? this.annualScale,
     settlements: settlements ?? this.settlements,
   );
 
@@ -7206,6 +7213,7 @@ class ProposalSkuDetailRow {
     'platformMessage': platformMessage.trim(),
     'remark': remark.trim(),
     'province': province.trim(),
+    'annualScale': annualScale.trim(),
     'settlements': [
       for (final item in settlements)
         item
@@ -7286,6 +7294,7 @@ class ProposalSkuDetailRow {
           .trim(),
       remark: '${raw['remark'] ?? ''}'.trim(),
       province: '${raw['province'] ?? ''}'.trim(),
+      annualScale: '${raw['annualScale'] ?? ''}'.trim(),
       settlements: [
         for (final item
             in raw['settlements'] is List

@@ -18,6 +18,8 @@ const kTaskTodoCompletionLabels = <String, String>{
   'expressTrackingNo': '快递单号',
   'expressSentAt': '寄出时间',
   'signedAt': '签收时间',
+  'issuedInvoiceTotal': '已开票金额（元）',
+  'issuedInvoiceCount': '已开票张数',
   'invoiceFiles': '发票文件',
   'paymentVoucherFiles': '支付凭证',
   'files': '附件',

@@ -9,7 +9,8 @@ import '../auth/auth_session.dart';
 const hrPerformanceTitle = '绩效考核';
 
 const hrPerformanceStageLabels = <String, String>{
-  'opening': '开启考核 / 待补配',
+  'opening': '待补配',
+  'self': '自评',
   'indicators': '指标确认',
   'review': '主管初评',
   'calibration': '绩效校准',
@@ -52,6 +53,8 @@ class HrPerformanceRecord {
   HrPerformanceRecord.fromJson(Map<String, dynamic> json)
     : id = (json['id'] as num).toInt(),
       userId = (json['userId'] as num).toInt(),
+      departmentId = (json['departmentId'] as num?)?.toInt(),
+      directSupervisorId = (json['directSupervisorId'] as num?)?.toInt(),
       month = '${json['month'] ?? ''}',
       stage = '${json['stage'] ?? 'opening'}',
       adjustmentDueAt = DateTime.tryParse('${json['adjustmentDueAt'] ?? ''}'),
@@ -73,6 +76,8 @@ class HrPerformanceRecord {
   final List<String> actions, todoGroups, warnings;
   final int id;
   final int userId;
+  final int? departmentId;
+  final int? directSupervisorId;
   final String month;
   final String stage;
   final DateTime? adjustmentDueAt;
@@ -119,6 +124,19 @@ class HrPerformanceService {
   Future<HrPerformanceAccess> access() async {
     final data = _unwrap(await dunesHttpGet(session, '/hr-performance/access'));
     return HrPerformanceAccess.fromJson(Map<String, dynamic>.from(data as Map));
+  }
+
+  Future<bool> monthStarted(String month) async {
+    final query = Uri(queryParameters: {'month': month}).query;
+    final data = _unwrap(
+      await dunesHttpGet(session, '/hr-performance/period?$query'),
+    );
+    if (data is! Map) return false;
+    return data['started'] == true;
+  }
+
+  Future<void> startMonth(String month) async {
+    await _post('/hr-performance/start', {'month': month});
   }
 
   Future<List<HrPerformanceRecord>> records(String month, String scope) async {

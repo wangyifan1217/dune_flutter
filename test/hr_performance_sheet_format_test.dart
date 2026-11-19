@@ -81,4 +81,55 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+  testWidgets(
+    'desktop overview keeps indicators compact and expands criteria',
+    (tester) async {
+      tester.view.physicalSize = const Size(1100, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: HrAssessmentOverview(
+                scoresVisible: false,
+                lines: [
+                  {
+                    'indicatorId': 1,
+                    'project': '工作成果',
+                    'name': '任务完成',
+                    'weight': 60,
+                    'score': 88,
+                    'bands': [
+                      {'description': '按时完成目标', 'min': 80, 'max': 100},
+                    ],
+                  },
+                  {
+                    'indicatorId': 2,
+                    'project': '工作成果',
+                    'name': '工作质量',
+                    'weight': 40,
+                    'bands': [
+                      {'description': '质量符合要求', 'min': 0, 'max': 100},
+                    ],
+                  },
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+      expect(find.text('任务完成'), findsOneWidget);
+      expect(find.text('工作质量'), findsOneWidget);
+      expect(find.text('合计权重 100%'), findsOneWidget);
+      expect(find.text('按时完成目标'), findsNothing);
+      expect(find.textContaining('88'), findsNothing);
+      await tester.tap(find.text('任务完成'));
+      await tester.pumpAndSettle();
+      expect(find.text('按时完成目标'), findsOneWidget);
+      expect(find.text('80–100'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
 }

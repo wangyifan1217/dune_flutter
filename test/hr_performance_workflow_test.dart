@@ -214,6 +214,45 @@ Future<void> openRow(WidgetTester tester, double width, String name) async {
 }
 
 void main() {
+  testWidgets('desktop roster and filters collapse without losing selection', (
+    tester,
+  ) async {
+    final service = FakeHR(testSession(4), [
+      sample(id: 1, userId: 1, name: '员工甲', department: '研发部'),
+      sample(id: 2, userId: 6, name: '员工乙', department: '研发部'),
+    ], hr: true);
+    await mount(tester, 900, service);
+    await tester.tap(find.text('全员'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('hr-dept-select-name-研发部')));
+    await tester.pumpAndSettle();
+    expect(find.text('已选 2 人'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('hr-roster-collapse')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('hr-roster-expand')), findsOneWidget);
+    expect(find.byKey(const ValueKey('hr-dept-select-name-研发部')), findsNothing);
+    expect(find.text('已选 2 人'), findsOneWidget);
+    expect(find.byType(HrPerformanceDetail), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('hr-roster-expand')));
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<Checkbox>(
+            find.byKey(const ValueKey('hr-dept-select-name-研发部')),
+          )
+          .value,
+      isTrue,
+    );
+    await tester.enterText(find.byType(TextField).first, '员工乙');
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('hr-filter-toggle')));
+    await tester.pumpAndSettle();
+    expect(find.text('已启用筛选 · 当前 1 人'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('hr-filter-toggle')));
+    await tester.pumpAndSettle();
+    expect(find.text('员工乙'), findsWidgets);
+    expect(tester.takeException(), isNull);
+  });
   testWidgets('HR can revoke exemption with a reason', (tester) async {
     final record = sample(stage: 'exempt', actions: ['undo_exempt']);
     final service = FakeHR(testSession(4), [record], hr: true);
@@ -464,7 +503,12 @@ void main() {
       }
       await tester.tap(find.text('全部部门'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('财务部').last);
+      await tester.tap(
+        find.ancestor(
+          of: find.text('财务部'),
+          matching: find.byType(MenuItemButton),
+        ),
+      );
       await tester.pumpAndSettle();
       if (width < 640) {
         await tester.tap(find.text('完成'));

@@ -132,6 +132,8 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
   final Set<int> _selectedIds = {};
   List<Map<String, dynamic>> _alerts = [];
   bool _busy = false;
+  bool _rosterCollapsed = false;
+  bool _filtersCollapsed = false;
   String? _grade;
   String _scope = 'mine';
   String _query = '';
@@ -439,81 +441,105 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
   Widget _rosterHeader(_HrRosterHeader item) {
     final collapsed =
         _query.isEmpty && _collapsedRoster.contains(item.dept.key);
-    final indent = (item.depth.clamp(0, 4)) * 16.0;
+    final indent = item.depth.clamp(0, 4) * 10.0;
+    final topLevel = item.depth == 0;
+    final muted = DunesColors.resolve(context, DunesColors.text3);
     return Padding(
-      padding: EdgeInsets.only(left: indent, top: item.depth == 0 ? 8 : 2),
-      child: Row(
-        children: [
-          if (_access.allowed)
-            Checkbox(
-              key: ValueKey('hr-dept-select-${item.dept.key}'),
-              tristate: true,
-              value: _deptChecked(item.dept),
-              activeColor: _purple,
-              visualDensity: VisualDensity.compact,
-              semanticLabel: '选择${item.dept.name}及下级',
-              onChanged: _busy ? null : (_) => _toggleDept(item.dept),
-            ),
-          Expanded(
-            child: InkWell(
-              borderRadius: BorderRadius.circular(8),
-              onTap: () => setState(() {
-                if (_collapsedRoster.contains(item.dept.key)) {
-                  _collapsedRoster.remove(item.dept.key);
-                } else {
-                  _collapsedRoster.add(item.dept.key);
-                }
-              }),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
-                child: Row(
-                  children: [
-                    Icon(
-                      collapsed
-                          ? Icons.chevron_right_rounded
-                          : Icons.expand_more_rounded,
-                      size: 18,
-                      color: DunesColors.resolve(context, DunesColors.text2),
+      padding: EdgeInsets.only(left: indent, top: topLevel ? 10 : 3, bottom: 3),
+      child: Container(
+        decoration: BoxDecoration(
+          color: DunesColors.resolve(
+            context,
+            topLevel ? const Color(0xFFEEE9F7) : const Color(0xFFF7F4FC),
+            role: DunesColorRole.surface,
+          ),
+          borderRadius: BorderRadius.circular(9),
+        ),
+        child: Row(
+          children: [
+            if (_access.allowed)
+              SizedBox(
+                width: 36,
+                height: 38,
+                child: Checkbox(
+                  key: ValueKey('hr-dept-select-${item.dept.key}'),
+                  tristate: true,
+                  value: _deptChecked(item.dept),
+                  activeColor: _purple,
+                  checkColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(5),
+                  ),
+                  side: BorderSide(
+                    color: DunesColors.resolve(
+                      context,
+                      const Color(0xFFC8BDDA),
+                      role: DunesColorRole.border,
                     ),
-                    const SizedBox(width: 2),
-                    Expanded(
-                      child: Text.rich(
-                        TextSpan(
-                          children: [
-                            TextSpan(
-                              text: item.dept.name,
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w700,
-                                color: DunesColors.resolve(
-                                  context,
-                                  DunesColors.text,
-                                ),
-                              ),
-                            ),
-                            TextSpan(
-                              text: '  ${item.dept.total}',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontFeatures: _hrTabular,
-                                color: DunesColors.resolve(
-                                  context,
-                                  DunesColors.text3,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                    width: 1.3,
+                  ),
+                  overlayColor: WidgetStatePropertyAll(
+                    _purple.withValues(alpha: 0.10),
+                  ),
+                  visualDensity: VisualDensity.compact,
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  semanticLabel: '选择${item.dept.name}及下级',
+                  onChanged: _busy ? null : (_) => _toggleDept(item.dept),
+                ),
+              ),
+            Expanded(
+              child: InkWell(
+                borderRadius: BorderRadius.circular(9),
+                onTap: () => setState(() {
+                  if (_collapsedRoster.contains(item.dept.key)) {
+                    _collapsedRoster.remove(item.dept.key);
+                  } else {
+                    _collapsedRoster.add(item.dept.key);
+                  }
+                }),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(2, 9, 10, 9),
+                  child: Row(
+                    children: [
+                      Icon(
+                        collapsed
+                            ? Icons.chevron_right_rounded
+                            : Icons.expand_more_rounded,
+                        size: 18,
+                        color: muted,
                       ),
-                    ),
-                  ],
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          item.dept.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.text,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        '${item.dept.total} 人',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontFeatures: _hrTabular,
+                          color: muted,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -522,7 +548,7 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
     final r = item.record;
     final selected = wide && _selected?.id == r.id;
     final contact = _orgPeople[r.userId];
-    final indent = (item.depth.clamp(0, 5)) * 16.0;
+    final indent = item.depth.clamp(0, 5) * 10.0;
     final initial = r.name.trim().isEmpty ? '?' : r.name.trim().substring(0, 1);
     final subtitle = [
       if (r.todoGroups.isNotEmpty) r.todoGroups.join(' / ') else r.stageLabel,
@@ -532,17 +558,18 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
       if (r.position.isNotEmpty) r.position,
       if (r.probation) '试用期',
     ].join(' · ');
+    final secondary = DunesColors.resolve(context, DunesColors.text3);
     return Padding(
-      padding: EdgeInsets.only(left: indent, bottom: 6),
+      padding: EdgeInsets.only(left: indent, bottom: 4),
       child: Material(
         color: DunesColors.resolve(
           context,
-          selected ? const Color(0xFFF4EFFB) : Colors.white,
+          selected ? const Color(0xFFF1EBFC) : Colors.white,
           role: DunesColorRole.surface,
         ),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(10),
         child: InkWell(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(10),
           onTap: () {
             setState(() => _selected = r);
             if (!wide) {
@@ -564,7 +591,7 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
           },
           child: Container(
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(10),
               border: Border.all(
                 color: DunesColors.resolve(
                   context,
@@ -573,36 +600,57 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
                 ),
               ),
             ),
-            padding: const EdgeInsets.fromLTRB(4, 8, 8, 8),
+            padding: const EdgeInsets.fromLTRB(2, 6, 8, 6),
             child: Row(
               children: [
                 if (_access.allowed)
-                  Checkbox(
-                    value: _selectedIds.contains(r.id),
-                    activeColor: _purple,
-                    visualDensity: VisualDensity.compact,
-                    onChanged: _busy
-                        ? null
-                        : (checked) => setState(() {
-                            if (checked == true) {
-                              _selectedIds.add(r.id);
-                            } else {
-                              _selectedIds.remove(r.id);
-                            }
-                          }),
+                  SizedBox(
+                    width: 34,
+                    height: 38,
+                    child: Checkbox(
+                      value: _selectedIds.contains(r.id),
+                      activeColor: _purple,
+                      checkColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(5),
+                      ),
+                      side: BorderSide(
+                        color: DunesColors.resolve(
+                          context,
+                          const Color(0xFFC8BDDA),
+                          role: DunesColorRole.border,
+                        ),
+                        width: 1.3,
+                      ),
+                      overlayColor: WidgetStatePropertyAll(
+                        _purple.withValues(alpha: 0.10),
+                      ),
+                      visualDensity: VisualDensity.compact,
+                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      semanticLabel: '选择${r.name}',
+                      onChanged: _busy
+                          ? null
+                          : (checked) => setState(() {
+                              if (checked == true) {
+                                _selectedIds.add(r.id);
+                              } else {
+                                _selectedIds.remove(r.id);
+                              }
+                            }),
+                    ),
                   ),
                 ImUserAvatar(
                   initial: initial,
                   seed: r.userId,
-                  size: 36,
-                  borderRadius: 10,
+                  size: 32,
+                  borderRadius: 9,
                   avatarPreset: contact?.avatarPreset,
                   avatarObjectKey: contact?.avatarObjectKey,
                   avatarService: _avatars,
                   fallbackBackground: const Color(0xFF7B5CD8),
                   fallbackForeground: Colors.white,
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 9),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -612,31 +660,40 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          fontSize: 14,
+                          fontSize: 13,
                           fontWeight: FontWeight.w600,
-                          color: DunesColors.resolve(context, DunesColors.text),
+                          color: DunesColors.resolve(
+                            context,
+                            selected
+                                ? DunesColors.brandPurpleDeep
+                                : DunesColors.text,
+                          ),
                         ),
                       ),
-                      const SizedBox(height: 2),
+                      const SizedBox(height: 3),
                       Text(
                         subtitle,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          fontSize: 12,
-                          height: 1.3,
-                          color: DunesColors.resolve(
-                            context,
-                            DunesColors.text3,
-                          ),
+                          fontSize: 11,
+                          height: 1.2,
+                          color: secondary,
                         ),
                       ),
                     ],
                   ),
                 ),
+                const SizedBox(width: 4),
                 Icon(
                   Icons.chevron_right_rounded,
-                  color: DunesColors.resolve(context, DunesColors.text3),
+                  size: 18,
+                  color: selected
+                      ? DunesColors.resolve(
+                          context,
+                          DunesColors.brandPurpleDeep,
+                        )
+                      : secondary,
                 ),
               ],
             ),
@@ -1251,42 +1308,113 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
                 ),
               ],
               const SizedBox(height: 10),
-              if (scopes.length > 1)
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: _HrScopeTabs(
-                    value: _scope,
-                    expand: !wide && scopes.length > 1,
-                    options: scopes,
-                    onChanged: _loading ? null : _selectScope,
+              if (scopes.length > 1 || (!mine && wide))
+                Row(
+                  children: [
+                    Expanded(
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: scopes.length > 1
+                            ? _HrScopeTabs(
+                                value: _scope,
+                                expand: !wide && scopes.length > 1,
+                                options: scopes,
+                                onChanged: _loading ? null : _selectScope,
+                              )
+                            : const SizedBox.shrink(),
+                      ),
+                    ),
+                    if (!mine && wide)
+                      TextButton.icon(
+                        key: const ValueKey('hr-filter-toggle'),
+                        onPressed: () => setState(
+                          () => _filtersCollapsed = !_filtersCollapsed,
+                        ),
+                        icon: Icon(
+                          _filtersCollapsed
+                              ? Icons.tune_rounded
+                              : Icons.expand_less_rounded,
+                          size: 17,
+                        ),
+                        label: Text(_filtersCollapsed ? '展开筛选' : '收起筛选'),
+                        style: TextButton.styleFrom(
+                          foregroundColor: DunesColors.resolve(
+                            context,
+                            DunesColors.brandPurpleDeep,
+                          ),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                      ),
+                  ],
+                ),
+              if (!mine)
+                Visibility(
+                  visible: !wide || !_filtersCollapsed,
+                  maintainState: true,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const SizedBox(height: 8),
+                      if (constraints.maxWidth >= 900)
+                        Row(
+                          children: [
+                            SizedBox(
+                              width: 260,
+                              child: _HrSearchField(
+                                hint: '搜索姓名、部门或岗位',
+                                onChanged: (v) => setState(() => _query = v),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(child: _filters()),
+                          ],
+                        )
+                      else ...[
+                        _HrSearchField(
+                          hint: '搜索姓名、部门或岗位',
+                          onChanged: (v) => setState(() => _query = v),
+                          trailing: wide
+                              ? null
+                              : IconButton(
+                                  tooltip: '筛选',
+                                  onPressed: _openFilters,
+                                  icon: Icon(
+                                    Icons.filter_list_rounded,
+                                    size: 20,
+                                    color: DunesColors.resolve(
+                                      context,
+                                      DunesColors.text2,
+                                    ),
+                                  ),
+                                ),
+                        ),
+                        if (wide) ...[const SizedBox(height: 8), _filters()],
+                      ],
+                      if (_stagePool.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        _stageStrip(),
+                      ],
+                    ],
                   ),
                 ),
-              if (!mine) ...[
-                const SizedBox(height: 8),
-                _HrSearchField(
-                  hint: '搜索姓名、部门或岗位',
-                  onChanged: (v) => setState(() => _query = v),
-                  trailing: wide
-                      ? null
-                      : IconButton(
-                          tooltip: '筛选',
-                          onPressed: _openFilters,
-                          icon: Icon(
-                            Icons.filter_list_rounded,
-                            size: 20,
-                            color: DunesColors.resolve(
-                              context,
-                              DunesColors.text2,
-                            ),
-                          ),
-                        ),
+              if (!mine &&
+                  wide &&
+                  _filtersCollapsed &&
+                  (_query.isNotEmpty ||
+                      _department != null ||
+                      _tag != null ||
+                      _grade != null ||
+                      _stage != null))
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    '已启用筛选 · 当前 ${rows.length} 人',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: DunesColors.resolve(context, DunesColors.text2),
+                    ),
+                  ),
                 ),
-                if (wide) ...[const SizedBox(height: 8), _filters()],
-                if (_stagePool.isNotEmpty) ...[
-                  const SizedBox(height: 8),
-                  _stageStrip(),
-                ],
-              ],
               if (_scope == 'todo' && _alerts.isNotEmpty) ...[
                 const SizedBox(height: 8),
                 ConstrainedBox(
@@ -1355,22 +1483,117 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
                     : Row(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          SizedBox(
-                            width: wide ? 360 : constraints.maxWidth - 24,
-                            child: ListView.builder(
-                              key: PageStorageKey('hr-$_monthKey-$_scope'),
-                              padding: const EdgeInsets.fromLTRB(0, 6, 0, 12),
-                              itemCount: rosterItems.length,
-                              itemBuilder: (context, i) {
-                                final item = rosterItems[i];
-                                if (item is _HrRosterHeader) {
-                                  return _rosterHeader(item);
-                                }
-                                final person = item as _HrRosterPerson;
-                                return _rosterPerson(person, wide);
-                              },
+                          if (!wide || !_rosterCollapsed)
+                            SizedBox(
+                              width: wide
+                                  ? (constraints.maxWidth < 1200 ? 300 : 360)
+                                  : constraints.maxWidth - 24,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  if (wide)
+                                    Row(
+                                      children: [
+                                        const SizedBox(width: 6),
+                                        Expanded(
+                                          child: Text(
+                                            '人员名单 · ${rows.length}',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w600,
+                                              color: DunesColors.resolve(
+                                                context,
+                                                DunesColors.text2,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                        IconButton(
+                                          key: const ValueKey(
+                                            'hr-roster-collapse',
+                                          ),
+                                          tooltip: '收起人员名单',
+                                          onPressed: () => setState(
+                                            () => _rosterCollapsed = true,
+                                          ),
+                                          icon: const Icon(
+                                            Icons
+                                                .keyboard_double_arrow_left_rounded,
+                                            size: 20,
+                                          ),
+                                          color: DunesColors.resolve(
+                                            context,
+                                            DunesColors.brandPurpleDeep,
+                                          ),
+                                          visualDensity: VisualDensity.compact,
+                                        ),
+                                      ],
+                                    ),
+                                  Expanded(
+                                    child: ListView.builder(
+                                      key: PageStorageKey(
+                                        'hr-$_monthKey-$_scope',
+                                      ),
+                                      padding: const EdgeInsets.fromLTRB(
+                                        0,
+                                        0,
+                                        0,
+                                        12,
+                                      ),
+                                      itemCount: rosterItems.length,
+                                      itemBuilder: (context, i) {
+                                        final item = rosterItems[i];
+                                        if (item is _HrRosterHeader) {
+                                          return _rosterHeader(item);
+                                        }
+                                        return _rosterPerson(
+                                          item as _HrRosterPerson,
+                                          wide,
+                                        );
+                                      },
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            )
+                          else
+                            SizedBox(
+                              width: 44,
+                              child: Column(
+                                children: [
+                                  IconButton(
+                                    key: const ValueKey('hr-roster-expand'),
+                                    tooltip: '展开人员名单',
+                                    onPressed: () => setState(
+                                      () => _rosterCollapsed = false,
+                                    ),
+                                    icon: const Icon(
+                                      Icons.keyboard_double_arrow_right_rounded,
+                                      size: 20,
+                                    ),
+                                    color: DunesColors.resolve(
+                                      context,
+                                      DunesColors.brandPurpleDeep,
+                                    ),
+                                    visualDensity: VisualDensity.compact,
+                                  ),
+                                  if (_selectedIds.isNotEmpty)
+                                    Tooltip(
+                                      message: '已选 ${_selectedIds.length} 人',
+                                      child: Text(
+                                        '${_selectedIds.length}',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: DunesColors.resolve(
+                                            context,
+                                            DunesColors.brandPurpleDeep,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              ),
                             ),
-                          ),
                           if (wide)
                             Expanded(
                               child:

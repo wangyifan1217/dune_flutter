@@ -74,6 +74,7 @@ class _HrPerformanceDetailState extends State<HrPerformanceDetail> {
   Map<String, dynamic>? _options;
   Set<int> _missing = {};
   bool _busy = false;
+  bool _showFullAssessment = false;
   Future<List<Map<String, dynamic>>>? _logs;
   bool get _skipExecutiveCalibration => const {
     '许正阳',
@@ -360,195 +361,224 @@ class _HrPerformanceDetailState extends State<HrPerformanceDetail> {
       child: ListView(
         padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
         children: [
-          _HrPanel(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  r.name,
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w700,
-                    color: DunesColors.resolve(context, DunesColors.text),
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '${_hrMonthLabel(r.month)} · ${r.department.isEmpty ? '未分配部门' : r.department} · ${r.position.isEmpty ? '未配置岗位' : r.position}',
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: DunesColors.resolve(context, DunesColors.text2),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final identity = _HrPanel(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _HrTag(label: r.stageLabel),
-                    if (r.probation) const _HrTag(label: '试用期'),
-                    if (r.exemptionEligible) const _HrTag(label: '可免考核'),
-                    if (r.snapshot['resigned'] == true)
-                      const _HrTag(label: '已离职'),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                if (r.snapshot['selfTotal'] != null)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 6),
-                    child: Text(
-                      '自评 ${r.snapshot['selfTotal']}',
+                    Text(
+                      r.name,
                       style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700,
+                        color: DunesColors.resolve(context, DunesColors.text),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${_hrMonthLabel(r.month)} · ${r.department.isEmpty ? '未分配部门' : r.department} · ${r.position.isEmpty ? '未配置岗位' : r.position}',
+                      style: TextStyle(
+                        fontSize: 13,
                         color: DunesColors.resolve(context, DunesColors.text2),
                       ),
                     ),
-                  ),
-                if (r.scoresVisible && r.snapshot['total'] != null)
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: DunesColors.resolve(
-                        context,
-                        DunesColors.brandPurpleSoft,
-                        role: DunesColorRole.surface,
-                      ),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                    const SizedBox(height: 10),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
                       children: [
-                        Text(
-                          r.stage == 'result' ? '请核对考核结果' : '考核结果',
+                        _HrTag(label: r.stageLabel),
+                        if (r.probation) const _HrTag(label: '试用期'),
+                        if (r.exemptionEligible) const _HrTag(label: '可免考核'),
+                        if (r.snapshot['resigned'] == true)
+                          const _HrTag(label: '已离职'),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    if (r.snapshot['selfTotal'] != null)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 6),
+                        child: Text(
+                          '自评 ${r.snapshot['selfTotal']}',
                           style: TextStyle(
-                            fontSize: 12,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
                             color: DunesColors.resolve(
                               context,
                               DunesColors.text2,
                             ),
                           ),
                         ),
-                        const SizedBox(height: 8),
-                        Row(
+                      ),
+                    if (r.scoresVisible && r.snapshot['total'] != null)
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.brandPurpleSoft,
+                            role: DunesColorRole.surface,
+                          ),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            for (final item in [
-                              ('得分', '${r.snapshot['total']}'),
-                              ('等级', '${r.snapshot['grade'] ?? '—'}'),
-                              ('系数', '${r.snapshot['coefficient'] ?? '—'}'),
-                            ])
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      item.$1,
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: DunesColors.resolve(
-                                          context,
-                                          DunesColors.text2,
+                            Text(
+                              r.stage == 'result' ? '请核对考核结果' : '考核结果',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: DunesColors.resolve(
+                                  context,
+                                  DunesColors.text2,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Row(
+                              children: [
+                                for (final item in [
+                                  ('得分', '${r.snapshot['total']}'),
+                                  ('等级', '${r.snapshot['grade'] ?? '—'}'),
+                                  ('系数', '${r.snapshot['coefficient'] ?? '—'}'),
+                                ])
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          item.$1,
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: DunesColors.resolve(
+                                              context,
+                                              DunesColors.text2,
+                                            ),
+                                          ),
                                         ),
-                                      ),
-                                    ),
-                                    const SizedBox(height: 3),
-                                    Text(
-                                      item.$2,
-                                      style: TextStyle(
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.w700,
-                                        color: DunesColors.resolve(
-                                          context,
-                                          DunesColors.brandPurpleDeep,
+                                        const SizedBox(height: 3),
+                                        Text(
+                                          item.$2,
+                                          style: TextStyle(
+                                            fontSize: 18,
+                                            fontWeight: FontWeight.w700,
+                                            color: DunesColors.resolve(
+                                              context,
+                                              DunesColors.brandPurpleDeep,
+                                            ),
+                                          ),
                                         ),
-                                      ),
+                                      ],
                                     ),
-                                  ],
+                                  ),
+                              ],
+                            ),
+                            if (r.actions.contains('confirm_result'))
+                              const Padding(
+                                padding: EdgeInsets.only(top: 8),
+                                child: Text(
+                                  '请查看下方指标明细，确认后进入面谈。',
+                                  style: TextStyle(fontSize: 12),
+                                ),
+                              ),
+                            if (r.stage == 'result' &&
+                                r.userId == widget.session.userId)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 10),
+                                child: Text(
+                                  _resultConfirmationHint(r),
+                                  key: const ValueKey(
+                                    'hr-result-confirmation-policy',
+                                  ),
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    height: 1.5,
+                                    fontWeight: FontWeight.w600,
+                                    color: DunesColors.resolve(
+                                      context,
+                                      DunesColors.brandPurpleDeep,
+                                    ),
+                                  ),
                                 ),
                               ),
                           ],
                         ),
-                        if (r.actions.contains('confirm_result'))
-                          const Padding(
-                            padding: EdgeInsets.only(top: 8),
-                            child: Text(
-                              '请查看下方指标明细，确认后进入面谈。',
-                              style: TextStyle(fontSize: 12),
-                            ),
+                      )
+                    else if (r.stage == 'exempt')
+                      Text(
+                        '免考核：${r.workflow['exemptionReason'] ?? ''} ${r.workflow['exemptionNote'] ?? ''}',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.text2,
                           ),
-                        if (r.stage == 'result' &&
-                            r.userId == widget.session.userId)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 10),
-                            child: Text(
-                              _resultConfirmationHint(r),
-                              key: const ValueKey(
-                                'hr-result-confirmation-policy',
-                              ),
-                              style: TextStyle(
-                                fontSize: 12,
-                                height: 1.5,
-                                fontWeight: FontWeight.w600,
-                                color: DunesColors.resolve(
-                                  context,
-                                  DunesColors.brandPurpleDeep,
-                                ),
-                              ),
-                            ),
+                        ),
+                      )
+                    else if (r.stage == 'archived')
+                      Text(
+                        '归档：${r.workflow['archiveReason'] ?? ''} · ${hrDate(r.workflow['archivedAt'])}',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.text2,
                           ),
-                      ],
-                    ),
-                  )
-                else if (r.stage == 'exempt')
-                  Text(
-                    '免考核：${r.workflow['exemptionReason'] ?? ''} ${r.workflow['exemptionNote'] ?? ''}',
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: DunesColors.resolve(context, DunesColors.text2),
-                    ),
-                  )
-                else if (r.stage == 'archived')
-                  Text(
-                    '归档：${r.workflow['archiveReason'] ?? ''} · ${hrDate(r.workflow['archivedAt'])}',
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: DunesColors.resolve(context, DunesColors.text2),
-                    ),
-                  )
-                else
-                  const Text(
-                    '结果下发后显示分数、等级和系数。',
-                    style: TextStyle(fontSize: 13, color: Color(0xFF8A8494)),
-                  ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 10),
-          _HrPanel(
-            child: Column(
-              children: [
-                _HrMetaRow(
-                  label: '调整截止',
-                  value: started
-                      ? '${hrDate(r.adjustmentDueAt)}（北京时间）'
-                      : '开始考核后起算',
+                        ),
+                      )
+                    else
+                      const Text(
+                        '结果下发后显示分数、等级和系数。',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Color(0xFF8A8494),
+                        ),
+                      ),
+                  ],
                 ),
-                if (started && r.workflow['dueAt'] != null)
-                  _HrMetaRow(
-                    label: '当前节点截止',
-                    value: hrDate(r.workflow['dueAt']),
-                  ),
-                _HrMetaRow(
-                  label: '直属主管',
-                  value: '${r.snapshot['directSupervisorName'] ?? '未设置'}',
+              );
+              final metadata = _HrPanel(
+                child: Column(
+                  children: [
+                    _HrMetaRow(
+                      label: '调整截止',
+                      value: started
+                          ? '${hrDate(r.adjustmentDueAt)}（北京时间）'
+                          : '开始考核后起算',
+                    ),
+                    if (started && r.workflow['dueAt'] != null)
+                      _HrMetaRow(
+                        label: '当前节点截止',
+                        value: hrDate(r.workflow['dueAt']),
+                      ),
+                    _HrMetaRow(
+                      label: '直属主管',
+                      value: '${r.snapshot['directSupervisorName'] ?? '未设置'}',
+                    ),
+                    _HrMetaRow(
+                      label: '分管主管',
+                      value: '${r.snapshot['divisionSupervisorName'] ?? '未设置'}',
+                      last: true,
+                    ),
+                  ],
                 ),
-                _HrMetaRow(
-                  label: '分管主管',
-                  value: '${r.snapshot['divisionSupervisorName'] ?? '未设置'}',
-                  last: true,
-                ),
-              ],
-            ),
+              );
+              if (constraints.maxWidth < 700) {
+                return Column(
+                  children: [identity, const SizedBox(height: 10), metadata],
+                );
+              }
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(flex: 3, child: identity),
+                  const SizedBox(width: 10),
+                  Expanded(flex: 2, child: metadata),
+                ],
+              );
+            },
           ),
           if (r.blockers.isNotEmpty) ...[
             const SizedBox(height: 10),
@@ -646,12 +676,61 @@ class _HrPerformanceDetailState extends State<HrPerformanceDetail> {
               ),
             )
           else
-            HrAssessmentSheet(
-              lines: r.lines,
-              scoresVisible: r.scoresVisible,
-              month: _hrMonthLabel(r.month),
-              name: r.name,
-              supervisor: hrText(r.snapshot['directSupervisorName']),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final desktop =
+                    MediaQuery.sizeOf(context).width >= 800 &&
+                    constraints.maxWidth >= 360;
+                final sheet = HrAssessmentSheet(
+                  lines: r.lines,
+                  scoresVisible: r.scoresVisible,
+                  month: _hrMonthLabel(r.month),
+                  name: r.name,
+                  supervisor: hrText(r.snapshot['directSupervisorName']),
+                );
+                if (!desktop) return sheet;
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            '共 ${r.lines.length} 项 · 点击指标查看评分标准',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: DunesColors.resolve(
+                                context,
+                                DunesColors.text2,
+                              ),
+                            ),
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: _showFullAssessment
+                              ? () =>
+                                    setState(() => _showFullAssessment = false)
+                              : null,
+                          child: const Text('指标总览'),
+                        ),
+                        TextButton(
+                          onPressed: !_showFullAssessment
+                              ? () => setState(() => _showFullAssessment = true)
+                              : null,
+                          child: const Text('完整表格'),
+                        ),
+                      ],
+                    ),
+                    if (_showFullAssessment)
+                      sheet
+                    else
+                      HrAssessmentOverview(
+                        lines: r.lines,
+                        scoresVisible: r.scoresVisible,
+                      ),
+                  ],
+                );
+              },
             ),
           if (r.bonuses.isNotEmpty) ...[
             const SizedBox(height: 8),

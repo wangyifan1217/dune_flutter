@@ -89,18 +89,22 @@ class HrAssessmentSheet extends StatelessWidget {
                   : SingleChildScrollView(
                       scrollDirection: Axis.horizontal,
                       child: ConstrainedBox(
-                        constraints: const BoxConstraints(minWidth: 980),
+                        constraints: BoxConstraints(
+                          minWidth: constraints.maxWidth < 700
+                              ? 700
+                              : constraints.maxWidth,
+                        ),
                         child: Table(
                           defaultVerticalAlignment:
                               TableCellVerticalAlignment.top,
                           columnWidths: const {
-                            0: FixedColumnWidth(88),
-                            1: FixedColumnWidth(72),
-                            2: FixedColumnWidth(160),
-                            3: FixedColumnWidth(72),
+                            0: FixedColumnWidth(74),
+                            1: FixedColumnWidth(60),
+                            2: FixedColumnWidth(130),
+                            3: FixedColumnWidth(60),
                             4: FlexColumnWidth(),
-                            5: FixedColumnWidth(64),
-                            6: FixedColumnWidth(72),
+                            5: FixedColumnWidth(54),
+                            6: FixedColumnWidth(62),
                           },
                           border: TableBorder(
                             top: heading.isEmpty
@@ -347,6 +351,152 @@ class HrAssessmentSheet extends StatelessWidget {
           'range': '${band['min']}–${band['max']}',
         },
     ];
+  }
+}
+
+/// 电脑端先展示所有指标的概要；评分标准可按指标展开。
+class HrAssessmentOverview extends StatelessWidget {
+  const HrAssessmentOverview({
+    super.key,
+    required this.lines,
+    required this.scoresVisible,
+  });
+  final List<Map<String, dynamic>> lines;
+  final bool scoresVisible;
+
+  @override
+  Widget build(BuildContext context) {
+    final groups = _groups(lines);
+    final text = DunesColors.resolve(context, DunesColors.text);
+    final muted = DunesColors.resolve(context, DunesColors.text2);
+    final border = DunesColors.resolve(
+      context,
+      const Color(0xFFE4DCEC),
+      role: DunesColorRole.border,
+    );
+    final surface = DunesColors.resolve(
+      context,
+      const Color(0xFFF3EEF8),
+      role: DunesColorRole.surface,
+    );
+    final formatter = HrAssessmentSheet(
+      lines: lines,
+      scoresVisible: scoresVisible,
+    );
+    final total = lines.fold<double>(
+      0,
+      (sum, line) => sum + (_num(line['weight']) ?? 0),
+    );
+    return Container(
+      decoration: BoxDecoration(
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: border),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Material(
+        type: MaterialType.transparency,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (final group in groups) ...[
+              Container(
+                color: surface,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+                child: Text(
+                  '${group.dimension} · 维度权重 ${_percent(group.weight)}',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: text,
+                  ),
+                ),
+              ),
+              for (final line in group.lines)
+                ExpansionTile(
+                  key: ValueKey(
+                    'hr-overview-${line['indicatorId'] ?? line['name']}',
+                  ),
+                  dense: true,
+                  visualDensity: VisualDensity.compact,
+                  tilePadding: const EdgeInsets.symmetric(horizontal: 12),
+                  childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+                  title: Text(
+                    '${line['name'] ?? ''}',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: text,
+                    ),
+                  ),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        '权重 ${_percent(_num(line['weight']) ?? 0)}',
+                        style: TextStyle(fontSize: 12, color: muted),
+                      ),
+                      if (scoresVisible) ...[
+                        const SizedBox(width: 18),
+                        Text(
+                          '上级评分 ${formatter._supervisor(line).replaceAll("\n", " · ")}',
+                          style: TextStyle(fontSize: 12, color: muted),
+                        ),
+                      ],
+                      const SizedBox(width: 6),
+                      Icon(Icons.expand_more_rounded, size: 20, color: muted),
+                    ],
+                  ),
+                  children: [
+                    for (final band in formatter._bands(line))
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 3),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              child: Text(
+                                band['description'] ?? '',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  height: 1.4,
+                                  color: muted,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Text(
+                              band['range'] ?? '',
+                              style: TextStyle(fontSize: 12, color: muted),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
+            ],
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+              child: Text(
+                '合计权重 ${_percent(total)}',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: text,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

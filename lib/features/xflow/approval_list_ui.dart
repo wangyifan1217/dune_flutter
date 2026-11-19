@@ -17,16 +17,15 @@ class ApprovalListSummary extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final parts = kicker.split('·');
-    final accent = DunesColors.resolve(context, DunesColors.brandPurple);
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
         color: DunesColors.resolve(
           context,
           Colors.white,
           role: DunesColorRole.surface,
         ),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(10),
         border: Border.all(
           color: DunesColors.resolve(
             context,
@@ -35,121 +34,36 @@ class ApprovalListSummary extends StatelessWidget {
           ),
         ),
       ),
-      child: Column(
+      child: Row(
         children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: DunesColors.resolve(
-                    context,
-                    DunesColors.brandPurpleSoft,
-                    role: DunesColorRole.surface,
-                  ),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(Icons.fact_check_outlined, color: accent, size: 20),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      parts.first.trim(),
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700,
-                        color: DunesColors.resolve(context, DunesColors.text),
-                      ),
-                    ),
-                    if (parts.length > 1)
-                      Text(
-                        '共 ${parts.last.trim()}',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: DunesColors.resolve(
-                            context,
-                            DunesColors.text3,
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-                decoration: BoxDecoration(
-                  color: DunesColors.resolve(
-                    context,
-                    badgeUrge
-                        ? DunesColors.brandPurpleSoft
-                        : DunesColors.bgSoft,
-                    role: DunesColorRole.surface,
-                  ),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(
-                  badgeText,
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: badgeUrge
-                        ? accent
-                        : DunesColors.resolve(context, DunesColors.text2),
-                  ),
-                ),
-              ),
-            ],
+          Icon(
+            Icons.fact_check_outlined,
+            size: 22,
+            color: DunesColors.resolve(context, DunesColors.brandPurple),
           ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              for (var i = 0; i < footItems.length; i++) ...[
-                if (i > 0)
-                  Container(
-                    width: 1,
-                    height: 28,
-                    color: DunesColors.resolve(
-                      context,
-                      DunesColors.borderSoft,
-                      role: DunesColorRole.border,
-                    ),
-                  ),
-                Expanded(
-                  child: Column(
-                    children: [
-                      Text(
-                        footItems[i].$2,
-                        style: TextStyle(
-                          fontSize: 20,
-                          height: 1.1,
-                          fontWeight: FontWeight.w700,
-                          color: footItems[i].$3 == 'urge'
-                              ? accent
-                              : DunesColors.resolve(context, DunesColors.text),
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        footItems[i].$1,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: DunesColors.resolve(
-                            context,
-                            DunesColors.text2,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ],
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              parts.first.trim(),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: DunesColors.resolve(context, DunesColors.text),
+              ),
+            ),
           ),
+          if (parts.length > 1) ...[
+            const SizedBox(width: 12),
+            Text(
+              '共 ${parts.last.trim()}',
+              style: TextStyle(
+                fontSize: 12,
+                color: DunesColors.resolve(context, DunesColors.text3),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -168,41 +82,51 @@ class ApprovalListFilterChip extends StatelessWidget {
   final bool active, showDot;
   final VoidCallback onTap;
   @override
-  Widget build(BuildContext context) => Material(
-    color: DunesColors.resolve(
-      context,
-      active ? DunesColors.brandPurpleSoft : Colors.white,
-      role: DunesColorRole.surface,
-    ),
-    shape: RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(8),
-      side: BorderSide(
-        color: DunesColors.resolve(
-          context,
-          active ? DunesColors.brandPurpleLine : DunesColors.borderSoft,
-          role: DunesColorRole.border,
+  Widget build(BuildContext context) {
+    final compact = MediaQuery.sizeOf(context).width >= 680;
+    return Material(
+      color: DunesColors.resolve(
+        context,
+        active ? DunesColors.brandPurpleSoft : Colors.white,
+        role: DunesColorRole.surface,
+      ),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(6),
+        side: BorderSide(
+          color: DunesColors.resolve(
+            context,
+            active ? DunesColors.brandPurpleLine : DunesColors.borderSoft,
+            role: DunesColorRole.border,
+          ),
         ),
       ),
-    ),
-    child: InkWell(
-      borderRadius: BorderRadius.circular(8),
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: active ? FontWeight.w600 : FontWeight.w400,
-            color: DunesColors.resolve(
-              context,
-              active ? DunesColors.brandPurpleDeep : DunesColors.text2,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(6),
+        onTap: onTap,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minHeight: compact ? 32 : 44),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            child: Center(
+              widthFactor: 1,
+              heightFactor: 1,
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: active ? FontWeight.w600 : FontWeight.w400,
+                  color: DunesColors.resolve(
+                    context,
+                    active ? DunesColors.brandPurpleDeep : DunesColors.text2,
+                  ),
+                ),
+              ),
             ),
           ),
         ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 class ApprovalListEmpty extends StatelessWidget {

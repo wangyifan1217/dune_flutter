@@ -567,19 +567,19 @@ class _NativeTaskManagementPaneState extends State<NativeTaskManagementPane> {
   Widget build(BuildContext context) {
     return TaskCopyableScope(
       child: TaskTheme(
-      child: ColoredBox(
-        color: DunesColors.resolve(
-          context,
-          const Color(0xFFF5F6F8),
-          role: DunesColorRole.surface,
+        child: ColoredBox(
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFF5F6F8),
+            role: DunesColorRole.surface,
+          ),
+          child: Column(
+            children: [
+              _buildHeader(),
+              Expanded(child: _buildBody()),
+            ],
+          ),
         ),
-        child: Column(
-          children: [
-            _buildHeader(),
-            Expanded(child: _buildBody()),
-          ],
-        ),
-      ),
       ),
     );
   }
@@ -1152,13 +1152,10 @@ class _NativeTaskManagementPaneState extends State<NativeTaskManagementPane> {
                 onChanged: (value) =>
                     setState(() => _taskApprovalEnabled = value),
               ),
-              SwitchListTile(
+              const ListTile(
                 contentPadding: EdgeInsets.zero,
-                title: const Text('指派需要接收确认'),
-                subtitle: const Text('仅新建子目标指派他人时生效；运行中转派走任务流上级审批'),
-                value: _assignmentConfirmationEnabled,
-                onChanged: (value) =>
-                    setState(() => _assignmentConfirmationEnabled = value),
+                title: Text('跨部门协作接收确认'),
+                subtitle: Text('同部门新建分派直接生效；跨部门协作需接收确认。运行中转派仍走任务流上级审批。'),
               ),
             ],
           ),

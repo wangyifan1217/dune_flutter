@@ -240,7 +240,7 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
   String get _pathHint {
     if (!_rulesLoaded) return '';
     if (!_isSub) {
-      if (_handsOff) return '提交后由需求负责人接收。对方接收后才能拆子任务。';
+      if (_handsOff) return '同部门分派直接生效；跨部门协作由需求负责人接收后拆分子任务。';
       if (!_canAssignTeam) {
         return '自己负责即可创建，协助人谁都可以添加。只有沙丘职级为 M 序列的人可以把负责人设成团队成员。';
       }
@@ -250,9 +250,9 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
     if (!_parentIsMine) return '提交后由主任务负责人审核，通过后子任务才会生效。';
     if (self) return '你是主任务负责人，创建的子任务会直接生效。';
     if (_assignmentConfirmation) {
-      return '指派给他人后，对方接受才会开始执行。对方拒绝则不会生效。';
+      return '同部门分派直接生效；跨部门协作需对方接收确认，拒绝则不生效。';
     }
-    return '指派给他人后直接生效，对方可以开始执行。';
+    return '同部门分派直接生效；跨部门协作需对方接收确认。';
   }
 
   @override
@@ -621,7 +621,7 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
                       ? const Text('自己负责，创建后直接生效')
                       : Text(
                           owner.departmentName.isEmpty
-                              ? '科技研发中心，接收后拆子任务'
+                              ? '科技研发中心，同部门直接生效'
                               : owner.departmentName,
                         ),
                   onTap: () => Navigator.pop(ctx, owner),
@@ -746,10 +746,12 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
                 ? (draft.ownerId ?? selfId)
                 : selfId;
             if (draft.kind == 'team' && teamOwner == selfId) {
+              if (!mounted) return;
               showDunesCenterToast(context, '请为第 ${i + 1} 条子任务选择团队成员');
               break;
             }
             if (draft.kind == 'assist' && draft.helpers.isEmpty) {
+              if (!mounted) return;
               showDunesCenterToast(context, '请为第 ${i + 1} 条子任务选择协助人');
               break;
             }
@@ -1278,7 +1280,7 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
           Padding(
             padding: EdgeInsets.only(top: 12),
             child: Text(
-              '交给科技研发中心后，由需求负责人接收并创建子任务。',
+              '同部门分派直接生效；跨部门交给科技研发中心后，由需求负责人接收并创建子任务。',
               style: TextStyle(
                 fontSize: 12,
                 color: DunesColors.resolve(context, DunesColors.text3),

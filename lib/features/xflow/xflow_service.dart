@@ -1089,6 +1089,23 @@ class XflowService {
     return out;
   }
 
+  Future<String> fetchCurrentApprovalReviewer({
+    required String businessType,
+    required int businessId,
+  }) async {
+    final bt = Uri.encodeComponent(businessType.trim().toUpperCase());
+    final raw = await _request('/approvals/$bt/$businessId/stakeholders');
+    // Use the explicit current list: people is deduplicated and may assign another role.
+    final rows = raw['currentApprovers'];
+    if (rows is! List) throw const FormatException('missing currentApprovers');
+    final names = <String>{};
+    for (final row in rows.whereType<Map>()) {
+      final name = (row['displayName'] ?? '').toString().trim();
+      if (name.isNotEmpty) names.add(name);
+    }
+    return names.isEmpty ? '待分配' : names.join('、');
+  }
+
   Future<List<ApprovalStakeholderPerson>> fetchApprovalStakeholders({
     required String businessType,
     required int businessId,

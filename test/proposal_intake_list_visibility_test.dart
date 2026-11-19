@@ -10,6 +10,98 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
 void main() {
+  testWidgets('list searches initiator by name, alongside code and title', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1050, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    var listRequests = 0;
+    final client = MockClient((request) async {
+      if (request.url.path == '/proposal-intakes') listRequests++;
+      final data = switch (request.url.path) {
+        '/proposal-intakes/options' => <String, dynamic>{},
+        '/org/users' => [
+          {'id': 27, 'displayName': '李凡伊'},
+        ],
+        '/proposal-intakes' => {
+          'total': 2,
+          'items': [
+            {
+              'id': 1,
+              'code': 'TA-202611-01',
+              'title': '第一份提案',
+              'createdBy': 27,
+              'form': {'product': '产品甲'},
+            },
+            {
+              'id': 2,
+              'code': 'TA-202611-02',
+              'title': '第二份提案',
+              'createdBy': 28,
+              'form': {'createdByName': '王一凡', 'product': '产品乙'},
+            },
+          ],
+        },
+        _ => throw StateError('Unexpected request: ${request.url}'),
+      };
+      return http.Response.bytes(
+        utf8.encode(jsonEncode({'success': true, 'data': data})),
+        200,
+      );
+    });
+    await http.runWithClient(() async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: NativeProposalIntakePage(
+              session: AuthSession(
+                token: 'test',
+                userId: 1,
+                phone: '',
+                apiBase: 'http://local.test',
+                roles: [],
+              ),
+              kind: 'sales',
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final search = find.widgetWithText(TextField, '搜索编号、名称或发起人');
+      final first = find.byKey(
+        const ValueKey('proposal-tag-group-collapse-产品甲'),
+      );
+      final second = find.byKey(
+        const ValueKey('proposal-tag-group-collapse-产品乙'),
+      );
+
+      Future<void> searchFor(String input) async {
+        await tester.enterText(search, input);
+        await tester.testTextInput.receiveAction(TextInputAction.search);
+        await tester.pumpAndSettle();
+      }
+
+      await searchFor('凡伊');
+      expect(first, findsOneWidget);
+      expect(second, findsNothing);
+      await searchFor('王一');
+      expect(first, findsNothing);
+      expect(second, findsOneWidget);
+      await searchFor('ta-202611-01');
+      expect(first, findsOneWidget);
+      expect(second, findsNothing);
+      await searchFor('第二份');
+      expect(first, findsNothing);
+      expect(second, findsOneWidget);
+      await tester.tap(find.byTooltip('清空搜索'));
+      await tester.pumpAndSettle();
+      expect(first, findsOneWidget);
+      expect(second, findsOneWidget);
+      expect(listRequests, 1);
+    }, () => client);
+  });
+
   testWidgets('hidden proposal list detaches and pauses prefetch', (
     tester,
   ) async {

@@ -724,29 +724,144 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
     return answer == true;
   }
 
-  Future<void> _startMonth() async {
-    final recordIds = [
-      for (final r in _records)
-        if (_selectedIds.contains(r.id) &&
-            (r.started == false || (r.started == null && !_monthStarted)) &&
-            r.stage != 'archived' &&
-            r.stage != 'exempt')
-          r.id,
-    ];
-    final departmentOptions = [
-      for (final entry in _deptName.entries)
-        if (!hrPerformanceDepartmentExcluded(
-          departmentId: entry.key,
-          departmentName: entry.value,
-          parents: _deptParent,
-          names: _deptName,
-        ))
-          HrConfigOption(
-            entry.key,
-            entry.value,
-            subtitle: _deptName[_deptParent[entry.key]] ?? '',
+  List<int> get _selectedStartIds => [
+    for (final r in _records)
+      if (_selectedIds.contains(r.id) &&
+          r.started != true &&
+          r.stage != 'archived' &&
+          r.stage != 'exempt')
+        r.id,
+  ];
+
+  Widget _buildBatchActions() {
+    final purple = DunesColors.resolve(context, DunesColors.brandPurple);
+    final border = DunesColors.resolve(
+      context,
+      _hrLine,
+      role: DunesColorRole.border,
+    );
+    final shape = RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(8),
+    );
+    final actionStyle = TextButton.styleFrom(
+      minimumSize: const Size(0, 36),
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+      shape: shape,
+      textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+      visualDensity: VisualDensity.standard,
+      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+    );
+    final selection = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(Icons.check_circle_rounded, size: 18, color: purple),
+        const SizedBox(width: 8),
+        Text(
+          '已选 ${_selectedIds.length} 人',
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: DunesColors.resolve(context, DunesColors.text),
           ),
-    ];
+        ),
+        const SizedBox(width: 12),
+        TextButton(
+          onPressed: () => setState(() => _selectedIds.clear()),
+          style: actionStyle.copyWith(
+            foregroundColor: WidgetStatePropertyAll(
+              DunesColors.resolve(context, DunesColors.text2),
+            ),
+          ),
+          child: const Text('取消选择'),
+        ),
+      ],
+    );
+    final actions = Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      alignment: WrapAlignment.end,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        OutlinedButton(
+          onPressed: _busy ? null : () => _batch('urge'),
+          style: actionStyle.copyWith(
+            foregroundColor: WidgetStatePropertyAll(purple),
+            side: WidgetStatePropertyAll(BorderSide(color: border)),
+          ),
+          child: const Text('批量督办'),
+        ),
+        if (_operationRows.any((r) => r.actions.contains('reject_final')))
+          OutlinedButton(
+            onPressed: _busy ? null : () => _batch('reject_final'),
+            style: actionStyle.copyWith(
+              foregroundColor: WidgetStatePropertyAll(
+                DunesColors.resolve(context, DunesColors.coral),
+              ),
+              side: WidgetStatePropertyAll(BorderSide(color: border)),
+            ),
+            child: const Text('驳回选中人员'),
+          ),
+        if (_access.hr)
+          FilledButton(
+            onPressed: _busy || _loading || _selectedStartIds.isEmpty
+                ? null
+                : _startSelected,
+            style: actionStyle.copyWith(
+              backgroundColor: WidgetStateProperty.resolveWith(
+                (states) => states.contains(WidgetState.disabled)
+                    ? purple.withValues(alpha: 0.35)
+                    : purple,
+              ),
+              foregroundColor: const WidgetStatePropertyAll(Colors.white),
+            ),
+            child: const Text('批量考核'),
+          ),
+      ],
+    );
+    return Container(
+      key: const ValueKey('hr-batch-actions'),
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      decoration: BoxDecoration(
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: border),
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          if (constraints.maxWidth < 600) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [selection, const SizedBox(height: 8), actions],
+            );
+          }
+          return Row(
+            children: [
+              selection,
+              const SizedBox(width: 16),
+              Expanded(child: actions),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _startSelected() async {
+    final recordIds = _selectedStartIds;
+    if (!_access.hr || _busy || recordIds.isEmpty) {
+      return;
+    }
+    if (!await _ensureScopedStart() || !mounted) return;
+    await _confirmStart('已勾选的 ${recordIds.length} 人', recordIds: recordIds);
+  }
+
+  Future<void> _startMonth() async {
+    final recordIds = _selectedStartIds;
     final mode = await showDialog<String>(
       context: context,
       builder: (ctx) => SimpleDialog(
@@ -756,12 +871,15 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
             onPressed: () => Navigator.pop(ctx, 'all'),
             child: const Text('发起全员考核'),
           ),
-          if (_supportsBatchStart && departmentOptions.isNotEmpty)
-            SimpleDialogOption(
-              onPressed: () => Navigator.pop(ctx, 'department'),
-              child: const Text('按部门发起'),
-            ),
-          if (_supportsBatchStart && recordIds.isNotEmpty)
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(ctx, 'department'),
+            child: const Text('按部门发起'),
+          ),
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(ctx, 'people'),
+            child: const Text('选择人员发起'),
+          ),
+          if (recordIds.isNotEmpty)
             SimpleDialogOption(
               onPressed: () => Navigator.pop(ctx, 'selected'),
               child: Text('发起已勾选的 ${recordIds.length} 人'),
@@ -770,25 +888,143 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
       ),
     );
     if (!mounted || mode == null) return;
-    final List<int> departmentIds;
+    if (mode == 'all') {
+      await _confirmStart('全员');
+      return;
+    }
+    if (!await _ensureScopedStart() || !mounted) return;
+    if (mode == 'selected') {
+      await _confirmStart('已勾选的 ${recordIds.length} 人', recordIds: recordIds);
+      return;
+    }
+    List<HrPerformanceRecord> candidates;
+    setState(() => _busy = true);
+    try {
+      // Load the full permitted roster, regardless of the current tab and filters.
+      final rows = await _service.records(_monthKey, 'all');
+      candidates = rows
+          .where(
+            (r) =>
+                (r.started == false || (r.started == null && !_monthStarted)) &&
+                r.stage != 'archived' &&
+                r.stage != 'exempt' &&
+                !hrPerformanceExcludedLeader(r.name) &&
+                !hrPerformanceDepartmentExcluded(
+                  departmentId: r.departmentId ?? _userDept[r.userId],
+                  departmentName: r.department,
+                  parents: _deptParent,
+                  names: _deptName,
+                ),
+          )
+          .toList();
+    } catch (e) {
+      if (mounted) {
+        showDunesToast(context, '待发起名单加载失败：$e', kind: DunesToastKind.error);
+      }
+      return;
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+    if (!mounted) return;
+    if (candidates.isEmpty) {
+      showDunesToast(context, '本月暂无待发起考核人员');
+      return;
+    }
+    List<int> chosenIds;
+    String scopeLabel;
     if (mode == 'department') {
-      final selected = await showHrConfigPicker<int>(
+      final groups = <String, List<HrPerformanceRecord>>{};
+      final labels = <String, String>{};
+      for (final r in candidates) {
+        final deptId = r.departmentId ?? _userDept[r.userId];
+        final name = _deptName[deptId] ?? r.department;
+        final key = deptId == null ? 'name:$name' : 'id:$deptId';
+        groups.putIfAbsent(key, () => []).add(r);
+        labels[key] = name.isEmpty ? '未分配部门' : name;
+        // Selecting an ancestor includes its eligible descendants.
+        final seen = <int>{};
+        var ancestor = _deptParent[deptId];
+        while (ancestor != null && seen.add(ancestor)) {
+          final parentKey = 'id:$ancestor';
+          groups.putIfAbsent(parentKey, () => []).add(r);
+          labels[parentKey] = _deptName[ancestor] ?? '部门 $ancestor';
+          ancestor = _deptParent[ancestor];
+        }
+      }
+      final chosen = await showHrConfigPicker<String>(
         context,
         title: '选择发起部门（含下级部门）',
-        options: departmentOptions,
+        options: [
+          for (final entry in groups.entries)
+            HrConfigOption(
+              entry.key,
+              labels[entry.key]!,
+              subtitle: '待发起 ${entry.value.length} 人',
+            ),
+        ],
         selected: const {},
       );
-      if (!mounted || selected == null || selected.isEmpty) return;
-      departmentIds = selected.toList();
+      if (!mounted || chosen == null || chosen.isEmpty) return;
+      chosenIds = {
+        for (final key in chosen)
+          for (final r in groups[key]!) r.id,
+      }.toList();
+      scopeLabel = chosen.map((key) => labels[key]!).join('、');
     } else {
-      departmentIds = const [];
+      final chosen = await showHrConfigPicker<int>(
+        context,
+        title: '选择发起人员',
+        options: [
+          for (final r in candidates)
+            HrConfigOption(
+              r.id,
+              r.name,
+              subtitle: '${r.department} · ${r.position}',
+            ),
+        ],
+        selected: recordIds.toSet(),
+      );
+      if (!mounted || chosen == null || chosen.isEmpty) return;
+      chosenIds = chosen.toList();
+      scopeLabel = '所选 ${chosenIds.length} 人';
     }
-    final scopeLabel = switch (mode) {
-      'department' => departmentIds.map((id) => _deptName[id]).join('、'),
-      'selected' => '已勾选的 ${recordIds.length} 人',
-      _ => '全员',
-    };
+    await _confirmStart(scopeLabel, recordIds: chosenIds);
+  }
+
+  Future<bool> _ensureScopedStart() async {
+    if (_supportsBatchStart) return true;
+    try {
+      final status = await _service.monthStatus(_monthKey);
+      if (!mounted) return false;
+      if (status.supportsBatch) {
+        setState(() => _supportsBatchStart = true);
+        return true;
+      }
+    } catch (_) {}
+    if (!mounted) return false;
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('暂时无法分批发起'),
+        content: const Text('当前考核服务尚未确认支持按部门或人员发起，请更新考核服务后重试。此次没有发起任何考核。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('知道了'),
+          ),
+        ],
+      ),
+    );
+    return false;
+  }
+
+  Future<void> _confirmStart(
+    String scopeLabel, {
+    List<int> recordIds = const [],
+    List<int> departmentIds = const [],
+  }) async {
     final label = '${_month.year}年${_month.month}月';
+    final month = _monthKey;
     final confirmed = await _askStart(
       '开始当月绩效考核',
       '$label · $scopeLabel\n资料齐全的人员将直接进入主管初评或自评。已发起的考核表会保留当前进度。',
@@ -798,9 +1034,9 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
     setState(() => _busy = true);
     try {
       final started = await _service.startMonth(
-        _monthKey,
+        month,
         departmentIds: departmentIds,
-        recordIds: mode == 'selected' ? recordIds : const [],
+        recordIds: recordIds,
       );
       if (!mounted) return;
       showDunesToast(
@@ -1612,110 +1848,7 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
                         ],
                       ),
               ),
-              if (_selectedIds.isNotEmpty)
-                Container(
-                  margin: const EdgeInsets.only(bottom: 12),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 8,
-                  ),
-                  decoration: BoxDecoration(
-                    color: DunesColors.resolve(
-                      context,
-                      DunesColors.brandPurpleSoft,
-                      role: DunesColorRole.surface,
-                    ),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: DunesColors.resolve(
-                        context,
-                        DunesColors.brandPurpleLine,
-                        role: DunesColorRole.border,
-                      ),
-                    ),
-                  ),
-                  child: Wrap(
-                    spacing: 12,
-                    runSpacing: 8,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    children: [
-                      Text(
-                        '已选 ${_selectedIds.length} 人',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: DunesColors.resolve(
-                            context,
-                            DunesColors.brandPurpleDeep,
-                          ),
-                        ),
-                      ),
-                      TextButton(
-                        onPressed: () => setState(() => _selectedIds.clear()),
-                        style: TextButton.styleFrom(
-                          foregroundColor: DunesColors.resolve(
-                            context,
-                            DunesColors.brandPurpleDeep,
-                          ),
-                          textStyle: const TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        child: const Text('取消选择'),
-                      ),
-                      FilledButton(
-                        onPressed: _busy ? null : () => _batch('urge'),
-                        style: FilledButton.styleFrom(
-                          backgroundColor: DunesColors.resolve(
-                            context,
-                            DunesColors.brandPurple,
-                            role: DunesColorRole.surface,
-                          ),
-                          foregroundColor: Colors.white,
-                          disabledBackgroundColor: DunesColors.resolve(
-                            context,
-                            const Color(0xFFE4D8F5),
-                            role: DunesColorRole.surface,
-                          ),
-                          disabledForegroundColor: Colors.white,
-                          minimumSize: const Size(0, 36),
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(999),
-                          ),
-                          textStyle: const TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        child: const Text('批量督办'),
-                      ),
-                      if (_operationRows.any(
-                        (r) => r.actions.contains('reject_final'),
-                      ))
-                        FilledButton(
-                          onPressed: _busy
-                              ? null
-                              : () => _batch('reject_final'),
-                          style: FilledButton.styleFrom(
-                            backgroundColor: DunesColors.resolve(
-                              context,
-                              DunesColors.coral,
-                              role: DunesColorRole.surface,
-                            ),
-                            foregroundColor: Colors.white,
-                            minimumSize: const Size(0, 36),
-                            padding: const EdgeInsets.symmetric(horizontal: 16),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(999),
-                            ),
-                          ),
-                          child: const Text('驳回选中人员'),
-                        ),
-                    ],
-                  ),
-                ),
+              if (_selectedIds.isNotEmpty) _buildBatchActions(),
             ],
           ),
         ),

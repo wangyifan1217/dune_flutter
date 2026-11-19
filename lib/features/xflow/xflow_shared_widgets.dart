@@ -866,9 +866,7 @@ class XflowProposalListCard extends StatelessWidget {
     if (mode == XflowListCardMode.b14) {
       return LayoutBuilder(
         builder: (context, constraints) {
-          final threshold =
-              (onCopy != null || onDeleteDraft != null ? 960 : 840) *
-              MediaQuery.textScalerOf(context).scale(1);
+          final threshold = 760 * MediaQuery.textScalerOf(context).scale(1);
           return constraints.maxWidth >= threshold
               ? _buildWideApprovalCard(context)
               : _buildCompactInitiatedCard(context);
@@ -879,7 +877,7 @@ class XflowProposalListCard extends StatelessWidget {
       return LayoutBuilder(
         builder: (context, constraints) {
           return constraints.maxWidth >=
-                      840 * MediaQuery.textScalerOf(context).scale(1) &&
+                      760 * MediaQuery.textScalerOf(context).scale(1) &&
                   onPrimaryAction == null &&
                   onDangerAction == null
               ? _buildWideApprovalCard(context)
@@ -925,7 +923,10 @@ class XflowProposalListCard extends StatelessWidget {
                           children: [
                             Expanded(
                               child: Text(
-                                _compactApprovalTitle(item, _compactProposalKindLabel(item)),
+                                _compactApprovalTitle(
+                                  item,
+                                  _compactProposalKindLabel(item),
+                                ),
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
                                 style: DunesTypography.sans(
@@ -1142,13 +1143,26 @@ class XflowProposalListCard extends StatelessWidget {
     );
   }
 
+  String get _currentReviewerLabel {
+    if (item.isPending) return item.currentApprover ?? '加载中…';
+    if (['DRAFT', 'PENDING_INITIATE'].contains(item.status.toUpperCase())) {
+      return '未发起';
+    }
+    return '—';
+  }
+
   Widget _buildWideApprovalCard(BuildContext context) {
     final kind = _compactProposalKindLabel(item);
-    final type = _compactProposalTypeLabel(item, kind);
+    final title = _compactApprovalTitle(item, kind);
     final code = item.code.trim().isEmpty ? '#${item.id}' : item.code.trim();
     final muted = DunesColors.resolve(context, DunesColors.text3);
     final scale = MediaQuery.textScalerOf(context).scale(1);
-    final hasActions = onCopy != null || onDeleteDraft != null;
+    final amounts = item.highlights
+        .where((line) => line.label.contains('金额'))
+        .toList();
+    final details = item.highlights
+        .where((line) => !line.label.contains('金额'))
+        .toList();
     return Material(
       color: DunesColors.resolve(
         context,
@@ -1169,7 +1183,7 @@ class XflowProposalListCard extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
           child: Row(
             children: [
               Expanded(
@@ -1178,102 +1192,144 @@ class XflowProposalListCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      _compactApprovalTitle(item, kind),
+                      title,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: DunesTypography.sans(
                         context: context,
-                        fontSize: 14,
+                        fontSize: 15,
                         height: 1.35,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
-                    const SizedBox(height: 5),
+                    const SizedBox(height: 6),
                     Wrap(
-                      spacing: 12,
-                      runSpacing: 3,
+                      spacing: 10,
+                      runSpacing: 4,
                       children: [
                         Text(
                           code,
-                          style: TextStyle(fontSize: 11, color: muted),
+                          style: TextStyle(fontSize: 12, color: muted),
                         ),
                         if (item.createdByName.trim().isNotEmpty)
                           Text(
                             '发起人 ${item.createdByName.trim()}',
-                            style: TextStyle(fontSize: 11, color: muted),
+                            style: TextStyle(fontSize: 12, color: muted),
+                          ),
+                        if (kind != title)
+                          Text(
+                            kind,
+                            style: TextStyle(fontSize: 12, color: muted),
                           ),
                       ],
                     ),
-                    _approvalHighlights(context),
                   ],
                 ),
               ),
               const SizedBox(width: 20),
               Expanded(
-                flex: 2,
+                flex: 4,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 3,
-                      ),
-                      decoration: BoxDecoration(
-                        color: DunesColors.resolve(
-                          context,
-                          DunesColors.brandPurpleSoft,
-                          role: DunesColorRole.surface,
-                        ),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text(
-                        kind,
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: DunesColors.resolve(
-                            context,
-                            DunesColors.brandPurpleDeep,
+                    for (final line in details)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 2),
+                        child: Tooltip(
+                          message: '${line.label}  ${line.value}',
+                          child: Text(
+                            '${line.label}  ${line.value}',
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 13,
+                              height: 1.4,
+                              color: DunesColors.resolve(
+                                context,
+                                DunesColors.text2,
+                              ),
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                    if (type.isNotEmpty && type != kind) ...[
-                      const SizedBox(height: 5),
-                      Text(
-                        type,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: DunesColors.resolve(
-                            context,
-                            DunesColors.text2,
-                          ),
-                        ),
-                      ),
-                    ],
                   ],
                 ),
               ),
               const SizedBox(width: 16),
               SizedBox(
-                width: 104 * scale,
+                width: 105 * scale,
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    Text('发起时间', style: TextStyle(fontSize: 10, color: muted)),
+                    Text('金额', style: TextStyle(fontSize: 12, color: muted)),
+                    const SizedBox(height: 5),
+                    Tooltip(
+                      message: amounts
+                          .map((line) => '${line.label} ${line.value}')
+                          .join('；'),
+                      child: Text(
+                        amounts.isEmpty
+                            ? '—'
+                            : amounts.map((line) => line.value).join(' / '),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                          color: DunesColors.resolve(context, DunesColors.text),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 16),
+              SizedBox(
+                width: 90 * scale,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text('发起时间', style: TextStyle(fontSize: 12, color: muted)),
                     const SizedBox(height: 5),
                     Text(
                       item.createdAt == null
                           ? '—'
                           : _formatShortDate(item.createdAt!),
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: DunesColors.resolve(context, DunesColors.text2),
-                      ),
+                      style: TextStyle(fontSize: 12, color: muted),
                     ),
                   ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              SizedBox(
+                width: 100 * scale,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '当前审核人',
+                        style: TextStyle(fontSize: 12, color: muted),
+                      ),
+                      const SizedBox(height: 5),
+                      Tooltip(
+                        message: _currentReviewerLabel,
+                        child: Text(
+                          _currentReviewerLabel,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.text,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
               SizedBox(
@@ -1283,9 +1339,13 @@ class XflowProposalListCard extends StatelessWidget {
                   child: _StatusBadge(status: item.status),
                 ),
               ),
-              if (hasActions)
-                SizedBox(width: 220 * scale, child: _compactActionRow())
-              else
+              if (onCopy != null || onDeleteDraft != null) ...[
+                const SizedBox(width: 12),
+                SizedBox(
+                  width: (onDeleteDraft != null ? 158 : 110) * scale,
+                  child: _compactActionRow(compact: true),
+                ),
+              ] else
                 Icon(Icons.chevron_right_rounded, size: 20, color: muted),
             ],
           ),
@@ -1337,7 +1397,7 @@ class XflowProposalListCard extends StatelessWidget {
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: DunesTypography.sans(
-                        fontSize: 14,
+                        fontSize: 15,
                         height: 1.35,
                         fontWeight: FontWeight.w600,
                         letterSpacing: -0.01 * 14,
@@ -1418,7 +1478,7 @@ class XflowProposalListCard extends StatelessWidget {
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: DunesTypography.sans(
-                        fontSize: 14,
+                        fontSize: 15,
                         height: 1.35,
                         fontWeight: FontWeight.w600,
                         letterSpacing: -0.01 * 14,
@@ -1504,9 +1564,13 @@ class XflowProposalListCard extends StatelessWidget {
                   TextSpan(
                     text: item.highlights[i].value,
                     style: TextStyle(
-                      fontSize: 12,
+                      fontSize: item.highlights[i].label.contains('金额')
+                          ? 15
+                          : 12,
                       height: 1.35,
-                      fontWeight: FontWeight.w500,
+                      fontWeight: item.highlights[i].label.contains('金额')
+                          ? FontWeight.w700
+                          : FontWeight.w500,
                       color: valueColor,
                     ),
                   ),
@@ -1551,7 +1615,7 @@ class XflowProposalListCard extends StatelessWidget {
               child: Text(
                 kind,
                 style: TextStyle(
-                  fontSize: 11,
+                  fontSize: 12,
                   color: DunesColors.resolve(
                     context,
                     DunesColors.brandPurpleDeep,
@@ -1559,11 +1623,13 @@ class XflowProposalListCard extends StatelessWidget {
                 ),
               ),
             ),
-            if (type.isNotEmpty && type != kind)
+            if (type.isNotEmpty &&
+                type != kind &&
+                type != _compactApprovalTitle(item, kind))
               Text(
                 type,
                 style: TextStyle(
-                  fontSize: 11,
+                  fontSize: 12,
                   color: DunesColors.resolve(context, DunesColors.text2),
                 ),
               ),
@@ -1571,11 +1637,19 @@ class XflowProposalListCard extends StatelessWidget {
               Text(
                 '发起人 $submitter',
                 style: TextStyle(
-                  fontSize: 11,
+                  fontSize: 12,
                   color: DunesColors.resolve(context, DunesColors.text2),
                 ),
               ),
           ],
+        ),
+        const SizedBox(height: 7),
+        Text(
+          '当前审核人：$_currentReviewerLabel',
+          style: TextStyle(
+            fontSize: 13,
+            color: DunesColors.resolve(context, DunesColors.text2),
+          ),
         ),
         const SizedBox(height: 7),
         Row(
@@ -1585,31 +1659,41 @@ class XflowProposalListCard extends StatelessWidget {
                 code,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontSize: 11, color: muted),
+                style: TextStyle(fontSize: 12, color: muted),
               ),
             ),
             const SizedBox(width: 8),
-            Text(time, style: TextStyle(fontSize: 11, color: muted)),
+            Text(time, style: TextStyle(fontSize: 12, color: muted)),
           ],
         ),
       ],
     );
   }
 
-  Widget _compactActionRow() {
+  Widget _compactActionRow({bool compact = false}) {
     final isDraft = item.status.toUpperCase() == 'DRAFT';
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.end,
+    return Wrap(
+      alignment: WrapAlignment.end,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      spacing: 8,
+      runSpacing: 8,
       children: [
         if (onCopy != null)
           _CompactListActionButton(
-            label: '复制',
+            label: '复制发起',
             icon: Icons.copy_outlined,
             loading: copying,
             onPressed: copying ? null : onCopy,
           ),
-        if (onCopy != null && onDeleteDraft != null) const SizedBox(width: 8),
-        if (onDeleteDraft != null)
+
+        if (onDeleteDraft != null && compact)
+          IconButton(
+            tooltip: isDraft ? '删除草稿' : '删除',
+            onPressed: copying ? null : onDeleteDraft,
+            icon: const Icon(Icons.delete_outline, size: 18),
+            color: DunesColors.coral,
+          ),
+        if (onDeleteDraft != null && !compact)
           _CompactListActionButton(
             label: isDraft ? '删除草稿' : '删除',
             icon: Icons.delete_outline,
@@ -1654,7 +1738,7 @@ class _CompactListActionButton extends StatelessWidget {
             DunesColors.accentSoft,
             role: DunesColorRole.surface,
           );
-    return FilledButton.icon(
+    return OutlinedButton.icon(
       onPressed: loading ? null : onPressed,
       icon: loading
           ? SizedBox(
@@ -1664,15 +1748,17 @@ class _CompactListActionButton extends StatelessWidget {
             )
           : Icon(icon, size: 14),
       label: Text(label),
-      style: FilledButton.styleFrom(
-        backgroundColor: bg,
+      style: OutlinedButton.styleFrom(
+        backgroundColor: Colors.transparent,
+        side: BorderSide(color: fg.withValues(alpha: 0.25)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         foregroundColor: fg,
         disabledBackgroundColor: bg.withValues(alpha: 0.7),
         disabledForegroundColor: fg.withValues(alpha: 0.7),
         elevation: 0,
         visualDensity: VisualDensity.compact,
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        minimumSize: const Size(0, 32),
+        minimumSize: const Size(0, 44),
         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
         textStyle: DunesTypography.sans(
           fontSize: 12,

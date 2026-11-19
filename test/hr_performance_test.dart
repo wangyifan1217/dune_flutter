@@ -101,6 +101,38 @@ class _HrStartService extends _Service {
   }
 }
 
+class _HrStartPickerService extends _HrStartService {
+  _HrStartPickerService({this.legacy = false});
+  final bool legacy;
+
+  @override
+  Future<({bool started, bool canStart, bool supportsBatch})> monthStatus(
+    String month,
+  ) async => (started: false, canStart: true, supportsBatch: !legacy);
+
+  @override
+  Future<List<HrPerformanceRecord>> records(String month, String scope) async =>
+      [
+        ...await super.records(month, scope),
+        HrPerformanceRecord.fromJson({
+          'id': 43,
+          'userId': 3,
+          'month': month,
+          'stage': 'indicators',
+          'startedAt': null,
+          'snapshot': {'name': '市场员工', 'departmentName': '市场部'},
+        }),
+        HrPerformanceRecord.fromJson({
+          'id': 44,
+          'userId': 4,
+          'month': month,
+          'stage': 'review',
+          'startedAt': '2026-11-01',
+          'snapshot': {'name': '已发起员工', 'departmentName': '研发部'},
+        }),
+      ];
+}
+
 void main() {
   test('数字化解决方案中心及其下级不纳入考核', () {
     const parents = <int, int?>{2: 1, 3: 1, 5: 4};
@@ -171,11 +203,95 @@ void main() {
     expect(find.text('发起全员考核'), findsOneWidget);
     await tester.tap(find.text('发起已勾选的 1 人'));
     await tester.pumpAndSettle();
+    await tester.tap(find.text('取消'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('批量考核'));
+    await tester.pumpAndSettle();
+    expect(find.text('选择发起范围'), findsNothing);
+    expect(find.textContaining('已勾选的 1 人'), findsOneWidget);
     expect(service.startedRecords, isNull);
     await tester.tap(find.text('确认发起'));
     await tester.pumpAndSettle();
     expect(service.startedRecords, [42]);
     await tester.pump(const Duration(seconds: 3));
+  });
+
+  for (final mode in ['选择人员发起', '按部门发起']) {
+    testWidgets('开始考核可直接$mode，无需预先勾选名单', (tester) async {
+      tester.view.physicalSize = const Size(1100, 1000);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final service = _HrStartPickerService();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: NativeHrPerformancePage(session: _session, service: service),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('开始考核'));
+      await tester.pumpAndSettle();
+      expect(find.text('按部门发起'), findsOneWidget);
+      expect(find.text('选择人员发起'), findsOneWidget);
+      await tester.tap(find.text(mode));
+      await tester.pumpAndSettle();
+      final key = mode == '选择人员发起' ? 'hr-option-42' : 'hr-option-name:研发部';
+      expect(find.byKey(const ValueKey('hr-option-44')), findsNothing);
+      await tester.tap(find.byKey(ValueKey(key)));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('确认选择'));
+      await tester.pumpAndSettle();
+      expect(service.startedRecords, isNull);
+      await tester.tap(find.text('确认发起'));
+      await tester.pumpAndSettle();
+      expect(service.startedRecords, [42]);
+      await tester.pump(const Duration(seconds: 3));
+    });
+  }
+
+  testWidgets('旧服务明确提示不支持范围发起，不能退化成全员', (tester) async {
+    final service = _HrStartPickerService(legacy: true);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: NativeHrPerformancePage(session: _session, service: service),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('开始考核'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('选择人员发起'));
+    await tester.pumpAndSettle();
+    expect(find.text('暂时无法分批发起'), findsOneWidget);
+    expect(service.startedRecords, isNull);
+  });
+
+  testWidgets('批量考核按钮在服务能力未确认时仍显示，点击后校验范围能力', (tester) async {
+    tester.view.physicalSize = const Size(1100, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final service = _HrStartPickerService(legacy: true);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: NativeHrPerformancePage(session: _session, service: service),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('全员'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(Checkbox).last);
+    await tester.pumpAndSettle();
+    expect(find.text('批量考核'), findsOneWidget);
+    await tester.tap(find.text('批量考核'));
+    await tester.pumpAndSettle();
+    expect(find.text('暂时无法分批发起'), findsOneWidget);
+    expect(service.startedRecords, isNull);
   });
 
   for (final width in [360.0, 900.0]) {

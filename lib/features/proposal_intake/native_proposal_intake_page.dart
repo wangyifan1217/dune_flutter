@@ -273,7 +273,9 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
   final _listStorage = PageStorageBucket();
   Completer<void>? _resumeListLoading;
   _ProposalPage _page = _ProposalPage.list;
+  List<ProposalIntakeRow> _listedRows = const [];
   List<ProposalIntakeRow> _rows = const [];
+  String _searchKeyword = '';
   ProposalIntakeOptions? _options;
   List<ProposalPerson> _people = const [];
   ProposalIntakeRow? _editing;
@@ -365,6 +367,7 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
 
   Future<void> _load({bool quiet = false, bool resetScroll = false}) async {
     final gen = ++_loadGen;
+    _searchKeyword = _search.text.trim().toLowerCase();
     if (resetScroll) {
       _listScrollOffset = 0;
       if (_listScroll.hasClients) _listScroll.jumpTo(0);
@@ -383,12 +386,12 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
       ]);
       if (!mounted || gen != _loadGen) return;
       final list = result[0] as ProposalIntakeListResult;
-      final items = _filterListedRows(list.items);
       setState(() {
-        _rows = items;
         _libraryStats = list.stats;
         _options = result[1] as ProposalIntakeOptions;
         _people = result[2] as List<ProposalPerson>;
+        _listedRows = _filterListedRows(list.items);
+        _rows = _searchListedRows();
         _lookupsReady = true;
         _loading = false;
       });
@@ -425,17 +428,27 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
       items = items
           .where((row) => proposalIntakeStillActionableFor(row, me))
           .toList(growable: false);
-      final q = _search.text.trim().toLowerCase();
-      if (q.isNotEmpty) {
-        items = items
-            .where((row) {
-              final hay = '${row.title} ${row.code}'.toLowerCase();
-              return hay.contains(q);
-            })
-            .toList(growable: false);
-      }
     }
     return items;
+  }
+
+  List<ProposalIntakeRow> _searchListedRows() {
+    final keyword = _searchKeyword;
+    if (keyword.isEmpty) return _listedRows;
+    return _listedRows.where((row) {
+      return row.code.toLowerCase().contains(keyword) ||
+          row.title.toLowerCase().contains(keyword) ||
+          row.initiatorDisplayName(_people).toLowerCase().contains(keyword);
+    }).toList(growable: false);
+  }
+
+  void _submitSearch() {
+    _listScrollOffset = 0;
+    if (_listScroll.hasClients) _listScroll.jumpTo(0);
+    setState(() {
+      _searchKeyword = _search.text.trim().toLowerCase();
+      _rows = _searchListedRows();
+    });
   }
 
   Future<ProposalIntakeListResult> _fetchListPage(int page) {
@@ -443,7 +456,6 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
     return _service.fetchList(
       page: page,
       pageSize: pageSize,
-      keyword: widget.assistantMode ? '' : _search.text,
       status: widget.assistantMode || _statusFilter == _kMineFilter
           ? ''
           : _statusFilter,
@@ -475,7 +487,10 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
         }
         if (raw.length == previousLength) break;
         page++;
-        setState(() => _rows = _filterListedRows(raw));
+        setState(() {
+          _listedRows = _filterListedRows(raw);
+          _rows = _searchListedRows();
+        });
       }
     } catch (error) {
       if (!mounted || gen != _loadGen || _resumeListLoading != null) return;
@@ -513,6 +528,7 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
     setState(() {
       _options = result[0] as ProposalIntakeOptions;
       _people = result[1] as List<ProposalPerson>;
+      _rows = _searchListedRows();
       _lookupsReady = true;
     });
   }
@@ -804,7 +820,8 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
       await _service.delete(row.id);
       if (!mounted) return;
       setState(() {
-        _rows = _rows.where((item) => item.id != row.id).toList();
+        _listedRows = _listedRows.where((item) => item.id != row.id).toList();
+        _rows = _searchListedRows();
         _error = null;
       });
       _toast('已删除');
@@ -1475,12 +1492,26 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
   Widget _buildListBody({required bool compact}) {
     final search = TextField(
       controller: _search,
-      onSubmitted: (_) => unawaited(_load(resetScroll: true)),
+      textInputAction: TextInputAction.search,
+      onSubmitted: (_) => _submitSearch(),
       onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
       style: const TextStyle(fontSize: 13, height: 1.2),
-      decoration: proposalInputDecoration(context: context, hint: '搜索提案编号或名称')
+      decoration: proposalInputDecoration(
+        context: context,
+        hint: '搜索编号、名称或发起人',
+      )
           .copyWith(
             prefixIcon: const Icon(Icons.search, size: 16),
+            suffixIcon: _searchKeyword.isEmpty
+                ? null
+                : IconButton(
+                    tooltip: '清空搜索',
+                    icon: const Icon(Icons.close, size: 16),
+                    onPressed: () {
+                      _search.clear();
+                      _submitSearch();
+                    },
+                  ),
             prefixIconConstraints: const BoxConstraints(
               minWidth: 32,
               minHeight: 32,

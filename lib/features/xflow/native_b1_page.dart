@@ -357,6 +357,7 @@ class _NativeProposalListPageState extends State<_NativeProposalListPage> {
       });
       _persistListSnapshot();
       unawaited(_enrichHighlights(seq));
+      unawaited(_enrichCurrentReviewers(seq));
       if (silent) _scheduleScrollRestore();
       final templateTitles = await templateTitlesFuture;
       if (!mounted || seq != _loadSeq) return;
@@ -410,9 +411,9 @@ class _NativeProposalListPageState extends State<_NativeProposalListPage> {
   };
 
   String get _searchHint => switch (widget.type) {
-    _ListType.b1 => '搜索提案名称、编号、提交人…',
+    _ListType.b1 => '搜索审批名称、单号、主体或发起人…',
     _ListType.b13 => '搜索单据名称、编号、办理动作…',
-    _ListType.b14 => '搜索我发起的提案…',
+    _ListType.b14 => '搜索审批名称、单号或主体…',
     _ListType.p1 => '搜索抄送提案…',
   };
 
@@ -869,9 +870,7 @@ class _NativeProposalListPageState extends State<_NativeProposalListPage> {
   }
 
   List<XflowProposalItem> _withDigest(List<XflowProposalItem> rows) {
-    return [
-      for (final row in rows) _rowWithDigest(row),
-    ];
+    return [for (final row in rows) _rowWithDigest(row)];
   }
 
   XflowProposalItem _rowWithDigest(XflowProposalItem row) {
@@ -886,6 +885,42 @@ class _NativeProposalListPageState extends State<_NativeProposalListPage> {
       if (row.highlights.isEmpty) continue;
       ApprovalListDigestStore.put(row, row.highlights);
     }
+  }
+
+  Future<void> _enrichCurrentReviewers(int seq) async {
+    final pending = _all.where((row) => row.isPending).toList();
+    var cursor = 0;
+    Future<void> worker() async {
+      while (mounted && seq == _loadSeq) {
+        final index = cursor++;
+        if (index >= pending.length) return;
+        final row = pending[index];
+        String reviewer;
+        try {
+          reviewer = await _service.fetchCurrentApprovalReviewer(
+            businessType: row.businessType,
+            businessId: row.id,
+          );
+        } catch (_) {
+          reviewer = '暂未获取';
+        }
+        if (!mounted || seq != _loadSeq) return;
+        setState(
+          () => _all = [
+            for (final item in _all)
+              if (item.businessType == row.businessType && item.id == row.id)
+                item.copyWith(currentApprover: reviewer)
+              else
+                item,
+          ],
+        );
+      }
+    }
+
+    await Future.wait([
+      for (var n = 0; n < pending.length.clamp(0, 4); n++) worker(),
+    ]);
+    if (mounted && seq == _loadSeq) _persistListSnapshot();
   }
 
   Future<void> _enrichHighlights(int seq) async {

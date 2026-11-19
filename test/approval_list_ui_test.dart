@@ -1,3 +1,8 @@
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
+import 'package:dunes_app/features/auth/auth_session.dart';
+import 'package:dunes_app/features/xflow/xflow_service.dart';
 import 'package:dunes_app/features/xflow/approval_list_ui.dart';
 import 'package:dunes_app/features/xflow/xflow_models.dart';
 import 'package:dunes_app/features/xflow/xflow_shared_widgets.dart';
@@ -5,32 +10,108 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  testWidgets('wide draft keeps copy and delete in a compact row', (tester) async {
+  test(
+    'reviewer uses currentApprovers even when people assigns the initiator role',
+    () async {
+      final service = XflowService(
+        session: AuthSession(
+          phone: '',
+          userId: 1,
+          token: 'test',
+          apiBase: 'https://example.com/api/v1',
+          roles: [],
+        ),
+        client: MockClient((request) async {
+          expect(
+            request.url.path,
+            '/api/v1/approvals/REIMBURSEMENT/206/stakeholders',
+          );
+          return http.Response(
+            jsonEncode({
+              'success': true,
+              'data': {
+                'currentApprovers': [
+                  {'displayName': '张三'},
+                  {'displayName': '李四'},
+                  {'displayName': '张三'},
+                ],
+                'people': [
+                  {'displayName': '张三', 'role': 'initiator'},
+                  {'displayName': '旧审核人', 'role': 'past'},
+                ],
+              },
+            }),
+            200,
+            headers: {'content-type': 'application/json; charset=utf-8'},
+          );
+        }),
+      );
+      expect(
+        await service.fetchCurrentApprovalReviewer(
+          businessType: 'REIMBURSEMENT',
+          businessId: 206,
+        ),
+        '张三、李四',
+      );
+    },
+  );
+
+  testWidgets('wide draft keeps copy and delete in a compact row', (
+    tester,
+  ) async {
     tester.view.physicalSize = const Size(1270, 500);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     var copies = 0, deletes = 0, opens = 0;
-    await tester.pumpWidget(MaterialApp(home: Scaffold(body: ListView(children: [
-      XflowProposalListCard(mode: XflowListCardMode.b14,
-        item: XflowProposalItem(id: 13, businessType: 'REIMBURSEMENT', code: '#13',
-          title: '王奕凡 - 电子报销审批', status: 'DRAFT', createdByName: '王奕凡',
-          createdAt: DateTime(2026,10,13), documentKind: '非业务审批', proposalType: '电子报销审批'),
-        onTap: () => opens++, onCopy: () => copies++, onDeleteDraft: () => deletes++)]))));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ListView(
+            children: [
+              XflowProposalListCard(
+                mode: XflowListCardMode.b14,
+                item: XflowProposalItem(
+                  id: 13,
+                  businessType: 'REIMBURSEMENT',
+                  code: '#13',
+                  title: '王奕凡 - 电子报销审批',
+                  status: 'DRAFT',
+                  createdByName: '王奕凡',
+                  createdAt: DateTime(2026, 10, 13),
+                  documentKind: '非业务审批',
+                  proposalType: '电子报销审批',
+                ),
+                onTap: () => opens++,
+                onCopy: () => copies++,
+                onDeleteDraft: () => deletes++,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
     expect(find.text('电子报销审批'), findsWidgets);
     expect(find.text('王奕凡 - 电子报销审批'), findsNothing);
     expect(find.text('发起人 王奕凡'), findsOneWidget);
-    expect(tester.getSize(find.byType(XflowProposalListCard)).height, lessThan(100));
-    await tester.tap(find.text('复制'));
-    await tester.tap(find.text('删除草稿'));
+    expect(
+      tester.getSize(find.byType(XflowProposalListCard)).height,
+      lessThan(100),
+    );
+    await tester.tap(find.text('复制发起'));
+    await tester.tap(
+      find.byTooltip('删除草稿').evaluate().isNotEmpty
+          ? find.byTooltip('删除草稿')
+          : find.text('删除草稿'),
+    );
     expect(copies, 1);
     expect(deletes, 1);
     expect(opens, 0);
   });
 
-  for (final width in [360.0, 1100.0]) {
+  for (final width in [320.0, 360.0, 430.0, 768.0, 1100.0]) {
     for (final brightness in Brightness.values) {
       testWidgets(
         'approval list width=$width theme=$brightness preserves content and actions',
@@ -102,6 +183,133 @@ void main() {
     }
   }
 
+  for (final width in [320.0, 390.0, 768.0, 1100.0]) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets(
+        'initiated approval actions fit width=$width textScale=$scale',
+        (tester) async {
+          tester.view.physicalSize = Size(width, 1000);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.resetPhysicalSize);
+          addTearDown(tester.view.resetDevicePixelRatio);
+          var copies = 0, deletes = 0, opens = 0;
+          await tester.pumpWidget(
+            MaterialApp(
+              home: Scaffold(
+                body: MediaQuery(
+                  data: MediaQueryData(
+                    size: Size(width, 1000),
+                    textScaler: TextScaler.linear(scale),
+                  ),
+                  child: ListView(
+                    padding: const EdgeInsets.all(14),
+                    children: [
+                      XflowProposalListCard(
+                        mode: XflowListCardMode.b14,
+                        item: XflowProposalItem(
+                          id: 206,
+                          businessType: 'REIMBURSEMENT',
+                          code: '#206',
+                          title: '电子报销审批',
+                          status: 'DRAFT',
+                          createdByName: '王奕凡',
+                          createdAt: DateTime(2026, 11, 16),
+                          documentKind: '非业务审批',
+                          proposalType: '电子报销审批',
+                          highlights: const [
+                            ApprovalListHighlight(
+                              label: '双方主体',
+                              value: '湖南淼毅夯斯供应链管理服务有限公司 · 王奕凡',
+                            ),
+                            ApprovalListHighlight(label: '金额', value: '¥7,500'),
+                          ],
+                        ),
+                        onTap: () => opens++,
+                        onCopy: () => copies++,
+                        onDeleteDraft: () => deletes++,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          expect(tester.takeException(), isNull);
+          expect(find.text('电子报销审批'), findsOneWidget);
+          await tester.ensureVisible(find.text('复制发起'));
+          await tester.tap(find.text('复制发起'));
+          await tester.ensureVisible(
+            find.byTooltip('删除草稿').evaluate().isNotEmpty
+                ? find.byTooltip('删除草稿')
+                : find.text('删除草稿'),
+          );
+          await tester.tap(
+            find.byTooltip('删除草稿').evaluate().isNotEmpty
+                ? find.byTooltip('删除草稿')
+                : find.text('删除草稿'),
+          );
+          expect(copies, 1);
+          expect(deletes, 1);
+          expect(opens, 0);
+          expect(tester.takeException(), isNull);
+        },
+      );
+    }
+  }
+
+  for (final status in ['DRAFT', 'PENDING']) {
+    testWidgets(
+      'desktop $status uses the same row layout and shows current reviewer',
+      (tester) async {
+        tester.view.physicalSize = const Size(1120, 800);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: MediaQuery(
+                data: const MediaQueryData(
+                  size: Size(1120, 800),
+                  textScaler: TextScaler.linear(1.25),
+                ),
+                child: ListView(
+                  children: [
+                    XflowProposalListCard(
+                      mode: XflowListCardMode.b14,
+                      item: XflowProposalItem(
+                        id: 206,
+                        businessType: 'REIMBURSEMENT',
+                        code: '#206',
+                        title: '电子报销审批',
+                        status: status,
+                        createdByName: '王奕凡',
+                        createdAt: DateTime(2026, 11, 19),
+                        currentApprover: '李四、王五',
+                      ),
+                      onTap: () {},
+                      onCopy: () {},
+                      onDeleteDraft: status == 'DRAFT' ? () {} : null,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        expect(find.text('当前审核人'), findsOneWidget);
+        expect(find.text(status == 'DRAFT' ? '未发起' : '李四、王五'), findsOneWidget);
+        expect(
+          tester.getSize(find.byType(XflowProposalListCard)).height,
+          lessThan(110),
+        );
+      },
+    );
+  }
+
   testWidgets('approval card shows parties and matter under the title', (
     tester,
   ) async {
@@ -123,10 +331,7 @@ void main() {
               createdAt: DateTime(2026, 10, 18),
               documentKind: '推广费付款申请单',
               highlights: const [
-                ApprovalListHighlight(
-                  label: '双方主体',
-                  value: '上海卓悦优泰 · 杭州推客',
-                ),
+                ApprovalListHighlight(label: '双方主体', value: '上海卓悦优泰 · 杭州推客'),
                 ApprovalListHighlight(label: '事由', value: '8月信息流推广费'),
               ],
             ),

@@ -527,6 +527,7 @@ class XflowProposalItem {
     required this.createdByName,
     required this.createdAt,
     this.todoHint,
+    this.currentApprover,
     this.tag1,
     this.txType,
     this.proposalType,
@@ -551,6 +552,7 @@ class XflowProposalItem {
   final String createdByName;
   final DateTime? createdAt;
   final XflowTodoHint? todoHint;
+  final String? currentApprover;
   final String? tag1;
   final String? txType;
   final String? proposalType;
@@ -572,6 +574,7 @@ class XflowProposalItem {
       status.toUpperCase() == 'OPEN' || status.toUpperCase() == 'PENDING';
 
   XflowProposalItem copyWith({
+    String? currentApprover,
     String? code,
     String? title,
     String? status,
@@ -595,6 +598,7 @@ class XflowProposalItem {
   }) {
     return XflowProposalItem(
       id: id,
+      currentApprover: currentApprover ?? this.currentApprover,
       businessType: businessType,
       code: code ?? this.code,
       title: title ?? this.title,
@@ -629,11 +633,7 @@ class ApprovalListHighlight {
 }
 
 class XflowTodoFieldDef {
-  const XflowTodoFieldDef({
-    required this.key,
-    this.label = '',
-    this.type = '',
-  });
+  const XflowTodoFieldDef({required this.key, this.label = '', this.type = ''});
 
   final String key;
   final String label;
@@ -682,9 +682,11 @@ class XflowSubmissionDetail {
   final int createdById;
   final String createdByName;
   final DateTime? createdAt;
+
   /// 服务端中文类型标签（模板标题），列表种类/类型展示用。
   final String proposalType;
   final String documentKind;
+
   /// 终审通过后的办理子状态，如「待出纳支付」「待核验发票」。
   final String subStatus;
 
@@ -900,6 +902,7 @@ extension XflowApprovalStepExt on XflowApprovalStep {
     if (v is num) return v.toInt();
     return int.tryParse('$v') ?? 0;
   }
+
   bool? get isCurrent {
     final v = raw['isCurrent'];
     if (v is bool) return v;
@@ -960,11 +963,11 @@ class ApprovalCommentAttachment {
   }
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'name': name,
-        'objectKey': objectKey,
-        if (size > 0) 'size': size,
-        if (mimeType.isNotEmpty) 'mimeType': mimeType,
-      };
+    'name': name,
+    'objectKey': objectKey,
+    if (size > 0) 'size': size,
+    if (mimeType.isNotEmpty) 'mimeType': mimeType,
+  };
 
   /// 供 resolveFileUrl / openXflowAttachment 使用的通用 item 形态。
   Map<String, dynamic> toFileItem() {
@@ -979,13 +982,14 @@ class ApprovalCommentAttachment {
   }
 
   factory ApprovalCommentAttachment.fromJson(Map<String, dynamic> json) {
-    final key = (json['objectKey'] ??
-            json['object_key'] ??
-            json['url'] ??
-            json['fileUrl'] ??
-            '')
-        .toString()
-        .trim();
+    final key =
+        (json['objectKey'] ??
+                json['object_key'] ??
+                json['url'] ??
+                json['fileUrl'] ??
+                '')
+            .toString()
+            .trim();
     return ApprovalCommentAttachment(
       name: (json['name'] ?? json['fileName'] ?? '附件').toString(),
       objectKey: key,
@@ -1088,7 +1092,10 @@ String normalizeDuplicatedInitiatorTitle(String title) {
 
 /// 复制或再次提交前去掉「发起人 - 」前缀。
 /// 服务端落标题时会再拼一次发起人，原样提交就会变成「冯静 - 冯静 - 资质使用」。
-String stripInitiatorTitlePrefix(String title, Iterable<String> initiatorNames) {
+String stripInitiatorTitlePrefix(
+  String title,
+  Iterable<String> initiatorNames,
+) {
   var value = title.trim();
   final names = <String>{
     for (final name in initiatorNames)

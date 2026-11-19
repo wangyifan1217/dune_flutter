@@ -1475,14 +1475,19 @@ class _MineHomeBodyState extends State<MineHomeBody> {
 
   // ── build ──
 
+  // 营收统计口径确认并完成联调后，再开启此卡片。
+  static const bool _showRevenueTarget = false;
+
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         if (widget.showProposals) ...[
-          _buildTargetCard(context),
-          const SizedBox(height: 12),
+          if (_showRevenueTarget) ...[
+            _buildTargetCard(context),
+            const SizedBox(height: 12),
+          ],
           _buildPoolCard(context),
           const SizedBox(height: 16),
         ],

@@ -11,7 +11,7 @@ const hrPerformanceTitle = '绩效考核';
 const hrPerformanceStageLabels = <String, String>{
   'opening': '待补配',
   'self': '自评',
-  'indicators': '指标确认',
+  'indicators': '待发起',
   'review': '主管初评',
   'calibration': '绩效校准',
   'hr': 'HR 审核',
@@ -57,6 +57,9 @@ class HrPerformanceRecord {
       directSupervisorId = (json['directSupervisorId'] as num?)?.toInt(),
       month = '${json['month'] ?? ''}',
       stage = '${json['stage'] ?? 'opening'}',
+      started = json.containsKey('startedAt')
+          ? json['startedAt'] != null
+          : null,
       adjustmentDueAt = DateTime.tryParse('${json['adjustmentDueAt'] ?? ''}'),
       snapshot = Map<String, dynamic>.from(json['snapshot'] as Map),
       version = (json['version'] as num?)?.toInt() ?? 1,
@@ -80,6 +83,7 @@ class HrPerformanceRecord {
   final int? directSupervisorId;
   final String month;
   final String stage;
+  final bool? started;
   final DateTime? adjustmentDueAt;
   final Map<String, dynamic> snapshot;
   Map<String, dynamic> get workflow => snapshot['workflow'] is Map
@@ -126,17 +130,36 @@ class HrPerformanceService {
     return HrPerformanceAccess.fromJson(Map<String, dynamic>.from(data as Map));
   }
 
-  Future<bool> monthStarted(String month) async {
+  Future<({bool started, bool canStart, bool supportsBatch})> monthStatus(
+    String month,
+  ) async {
     final query = Uri(queryParameters: {'month': month}).query;
     final data = _unwrap(
       await dunesHttpGet(session, '/hr-performance/period?$query'),
     );
-    if (data is! Map) return false;
-    return data['started'] == true;
+    final started = data is Map && data['started'] == true;
+    final supportsBatch = data is Map && data.containsKey('canStart');
+    return (
+      started: started,
+      supportsBatch: supportsBatch,
+      canStart: data is Map && supportsBatch
+          ? data['canStart'] == true
+          : !started,
+    );
   }
 
-  Future<void> startMonth(String month) async {
-    await _post('/hr-performance/start', {'month': month});
+  Future<int> startMonth(
+    String month, {
+    List<int> recordIds = const [],
+    List<int> departmentIds = const [],
+  }) async {
+    final data = await _post('/hr-performance/start', {
+      'month': month,
+      if (recordIds.isNotEmpty) 'recordIds': recordIds,
+      if (departmentIds.isNotEmpty) 'departmentIds': departmentIds,
+    });
+    return (data['startedCount'] as num? ?? data['notified'] as num? ?? 0)
+        .toInt();
   }
 
   Future<List<HrPerformanceRecord>> records(String month, String scope) async {

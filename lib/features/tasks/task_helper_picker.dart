@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../core/theme/dunes_theme.dart';
+import '../../core/util/friendly_error.dart';
 import 'task_avatar.dart';
 import 'task_api.dart';
 import 'task_models.dart';
@@ -40,19 +41,21 @@ Future<List<TaskAssignee>?> showTaskHelperPicker(
   );
 }
 
-Future<TaskAssignee?> showTaskColleaguePicker(
+const _subtaskAssigneeScope = 'subtask';
+
+Future<TaskAssignee?> showTaskSubtaskAssigneePicker(
   BuildContext context, {
   required TaskApi api,
   required int excludeUserId,
-  String title = '选择同事',
 }) async {
   final picked = await showTaskHelperPicker(
     context,
     api: api,
     selectedIds: const {},
     excludeUserId: excludeUserId,
-    title: title,
+    title: '选择团队成员',
     single: true,
+    scope: _subtaskAssigneeScope,
   );
   if (picked == null || picked.isEmpty) return null;
   return picked.first;
@@ -130,7 +133,7 @@ class _TaskHelperPickerState extends State<_TaskHelperPicker> {
       if (!mounted || gen != _loadGen) return;
       setState(() {
         _loading = false;
-        _error = '$e';
+        _error = friendlyErrorText(e, fallback: '人员名单获取失败，请稍后重试');
       });
     }
   }
@@ -193,7 +196,9 @@ class _TaskHelperPickerState extends State<_TaskHelperPicker> {
                   : _people.isEmpty
                   ? Center(
                       child: Text(
-                        '没有匹配的同事',
+                        widget.scope == _subtaskAssigneeScope
+                            ? '没有符合指派范围的团队成员'
+                            : '没有匹配的同事',
                         style: TextStyle(
                           color: DunesColors.resolve(
                             context,

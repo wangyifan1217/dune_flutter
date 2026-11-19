@@ -270,6 +270,8 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
   );
   final _search = TextEditingController();
   final ScrollController _listScroll = ScrollController();
+  final _listStorage = PageStorageBucket();
+  Completer<void>? _resumeListLoading;
   _ProposalPage _page = _ProposalPage.list;
   List<ProposalIntakeRow> _rows = const [];
   ProposalIntakeOptions? _options;
@@ -302,6 +304,22 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // 主界面保留提案页的 State，离屏时先卸载列表并暂停预取。
+    if (!TickerMode.valuesOf(context).enabled) {
+      if (_resumeListLoading == null) {
+        if (_page == _ProposalPage.list) _rememberListScroll();
+        _resumeListLoading = Completer<void>();
+      }
+    } else if (_resumeListLoading != null) {
+      _resumeListLoading!.complete();
+      _resumeListLoading = null;
+      _restoreListScroll();
+    }
+  }
+
+  @override
   void didUpdateWidget(covariant NativeProposalIntakePage oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.kind != widget.kind ||
@@ -314,6 +332,8 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
 
   @override
   void dispose() {
+    _loadGen++;
+    _resumeListLoading?.complete();
     _search.dispose();
     _listScroll.dispose();
     widget.onChromeChanged?.call(const TaskShellChrome());
@@ -328,7 +348,9 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
 
   void _restoreListScroll({int attempt = 0}) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || _page != _ProposalPage.list) return;
+      if (!mounted || _resumeListLoading != null || _page != _ProposalPage.list) {
+        return;
+      }
       if (!_listScroll.hasClients) {
         if (attempt < 10) _restoreListScroll(attempt: attempt + 1);
         return;
@@ -440,20 +462,24 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
     final seen = {for (final row in first.items) row.id};
     final raw = [...first.items];
     var page = 1;
-    while (raw.length < first.total && page < 20) {
-      if (!mounted || gen != _loadGen) return;
-      final batch = await _fetchListPage(page);
-      var added = 0;
-      for (final row in batch.items) {
-        if (seen.add(row.id)) {
-          raw.add(row);
-          added++;
+    try {
+      while (raw.length < first.total && page < 20) {
+        await _resumeListLoading?.future;
+        if (!mounted || gen != _loadGen) return;
+        final batch = await _fetchListPage(page);
+        await _resumeListLoading?.future;
+        if (!mounted || gen != _loadGen) return;
+        final previousLength = raw.length;
+        for (final row in batch.items) {
+          if (seen.add(row.id)) raw.add(row);
         }
+        if (raw.length == previousLength) break;
+        page++;
+        setState(() => _rows = _filterListedRows(raw));
       }
-      if (added == 0) break;
-      page++;
-      if (!mounted || gen != _loadGen) return;
-      setState(() => _rows = _filterListedRows(raw));
+    } catch (error) {
+      if (!mounted || gen != _loadGen || _resumeListLoading != null) return;
+      _toast('后续提案加载失败：${friendlyErrorText(error)}', error: true);
     }
   }
 
@@ -1025,7 +1051,13 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
       index: showForm ? 1 : 0,
       sizing: StackFit.expand,
       children: [
-        TickerMode(enabled: !showForm, child: _buildList()),
+        if (_resumeListLoading == null)
+          TickerMode(
+            enabled: !showForm,
+            child: PageStorage(bucket: _listStorage, child: _buildList()),
+          )
+        else
+          const SizedBox.shrink(),
         if (showForm) _buildForm() else const SizedBox.shrink(),
       ],
     );
@@ -2189,7 +2221,7 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
               // 按标签一合成一组：外面只认标签一，年化规模加总，组里一行一份提案。
               for (final group in _protoTagGroups())
                 ProposalTagGroupCard(
-                  key: ValueKey('proposal-tag-group-card-${group.tag1}'),
+                  key: PageStorageKey('proposal-tag-group-card-${group.tag1}'),
                   data: group,
                 ),
               if (_listRows.isEmpty && _localFilterOn)
@@ -2407,7 +2439,7 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
         return index < 0 ? null : index;
       },
       itemBuilder: (_, index) => ProposalTagGroupCard(
-        key: ValueKey('proposal-tag-group-card-${groups[index].tag1}'),
+        key: PageStorageKey('proposal-tag-group-card-${groups[index].tag1}'),
         data: groups[index],
       ),
     );

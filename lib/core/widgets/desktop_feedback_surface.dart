@@ -11,6 +11,7 @@ class DesktopFeedbackSurface extends StatefulWidget {
     required this.onTap,
     this.backgroundColor = Colors.transparent,
     this.selected = false,
+    this.showSelectionIndicator = false,
     this.visualInset = EdgeInsets.zero,
     this.borderRadius = const BorderRadius.all(Radius.circular(10)),
     this.mobileBorder,
@@ -21,6 +22,7 @@ class DesktopFeedbackSurface extends StatefulWidget {
   final VoidCallback? onTap;
   final Color backgroundColor;
   final bool selected;
+  final bool showSelectionIndicator;
   final EdgeInsets visualInset;
   final BorderRadius borderRadius;
   final ShapeBorder? mobileBorder;
@@ -103,6 +105,24 @@ class _DesktopFeedbackSurfaceState extends State<DesktopFeedbackSurface> {
                 ),
               ),
             ),
+            if (widget.selected && widget.showSelectionIndicator)
+              Positioned(
+                left: widget.visualInset.left,
+                top: 15,
+                bottom: 15,
+                child: IgnorePointer(
+                  child: Container(
+                    width: 3,
+                    decoration: BoxDecoration(
+                      color: DunesColors.resolve(
+                        context,
+                        DunesColors.brandPurple,
+                      ),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+              ),
           ],
         );
       },

@@ -10,7 +10,6 @@ import 'hr_performance_sheet.dart';
 import 'hr_performance_sheets.dart';
 
 const hrActionLabels = <String, String>{
-  'confirm_indicators': '确认无误',
   'submit_self': '提交自评',
   'request_adjustment': '申请调整',
   'approve_adjustment': '通过调整',
@@ -36,6 +35,7 @@ const hrActionLabels = <String, String>{
   'verify_history': '核对月末资料',
   'urge': '督办',
   'initialize': '生成考核表',
+  'match_template': '自动匹配考核表',
   'assign': '补配快照',
   'auto_indicators': '窗口结束自动确认',
   'auto_result': '超时视为确认',
@@ -282,8 +282,6 @@ class _HrPerformanceDetailState extends State<HrPerformanceDetail> {
             minLength: requiredReason ? 1 : 0,
             message: action == 'return_hr' && _skipExecutiveCalibration
                 ? '该考核跳过分管校准，将退回直属主管初评。'
-                : action == 'confirm_indicators'
-                ? '确认后将进入主管初评，调整窗口内也不能再次改动。'
                 : action == 'submit_self'
                 ? '提交自评后进入主管初评。自评分数会保留给主管查看。'
                 : action == 'submit_calibration'
@@ -330,9 +328,11 @@ class _HrPerformanceDetailState extends State<HrPerformanceDetail> {
   Widget build(BuildContext context) {
     final r = _record;
     final requests = r.requests;
+    final started = r.started ?? widget.monthStarted;
     final visibleActions = r.actions
         .where(
           (a) => ![
+            'confirm_indicators',
             'approve_adjustment',
             'reject_adjustment',
             'resolve_appeal',
@@ -343,7 +343,6 @@ class _HrPerformanceDetailState extends State<HrPerformanceDetail> {
         )
         .toList();
     final primaryActions = {
-      'confirm_indicators',
       'submit_self',
       'submit_review',
       'submit_calibration',
@@ -530,11 +529,11 @@ class _HrPerformanceDetailState extends State<HrPerformanceDetail> {
               children: [
                 _HrMetaRow(
                   label: '调整截止',
-                  value: widget.monthStarted
+                  value: started
                       ? '${hrDate(r.adjustmentDueAt)}（北京时间）'
                       : '开始考核后起算',
                 ),
-                if (widget.monthStarted && r.workflow['dueAt'] != null)
+                if (started && r.workflow['dueAt'] != null)
                   _HrMetaRow(
                     label: '当前节点截止',
                     value: hrDate(r.workflow['dueAt']),

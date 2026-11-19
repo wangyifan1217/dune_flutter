@@ -921,6 +921,22 @@ class _ProposalTagGroupCardState extends State<ProposalTagGroupCard> {
   /// 默认收起每个分组的提案，仍可用摘要后的小箭头展开。
   bool _collapsed = true;
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (widget.key is! PageStorageKey) return;
+    final saved = PageStorage.maybeOf(context)?.readState(context);
+    if (saved is (bool, bool)) {
+      _collapsed = saved.$1;
+      _expanded = saved.$2;
+    }
+  }
+
+  void _saveExpansion() {
+    if (widget.key is! PageStorageKey) return;
+    PageStorage.maybeOf(context)?.writeState(context, (_collapsed, _expanded));
+  }
+
   static const _accent = Color(0xFF4A3A9A);
   static const _ink = Color(0xFF1F1B2E);
   static const _text2 = Color(0xFF6B6680);
@@ -1116,7 +1132,10 @@ class _ProposalTagGroupCardState extends State<ProposalTagGroupCard> {
       message: _collapsed ? '展开 $total 份提案' : '收起 $total 份提案',
       child: InkWell(
         key: ValueKey('proposal-tag-group-collapse-${data.tag1}'),
-        onTap: () => setState(() => _collapsed = !_collapsed),
+        onTap: () {
+          setState(() => _collapsed = !_collapsed);
+          _saveExpansion();
+        },
         borderRadius: BorderRadius.circular(4),
         child: Padding(
           padding: const EdgeInsets.only(left: 2),
@@ -1153,7 +1172,10 @@ class _ProposalTagGroupCardState extends State<ProposalTagGroupCard> {
                     if (hidden > 0 || (_expanded && total > limit + 1))
                       InkWell(
                         key: ValueKey('proposal-tag-group-toggle-${data.tag1}'),
-                        onTap: () => setState(() => _expanded = !_expanded),
+                        onTap: () {
+                          setState(() => _expanded = !_expanded);
+                          _saveExpansion();
+                        },
                         child: Container(
                           padding: const EdgeInsets.symmetric(vertical: 8),
                           alignment: Alignment.center,

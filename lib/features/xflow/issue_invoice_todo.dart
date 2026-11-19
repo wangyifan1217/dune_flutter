@@ -17,7 +17,7 @@ import 'xflow_upload_field.dart';
 const _maxBatchFiles = 6;
 const _maxInvoiceBytes = 20 * 1024 * 1024;
 
-/// 发票申请「开具发票」：识别金额后确认记入原单，待办保持未完成。
+/// 发票申请「开具发票」：可分批记入，全部办理后手动完结。
 Future<bool> confirmIssueInvoiceBatch({
   required BuildContext context,
   required XflowService service,
@@ -27,11 +27,8 @@ Future<bool> confirmIssueInvoiceBatch({
   if (todoId <= 0) return false;
   final saved = await showDialog<bool>(
     context: context,
-    builder: (ctx) => _IssueInvoiceDialog(
-      service: service,
-      item: item,
-      todoId: todoId,
-    ),
+    builder: (ctx) =>
+        _IssueInvoiceDialog(service: service, item: item, todoId: todoId),
   );
   return saved == true;
 }
@@ -108,6 +105,7 @@ class _IssueInvoiceDialogState extends State<_IssueInvoiceDialog> {
   List<Map<String, dynamic>> _issued = const [];
   String _requested = '';
   bool _loading = true;
+  bool _loadFailed = false;
   bool _picking = false;
   bool _dragging = false;
   bool _saving = false;
@@ -138,6 +136,12 @@ class _IssueInvoiceDialogState extends State<_IssueInvoiceDialog> {
   }
 
   Future<void> _loadIssued() async {
+    if (mounted) {
+      setState(() {
+        _loading = true;
+        _loadFailed = false;
+      });
+    }
     try {
       final detail = await widget.service.fetchSubmissionDetail(
         businessType: widget.item.businessType,
@@ -147,16 +151,22 @@ class _IssueInvoiceDialogState extends State<_IssueInvoiceDialog> {
       final form = detail.formData;
       setState(() {
         _issued = [
-          for (final item in form['invoiceFiles'] is List
-              ? form['invoiceFiles'] as List
-              : const [])
+          for (final item
+              in form['invoiceFiles'] is List
+                  ? form['invoiceFiles'] as List
+                  : const [])
             if (item is Map) Map<String, dynamic>.from(item),
         ];
         _requested = _moneyText(form['invoiceTotalLimit']);
         _loading = false;
       });
     } catch (_) {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _loadFailed = true;
+        });
+      }
     }
   }
 
@@ -287,12 +297,12 @@ class _IssueInvoiceDialogState extends State<_IssueInvoiceDialog> {
 
   void _syncSuggestedAmount() {
     if (_amountEdited) return;
-    _amount.text = _money(_batchSummary.total);
+    final summary = _batchSummary;
+    _amount.text = summary.count > 0 ? _money(summary.total) : '';
   }
 
   double? _confirmedAmount() {
     final text = _amount.text.replaceAll(',', '').trim();
-    if (text.isEmpty) return _batchSummary.total;
     return double.tryParse(text);
   }
 
@@ -319,6 +329,39 @@ class _IssueInvoiceDialogState extends State<_IssueInvoiceDialog> {
 
   XflowInvoiceSummary get _issuedSummary => xflowInvoiceSummary(_issued);
 
+  Future<void> _finish() async {
+    if (_saving || _loading || _loadFailed || _picking || _busyBatch) return;
+    if (_batch.isNotEmpty) {
+      showDunesToast(context, '请先确认本次开票或移除未登记的发票');
+      return;
+    }
+    final ok = await _askIssueConfirm(
+      context,
+      '当前已登记 ${_issued.length} 个发票文件。${_amountEdited && _amount.text.trim().isNotEmpty ? '当前输入的本次开票金额未登记，不会计入原单。' : ''}完结后此待办将结束，不能再通过本待办继续开票。',
+      title: '确认完结开票待办',
+      okText: '确认完结',
+    );
+    if (!ok || !mounted) return;
+    setState(() => _saving = true);
+    try {
+      await widget.service.finishIssuedInvoices(
+        todoId: widget.todoId,
+        comment: _comment.text.trim(),
+      );
+      if (!mounted) return;
+      showDunesToast(context, '开票待办已完结');
+      Navigator.pop(context, true);
+    } catch (e) {
+      if (!mounted) return;
+      showDunesToast(
+        context,
+        '完结失败：${friendlyErrorText(e)}',
+        kind: DunesToastKind.error,
+      );
+      setState(() => _saving = false);
+    }
+  }
+
   Future<void> _confirm() async {
     if (!_canConfirm) {
       if (_busyBatch) {
@@ -331,7 +374,7 @@ class _IssueInvoiceDialogState extends State<_IssueInvoiceDialog> {
       return;
     }
     final amount = _confirmedAmount();
-    if (amount == null || amount < 0) {
+    if (amount == null || !amount.isFinite || amount < 0) {
       showDunesToast(context, '请填写本次开票金额', kind: DunesToastKind.error);
       return;
     }
@@ -404,10 +447,13 @@ class _IssueInvoiceDialogState extends State<_IssueInvoiceDialog> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const _IssueTitle(title: '开具发票', icon: Icons.receipt_long_outlined),
+                const _IssueTitle(
+                  title: '开具发票',
+                  icon: Icons.receipt_long_outlined,
+                ),
                 const SizedBox(height: 6),
                 Text(
-                  '可以分多次上传。确认后写入原单，这条待办不会结束。',
+                  '可以分多次登记发票；全部办理完成后，点击“完结待办”。',
                   style: DunesTypography.sans(
                     fontSize: 11.5,
                     color: DunesColors.resolve(context, DunesColors.text3),
@@ -422,11 +468,18 @@ class _IssueInvoiceDialogState extends State<_IssueInvoiceDialog> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         _summaryCard(
-                          title: _loading
+                          title: _loadFailed
+                              ? '已开发票读取失败'
+                              : _loading
                               ? '正在读取已开票…'
-                              : '已开票 ${issued.count} 张，合计 ¥${_money(issued.total)}',
+                              : '已登记 ${_issued.length} 个文件 · 已识别 ${issued.count} 张，合计 ¥${_money(issued.total)}',
                           extra: _requested.isEmpty ? '' : '申请总额 ¥$_requested',
                           children: [
+                            if (_loadFailed)
+                              TextButton(
+                                onPressed: _loadIssued,
+                                child: const Text('重新加载'),
+                              ),
                             for (final item in _issued)
                               _fileCard(
                                 name:
@@ -445,7 +498,10 @@ class _IssueInvoiceDialogState extends State<_IssueInvoiceDialog> {
                           style: DunesTypography.sans(
                             fontSize: 12,
                             fontWeight: FontWeight.w700,
-                            color: DunesColors.resolve(context, DunesColors.text),
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.text,
+                            ),
                             context: context,
                           ),
                         ),
@@ -453,6 +509,7 @@ class _IssueInvoiceDialogState extends State<_IssueInvoiceDialog> {
                         const XfFieldLabel(label: '本次开票金额（元，可修改）'),
                         TextField(
                           controller: _amount,
+                          enabled: !_saving,
                           style: xfInputTextStyle(context: context),
                           keyboardType: const TextInputType.numberWithOptions(
                             decimal: true,
@@ -460,7 +517,7 @@ class _IssueInvoiceDialogState extends State<_IssueInvoiceDialog> {
                           onChanged: (_) => _amountEdited = true,
                           decoration: xfInputDecoration(
                             context: context,
-                            hint: '0.00',
+                            hint: '请输入本次开票金额',
                           ),
                         ),
                         const SizedBox(height: 12),
@@ -480,8 +537,22 @@ class _IssueInvoiceDialogState extends State<_IssueInvoiceDialog> {
                   ),
                 ),
                 const SizedBox(height: 14),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
+                if (_batch.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Text(
+                      '请先登记或移除本次发票，再完结待办。',
+                      style: DunesTypography.sans(
+                        fontSize: 11,
+                        color: DunesColors.resolve(context, DunesColors.text3),
+                        context: context,
+                      ),
+                    ),
+                  ),
+                Wrap(
+                  alignment: WrapAlignment.end,
+                  spacing: 8,
+                  runSpacing: 8,
                   children: [
                     _IssueBtn(
                       label: '关闭',
@@ -489,7 +560,18 @@ class _IssueInvoiceDialogState extends State<_IssueInvoiceDialog> {
                           ? null
                           : () => Navigator.pop(context, false),
                     ),
-                    const SizedBox(width: 8),
+                    _IssueBtn(
+                      label: '完结待办',
+                      onPressed:
+                          _saving ||
+                              _loading ||
+                              _loadFailed ||
+                              _picking ||
+                              _busyBatch ||
+                              _batch.isNotEmpty
+                          ? null
+                          : _finish,
+                    ),
                     _IssueBtn(
                       label: _saving ? '正在处理…' : '确认本次开票',
                       primary: true,
@@ -666,9 +748,7 @@ class _IssueInvoiceDialogState extends State<_IssueInvoiceDialog> {
               Text(
                 _dragging
                     ? '松开即可上传'
-                    : (_desktopDrop
-                          ? '点击或拖入电子发票 PDF'
-                          : '点击上传电子发票 PDF'),
+                    : (_desktopDrop ? '点击或拖入电子发票 PDF' : '点击上传电子发票 PDF'),
                 textAlign: TextAlign.center,
                 style: DunesTypography.sans(
                   fontSize: 12,
@@ -778,7 +858,12 @@ class _IssueInvoiceDialogState extends State<_IssueInvoiceDialog> {
   }
 }
 
-Future<bool> _askIssueConfirm(BuildContext context, String body) async {
+Future<bool> _askIssueConfirm(
+  BuildContext context,
+  String body, {
+  String title = '确认本次开票',
+  String okText = '确认开票',
+}) async {
   final ok = await showDialog<bool>(
     context: context,
     builder: (ctx) => Dialog(
@@ -794,10 +879,7 @@ Future<bool> _askIssueConfirm(BuildContext context, String body) async {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const _IssueTitle(
-                  title: '确认本次开票',
-                  icon: Icons.receipt_long_outlined,
-                ),
+                _IssueTitle(title: title, icon: Icons.receipt_long_outlined),
                 const SizedBox(height: 10),
                 Text(
                   body,
@@ -818,7 +900,7 @@ Future<bool> _askIssueConfirm(BuildContext context, String body) async {
                     ),
                     const SizedBox(width: 8),
                     _IssueBtn(
-                      label: '确认开票',
+                      label: okText,
                       primary: true,
                       onPressed: () => Navigator.pop(ctx, true),
                     ),
@@ -923,7 +1005,11 @@ class _IssueBtn extends StatelessWidget {
   Widget build(BuildContext context) {
     final enabled = onPressed != null && !loading;
     final bg = !primary
-        ? DunesColors.resolve(context, Colors.white, role: DunesColorRole.surface)
+        ? DunesColors.resolve(
+            context,
+            Colors.white,
+            role: DunesColorRole.surface,
+          )
         : enabled
         ? DunesColors.resolve(
             context,
@@ -936,7 +1022,10 @@ class _IssueBtn extends StatelessWidget {
             role: DunesColorRole.surface,
           );
     final fg = !primary
-        ? DunesColors.resolve(context, XfProposalUi.ink)
+        ? DunesColors.resolve(
+            context,
+            enabled ? XfProposalUi.ink : XfProposalUi.mute,
+          )
         : enabled
         ? DunesColors.resolve(context, Colors.white)
         : DunesColors.resolve(context, XfProposalUi.mute);

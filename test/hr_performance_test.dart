@@ -65,15 +65,46 @@ class _Service extends HrPerformanceService {
   };
 }
 
+class _HrStartService extends _Service {
+  List<int>? startedRecords;
+
+  @override
+  Future<HrPerformanceAccess> access() async =>
+      const HrPerformanceAccess(allowed: true, hr: true, all: true);
+
+  @override
+  Future<({bool started, bool canStart, bool supportsBatch})> monthStatus(
+    String month,
+  ) async => (started: true, canStart: true, supportsBatch: true);
+
+  @override
+  Future<List<HrPerformanceRecord>> records(String month, String scope) async =>
+      [
+        HrPerformanceRecord.fromJson({
+          'id': 42,
+          'userId': 2,
+          'month': month,
+          'stage': 'indicators',
+          'startedAt': null,
+          'snapshot': {'name': '待发起员工', 'departmentName': '研发部'},
+        }),
+      ];
+
+  @override
+  Future<int> startMonth(
+    String month, {
+    List<int> recordIds = const [],
+    List<int> departmentIds = const [],
+  }) async {
+    startedRecords = recordIds;
+    return recordIds.length;
+  }
+}
+
 void main() {
   test('数字化解决方案中心及其下级不纳入考核', () {
     const parents = <int, int?>{2: 1, 3: 1, 5: 4};
-    const names = <int, String>{
-      1: '数字化解决方案中心',
-      2: '能源板块',
-      3: '通信板块',
-      4: '研发部',
-    };
+    const names = <int, String>{1: '数字化解决方案中心', 2: '能源板块', 3: '通信板块', 4: '研发部'};
     expect(
       hrPerformanceDepartmentExcluded(
         departmentId: 3,
@@ -115,6 +146,36 @@ void main() {
     expect(restored.hrPerformanceFollowupAccess, isTrue);
     expect(restored.kpiPerformanceAccess, isFalse);
     expect(restored.kpiFollowupAccess, isFalse);
+  });
+
+  testWidgets('首批发起后 HR 仍可发起勾选的人员', (tester) async {
+    tester.view.physicalSize = const Size(1100, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final service = _HrStartService();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: NativeHrPerformancePage(session: _session, service: service),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('全员'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(Checkbox).last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('开始考核'));
+    await tester.pumpAndSettle();
+    expect(find.text('发起全员考核'), findsOneWidget);
+    await tester.tap(find.text('发起已勾选的 1 人'));
+    await tester.pumpAndSettle();
+    expect(service.startedRecords, isNull);
+    await tester.tap(find.text('确认发起'));
+    await tester.pumpAndSettle();
+    expect(service.startedRecords, [42]);
+    await tester.pump(const Duration(seconds: 3));
   });
 
   for (final width in [360.0, 900.0]) {

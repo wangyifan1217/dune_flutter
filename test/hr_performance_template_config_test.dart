@@ -149,6 +149,33 @@ void main() {
           as Map)['bands'],
       (item['snapshot'] as Map)['bands'],
     );
+    final departmentField = find.byKey(
+      const ValueKey('hr-template-departments'),
+    );
+    await tester.tap(find.text('编辑模板').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('hr-template-users')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('员工甲'));
+    await tester.tap(find.text('确认选择'));
+    await tester.pumpAndSettle();
+    await tester.tap(departmentField);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('hr-option-7')));
+    await tester.tap(find.text('确认选择'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('保存模板'));
+    await tester.tap(find.text('保存模板'));
+    await tester.pumpAndSettle();
+    final updated = service.saved!.singleWhere((t) => t['name'] == '财务模板');
+    expect(updated['departmentIds'], isEmpty);
+    expect(updated['userIds'], [5]);
+    await tester.tap(find.text('编辑模板').first);
+    await tester.pumpAndSettle();
+    expect(
+      find.descendant(of: departmentField, matching: find.text('请选择')),
+      findsOneWidget,
+    );
     await tester.pump(const Duration(seconds: 3));
     expect(tester.takeException(), isNull);
   });

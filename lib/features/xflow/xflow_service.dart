@@ -1676,6 +1676,21 @@ class XflowService {
     );
   }
 
+  Future<void> finishIssuedInvoices({
+    required int todoId,
+    String comment = '',
+  }) async {
+    await _request(
+      '/todos/$todoId/complete-task',
+      method: 'POST',
+      body: <String, dynamic>{
+        'action': 'ISSUE_INVOICE',
+        'finishIssueInvoice': true,
+        'comment': comment,
+      },
+    );
+  }
+
   /// 发票申请「开具发票」：先按最新账单预览分摊，确认后追加这一批，待办保持未完成。
   Future<Map<String, dynamic>> previewIssuedInvoices({
     required int todoId,

@@ -118,7 +118,12 @@ void main() {
                       title: '设计讨论',
                       preview: '统一桌面端的视觉风格',
                       timeLabel: '10:24',
+                      unreadCount: 4,
+                      imStatus: 'custom',
+                      imStatusText: '对账中',
+                      imStatusIcon: 'clock',
                       selected: true,
+                      showDivider: true,
                       onTap: () => selected = 'chat',
                     ),
                   ],
@@ -131,6 +136,16 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
+      expect(find.text('对账中'), findsOneWidget);
+      expect(find.text('4'), findsOneWidget);
+      expect(
+        tester.getSize(find.byType(ChatInboxRow)).height,
+        inInclusiveRange(60, 64),
+      );
+      expect(
+        tester.getCenter(find.text('4')).dx,
+        greaterThan(tester.getCenter(find.text('设计讨论')).dx),
+      );
       await tester.enterText(find.byType(TextField), '设计');
       expect(search.text, '设计');
       await tester.tap(find.text('设计讨论'));

@@ -9370,6 +9370,9 @@ class _NativeChatViewState extends State<NativeChatView>
 
   ImUserAvatar _avatarForMessage(NativeChatMessage m, {required bool mine}) {
     final conv = _conversation;
+    final size = isDesktopCommOnly
+        ? desktopChatRowAvatarSize
+        : chatMessageAvatarSize;
     if (mine) {
       final self = widget.session.displayName?.trim();
       final initial = self != null && self.isNotEmpty
@@ -9378,12 +9381,12 @@ class _NativeChatViewState extends State<NativeChatView>
       return ImUserAvatar(
         initial: initial,
         seed: widget.session.userId,
-        size: chatMessageAvatarSize,
+        size: size,
         avatarPreset: m.senderAvatarPreset ?? _selfAvatarPreset,
         avatarObjectKey: m.senderAvatarObjectKey ?? _selfAvatarObjectKey,
         avatarUrl: _selfAvatarUrl,
         avatarService: _service,
-        borderRadius: chatMessageAvatarSize * 0.18,
+        borderRadius: size * 0.18,
       );
     }
     final name = m.senderName.isNotEmpty
@@ -9413,12 +9416,12 @@ class _NativeChatViewState extends State<NativeChatView>
     return ImUserAvatar(
       initial: name.isNotEmpty ? name.substring(0, 1) : '?',
       seed: seed,
-      size: chatMessageAvatarSize,
+      size: size,
       showOnline: false,
       avatarPreset: preset,
       avatarObjectKey: objectKey,
       avatarService: _service,
-      borderRadius: chatMessageAvatarSize * 0.18,
+      borderRadius: size * 0.18,
     );
   }
 
@@ -9943,6 +9946,7 @@ class _NativeChatViewState extends State<NativeChatView>
     return ChatTextBubble(
       text: m.bodyText.isEmpty ? '[${m.kind}]' : m.bodyText,
       mine: mine,
+      compactDesktop: isDesktopCommOnly,
       quote: quote.isEmpty ? null : quote,
       onQuoteTap: onQuoteTap,
       onUrlTap: _openChatUrl,
@@ -11584,11 +11588,6 @@ class _NativeChatViewState extends State<NativeChatView>
                                                   InboxFormat.messageBubbleTimeLabel(
                                                     m.createdAt,
                                                   );
-                                              final rowAvatar =
-                                                  _tappableAvatarForMessage(
-                                                    m,
-                                                    mine: mine,
-                                                  );
                                               Widget row;
                                               if (_isSystemKind(m.kind)) {
                                                 row = _buildMessageWidget(
@@ -11602,6 +11601,11 @@ class _NativeChatViewState extends State<NativeChatView>
                                                     : false;
                                                 final desktop =
                                                     isDesktopCommOnly;
+                                                final rowAvatar =
+                                                    _tappableAvatarForMessage(
+                                                      m,
+                                                      mine: mine,
+                                                    );
                                                 final textMessage =
                                                     m.kind.toUpperCase() ==
                                                     'TEXT';
@@ -11651,6 +11655,7 @@ class _NativeChatViewState extends State<NativeChatView>
                                                 row = ChatMessageRow(
                                                   message: m,
                                                   mine: mine,
+                                                  compactDesktop: desktop,
                                                   showSenderMeta:
                                                       entry.showSenderMeta,
                                                   showTimeForMine: mine,

@@ -25,6 +25,9 @@ String friendlyErrorText(Object? error, {String fallback = '操作失败，请�
   if (RegExp(r'[\u4e00-\u9fa5]').hasMatch(msg)) return msg;
 
   final low = msg.toLowerCase();
+  if (low.contains('assignee must be self or subordinate')) {
+    return '该成员不在你的子任务指派范围内，请重新选择执行人';
+  }
   if (low.contains('failed host lookup') ||
       low.contains('network is unreachable') ||
       low.contains('connection refused') ||

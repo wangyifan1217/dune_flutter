@@ -647,7 +647,7 @@ class _State extends State<HrPerformanceTemplatesPage> {
   Widget scopeSection(BuildContext ctx) => HrConfigSection(
     title: '适用范围',
     icon: Icons.people_outline_rounded,
-    subtitle: '指定人员优先于部门；未指定时按岗位关键词匹配。',
+    subtitle: '指定人员后，仅匹配所选人员。未指定人员时，先匹配部门，再匹配岗位关键词。',
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -1176,15 +1176,17 @@ class _State extends State<HrPerformanceTemplatesPage> {
                               const SizedBox(height: 8),
                               Text(
                                 [
-                                  for (final d in departments)
-                                    if ((t['departmentIds'] as List? ?? [])
-                                        .contains(d.id))
-                                      d.name,
                                   if ((t['userIds'] as List? ?? []).isNotEmpty)
-                                    '${(t['userIds'] as List).length} 位指定人员',
-                                  ...(t['keywords'] as List? ?? []).map(
-                                    (v) => '$v',
-                                  ),
+                                    '${(t['userIds'] as List).length} 位指定人员'
+                                  else ...[
+                                    for (final d in departments)
+                                      if ((t['departmentIds'] as List? ?? [])
+                                          .contains(d.id))
+                                        d.name,
+                                    ...(t['keywords'] as List? ?? []).map(
+                                      (v) => '$v',
+                                    ),
+                                  ],
                                 ].join(' · '),
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/platform/desktop_features.dart';
 import '../../core/theme/dunes_theme.dart';
+import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
 import '../shell/dunes_toast.dart';
 import 'task_api.dart';
@@ -359,11 +360,10 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
   }
 
   Future<void> _pickAssignee() async {
-    final picked = await showTaskColleaguePicker(
+    final picked = await showTaskSubtaskAssigneePicker(
       context,
       api: _api,
       excludeUserId: widget.session.userId,
-      title: '选择团队成员',
     );
     if (picked == null || !mounted) return;
     if (_rejectTeamAssign(picked.id)) return;
@@ -767,7 +767,11 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
             });
           } catch (e) {
             if (mounted) {
-              showDunesCenterToast(context, '主任务已创建，第 ${i + 1} 条子任务失败：$e');
+              final message = friendlyErrorText(e, fallback: '请稍后重试');
+              showDunesCenterToast(
+                context,
+                '主任务已创建，第 ${i + 1} 条子任务失败：$message',
+              );
             }
             break;
           }
@@ -777,7 +781,10 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
       widget.onCreated(created);
     } catch (e) {
       if (!mounted) return;
-      showDunesCenterToast(context, '$e');
+      showDunesCenterToast(
+        context,
+        friendlyErrorText(e, fallback: '保存任务失败，请稍后重试'),
+      );
       setState(() => _saving = false);
     }
   }
@@ -832,11 +839,10 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
   }
 
   Future<void> _pickDraftOwner(_SubDraft draft) async {
-    final picked = await showTaskColleaguePicker(
+    final picked = await showTaskSubtaskAssigneePicker(
       context,
       api: _api,
       excludeUserId: widget.session.userId,
-      title: '选择团队成员',
     );
     if (picked == null || !mounted) return;
     if (_rejectTeamAssign(picked.id)) return;

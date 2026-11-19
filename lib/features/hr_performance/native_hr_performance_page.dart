@@ -15,14 +15,15 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'package:file_selector/file_selector.dart';
 import 'hr_performance_service.dart';
+import 'hr_performance_template_ui.dart';
 
 const _hrPageBg = Color(0xFFF7F4FC);
 const _hrLine = Color(0xFFECE7F3);
 const _hrTabular = <FontFeature>[FontFeature.tabularFigures()];
 const _hrStageFlow = [
   'opening',
-  'self',
   'indicators',
+  'self',
   'review',
   'calibration',
   'hr',
@@ -34,7 +35,7 @@ const _hrStageAside = ['archived', 'exempt'];
 const _hrStageShort = <String, String>{
   'opening': '待补配',
   'self': '自评',
-  'indicators': '指标确认',
+  'indicators': '待发起',
   'review': '主管初评',
   'calibration': '绩效校准',
   'hr': 'HR 审核',
@@ -140,6 +141,8 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
   String? _error;
   bool _loading = true;
   bool _monthStarted = true;
+  bool _canStartMonth = false;
+  bool _supportsBatchStart = false;
   int _epoch = 0;
   final Map<String, GlobalKey> _stageChipKeys = {};
 
@@ -194,14 +197,17 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
         }
       }
       var started = true;
-      if (widget.service == null) {
+      var canStart = false;
+      var supportsBatch = false;
+      if (widget.service == null || access.hr) {
         try {
-          started = await _service.monthStarted(_monthKey);
-        } catch (_) {
-          started = false;
-        }
-        await _loadOrg();
+          final status = await _service.monthStatus(_monthKey);
+          started = status.started;
+          canStart = status.canStart;
+          supportsBatch = status.supportsBatch;
+        } catch (_) {}
       }
+      if (widget.service == null) await _loadOrg();
       if (!mounted || epoch != _epoch) return;
       final rows = fetched
           .where(
@@ -219,6 +225,8 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
         _access = access;
         _scope = scope;
         _monthStarted = started;
+        _canStartMonth = canStart;
+        _supportsBatchStart = supportsBatch;
         _records = rows;
         _alerts = results[2] as List<Map<String, dynamic>>;
         _selectedIds.removeWhere((id) => !rows.any((r) => r.id == id));
@@ -236,6 +244,7 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
         _error = '$e';
         _loading = false;
         _monthStarted = true;
+        _canStartMonth = false;
         _records = [];
         _selected = null;
       });
@@ -659,24 +668,88 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
   }
 
   Future<void> _startMonth() async {
+    final recordIds = [
+      for (final r in _records)
+        if (_selectedIds.contains(r.id) &&
+            (r.started == false || (r.started == null && !_monthStarted)) &&
+            r.stage != 'archived' &&
+            r.stage != 'exempt')
+          r.id,
+    ];
+    final departmentOptions = [
+      for (final entry in _deptName.entries)
+        if (!hrPerformanceDepartmentExcluded(
+          departmentId: entry.key,
+          departmentName: entry.value,
+          parents: _deptParent,
+          names: _deptName,
+        ))
+          HrConfigOption(
+            entry.key,
+            entry.value,
+            subtitle: _deptName[_deptParent[entry.key]] ?? '',
+          ),
+    ];
+    final mode = await showDialog<String>(
+      context: context,
+      builder: (ctx) => SimpleDialog(
+        title: const Text('选择发起范围'),
+        children: [
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(ctx, 'all'),
+            child: const Text('发起全员考核'),
+          ),
+          if (_supportsBatchStart && departmentOptions.isNotEmpty)
+            SimpleDialogOption(
+              onPressed: () => Navigator.pop(ctx, 'department'),
+              child: const Text('按部门发起'),
+            ),
+          if (_supportsBatchStart && recordIds.isNotEmpty)
+            SimpleDialogOption(
+              onPressed: () => Navigator.pop(ctx, 'selected'),
+              child: Text('发起已勾选的 ${recordIds.length} 人'),
+            ),
+        ],
+      ),
+    );
+    if (!mounted || mode == null) return;
+    final List<int> departmentIds;
+    if (mode == 'department') {
+      final selected = await showHrConfigPicker<int>(
+        context,
+        title: '选择发起部门（含下级部门）',
+        options: departmentOptions,
+        selected: const {},
+      );
+      if (!mounted || selected == null || selected.isEmpty) return;
+      departmentIds = selected.toList();
+    } else {
+      departmentIds = const [];
+    }
+    final scopeLabel = switch (mode) {
+      'department' => departmentIds.map((id) => _deptName[id]).join('、'),
+      'selected' => '已勾选的 ${recordIds.length} 人',
+      _ => '全员',
+    };
     final label = '${_month.year}年${_month.month}月';
-    final first = await _askStart(
-      '确认开始当月绩效考核',
-      '准备开始$label绩效考核。系统会按已保存的规则、模板和组织关系生成考核表。没有模板或上级的人员会留在待补配，补齐后才进入指标确认。',
-      '继续',
+    final confirmed = await _askStart(
+      '开始当月绩效考核',
+      '$label · $scopeLabel\n资料齐全的人员将直接进入主管初评或自评。已发起的考核表会保留当前进度。',
+      '确认发起',
     );
-    if (!first || !mounted) return;
-    final second = await _askStart(
-      '再次确认',
-      '确认开始$label绩效考核？开启后系统会通知相关人员并按流程推进，此操作不能撤回。',
-      '确认开始',
-    );
-    if (!second || !mounted) return;
+    if (!mounted || !confirmed) return;
     setState(() => _busy = true);
     try {
-      await _service.startMonth(_monthKey);
+      final started = await _service.startMonth(
+        _monthKey,
+        departmentIds: departmentIds,
+        recordIds: mode == 'selected' ? recordIds : const [],
+      );
       if (!mounted) return;
-      showDunesToast(context, '已开始$label绩效考核');
+      showDunesToast(
+        context,
+        started == 0 ? '所选范围暂无待发起考核表' : '已发起 $started 人的绩效考核',
+      );
       await _load();
     } catch (e) {
       if (mounted) {
@@ -1130,7 +1203,7 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
           label: '刷新',
           onTap: _loading ? null : _load,
         ),
-        if (_access.hr && !_monthStarted)
+        if (_access.hr && _canStartMonth)
           _HrAction(
             icon: Icons.play_circle_outline,
             label: '开始考核',
@@ -1163,10 +1236,13 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
                     : stats,
                 actions: actions,
               ),
-              if (!_loading && _access.hr && !_monthStarted) ...[
+              if (!_loading &&
+                  _access.hr &&
+                  _canStartMonth &&
+                  _supportsBatchStart) ...[
                 const SizedBox(height: 8),
                 Text(
-                  '本月尚未开启。确认开始后，系统按已保存的规则和模板生成考核表并通知相关人员。没有模板或上级的人员留在待补配。',
+                  '可按部门或勾选人员分批发起，也可一次发起全员。',
                   style: TextStyle(
                     fontSize: 12,
                     height: 1.4,

@@ -1494,6 +1494,8 @@ bool chatInboxMarkedUnreadDot({
   required bool markedUnread,
 }) => markedUnread && unreadCount <= 0;
 
+const _desktopInboxAvatarSize = 42.0;
+
 class ChatInboxRow extends StatelessWidget {
   const ChatInboxRow({
     super.key,
@@ -1574,9 +1576,13 @@ class ChatInboxRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final desktop = isDesktopCommOnly;
+    final avatarSlot = desktop ? _desktopInboxAvatarSize : 52.0;
+    final avatarLimit = desktop ? avatarSlot : 56.0;
     final unreadText = unreadCount > 99 ? '99+' : '$unreadCount';
     final unreadColor =
-        kind == ChatInboxRowKind.private ||
+        desktop ||
+            kind == ChatInboxRowKind.private ||
             kind == ChatInboxRowKind.aiAssistant ||
             kind == ChatInboxRowKind.aiSummary ||
             kind == ChatInboxRowKind.approvalAssistant ||
@@ -1592,11 +1598,18 @@ class ChatInboxRow extends StatelessWidget {
             kind == ChatInboxRowKind.robot
         ? DunesColors.resolve(context, const Color(0xFF7B5CD8))
         : DunesColors.resolve(context, DunesColors.coral);
+    final previewLine = _PreviewLine(
+      preview: preview,
+      sysTag: sysTag,
+      generating: previewGenerating,
+      mentionLabel: mentionLabel,
+    );
     return Column(
       children: [
         DesktopFeedbackSurface(
           onTap: onTap,
           selected: selected,
+          showSelectionIndicator: true,
           visualInset: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
           backgroundColor: DunesColors.resolve(
             context,
@@ -1604,21 +1617,25 @@ class ChatInboxRow extends StatelessWidget {
             role: DunesColorRole.surface,
           ),
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+            padding: desktop
+                ? const EdgeInsets.fromLTRB(14, 9, 14, 9)
+                : const EdgeInsets.fromLTRB(16, 10, 16, 10),
             child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: desktop
+                  ? CrossAxisAlignment.center
+                  : CrossAxisAlignment.start,
               children: [
                 SizedBox(
-                  width: 52,
-                  height: 52,
+                  width: avatarSlot,
+                  height: avatarSlot,
                   child: Stack(
                     clipBehavior: Clip.none,
                     children: [
                       RepaintBoundary(
                         child: OverflowBox(
                           alignment: Alignment.center,
-                          maxWidth: 56,
-                          maxHeight: 56,
+                          maxWidth: avatarLimit,
+                          maxHeight: avatarLimit,
                           child:
                               robotAvatar ??
                               _Avatar(
@@ -1634,7 +1651,7 @@ class ChatInboxRow extends StatelessWidget {
                               ),
                         ),
                       ),
-                      if (unreadCount > 0)
+                      if (!desktop && unreadCount > 0)
                         Positioned(
                           right: -4,
                           top: -5,
@@ -1656,7 +1673,7 @@ class ChatInboxRow extends StatelessWidget {
                     ],
                   ),
                 ),
-                const SizedBox(width: 12),
+                SizedBox(width: desktop ? 11 : 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -1673,8 +1690,14 @@ class ChatInboxRow extends StatelessWidget {
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
                                       style: DunesTypography.sans(
-                                        fontSize: 15,
-                                        fontWeight: FontWeight.w500,
+                                        fontSize: desktop ? 14 : 15,
+                                        fontWeight:
+                                            desktop &&
+                                                (selected ||
+                                                    unreadCount > 0 ||
+                                                    markedUnread)
+                                            ? FontWeight.w700
+                                            : FontWeight.w500,
                                         letterSpacing: -0.01 * 15,
                                         color: DunesColors.resolve(
                                           context,
@@ -1771,12 +1794,20 @@ class ChatInboxRow extends StatelessWidget {
                         ],
                       ),
                       const SizedBox(height: 3),
-                      _PreviewLine(
-                        preview: preview,
-                        sysTag: sysTag,
-                        generating: previewGenerating,
-                        mentionLabel: mentionLabel,
-                      ),
+                      if (desktop && unreadCount > 0)
+                        Row(
+                          children: [
+                            Expanded(child: previewLine),
+                            const SizedBox(width: 6),
+                            _UnreadBadge(
+                              text: unreadText,
+                              color: unreadColor,
+                              mini: true,
+                            ),
+                          ],
+                        )
+                      else
+                        previewLine,
                     ],
                   ),
                 ),
@@ -1805,11 +1836,11 @@ class ChatInboxRow extends StatelessWidget {
           ColoredBox(
             color: DunesColors.resolve(
               context,
-              isDesktopCommOnly ? DunesColors.bgApp : _rowBg,
+              desktop ? DunesColors.bgApp : _rowBg,
               role: DunesColorRole.surface,
             ),
             child: Padding(
-              padding: EdgeInsets.only(left: 80, right: 16),
+              padding: EdgeInsets.only(left: desktop ? 67 : 80, right: 16),
               child: Divider(
                 height: 1,
                 thickness: 1,
@@ -1976,7 +2007,12 @@ class _PreviewLine extends StatelessWidget {
             style: DunesTypography.sans(
               fontSize: previewSize,
               fontWeight: FontWeight.w600,
-              color: DunesColors.resolve(context, const Color(0xFFE4554D)),
+              color: DunesColors.resolve(
+                context,
+                isDesktopCommOnly
+                    ? DunesColors.brandPurpleDeep
+                    : const Color(0xFFE4554D),
+              ),
               context: context,
             ),
           ),
@@ -2072,12 +2108,13 @@ class _Avatar extends StatelessWidget {
   final ConversationService? avatarService;
   final List<ConversationAvatarMember> groupAvatarMembers;
 
-  static const _inboxAvatarSize = kImListAvatarSize;
-  static const _inboxAvatarRadius = _inboxAvatarSize * 0.18;
-
   @override
   Widget build(BuildContext context) {
-    final borderRadius = BorderRadius.circular(_inboxAvatarRadius);
+    final inboxAvatarSize = isDesktopCommOnly
+        ? _desktopInboxAvatarSize
+        : kImListAvatarSize;
+    final inboxAvatarRadius = inboxAvatarSize * 0.18;
+    final borderRadius = BorderRadius.circular(inboxAvatarRadius);
 
     BoxDecoration decoration;
     Widget child;
@@ -2085,8 +2122,8 @@ class _Avatar extends StatelessWidget {
     switch (kind) {
       case ChatInboxRowKind.aiAssistant:
         return Container(
-          width: _inboxAvatarSize,
-          height: _inboxAvatarSize,
+          width: inboxAvatarSize,
+          height: inboxAvatarSize,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             border: Border.all(
@@ -2107,8 +2144,8 @@ class _Avatar extends StatelessWidget {
           ),
           child: ClipOval(
             child: NovaPersonAvatarImage(
-              width: _inboxAvatarSize,
-              height: _inboxAvatarSize,
+              width: inboxAvatarSize,
+              height: inboxAvatarSize,
             ),
           ),
         );
@@ -2351,7 +2388,7 @@ class _Avatar extends StatelessWidget {
           size: 20,
         );
       case ChatInboxRowKind.aiSummary:
-        return const AiSummaryAvatarMark(size: _inboxAvatarSize);
+        return AiSummaryAvatarMark(size: inboxAvatarSize);
       case ChatInboxRowKind.systemNotification:
         decoration = BoxDecoration(
           borderRadius: borderRadius,
@@ -2403,7 +2440,7 @@ class _Avatar extends StatelessWidget {
         if (groupAvatarMembers.isNotEmpty) {
           return GroupCompositeAvatar(
             members: groupAvatarMembers,
-            size: _inboxAvatarSize,
+            size: inboxAvatarSize,
             avatarService: avatarService,
           );
         }
@@ -2463,13 +2500,13 @@ class _Avatar extends StatelessWidget {
           return ImUserAvatar(
             initial: letter,
             seed: seed,
-            size: _inboxAvatarSize,
+            size: inboxAvatarSize,
             showOnline: showOnlineDot,
             avatarPreset: avatarPreset,
             avatarObjectKey: avatarObjectKey,
             avatarUrl: avatarUrl,
             avatarService: avatarService,
-            borderRadius: _inboxAvatarRadius,
+            borderRadius: inboxAvatarRadius,
           );
         }
         final style = InboxFormat.personStyle(seed);
@@ -2491,8 +2528,8 @@ class _Avatar extends StatelessWidget {
       clipBehavior: Clip.none,
       children: [
         Container(
-          width: _inboxAvatarSize,
-          height: _inboxAvatarSize,
+          width: inboxAvatarSize,
+          height: inboxAvatarSize,
           decoration: decoration,
           alignment: Alignment.center,
           child: child,

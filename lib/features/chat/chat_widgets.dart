@@ -1774,6 +1774,8 @@ class _ChatTextFieldState extends State<_ChatTextField> {
   }
 }
 
+const double desktopChatRowAvatarSize = 34;
+
 class ChatMessageRow extends StatelessWidget {
   const ChatMessageRow({
     super.key,
@@ -1791,6 +1793,7 @@ class ChatMessageRow extends StatelessWidget {
     this.trailingAvatar,
     this.timeLabel,
     this.showTimeForMine = false,
+    this.compactDesktop = false,
   });
 
   final NativeChatMessage message;
@@ -1809,6 +1812,7 @@ class ChatMessageRow extends StatelessWidget {
   final Widget? trailingAvatar;
   final String? timeLabel;
   final bool showTimeForMine;
+  final bool compactDesktop;
 
   @override
   Widget build(BuildContext context) {
@@ -1822,7 +1826,13 @@ class ChatMessageRow extends StatelessWidget {
       color: DunesColors.resolve(context, DunesColors.text3),
       context: context,
     ).copyWith(fontFeatures: const [FontFeature.tabularFigures()]);
-    final avatarSlot = SizedBox(width: chatMessageAvatarSize);
+    final avatarSlot = SizedBox(
+      width: compactDesktop ? desktopChatRowAvatarSize : chatMessageAvatarSize,
+    );
+    final avatarWidget = (mine ? trailingAvatar ?? avatar : avatar) ?? avatarSlot;
+    final alignedAvatar = compactDesktop && showMeta
+        ? Padding(padding: const EdgeInsets.only(top: 16), child: avatarWidget)
+        : avatarWidget;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
@@ -1832,7 +1842,7 @@ class ChatMessageRow extends StatelessWidget {
             ? MainAxisAlignment.end
             : MainAxisAlignment.start,
         children: [
-          if (!mine) ...[avatar ?? avatarSlot, const SizedBox(width: 8)],
+          if (!mine) ...[alignedAvatar, const SizedBox(width: 8)],
           Flexible(
             child: GestureDetector(
               onLongPress: onLongPress,
@@ -1916,10 +1926,7 @@ class ChatMessageRow extends StatelessWidget {
               ),
             ),
           ),
-          if (mine) ...[
-            const SizedBox(width: 8),
-            trailingAvatar ?? avatar ?? avatarSlot,
-          ],
+          if (mine) ...[const SizedBox(width: 8), alignedAvatar],
         ],
       ),
     );
@@ -1981,6 +1988,7 @@ class ChatTextBubble extends StatelessWidget {
     this.enableSelection = true,
     this.selectAllOnLongPress = false,
     this.preferPartialTextCopy = false,
+    this.compactDesktop = false,
   });
 
   final String text;
@@ -2007,6 +2015,7 @@ class ChatTextBubble extends StatelessWidget {
   final Future<void> Function(Uri uri)? onUrlTap;
   final bool enableSelection;
   final bool selectAllOnLongPress;
+  final bool compactDesktop;
 
   /// APP：长按先出选区手柄并默认全选；拖动手柄可截取。复制跟当前选区；其余功能直接列出。
   final bool preferPartialTextCopy;
@@ -2103,21 +2112,27 @@ class ChatTextBubble extends StatelessWidget {
         final maxW = chatBubbleMaxWidth(constraints.maxWidth);
         return Container(
           constraints: BoxConstraints(maxWidth: maxW),
-          padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 9),
+          padding: compactDesktop
+              ? const EdgeInsets.symmetric(horizontal: 11, vertical: 8)
+              : const EdgeInsets.symmetric(horizontal: 13, vertical: 9),
           decoration: BoxDecoration(
             // 扁平化：己方纯色；对方浅底 + 细描边，避免与聊天背景融在一起。
             color: mine
                 ? DunesColors.resolve(
                     context,
-                    const Color(0xFF7E64BD),
+                    compactDesktop
+                        ? const Color(0xFF765CBA)
+                        : const Color(0xFF7E64BD),
                     role: DunesColorRole.surface,
                   )
                 : DunesColors.resolve(
                     context,
-                    DunesColors.bgApp,
+                    compactDesktop
+                        ? const Color(0xFFF6F5F8)
+                        : DunesColors.bgApp,
                     role: DunesColorRole.surface,
                   ),
-            border: mine
+            border: mine || compactDesktop
                 ? null
                 : Border.all(
                     color: DunesColors.resolve(

@@ -34,6 +34,9 @@ class ChatConvHeader extends StatelessWidget {
     this.imStatusIcon,
     this.imStatusColor,
     this.showBottomBorder = true,
+    this.titleOnly = false,
+    this.titleDetail,
+    this.titleBadge,
   });
 
   final String title;
@@ -42,6 +45,9 @@ class ChatConvHeader extends StatelessWidget {
 
   /// 关掉后由外层按滚动位置自行画分割线。
   final bool showBottomBorder;
+  final bool titleOnly;
+  final String? titleDetail;
+  final Widget? titleBadge;
   final VoidCallback? onTapTitle;
   final List<Widget> actions;
   final Widget? leadingAvatar;
@@ -60,7 +66,12 @@ class ChatConvHeader extends StatelessWidget {
           : null,
       padding: isDesktopCommOnly
           ? EdgeInsets.fromLTRB(showBackButton ? 8 : 20, 11, 16, 11)
-          : EdgeInsets.fromLTRB(showBackButton ? 4 : 12, 8, 8, 10),
+          : EdgeInsets.fromLTRB(
+              showBackButton ? 4 : 12,
+              titleOnly ? 2 : 8,
+              8,
+              titleOnly ? 2 : 10,
+            ),
       decoration: BoxDecoration(
         color: DunesColors.resolve(
           context,
@@ -87,7 +98,7 @@ class ChatConvHeader extends StatelessWidget {
               icon: const Icon(Icons.chevron_left_rounded, size: 28),
               color: DunesColors.resolve(context, DunesColors.text2),
             ),
-          if (leadingAvatar != null) ...[
+          if (!titleOnly && leadingAvatar != null) ...[
             GestureDetector(
               onTap: onTapTitle,
               child: isDesktopCommOnly && showOnlineDot
@@ -151,7 +162,24 @@ class ChatConvHeader extends StatelessWidget {
                           ),
                         ),
                       ),
-                      if (ImUserStatusCatalog.showsBadge(imStatus)) ...[
+                      if (titleBadge case final badge?) ...[
+                        const SizedBox(width: 6),
+                        badge,
+                      ],
+                      if (titleDetail case final detail?) ...[
+                        const SizedBox(width: 4),
+                        Text(
+                          detail,
+                          maxLines: 1,
+                          style: DunesTypography.sans(
+                            fontSize: 12,
+                            color: DunesColors.resolve(context, DunesColors.text3),
+                            context: context,
+                          ),
+                        ),
+                      ],
+                      if (!titleOnly &&
+                          ImUserStatusCatalog.showsBadge(imStatus)) ...[
                         const SizedBox(width: 6),
                         ImStatusBadge(
                           status: imStatus!,
@@ -162,41 +190,43 @@ class ChatConvHeader extends StatelessWidget {
                       ],
                     ],
                   ),
-                  const SizedBox(height: 2),
-                  Row(
-                    children: [
-                      if (showOnlineDot && !isDesktopCommOnly) ...[
-                        Container(
-                          width: 7,
-                          height: 7,
-                          margin: const EdgeInsets.only(right: 5),
-                          decoration: BoxDecoration(
-                            color: DunesColors.resolve(
-                              context,
-                              DunesColors.green,
-                              role: DunesColorRole.surface,
+                  if (!titleOnly) ...[
+                    const SizedBox(height: 2),
+                    Row(
+                      children: [
+                        if (showOnlineDot && !isDesktopCommOnly) ...[
+                          Container(
+                            width: 7,
+                            height: 7,
+                            margin: const EdgeInsets.only(right: 5),
+                            decoration: BoxDecoration(
+                              color: DunesColors.resolve(
+                                context,
+                                DunesColors.green,
+                                role: DunesColorRole.surface,
+                              ),
+                              borderRadius: BorderRadius.circular(99),
                             ),
-                            borderRadius: BorderRadius.circular(99),
+                          ),
+                        ],
+                        Expanded(
+                          child: Text(
+                            subtitle,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: DunesTypography.sans(
+                              fontSize: isDesktopCommOnly ? 12 : 11.5,
+                              color: DunesColors.resolve(
+                                context,
+                                DunesColors.text3,
+                              ),
+                              context: context,
+                            ),
                           ),
                         ),
                       ],
-                      Expanded(
-                        child: Text(
-                          subtitle,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: DunesTypography.sans(
-                            fontSize: isDesktopCommOnly ? 12 : 11.5,
-                            color: DunesColors.resolve(
-                              context,
-                              DunesColors.text3,
-                            ),
-                            context: context,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ],
               ),
             ),

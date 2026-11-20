@@ -5,6 +5,17 @@ const kTaskTodoUploadFieldKeys = {
   'paymentVoucher',
   'returnedInvoice',
   'receiptVoucher',
+  'invoiceFiles',
+  'files',
+  'paymentVoucherFiles',
+  'attachments',
+  'planFiles',
+  'productFiles',
+  'contractFiles',
+  'contractAttachment',
+  'invoiceAttachment',
+  'invoiceOrReceipt',
+  'paymentScreenshot',
 };
 
 const kTaskTodoCompletionLabels = <String, String>{
@@ -112,11 +123,14 @@ List<(String, String)> taskTodoCompletionTexts(
 }
 
 List<Map<String, dynamic>> _usableUploadItems(Object? raw) {
-  return normalizeUploadItems(raw).where((item) {
-    final key = '${item['objectKey'] ?? item['url'] ?? item['fileName'] ?? ''}'
-        .trim();
-    return key.isNotEmpty && item['status'] != 'error';
-  }).toList(growable: false);
+  return normalizeUploadItems(raw)
+      .where((item) {
+        final key =
+            '${item['objectKey'] ?? item['url'] ?? item['fileName'] ?? ''}'
+                .trim();
+        return key.isNotEmpty && item['status'] != 'error';
+      })
+      .toList(growable: false);
 }
 
 List<(String, List<Map<String, dynamic>>)> taskTodoCompletionFileGroups(
@@ -163,7 +177,5 @@ List<(String, List<Map<String, dynamic>>)> taskTodoCompletionFileGroups(
 }
 
 List<Map<String, dynamic>> taskTodoCompletionFiles(Map<String, dynamic> form) {
-  return [
-    for (final group in taskTodoCompletionFileGroups(form)) ...group.$2,
-  ];
+  return [for (final group in taskTodoCompletionFileGroups(form)) ...group.$2];
 }

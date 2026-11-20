@@ -1693,6 +1693,33 @@ class XflowService {
     );
   }
 
+  Future<void> registerPromotionPayment({
+    required int todoId,
+    required int itemIndex,
+    required String requestId,
+    required Map<String, dynamic> payload,
+    required String comment,
+  }) async {
+    await _request(
+      '/todos/$todoId/complete-task',
+      method: 'POST',
+      body: {
+        'action': 'MARK_PAID',
+        'promotionPayment': {'itemIndex': itemIndex, 'requestId': requestId},
+        'payload': payload,
+        'comment': comment,
+      },
+    );
+  }
+
+  Future<void> finishPromotionPayment(int todoId) async {
+    await _request(
+      '/todos/$todoId/complete-task',
+      method: 'POST',
+      body: {'action': 'MARK_PAID', 'finishPromotionPayment': true},
+    );
+  }
+
   Future<void> finishIssuedInvoices({
     required int todoId,
     String comment = '',
@@ -1738,6 +1765,37 @@ class XflowService {
           'invoiceAmount': invoiceAmount,
         },
         'comment': comment,
+      },
+    );
+  }
+
+  Future<void> reverseIssuedInvoice({
+    required int todoId,
+    required String originalKey,
+    required Map<String, dynamic> redInvoice,
+    required List<Map<String, dynamic>> billAmounts,
+    String comment = '',
+  }) async {
+    await _request(
+      '/todos/$todoId/issue-invoice',
+      method: 'POST',
+      body: {
+        'payload': {
+          'reversalOf': originalKey,
+          'invoiceFiles': [redInvoice],
+          'reversalBillAmounts': billAmounts,
+        },
+        'comment': comment,
+      },
+    );
+  }
+
+  Future<void> retryIssuedInvoiceReversal(int todoId) async {
+    await _request(
+      '/todos/$todoId/issue-invoice',
+      method: 'POST',
+      body: {
+        'payload': {'retryReversal': true},
       },
     );
   }

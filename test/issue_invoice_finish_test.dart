@@ -27,6 +27,23 @@ class InvoiceService extends XflowService {
   final appendedAmounts = <double>[];
   bool failLoad = false;
   bool failFinish = false;
+  bool redInvoice = false;
+  final reversals = <String>[];
+
+  @override
+  Future<void> reverseIssuedInvoice({
+    required int todoId,
+    required String originalKey,
+    required Map<String, dynamic> redInvoice,
+    required List<Map<String, dynamic>> billAmounts,
+    String comment = '',
+  }) async {
+    expect(todoId, 20);
+    expect(redInvoice['invoiceRecordId'], 7);
+    expect(billAmounts, isEmpty);
+    reversals.add(originalKey);
+  }
+
   @override
   Future<Map<String, dynamic>> uploadProposalFile({
     required Uint8List bytes,
@@ -42,7 +59,11 @@ class InvoiceService extends XflowService {
     String businessType = '',
     String businessId = '',
   }) async => {
-    'invoice': {'recordId': 7, 'invoiceNo': 'new-1', 'total': 100},
+    'invoice': {
+      'recordId': 7,
+      'invoiceNo': 'new-1',
+      'total': redInvoice ? -100 : 100,
+    },
   };
   @override
   Future<Map<String, dynamic>> previewIssuedInvoices({
@@ -85,8 +106,25 @@ class InvoiceService extends XflowService {
       status: 'APPROVED',
       formData: {
         'invoiceFiles': [
-          {'fileName': '已开发票.pdf', 'status': 'done'},
+          {
+            'fileName': '已开发票.pdf',
+            'status': 'done',
+            'objectKey': 'original-file',
+          },
         ],
+        if (redInvoice)
+          'issuedInvoiceBatches': [
+            {
+              'batchNo': 1,
+              'invoiceAmount': 100,
+              'invoices': [
+                {'objectKey': 'original-file'},
+              ],
+              'bills': [
+                {'billId': 11, 'allocateAmount': 100},
+              ],
+            },
+          ],
       },
       createdById: 1,
       createdAt: null,
@@ -121,7 +159,11 @@ final item = XflowProposalItem(
   ),
 );
 
-Future<void> openInvoice(WidgetTester tester, InvoiceService service) async {
+Future<void> openInvoice(
+  WidgetTester tester,
+  InvoiceService service, {
+  XflowProposalItem? testItem,
+}) async {
   tester.view.physicalSize = const Size(360, 800);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.resetPhysicalSize);
@@ -134,7 +176,7 @@ Future<void> openInvoice(WidgetTester tester, InvoiceService service) async {
             onPressed: () => confirmIssueInvoiceBatch(
               context: context,
               service: service,
-              item: item,
+              item: testItem ?? item,
             ),
             child: const Text('打开'),
           ),
@@ -192,6 +234,39 @@ void main() {
       client.close();
     },
   );
+  testWidgets('completed invoice can link a red PDF to its original', (
+    tester,
+  ) async {
+    final service = InvoiceService()..redInvoice = true;
+    await openInvoice(
+      tester,
+      service,
+      testItem: item.copyWith(
+        todoHint: const XflowTodoHint(
+          id: 20,
+          businessType: 'FINANCE_INVOICE_REQUEST',
+          businessId: 10,
+          status: 'DONE',
+          kind: 'TASK',
+        ),
+      ),
+    );
+    expect(find.byType(DropTarget), findsNothing);
+    expect(find.text('完结待办'), findsNothing);
+    await tester.tap(find.text('红冲'));
+    await tester.pumpAndSettle();
+    await addInvoice(tester);
+    await tester.tap(find.text('确认红冲'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('资管确认后，待办将重新打开'), findsOneWidget);
+    await tester.tap(find.text('确认红冲').last);
+    await tester.pumpAndSettle();
+    expect(service.reversals, ['original-file']);
+    expect(service.finishCalls, 0);
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pumpAndSettle();
+  });
+
   testWidgets('unregistered invoice must be handled before finishing', (
     tester,
   ) async {

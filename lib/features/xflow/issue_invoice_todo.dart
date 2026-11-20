@@ -103,6 +103,43 @@ class _IssueInvoiceDialogState extends State<_IssueInvoiceDialog> {
   final _amount = TextEditingController();
   final _batch = <_BatchFile>[];
   List<Map<String, dynamic>> _issued = const [];
+  List<Map<String, dynamic>> _issuedBatches = const [];
+  Map<String, dynamic>? _original;
+  final _reversalAmounts = <String, String>{};
+  bool _pendingReversal = false;
+  bool _canRetryReversal = false;
+  String _netIssued = '';
+
+  bool get _completed => widget.item.todoHint?.status.toUpperCase() == 'DONE';
+  bool get _reversing => _original != null;
+  int get _fileLimit => _reversing ? 1 : _maxBatchFiles;
+
+  Map<String, dynamic>? _sourceBatch(Map<String, dynamic> original) {
+    final key = _issuedKey(original);
+    for (final batch in _issuedBatches) {
+      if ((batch['reversalOf'] ?? '').toString().isNotEmpty) continue;
+      if (_mapList(batch['invoices']).any((file) => _issuedKey(file) == key)) {
+        return batch;
+      }
+    }
+    return null;
+  }
+
+  List<Map<String, dynamic>> get _reversalDestinations {
+    final original = _original;
+    if (original == null) return const [];
+    final batch = _sourceBatch(original);
+    if (batch == null || _mapList(batch['invoices']).length <= 1) {
+      return const [];
+    }
+    final bills = [
+      ..._mapList(batch['bills']),
+      if ((double.tryParse('${batch['unallocatedAmount']}') ?? 0) > 0)
+        {'billId': 0, 'billNo': '未分摊金额'},
+    ];
+    return bills.length > 1 ? bills : const [];
+  }
+
   String _requested = '';
   bool _loading = true;
   bool _loadFailed = false;
@@ -150,13 +187,13 @@ class _IssueInvoiceDialogState extends State<_IssueInvoiceDialog> {
       if (!mounted) return;
       final form = detail.formData;
       setState(() {
-        _issued = [
-          for (final item
-              in form['invoiceFiles'] is List
-                  ? form['invoiceFiles'] as List
-                  : const [])
-            if (item is Map) Map<String, dynamic>.from(item),
-        ];
+        _issued = _mapList(form['invoiceFiles']);
+        _issuedBatches = _mapList(form['issuedInvoiceBatches']);
+        _netIssued = _moneyText(form['issuedInvoiceTotal']);
+        final pending = form['pendingIssuedInvoiceReversal'];
+        _pendingReversal = pending is Map;
+        _canRetryReversal =
+            pending is Map && '${pending['todoId']}' == '${widget.todoId}';
         _requested = _moneyText(form['invoiceTotalLimit']);
         _loading = false;
       });
@@ -172,9 +209,9 @@ class _IssueInvoiceDialogState extends State<_IssueInvoiceDialog> {
 
   Future<void> _pick() async {
     if (_picking || _saving) return;
-    final remain = _maxBatchFiles - _batch.length;
+    final remain = _fileLimit - _batch.length;
     if (remain <= 0) {
-      showDunesToast(context, '一次最多上传 $_maxBatchFiles 张');
+      showDunesToast(context, '一次最多上传 $_fileLimit 张');
       return;
     }
     setState(() => _picking = true);
@@ -215,14 +252,14 @@ class _IssueInvoiceDialogState extends State<_IssueInvoiceDialog> {
   }
 
   Future<void> _addFiles(List<XFile> files) async {
-    final remain = _maxBatchFiles - _batch.length;
+    final remain = _fileLimit - _batch.length;
     if (remain <= 0) {
-      showDunesToast(context, '一次最多上传 $_maxBatchFiles 张');
+      showDunesToast(context, '一次最多上传 $_fileLimit 张');
       return;
     }
     final list = files.length > remain ? files.sublist(0, remain) : files;
     if (files.length > remain) {
-      showDunesToast(context, '一次最多 $_maxBatchFiles 张，已截取前 $remain 张');
+      showDunesToast(context, '一次最多 $_fileLimit 张，已截取前 $remain 张');
     }
     for (final file in list) {
       if (!mounted) return;
@@ -318,10 +355,88 @@ class _IssueInvoiceDialogState extends State<_IssueInvoiceDialog> {
     (item) => item.phase == 'uploading' || item.phase == 'recognizing',
   );
 
+  Future<void> _confirmReversal() async {
+    final original = _original;
+    if (!_canConfirm || original == null) return;
+    final red = _batch.single;
+    final amount = double.tryParse('${red.invoice['total'] ?? ''}');
+    if (red.unrecognized || amount == null || !amount.isFinite || amount >= 0) {
+      showDunesToast(context, '请上传能识别负数价税合计的红字发票');
+      return;
+    }
+    final split = <Map<String, dynamic>>[];
+    for (final bill in _reversalDestinations) {
+      final id = '${bill['billId']}';
+      final input = _reversalAmounts[id]?.trim() ?? '';
+      if (input.isEmpty) continue;
+      final value = double.tryParse(input);
+      if (value == null || !value.isFinite || value <= 0) {
+        showDunesToast(context, '请填写有效的账单冲减金额');
+        return;
+      }
+      split.add({'billId': id, 'amount': value});
+    }
+    if (_reversalDestinations.isNotEmpty &&
+        split.fold<int>(
+              0,
+              (total, row) => total + ((row['amount'] as double) * 100).round(),
+            ) !=
+            (-amount * 100).round()) {
+      showDunesToast(context, '各项冲减金额合计须等于红字发票金额');
+      return;
+    }
+    final ok = await _askIssueConfirm(
+      context,
+      '将对「${original['fileName'] ?? '所选原票'}」登记红冲 ¥${_money(amount)}。'
+      '${_completed ? '资管确认后，待办将重新打开。' : ''}',
+      title: '确认发票红冲',
+      okText: '确认红冲',
+    );
+    if (ok != true || !mounted) return;
+    setState(() => _saving = true);
+    try {
+      await widget.service.reverseIssuedInvoice(
+        todoId: widget.todoId,
+        originalKey: _issuedKey(original),
+        redInvoice: red.toPayload(),
+        billAmounts: split,
+        comment: _comment.text.trim(),
+      );
+      if (!mounted) return;
+      showDunesToast(context, '红冲已登记并同步资管');
+      Navigator.pop(context, true);
+    } catch (e) {
+      if (!mounted) return;
+      showDunesToast(context, friendlyErrorText(e), kind: DunesToastKind.error);
+      await _loadIssued();
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _retryReversal() async {
+    setState(() => _saving = true);
+    try {
+      await widget.service.retryIssuedInvoiceReversal(widget.todoId);
+      if (!mounted) return;
+      showDunesToast(context, '红冲已登记并同步资管');
+      Navigator.pop(context, true);
+    } catch (e) {
+      if (!mounted) return;
+      showDunesToast(context, friendlyErrorText(e), kind: DunesToastKind.error);
+      await _loadIssued();
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
   bool get _canConfirm =>
       !_saving &&
+      !_loading &&
+      !_loadFailed &&
+      !_pendingReversal &&
       !_busyBatch &&
-      _batch.isNotEmpty &&
+      (_batch.isNotEmpty || (!_reversing && (_confirmedAmount() ?? 0) > 0)) &&
       _batch.every((item) => item.phase == 'done' && !item.blocked);
 
   XflowInvoiceSummary get _batchSummary =>
@@ -369,7 +484,7 @@ class _IssueInvoiceDialogState extends State<_IssueInvoiceDialog> {
       } else if (_batch.any((item) => item.blocked)) {
         showDunesToast(context, '有发票不能记入，请先移除', kind: DunesToastKind.error);
       } else {
-        showDunesToast(context, '请先上传发票', kind: DunesToastKind.error);
+        showDunesToast(context, '请填写本次开票金额', kind: DunesToastKind.error);
       }
       return;
     }
@@ -403,6 +518,7 @@ class _IssueInvoiceDialogState extends State<_IssueInvoiceDialog> {
       context,
       '本次开票金额 ¥${_money(amount)}。已按最新账单剩余依次填满：\n$lines'
       '${extra == '0.00' ? '' : '\n超出剩余可开票 ¥$extra，不摊进账单。'}'
+      '${_batch.isEmpty ? '\n本次仅登记金额，未添加发票附件。' : ''}'
       '\n确认后通知资管并写入原单，这条待办保持未完成。',
     );
     if (ok != true || !mounted) return;
@@ -447,13 +563,15 @@ class _IssueInvoiceDialogState extends State<_IssueInvoiceDialog> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const _IssueTitle(
-                  title: '开具发票',
+                _IssueTitle(
+                  title: _completed || _reversing ? '发票红冲' : '开具发票',
                   icon: Icons.receipt_long_outlined,
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  '可以分多次登记发票；全部办理完成后，点击“完结待办”。',
+                  _completed || _reversing
+                      ? '选择已登记的原票，上传对应红字发票。资管同步成功后，已完结的待办将重新打开。'
+                      : '可以分多次登记发票；全部办理完成后，点击“完结待办”。',
                   style: DunesTypography.sans(
                     fontSize: 11.5,
                     color: DunesColors.resolve(context, DunesColors.text3),
@@ -472,7 +590,7 @@ class _IssueInvoiceDialogState extends State<_IssueInvoiceDialog> {
                               ? '已开发票读取失败'
                               : _loading
                               ? '正在读取已开票…'
-                              : '已登记 ${_issued.length} 个文件 · 已识别 ${issued.count} 张，合计 ¥${_money(issued.total)}',
+                              : '已登记 ${_issued.length} 个文件 · 净开票 ¥${_netIssued.isEmpty ? _money(issued.total) : _netIssued}',
                           extra: _requested.isEmpty ? '' : '申请总额 ¥$_requested',
                           children: [
                             if (_loadFailed)
@@ -485,59 +603,127 @@ class _IssueInvoiceDialogState extends State<_IssueInvoiceDialog> {
                                 name:
                                     '${item['fileName'] ?? item['name'] ?? '发票'}',
                                 line: _issuedMeta(item),
+                                trailing:
+                                    _issuedKey(item).isNotEmpty &&
+                                        item['reversalOf'] == null &&
+                                        item['reversalStatus'] != 'FULL' &&
+                                        _sourceBatch(item) != null &&
+                                        !_pendingReversal
+                                    ? TextButton(
+                                        onPressed:
+                                            _saving ||
+                                                _picking ||
+                                                _batch.isNotEmpty
+                                            ? null
+                                            : () => setState(() {
+                                                _original = item;
+                                                _reversalAmounts.clear();
+                                              }),
+                                        child: const Text('红冲'),
+                                      )
+                                    : null,
                               ),
                           ],
                         ),
-                        const SizedBox(height: 12),
-                        _dropZone(),
-                        for (var i = 0; i < _batch.length; i++)
-                          _batchTile(_batch[i], i),
-                        const SizedBox(height: 10),
-                        Text(
-                          '本次 ${_summaryLabel(_batchSummary)}',
-                          style: DunesTypography.sans(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                            color: DunesColors.resolve(
-                              context,
-                              DunesColors.text,
+                        if (_pendingReversal)
+                          const ListTile(title: Text('有一笔红冲待同步资管')),
+                        if (_reversing && !_pendingReversal)
+                          ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: Text('原票：${_original?['fileName'] ?? '发票'}'),
+                            trailing: TextButton(
+                              onPressed: _saving || _picking || _busyBatch
+                                  ? null
+                                  : () => setState(() {
+                                      _original = null;
+                                      _batch.clear();
+                                      _amount.clear();
+                                      _amountEdited = false;
+                                    }),
+                              child: const Text('取消红冲'),
                             ),
-                            context: context,
                           ),
-                        ),
-                        const SizedBox(height: 12),
-                        const XfFieldLabel(label: '本次开票金额（元，可修改）'),
-                        TextField(
-                          controller: _amount,
-                          enabled: !_saving,
-                          style: xfInputTextStyle(context: context),
-                          keyboardType: const TextInputType.numberWithOptions(
-                            decimal: true,
+                        if ((!_completed || _reversing) &&
+                            !_pendingReversal) ...[
+                          const SizedBox(height: 12),
+                          _dropZone(),
+                          for (var i = 0; i < _batch.length; i++)
+                            _batchTile(_batch[i], i),
+                          const SizedBox(height: 10),
+                          Text(
+                            '本次 ${_summaryLabel(_batchSummary)}',
+                            style: DunesTypography.sans(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: DunesColors.resolve(
+                                context,
+                                DunesColors.text,
+                              ),
+                              context: context,
+                            ),
                           ),
-                          onChanged: (_) => _amountEdited = true,
-                          decoration: xfInputDecoration(
-                            context: context,
-                            hint: '请输入本次开票金额',
+                          const SizedBox(height: 12),
+                          if (_reversing)
+                            for (final bill in _reversalDestinations)
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 10),
+                                child: TextFormField(
+                                  key: ValueKey(
+                                    'reversal-${_issuedKey(_original!)}-${bill['billId']}',
+                                  ),
+                                  initialValue:
+                                      _reversalAmounts['${bill['billId']}'],
+                                  enabled: !_saving,
+                                  keyboardType:
+                                      const TextInputType.numberWithOptions(
+                                        decimal: true,
+                                      ),
+                                  decoration: InputDecoration(
+                                    labelText:
+                                        '${bill['billNo'] ?? bill['billId']} 冲减金额（填正数）',
+                                  ),
+                                  onChanged: (value) =>
+                                      _reversalAmounts['${bill['billId']}'] =
+                                          value,
+                                ),
+                              )
+                          else ...[
+                            const XfFieldLabel(label: '本次开票金额（元，可修改）'),
+                            TextField(
+                              controller: _amount,
+                              enabled: !_saving,
+                              style: xfInputTextStyle(context: context),
+                              keyboardType:
+                                  const TextInputType.numberWithOptions(
+                                    decimal: true,
+                                  ),
+                              onChanged: (_) =>
+                                  setState(() => _amountEdited = true),
+                              decoration: xfInputDecoration(
+                                context: context,
+                                hint: '请输入本次开票金额',
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                          ],
+                          const XfFieldLabel(label: '办理意见（选填，会写到单据评论）'),
+                          TextField(
+                            controller: _comment,
+                            minLines: 2,
+                            maxLines: 3,
+                            style: xfInputTextStyle(context: context),
+                            decoration: xfInputDecoration(
+                              context: context,
+                              hint: '选填',
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 12),
-                        const XfFieldLabel(label: '办理意见（选填，会写到单据评论）'),
-                        TextField(
-                          controller: _comment,
-                          minLines: 2,
-                          maxLines: 3,
-                          style: xfInputTextStyle(context: context),
-                          decoration: xfInputDecoration(
-                            context: context,
-                            hint: '选填',
-                          ),
-                        ),
+                        ],
                       ],
                     ),
                   ),
                 ),
                 const SizedBox(height: 14),
-                if (_batch.isNotEmpty)
+                if (!_reversing && _batch.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 8),
                     child: Text(
@@ -560,24 +746,37 @@ class _IssueInvoiceDialogState extends State<_IssueInvoiceDialog> {
                           ? null
                           : () => Navigator.pop(context, false),
                     ),
-                    _IssueBtn(
-                      label: '完结待办',
-                      onPressed:
-                          _saving ||
-                              _loading ||
-                              _loadFailed ||
-                              _picking ||
-                              _busyBatch ||
-                              _batch.isNotEmpty
-                          ? null
-                          : _finish,
-                    ),
-                    _IssueBtn(
-                      label: _saving ? '正在处理…' : '确认本次开票',
-                      primary: true,
-                      loading: _saving,
-                      onPressed: _canConfirm ? _confirm : null,
-                    ),
+                    if (!_completed && !_reversing && !_pendingReversal)
+                      _IssueBtn(
+                        label: '完结待办',
+                        onPressed:
+                            _saving ||
+                                _loading ||
+                                _loadFailed ||
+                                _picking ||
+                                _busyBatch ||
+                                _batch.isNotEmpty
+                            ? null
+                            : _finish,
+                      ),
+                    if (_canRetryReversal)
+                      _IssueBtn(
+                        label: '重试同步',
+                        primary: true,
+                        loading: _saving,
+                        onPressed: _saving || _loading ? null : _retryReversal,
+                      )
+                    else if (!_pendingReversal && (!_completed || _reversing))
+                      _IssueBtn(
+                        label: _saving
+                            ? '正在处理…'
+                            : (_reversing ? '确认红冲' : '确认本次开票'),
+                        primary: true,
+                        loading: _saving,
+                        onPressed: _canConfirm
+                            ? (_reversing ? _confirmReversal : _confirm)
+                            : null,
+                      ),
                   ],
                 ),
               ],
@@ -640,7 +839,11 @@ class _IssueInvoiceDialogState extends State<_IssueInvoiceDialog> {
     );
   }
 
-  Widget _fileCard({required String name, required String line}) {
+  Widget _fileCard({
+    required String name,
+    required String line,
+    Widget? trailing,
+  }) {
     return Container(
       margin: const EdgeInsets.only(top: 8),
       padding: const EdgeInsets.fromLTRB(8, 8, 10, 8),
@@ -693,6 +896,7 @@ class _IssueInvoiceDialogState extends State<_IssueInvoiceDialog> {
               ],
             ),
           ),
+          ?trailing,
         ],
       ),
     );
@@ -759,7 +963,9 @@ class _IssueInvoiceDialogState extends State<_IssueInvoiceDialog> {
               ),
               const SizedBox(height: 4),
               Text(
-                'PDF · 最多 $_maxBatchFiles 张 · 单张 20MB',
+                _reversing
+                    ? '红字 PDF · 单张 20MB'
+                    : '选传 · PDF · 最多 $_fileLimit 张 · 单张 20MB',
                 style: DunesTypography.sans(
                   fontSize: 11,
                   color: DunesColors.resolve(context, DunesColors.text3),
@@ -1082,11 +1288,36 @@ String _allocationLines(Map<String, dynamic> preview) {
   ].join('\n');
 }
 
+List<Map<String, dynamic>> _mapList(Object? raw) => [
+  if (raw is List)
+    for (final value in raw)
+      if (value is Map) Map<String, dynamic>.from(value),
+];
+
+String _issuedKey(Map<String, dynamic> item) =>
+    _nonEmptyText(item['objectKey']) ?? _nonEmptyText(item['url']) ?? '';
+
+String? _nonEmptyText(Object? value) {
+  final text = value?.toString().trim() ?? '';
+  return text.isEmpty ? null : text;
+}
+
 String _issuedMeta(Map<String, dynamic> item) {
   final line = xflowInvoiceLine(item);
-  if (line.isNotEmpty) return line;
-  if (item['invoiceUnrecognized'] == true) return '未能识别金额';
-  return '';
+  final status = switch (item['reversalStatus']) {
+    'FULL' => '已全额红冲',
+    'PARTIAL' => '部分红冲',
+    _ => '',
+  };
+  return [
+    if (line.isNotEmpty)
+      line
+    else if (item['invoiceUnrecognized'] == true)
+      '未能识别金额',
+    if (status.isNotEmpty) status,
+    if (item['reversalOf'] != null)
+      '红字发票 · 原票 ${_nonEmptyText(item['originalInvoiceNo']) ?? item['originalFileName'] ?? ''}',
+  ].join(' · ');
 }
 
 String _summaryLabel(XflowInvoiceSummary summary) {

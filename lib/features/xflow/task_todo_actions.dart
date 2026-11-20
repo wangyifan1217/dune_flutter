@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:file_selector/file_selector.dart';
@@ -14,6 +15,9 @@ import 'issue_invoice_todo.dart';
 import 'xflow_models.dart';
 import 'xflow_service.dart';
 import 'task_todo_fields.dart';
+import 'xflow_file_open.dart';
+
+part 'promotion_payment_todo.dart';
 
 const kTaskTodoMaxInvoiceFiles = 6;
 const kTaskTodoMaxInvoiceBytes = 20 * 1024 * 1024;
@@ -67,12 +71,19 @@ bool taskTodoSkipsPaymentVoucher(XflowProposalItem item) {
 }
 
 List<String> taskTodoCompleteKeys(XflowProposalItem item) {
-  return [
-    for (final key in item.requiredFields)
-      if (key != 'verifyResult' &&
-          !(key == 'paymentVoucher' && taskTodoSkipsPaymentVoucher(item)))
-        key,
-  ];
+  final action = item.primaryAction?.toUpperCase();
+  final keys = <String>{
+    ...item.requiredFields,
+    for (final def in item.requiredFieldDefs)
+      if (def.isUpload) def.key,
+  };
+  keys.remove('verifyResult');
+  if (taskTodoSkipsPaymentVoucher(item)) keys.remove('paymentVoucher');
+  if (action == 'UPLOAD_INVOICE') {
+    keys.remove('invoiceFiles');
+    keys.add('returnedInvoice');
+  }
+  return keys.toList();
 }
 
 class TaskTodoConfirmCopy {
@@ -131,18 +142,18 @@ TaskTodoConfirmCopy taskTodoConfirmCopy(
           ? '确认后进入「已付款」待办。完成已付款并填写实付金额后，才会进入资金借调。不重审。'
           : adminProc
           ? '确认后进入「已付款」待办（填实付金额）。不重审。'
-          : '确认后进入「已付款」待办（填实付金额和凭证）。不重审。',
+          : '确认后进入「已付款」待办（填实付金额，凭证选传）。不重审。',
     'MARK_PAID' =>
       loan
           ? '提交实付金额后进入资金借调，借出金额以实付为准。不重审。'
           : adminProc
           ? '提交实付金额后，按先票/先款进入核验或补票。不重审。'
-          : '提交实付金额和支付凭证后，按先票/先款进入核验或补票。不重审。',
-    'UPLOAD_INVOICE' => '请上传发票文件（可多张，电脑可拖拽）。提交后核验人会收到「核验发票」。不重审。',
+          : '提交实付金额后（凭证选传），按先票/先款进入核验或补票。不重审。',
+    'UPLOAD_INVOICE' => '发票文件选传，可多张，电脑可拖拽。提交后核验人会收到「核验发票」。不重审。',
     'URGE' => '只会提醒申请人上传发票，并保留申请人的「补传发票」待办。本条催办不办结，回票流程不会因此结束。',
-    'ISSUE_INVOICE' => '请上传或拖拽已开具的发票文件。登记后可以继续开票，全部完成后手动完结待办。',
+    'ISSUE_INVOICE' => '已开具的发票文件可以选传或拖拽。登记后可以继续开票，全部完成后手动完结待办。',
     'SEAL' => '确认盖章后，合同用印进入「填写快递单号」。不重审。',
-    'REPAY' => loan ? '提交还款金额后冲减资金借调剩余未还。不重审。' : '提交还款金额和凭证后关闭本条待办。不重审。',
+    'REPAY' => loan ? '提交还款金额后冲减资金借调剩余未还。不重审。' : '提交还款金额后（凭证选传）关闭本条待办。不重审。',
     'OPEN_ACCOUNT' => '请回填开户信息到本单。提交后抄送出纳，不重审。',
     _ => '确认完成该待办？提交后写入原单，不重新走审批。',
   };
@@ -153,6 +164,11 @@ TaskTodoConfirmCopy taskTodoConfirmCopy(
     body: body,
   );
 }
+
+bool isPromotionPaidTodo(XflowProposalItem item) =>
+    item.primaryAction?.toUpperCase() == 'MARK_PAID' &&
+    (item.templateKey == 'finance-promotion-payment' ||
+        item.businessType.toUpperCase() == 'FINANCE_PROMOTION_PAYMENT');
 
 /// 二次确认后调用 complete-task。成功返回 true。
 Future<bool> confirmAndCompleteTaskTodo({
@@ -171,6 +187,13 @@ Future<bool> confirmAndCompleteTaskTodo({
       item: item,
     );
   }
+  if (isPromotionPaidTodo(item)) {
+    return await showDialog<bool>(
+          context: context,
+          builder: (_) => _PromotionPaymentDialog(service: service, item: item),
+        ) ??
+        false;
+  }
   final extra = <String, dynamic>{};
   if (action == 'VERIFY_INVOICE') {
     extra['verifyResult'] = (verifyPassed ?? false) ? '通过' : '失败';
@@ -183,7 +206,6 @@ Future<bool> confirmAndCompleteTaskTodo({
       copy: copy,
       keys: keys,
       fieldDefs: item.requiredFieldDefs,
-      needsInvoiceFiles: taskTodoNeedsInvoiceFiles(action),
       loanWan: _isLoanRequestItem(item),
       service: service,
     ),
@@ -249,18 +271,18 @@ class _TaskTodoCompleteDialog extends StatefulWidget {
   const _TaskTodoCompleteDialog({
     required this.copy,
     required this.keys,
-    required this.needsInvoiceFiles,
     required this.service,
     this.fieldDefs = const [],
     this.loanWan = false,
+    this.onSave,
   });
 
   final TaskTodoConfirmCopy copy;
   final List<String> keys;
   final List<XflowTodoFieldDef> fieldDefs;
-  final bool needsInvoiceFiles;
   final XflowService service;
   final bool loanWan;
+  final Future<void> Function(_TaskTodoCompleteResult)? onSave;
 
   @override
   State<_TaskTodoCompleteDialog> createState() =>
@@ -274,6 +296,7 @@ class _TaskTodoCompleteDialogState extends State<_TaskTodoCompleteDialog> {
   String _pickingKey = 'invoiceFiles';
   bool _picking = false;
   bool _dragging = false;
+  bool _saving = false;
 
   List<_InvoiceFileItem> _filesOf(String key) =>
       _filesByKey.putIfAbsent(key, () => <_InvoiceFileItem>[]);
@@ -293,7 +316,7 @@ class _TaskTodoCompleteDialogState extends State<_TaskTodoCompleteDialog> {
   }
 
   Future<void> _pickFiles(String key) async {
-    if (_picking) return;
+    if (_picking || _saving) return;
     final remain = kTaskTodoMaxInvoiceFiles - _filesOf(key).length;
     if (remain <= 0) {
       showDunesToast(context, '最多上传 $kTaskTodoMaxInvoiceFiles 个文件');
@@ -324,7 +347,7 @@ class _TaskTodoCompleteDialogState extends State<_TaskTodoCompleteDialog> {
   }
 
   Future<void> _onDesktopDrop(String key, DropDoneDetails detail) async {
-    if (_picking) return;
+    if (_picking || _saving) return;
     setState(() {
       _picking = true;
       _pickingKey = key;
@@ -466,19 +489,17 @@ class _TaskTodoCompleteDialogState extends State<_TaskTodoCompleteDialog> {
       showDunesToast(context, '有文件上传失败，请移除后重试', kind: DunesToastKind.error);
       return false;
     }
-    if (files.where((item) => item.status == _InvoiceFileStatus.done).isEmpty) {
-      showDunesToast(context, '请上传$label', kind: DunesToastKind.error);
+    if (files.any((item) => item.objectKey.isEmpty)) {
+      showDunesToast(context, '$label未上传完成', kind: DunesToastKind.error);
       return false;
     }
     return true;
   }
 
-  void _submit() {
+  Future<void> _submit() async {
+    if (_saving || _picking) return;
     if (widget.copy.needComment && _commentCtrl.text.trim().isEmpty) {
       showDunesToast(context, '请填写原因', kind: DunesToastKind.error);
-      return;
-    }
-    if (widget.needsInvoiceFiles && !_validateFiles('invoiceFiles', '发票文件')) {
       return;
     }
     for (final key in widget.keys) {
@@ -487,23 +508,37 @@ class _TaskTodoCompleteDialogState extends State<_TaskTodoCompleteDialog> {
         return;
       }
     }
-    final payload = <String, dynamic>{
-      for (final key in widget.keys)
-        if (_isUploadKey(key))
-          key: _filePayload(key)
-        else
-          key: _fieldValues[key] ?? '',
-    };
-    if (widget.needsInvoiceFiles) {
-      payload['invoiceFiles'] = _filePayload('invoiceFiles');
+    final payload = <String, dynamic>{};
+    for (final key in widget.keys) {
+      if (_isUploadKey(key)) {
+        final files = _filePayload(key);
+        if (files.isNotEmpty) payload[key] = files;
+      } else {
+        payload[key] = _fieldValues[key] ?? '';
+      }
     }
-    Navigator.pop(
-      context,
-      _TaskTodoCompleteResult(
-        payload: payload,
-        comment: _commentCtrl.text.trim(),
-      ),
+    final result = _TaskTodoCompleteResult(
+      payload: payload,
+      comment: _commentCtrl.text.trim(),
     );
+    final save = widget.onSave;
+    if (save != null) {
+      setState(() => _saving = true);
+      try {
+        await save(result);
+      } catch (e) {
+        if (mounted) {
+          setState(() => _saving = false);
+          showDunesToast(
+            context,
+            friendlyErrorText(e),
+            kind: DunesToastKind.error,
+          );
+        }
+        return;
+      }
+    }
+    if (mounted) Navigator.pop(context, result);
   }
 
   @override
@@ -514,18 +549,17 @@ class _TaskTodoCompleteDialogState extends State<_TaskTodoCompleteDialog> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(copy.body),
-        if (widget.needsInvoiceFiles) ...[
-          const SizedBox(height: 12),
-          _fileDropZone('invoiceFiles', '发票文件'),
-        ],
         const SizedBox(height: 12),
         TextField(
           controller: _commentCtrl,
+          enabled: !_saving,
           minLines: 2,
           maxLines: 4,
           decoration: InputDecoration(
             labelText: copy.needComment
                 ? '原因（必填，会写到单据详情评论）'
+                : widget.onSave != null
+                ? '办理意见（随本次付款记录保存）'
                 : '办理意见（会写到单据详情评论）',
           ),
         ),
@@ -559,6 +593,7 @@ class _TaskTodoCompleteDialogState extends State<_TaskTodoCompleteDialog> {
                       }),
                     )
                   : TextField(
+                      enabled: !_saving,
                       decoration: InputDecoration(
                         labelText: _taskFieldLabel(
                           key,
@@ -576,31 +611,34 @@ class _TaskTodoCompleteDialogState extends State<_TaskTodoCompleteDialog> {
         ],
       ],
     );
-    if (widget.needsInvoiceFiles || widget.keys.any(_isUploadKey)) {
+    if (widget.keys.any(_isUploadKey)) {
       body = SizedBox(width: 460, child: SingleChildScrollView(child: body));
     }
-    return AlertDialog(
-      title: Text(copy.title),
-      content: body,
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('取消'),
-        ),
-        FilledButton(
-          onPressed: _submit,
-          style: copy.danger
-              ? FilledButton.styleFrom(
-                  backgroundColor: DunesColors.resolve(
-                    context,
-                    DunesColors.coral,
-                    role: DunesColorRole.surface,
-                  ),
-                )
-              : null,
-          child: Text(copy.okText),
-        ),
-      ],
+    return PopScope(
+      canPop: !_saving,
+      child: AlertDialog(
+        title: Text(copy.title),
+        content: body,
+        actions: [
+          TextButton(
+            onPressed: _saving ? null : () => Navigator.pop(context),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: _saving || _picking ? null : _submit,
+            style: copy.danger
+                ? FilledButton.styleFrom(
+                    backgroundColor: DunesColors.resolve(
+                      context,
+                      DunesColors.coral,
+                      role: DunesColorRole.surface,
+                    ),
+                  )
+                : null,
+            child: Text(_saving ? '正在保存…' : copy.okText),
+          ),
+        ],
+      ),
     );
   }
 
@@ -621,7 +659,7 @@ class _TaskTodoCompleteDialogState extends State<_TaskTodoCompleteDialog> {
             ),
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
-        onTap: full || _picking ? null : () => _pickFiles(key),
+        onTap: full || _picking || _saving ? null : () => _pickFiles(key),
         borderRadius: BorderRadius.circular(12),
         child: Container(
           width: double.infinity,
@@ -664,7 +702,7 @@ class _TaskTodoCompleteDialogState extends State<_TaskTodoCompleteDialog> {
               ),
               const SizedBox(height: 2),
               Text(
-                '图片 / PDF · 最多 $kTaskTodoMaxInvoiceFiles 个，单个不超过 20MB',
+                '选传 · 图片 / PDF · 最多 $kTaskTodoMaxInvoiceFiles 个，单个不超过 20MB',
                 style: DunesTypography.sans(
                   fontSize: 11,
                   color: DunesColors.resolve(context, DunesColors.text3),
@@ -731,7 +769,9 @@ class _TaskTodoCompleteDialogState extends State<_TaskTodoCompleteDialog> {
           ),
           IconButton(
             visualDensity: VisualDensity.compact,
-            onPressed: () => setState(() => _filesOf(key).remove(item)),
+            onPressed: _saving
+                ? null
+                : () => setState(() => _filesOf(key).remove(item)),
             icon: const Icon(Icons.close, size: 16),
           ),
         ],

@@ -761,7 +761,11 @@ class _NativeProposalListPageState extends State<_NativeProposalListPage> {
                                   onTap: () => _openProposal(item),
                                   onPrimaryAction:
                                       widget.type == _ListType.b13 &&
-                                          _isMyOpenTodo(item)
+                                          (_isMyOpenTodo(item) ||
+                                              _isCompletedIssueInvoice(item) ||
+                                              _isCompletedPromotionPayment(
+                                                item,
+                                              ))
                                       ? () => _completeB13Task(
                                           item,
                                           verifyPassed:
@@ -773,9 +777,13 @@ class _NativeProposalListPageState extends State<_NativeProposalListPage> {
                                         )
                                       : null,
                                   primaryActionLabel:
-                                      (item.primaryAction ?? '')
-                                              .toUpperCase() ==
-                                          'VERIFY_INVOICE'
+                                      _isCompletedIssueInvoice(item)
+                                      ? '发票红冲'
+                                      : _isCompletedPromotionPayment(item)
+                                      ? '付款记录'
+                                      : (item.primaryAction ?? '')
+                                                .toUpperCase() ==
+                                            'VERIFY_INVOICE'
                                       ? '核验通过'
                                       : item.actionTitle,
                                   onDangerAction:
@@ -1191,6 +1199,13 @@ String _normalizeStatus(String raw) {
   if (status == 'SUPERSEDED') return 'SUPERSEDED';
   return 'OTHER';
 }
+
+bool _isCompletedIssueInvoice(XflowProposalItem row) =>
+    row.todoHint?.status.toUpperCase() == 'DONE' &&
+    row.primaryAction?.toUpperCase() == 'ISSUE_INVOICE';
+
+bool _isCompletedPromotionPayment(XflowProposalItem row) =>
+    row.todoHint?.status.toUpperCase() == 'DONE' && isPromotionPaidTodo(row);
 
 bool _isMyOpenTodo(XflowProposalItem row) {
   final todoStatus = row.todoHint?.status.toUpperCase() ?? '';

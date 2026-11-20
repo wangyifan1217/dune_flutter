@@ -39,6 +39,7 @@ import '../conversation/conversation_realtime_service.dart';
 import '../conversation/conversation_service.dart';
 import '../conversation/im_user_status.dart';
 import '../conversation/inbox_format.dart';
+import '../conversation/inbox_widgets.dart' show WorkgroupTag;
 import '../desktop/windows_desktop_tray.dart';
 import '../drive/chat_save_to_drive.dart';
 import '../kb/kb_chat_share.dart';
@@ -11199,6 +11200,7 @@ class _NativeChatViewState extends State<NativeChatView>
       );
     }
     final title = conv.displayTitle;
+    final compactHeader = !isWideChatLayout(context);
     final locked = conv.dissolved;
     final memberLabel = conv.memberCount > 0 ? '${conv.memberCount} 人' : '';
     final subtitle = _isPrivate
@@ -11272,6 +11274,17 @@ class _NativeChatViewState extends State<NativeChatView>
                             ChatConvHeader(
                               title: title,
                               subtitle: subtitle,
+                              titleOnly: compactHeader,
+                              titleDetail:
+                                  compactHeader &&
+                                      conv.isGroup &&
+                                      memberLabel.isNotEmpty
+                                  ? '（$memberLabel）'
+                                  : null,
+                              titleBadge:
+                                  compactHeader && conv.isReplySlaWorkgroup
+                                  ? const WorkgroupTag()
+                                  : null,
                               onBack: widget.onBack,
                               showBackButton: widget.showBackButton,
                               showBottomBorder: isDesktopCommOnly,

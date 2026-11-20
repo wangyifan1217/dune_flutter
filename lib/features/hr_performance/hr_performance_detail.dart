@@ -19,6 +19,7 @@ const hrActionLabels = <String, String>{
   'submit_calibration': '整部门提交 HR',
   'approve_hr': 'HR 通过',
   'approve_department_hr': '本部门全部通过',
+  'send_department_final': '发送部门终审',
   'return_hr': '退回校准',
   'approve_final': '终审通过并下发',
   'reject_final': '驳回至初评',
@@ -78,16 +79,20 @@ class _HrPerformanceDetailState extends State<HrPerformanceDetail> {
   bool _busy = false;
   bool _showFullAssessment = false;
   Future<List<Map<String, dynamic>>>? _logs;
-  bool get _skipExecutiveCalibration => const {
-    '许正阳',
-    '郑咏熹',
-  }.contains('${_record.snapshot['divisionSupervisorName'] ?? ''}'.trim());
-  bool get _skipDirectReview =>
-      _record.snapshot['selfReview'] == true &&
-      const {
-        '许正阳',
-        '郑咏熹',
-      }.contains('${_record.snapshot['directSupervisorName'] ?? ''}'.trim());
+  bool get _skipExecutiveCalibration => _record.skipsExecutiveCalibration;
+  bool get _skipDirectReview => _record.skipsDirectReview;
+  String get _selfSubmissionMessage {
+    if (!_skipDirectReview) {
+      return '提交自评后进入主管初评。自评分数会保留给主管查看。';
+    }
+    if (_record.selfSupervised &&
+        !_skipExecutiveCalibration &&
+        _record.divisionSupervisorId != _record.userId) {
+      return '提交后自评分数将交由分管主管校准。';
+    }
+    return '提交后自评分数将直接交由 HR 审核。';
+  }
+
   String _actionLabel(String action) =>
       action == 'return_hr' && _skipDirectReview
       ? '退回自评'
@@ -297,9 +302,7 @@ class _HrPerformanceDetailState extends State<HrPerformanceDetail> {
                 : action == 'return_hr' && _skipExecutiveCalibration
                 ? '该考核跳过分管校准，将退回直属主管初评。'
                 : action == 'submit_self'
-                ? (_skipDirectReview
-                      ? '提交后自评分数将直接交由 HR 审核。'
-                      : '提交自评后进入主管初评。自评分数会保留给主管查看。')
+                ? _selfSubmissionMessage
                 : action == 'submit_calibration'
                 ? '本部门符合条件的人员全部到达校准后，将一并提交 HR；已进入后续节点的人员保持原节点。'
                 : action == 'undo_exempt'
@@ -355,6 +358,7 @@ class _HrPerformanceDetailState extends State<HrPerformanceDetail> {
             'remove_bonus',
             'assign_snapshot',
             'verify_history',
+            'send_department_final',
           ].contains(a),
         )
         .toList();

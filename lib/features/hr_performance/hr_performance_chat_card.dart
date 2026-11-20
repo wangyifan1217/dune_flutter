@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/dunes_theme.dart';
 import '../auth/auth_session.dart';
+import '../shell/dunes_toast.dart';
 import 'hr_performance_detail.dart';
+import 'hr_performance_department_final.dart';
 import 'hr_performance_overlay.dart';
 import 'hr_performance_service.dart';
 import 'hr_performance_sheets.dart';
@@ -27,11 +29,117 @@ class HrPerformanceChatCard extends StatefulWidget {
 
 class _HrPerformanceChatCardState extends State<HrPerformanceChatCard> {
   bool _expanded = false;
+  bool get _isPreview => widget.payload['preview'] == true;
+  bool _loadingFinal = false;
+  bool _loadedFinal = false;
+  Map<int, HrPerformanceRecord> _currentFinalRows = {};
+
+  Future<void> _refreshFinalRows() async {
+    if (_isPreview) return;
+    if (_loadingFinal) return;
+    setState(() => _loadingFinal = true);
+    try {
+      final records = await HrPerformanceService(
+        widget.session,
+      ).records('${widget.payload['month'] ?? ''}', 'all');
+      final ids = hrMaps(
+        widget.payload['rows'],
+      ).map((row) => int.tryParse('${row['id']}')).whereType<int>().toSet();
+      if (mounted) {
+        setState(() {
+          _currentFinalRows = {
+            for (final record in records)
+              if (ids.contains(record.id)) record.id: record,
+          };
+          _loadedFinal = true;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _loadedFinal = false);
+    } finally {
+      if (mounted) setState(() => _loadingFinal = false);
+    }
+  }
+
+  Future<void> _rejectFinal(int id) async {
+    if (_isPreview) {
+      showDunesToast(context, '这是样式预览，不会执行实际驳回');
+      return;
+    }
+    final service = HrPerformanceService(widget.session);
+    try {
+      final record = await service.detail(id);
+      if (!mounted) return;
+      if (!record.actions.contains('reject_final')) {
+        showDunesToast(
+          context,
+          '该考核已不在您的终审待办中，请刷新',
+          kind: DunesToastKind.error,
+        );
+        await _refreshFinalRows();
+        return;
+      }
+      final skipReview = record.skipsDirectReview;
+      final reason = await showHrReasonSheet(
+        context,
+        title: '驳回 ${record.name}',
+        minLength: 1,
+        message: skipReview ? '该人员将退回本人自评，其他人员不受影响。' : '该人员将退回主管初评，其他人员不受影响。',
+      );
+      if (reason == null || !mounted) return;
+      await service.action(record, {'action': 'reject_final', ...reason});
+      if (!mounted) return;
+      showDunesToast(context, '已驳回 ${record.name}');
+      await _refreshFinalRows();
+    } catch (e) {
+      if (mounted) {
+        showDunesToast(context, '驳回失败：$e', kind: DunesToastKind.error);
+      }
+    }
+  }
+
+  Future<void> _openDepartmentFinal(List<Map<String, dynamic>> rows) async {
+    if (_isPreview) {
+      await showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('部门确认 · 样式预览'),
+          content: Text(
+            '实际操作时，将核对本部门 ${rows.length} 人的最新状态；确认后通过并下发。此处为静态预览，不会提交。',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('知道了'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+    final ids = rows
+        .map((row) => int.tryParse('${row['id']}'))
+        .whereType<int>()
+        .where((id) => id > 0)
+        .toSet();
+    if (ids.isEmpty) return;
+    await showHrDepartmentFinal(
+      context,
+      HrPerformanceService(widget.session),
+      ids.first,
+      recordIds: ids,
+      departmentName: '${widget.payload['department'] ?? ''}',
+    );
+    if (mounted) await _refreshFinalRows();
+  }
+
   @override
   Widget build(BuildContext context) {
     final p = widget.payload, rows = hrMaps(widget.payload['rows']);
     final notice = p['hrPerformanceNotice'] == true;
     if (notice) return _noticeCard(p);
+    final departmentFinal = p['hrPerformanceFinalSummary'] == true;
+    final averageCoefficient = (p['averageCoefficient'] as num?)?.toDouble();
     final progress = p['progress'] is Map
         ? Map<String, dynamic>.from(p['progress'])
         : <String, dynamic>{};
@@ -90,7 +198,7 @@ class _HrPerformanceChatCardState extends State<HrPerformanceChatCard> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          '$hrPerformanceTitle汇总',
+                          departmentFinal ? '部门绩效终审' : '$hrPerformanceTitle汇总',
                           style: DunesTypography.sans(
                             fontSize: 13,
                             fontWeight: FontWeight.w700,
@@ -99,7 +207,9 @@ class _HrPerformanceChatCardState extends State<HrPerformanceChatCard> {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          '${p['month'] ?? ''} · 发送时快照',
+                          departmentFinal
+                              ? '${p['department'] ?? ''} · ${p['month'] ?? ''}'
+                              : '${p['month'] ?? ''} · 发送时快照',
                           style: DunesTypography.sans(
                             fontSize: 11,
                             color: muted,
@@ -122,10 +232,34 @@ class _HrPerformanceChatCardState extends State<HrPerformanceChatCard> {
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
               child: Text(
-                '共 ${rows.length} 人${p['hasScores'] == true ? ' · 含已下发结果' : ' · 考核进度'}',
+                departmentFinal
+                    ? '发送时共 ${rows.length} 人待终审'
+                    : '共 ${rows.length} 人${p['hasScores'] == true ? ' · 含已下发结果' : ' · 考核进度'}',
                 style: TextStyle(fontSize: 11.5, color: muted),
               ),
             ),
+            if (departmentFinal)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 2, 12, 6),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        '部门平均系数',
+                        style: DunesTypography.sans(fontSize: 12, color: muted),
+                      ),
+                    ),
+                    Text(
+                      averageCoefficient?.toStringAsFixed(2) ?? '—',
+                      style: DunesTypography.sans(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: accent,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             if (progress.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -155,96 +289,243 @@ class _HrPerformanceChatCardState extends State<HrPerformanceChatCard> {
               padding: const EdgeInsets.fromLTRB(10, 8, 10, 2),
               child: Column(
                 children: [
-                  for (final row in _expanded ? rows : rows.take(5))
-                    Material(
-                      color: Colors.transparent,
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(8),
-                        onTap: () => openHrPerformanceRecord(
-                          context,
-                          widget.session,
-                          int.tryParse('${row['id']}') ?? 0,
-                        ),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 4,
-                            vertical: 7,
+                  for (final row
+                      in _expanded
+                          ? rows
+                          : departmentFinal
+                          ? <Map<String, dynamic>>[]
+                          : rows.take(5))
+                    if (departmentFinal)
+                      _finalPersonRow(row, text, muted, accent)
+                    else
+                      Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(8),
+                          onTap: () => openHrPerformanceRecord(
+                            context,
+                            widget.session,
+                            int.tryParse('${row['id']}') ?? 0,
                           ),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      '${row['name']} · ${row['department'] ?? ''}',
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: DunesTypography.sans(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w600,
-                                        color: text,
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 4,
+                              vertical: 7,
+                            ),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        '${row['name']} · ${row['department'] ?? ''}',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: DunesTypography.sans(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w600,
+                                          color: text,
+                                        ),
                                       ),
-                                    ),
-                                    const SizedBox(height: 3),
-                                    Text(
-                                      p['hasScores'] == true &&
-                                              const [
-                                                'result',
-                                                'interview',
-                                                'archived',
-                                              ].contains(row['stage']) &&
-                                              row['total'] != null
-                                          ? '${row['total']} 分 · ${row['grade'] ?? '—'} · 系数 ${row['coefficient'] ?? '—'}'
-                                          : hrPerformanceStageLabels['${row['stage']}'] ??
-                                                '考核中',
-                                      style: DunesTypography.sans(
-                                        fontSize: 11,
-                                        color: muted,
+                                      const SizedBox(height: 3),
+                                      Text(
+                                        p['hasScores'] == true &&
+                                                const [
+                                                  'result',
+                                                  'interview',
+                                                  'archived',
+                                                ].contains(row['stage']) &&
+                                                row['total'] != null
+                                            ? '${row['total']} 分 · ${row['grade'] ?? '—'} · 系数 ${row['coefficient'] ?? '—'}'
+                                            : hrPerformanceStageLabels['${row['stage']}'] ??
+                                                  '考核中',
+                                        style: DunesTypography.sans(
+                                          fontSize: 11,
+                                          color: muted,
+                                        ),
                                       ),
-                                    ),
-                                  ],
+                                    ],
+                                  ),
                                 ),
-                              ),
-                              Text(
-                                '查看',
-                                style: DunesTypography.sans(
-                                  fontSize: 11,
+                                Text(
+                                  '查看',
+                                  style: DunesTypography.sans(
+                                    fontSize: 11,
+                                    color: accent,
+                                  ),
+                                ),
+                                Icon(
+                                  Icons.chevron_right_rounded,
+                                  size: 16,
                                   color: accent,
                                 ),
-                              ),
-                              Icon(
-                                Icons.chevron_right_rounded,
-                                size: 16,
-                                color: accent,
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
                         ),
                       ),
-                    ),
                 ],
               ),
             ),
-            if (rows.length > 5)
+            if (!departmentFinal && rows.length > 5)
               TextButton(
                 style: TextButton.styleFrom(
                   foregroundColor: accent,
                   textStyle: DunesTypography.sans(fontSize: 12),
                 ),
-                onPressed: () => setState(() => _expanded = !_expanded),
-                child: Text(_expanded ? '收起' : '展开全部 ${rows.length} 人'),
+                onPressed: () {
+                  setState(() => _expanded = !_expanded);
+                  if (_expanded && departmentFinal) _refreshFinalRows();
+                },
+                child: Text(_expanded ? '收起人员' : '展开全部 ${rows.length} 人'),
+              ),
+            if (departmentFinal && rows.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 2, 12, 12),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: accent,
+                          side: BorderSide(
+                            color: accent.withValues(alpha: 0.45),
+                          ),
+                          minimumSize: const Size(0, 36),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          textStyle: DunesTypography.sans(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        onPressed: () {
+                          setState(() => _expanded = !_expanded);
+                          if (_expanded) _refreshFinalRows();
+                        },
+                        child: Text(
+                          _expanded ? '收起人员' : '展开人员（${rows.length}）',
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: FilledButton(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: accent,
+                          foregroundColor: Colors.white,
+                          disabledBackgroundColor: accent.withValues(
+                            alpha: 0.35,
+                          ),
+                          disabledForegroundColor: Colors.white70,
+                          padding: const EdgeInsets.symmetric(horizontal: 18),
+                          minimumSize: const Size(0, 36),
+                          visualDensity: VisualDensity.compact,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          textStyle: DunesTypography.sans(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        onPressed: _loadingFinal
+                            ? null
+                            : () => _openDepartmentFinal(rows),
+                        child: const Text('部门确认'),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             if (p['createdAt'] != null)
               Padding(
                 padding: const EdgeInsets.all(12),
                 child: Text(
-                  '发送于 ${hrDate(p['createdAt'])} · 数据不会自动更新',
+                  departmentFinal && _loadedFinal
+                      ? '发送于 ${hrDate(p['createdAt'])} · 人员状态已刷新'
+                      : '发送于 ${hrDate(p['createdAt'])} · 发送时快照',
                   style: TextStyle(fontSize: 11, color: muted),
                 ),
               ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _finalPersonRow(
+    Map<String, dynamic> row,
+    Color text,
+    Color muted,
+    Color accent,
+  ) {
+    final id = int.tryParse('${row['id']}') ?? 0;
+    final current = _currentFinalRows[id];
+    final total = _loadedFinal && current != null
+        ? current.snapshot['total']
+        : row['total'];
+    final grade = _loadedFinal && current != null
+        ? current.snapshot['grade']
+        : row['grade'];
+    final stage = _loadedFinal ? (current?.stageLabel ?? '无法查看') : '发送时待终审';
+    final canReject =
+        id > 0 &&
+        !_loadingFinal &&
+        (!_loadedFinal || (current?.actions.contains('reject_final') ?? false));
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 5),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${row['name'] ?? ''} · ${row['department'] ?? ''}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: DunesTypography.sans(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: text,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  '${total ?? '—'} 分${grade == null || '$grade'.isEmpty ? '' : ' · $grade'} · $stage',
+                  style: DunesTypography.sans(fontSize: 11, color: muted),
+                ),
+              ],
+            ),
+          ),
+          TextButton(
+            onPressed: canReject ? () => _rejectFinal(id) : null,
+            style: TextButton.styleFrom(
+              visualDensity: VisualDensity.compact,
+              padding: const EdgeInsets.symmetric(horizontal: 6),
+              minimumSize: const Size(0, 32),
+            ),
+            child: const Text('驳回'),
+          ),
+          TextButton(
+            onPressed: _isPreview
+                ? () => showDunesToast(context, '这是样式预览，不打开真实考核表')
+                : id > 0
+                ? () => openHrPerformanceRecord(context, widget.session, id)
+                : null,
+            style: TextButton.styleFrom(
+              foregroundColor: accent,
+              visualDensity: VisualDensity.compact,
+              padding: const EdgeInsets.symmetric(horizontal: 6),
+              minimumSize: const Size(0, 32),
+            ),
+            child: const Text('查看'),
+          ),
+        ],
       ),
     );
   }

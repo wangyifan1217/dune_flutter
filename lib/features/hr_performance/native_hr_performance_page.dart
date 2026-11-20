@@ -27,6 +27,7 @@ const _hrStageFlow = [
   'review',
   'calibration',
   'hr',
+  'ready_final',
   'final',
   'result',
   'interview',
@@ -39,6 +40,7 @@ const _hrStageShort = <String, String>{
   'review': '主管初评',
   'calibration': '绩效校准',
   'hr': 'HR 审核',
+  'ready_final': '待发送终审',
   'final': '终审',
   'result': '结果确认',
   'interview': '面谈',
@@ -52,6 +54,7 @@ const _hrStageColors = <String, Color>{
   'review': Color(0xFF7B5CD8),
   'calibration': Color(0xFF2F9E8F),
   'hr': Color(0xFF3E8E5A),
+  'ready_final': Color(0xFF6F55C7),
   'final': Color(0xFFD0892B),
   'result': Color(0xFFE06A4A),
   'interview': Color(0xFFC45B8A),
@@ -991,6 +994,162 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
     await _confirmStart(scopeLabel, recordIds: chosenIds);
   }
 
+  Future<void> _sendDepartmentFinal() async {
+    setState(() => _busy = true);
+    List<HrPerformanceRecord> all;
+    try {
+      all = await _service.records(_monthKey, 'all');
+    } catch (e) {
+      if (mounted) {
+        showDunesToast(context, '部门名单加载失败：$e', kind: DunesToastKind.error);
+      }
+      return;
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+    if (!mounted) return;
+    final groups = <int, List<HrPerformanceRecord>>{};
+    for (final r in all) {
+      final id = r.departmentId;
+      if (id == null ||
+          hrPerformanceExcludedLeader(r.name) ||
+          hrPerformanceDepartmentExcluded(
+            departmentId: id,
+            departmentName: r.department,
+            parents: _deptParent,
+            names: _deptName,
+          )) {
+        continue;
+      }
+      groups.putIfAbsent(id, () => []).add(r);
+      final seen = <int>{id};
+      var ancestor = _deptParent[id];
+      while (ancestor != null && seen.add(ancestor)) {
+        groups.putIfAbsent(ancestor, () => []).add(r);
+        ancestor = _deptParent[ancestor];
+      }
+    }
+    String departmentPath(int id, String fallback) {
+      final names = <String>[];
+      final seen = <int>{};
+      int? current = id;
+      while (current != null && seen.add(current)) {
+        names.add(
+          _deptName[current] ?? (current == id ? fallback : '部门 $current'),
+        );
+        current = _deptParent[current];
+      }
+      return names.reversed.join(' / ');
+    }
+
+    final candidates = groups.entries.toList()
+      ..sort(
+        (a, b) => departmentPath(
+          a.key,
+          a.value.first.department,
+        ).compareTo(departmentPath(b.key, b.value.first.department)),
+      );
+    if (candidates.isEmpty) {
+      showDunesToast(context, '本月暂无可选择的部门');
+      return;
+    }
+    bool pending(HrPerformanceRecord r) => !const {
+      'ready_final',
+      'final',
+      'result',
+      'interview',
+      'archived',
+      'exempt',
+    }.contains(r.stage);
+    final chosen = await showHrConfigPicker<int>(
+      context,
+      title: '选择发送终审的部门或子部门',
+      options: [
+        for (final entry in candidates)
+          HrConfigOption(
+            entry.key,
+            departmentPath(entry.key, entry.value.first.department),
+            subtitle:
+                '${entry.value.any((r) => r.departmentId != entry.key) ? '含下级部门' : '本部门'} · 待发送 ${entry.value.where((r) => r.stage == 'ready_final').length} 人 · 未完成 ${entry.value.where(pending).length} 人',
+          ),
+      ],
+      selected: const {},
+    );
+    if (!mounted || chosen == null || chosen.isEmpty) return;
+    final effective = chosen.where((id) {
+      final seen = <int>{id};
+      var parent = _deptParent[id];
+      while (parent != null && seen.add(parent)) {
+        if (chosen.contains(parent)) return false;
+        parent = _deptParent[parent];
+      }
+      return true;
+    }).toList();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('发送部门终审'),
+        content: Text(
+          '将检查所选 ${effective.length} 个部门及其下级部门。全部人员完成 HR 审核后才能发送终审；免考核及已归档人员不阻塞。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('确认发送'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || confirmed != true) return;
+    setState(() => _busy = true);
+    final results = <String>[];
+    for (final id in effective) {
+      final rows = groups[id]!;
+      final name = _deptName[id] ?? rows.first.department;
+      final waiting = rows.where(pending).length;
+      final ready = rows.where((r) => r.stage == 'ready_final').toList();
+      if (waiting > 0) {
+        results.add('$name：还有 $waiting 人未完成 HR 审核，暂不能发送');
+        continue;
+      }
+      if (ready.isEmpty) {
+        results.add('$name：暂无待发送终审的人员');
+        continue;
+      }
+      final anchor = ready.first;
+      try {
+        await _service.action(anchor, {
+          'action': 'send_department_final',
+          'departmentId': id,
+        });
+        results.add('$name：已发送');
+      } catch (e) {
+        results.add('$name：$e');
+      }
+    }
+    if (!mounted) return;
+    setState(() => _busy = false);
+    await _load();
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('发送结果'),
+        content: SingleChildScrollView(child: Text(results.join('\n'))),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('知道了'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<bool> _ensureScopedStart() async {
     if (_supportsBatchStart) return true;
     try {
@@ -1501,6 +1660,12 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
             icon: Icons.play_circle_outline,
             label: '开始考核',
             onTap: _busy || _loading ? null : _startMonth,
+          ),
+        if (_access.hr)
+          _HrAction(
+            icon: Icons.send_outlined,
+            label: '发送部门终审',
+            onTap: _busy || _loading ? null : _sendDepartmentFinal,
           ),
       ];
       return Material(

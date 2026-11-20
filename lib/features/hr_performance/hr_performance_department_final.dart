@@ -11,21 +11,35 @@ import 'hr_performance_template_ui.dart';
 Future<void> showHrDepartmentFinal(
   BuildContext context,
   HrPerformanceService service,
-  int recordId,
-) async {
+  int recordId, {
+  Set<int>? recordIds,
+  String? departmentName,
+}) async {
   await showDialog<void>(
     context: context,
     builder: (context) => Theme(
       data: hrConfigTheme(context),
-      child: _DepartmentFinalDialog(service: service, recordId: recordId),
+      child: _DepartmentFinalDialog(
+        service: service,
+        recordId: recordId,
+        recordIds: recordIds,
+        departmentName: departmentName,
+      ),
     ),
   );
 }
 
 class _DepartmentFinalDialog extends StatefulWidget {
-  const _DepartmentFinalDialog({required this.service, required this.recordId});
+  const _DepartmentFinalDialog({
+    required this.service,
+    required this.recordId,
+    this.recordIds,
+    this.departmentName,
+  });
   final HrPerformanceService service;
   final int recordId;
+  final Set<int>? recordIds;
+  final String? departmentName;
 
   @override
   State<_DepartmentFinalDialog> createState() => _DepartmentFinalDialogState();
@@ -57,14 +71,15 @@ class _DepartmentFinalDialogState extends State<_DepartmentFinalDialog> {
       if (!access.finalAccess) throw Exception('当前账号没有终审权限');
       final records = await widget.service.records(anchor.month, 'all');
       final departmentRows = records
-          .where((r) => r.departmentId == anchor.departmentId)
+          .where(
+            (r) => widget.recordIds == null
+                ? r.departmentId == anchor.departmentId
+                : widget.recordIds!.contains(r.id),
+          )
           .toList();
       final rows = departmentRows
           .where(
-            (r) =>
-                r.departmentId == anchor.departmentId &&
-                r.stage == 'final' &&
-                r.actions.contains('approve_final'),
+            (r) => r.stage == 'final' && r.actions.contains('approve_final'),
           )
           .toList();
       final totals = <int, double?>{};
@@ -129,6 +144,7 @@ class _DepartmentFinalDialogState extends State<_DepartmentFinalDialog> {
         'review',
         'calibration',
         'hr',
+        'ready_final',
       ].contains(r.stage)) {
         key = '前序环节';
       } else {
@@ -147,6 +163,7 @@ class _DepartmentFinalDialogState extends State<_DepartmentFinalDialog> {
       'review',
       'calibration',
       'hr',
+      'ready_final',
     ];
     return stages
         .map((stage) {
@@ -181,11 +198,7 @@ class _DepartmentFinalDialogState extends State<_DepartmentFinalDialog> {
       context,
       title: '驳回 ${record.name}',
       minLength: 1,
-      message:
-          record.snapshot['selfReview'] == true &&
-              const {'许正阳', '郑咏熹'}.contains(
-                '${record.snapshot['directSupervisorName'] ?? ''}'.trim(),
-              )
+      message: record.skipsDirectReview
           ? '该人员将退回本人自评，其他人员不受影响。'
           : '该人员将退回主管初评，其他人员不受影响。',
     );
@@ -212,7 +225,7 @@ class _DepartmentFinalDialogState extends State<_DepartmentFinalDialog> {
       builder: (context) => AlertDialog(
         title: const Text('确认部门终审'),
         content: Text(
-          '将通过并下发 ${_anchor?.department ?? ''} 当前列表中的 ${rows.length} 人。${_progress['前序环节']! > 0 ? '另有 ${_progress['前序环节']} 人尚在前序环节。' : ''}${_progress['待终审（其他）']! > 0 ? '另有 ${_progress['待终审（其他）']} 人当前不在您的办理范围。' : ''}请先逐一查看，并驳回需要修改的人员。',
+          '将通过并下发 ${widget.departmentName ?? _anchor?.department ?? ''} 当前列表中的 ${rows.length} 人。${_progress['前序环节']! > 0 ? '另有 ${_progress['前序环节']} 人尚在前序环节。' : ''}${_progress['待终审（其他）']! > 0 ? '另有 ${_progress['待终审（其他）']} 人当前不在您的办理范围。' : ''}请先逐一查看，并驳回需要修改的人员。',
         ),
         actions: [
           TextButton(
@@ -264,10 +277,14 @@ class _DepartmentFinalDialogState extends State<_DepartmentFinalDialog> {
 
   @override
   Widget build(BuildContext context) => AlertDialog(
-    title: Text(_anchor == null ? '部门终审' : '${_anchor!.department} · 部门终审'),
+    title: Text(
+      _anchor == null
+          ? '部门终审'
+          : '${widget.departmentName ?? _anchor!.department} · 部门终审',
+    ),
     content: SizedBox(
-      width: 620,
-      height: 440,
+      width: (MediaQuery.sizeOf(context).width - 80).clamp(200, 620),
+      height: (MediaQuery.sizeOf(context).height - 240).clamp(160, 440),
       child: _busy
           ? const Center(child: CircularProgressIndicator())
           : _error != null
@@ -276,7 +293,7 @@ class _DepartmentFinalDialogState extends State<_DepartmentFinalDialog> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '${_anchor!.month} · 本部门考核记录 ${_departmentRows.length} 人（不含下级部门）',
+                  '${_anchor!.month} · ${widget.recordIds == null ? '本部门考核记录' : '本次发送人员'} ${_departmentRows.length} 人${widget.recordIds == null ? '（不含下级部门）' : ''}',
                   style: const TextStyle(fontSize: 13),
                 ),
                 const SizedBox(height: 6),

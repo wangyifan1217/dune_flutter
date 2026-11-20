@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../core/theme/dunes_theme.dart';
+import '../../core/platform/desktop_features.dart';
 import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
 import '../conversation/conversation_models.dart';
@@ -39,6 +40,7 @@ class _HrPerformanceNoticePageState extends State<HrPerformanceNoticePage> {
   String? _error;
   Timer? _timer;
   int _epoch = 0;
+  bool _showFinalPreview = true;
 
   @override
   void initState() {
@@ -116,7 +118,9 @@ class _HrPerformanceNoticePageState extends State<HrPerformanceNoticePage> {
             onPressed: () => Navigator.pop(ctx, true),
             child: Text(
               '清空',
-              style: TextStyle(color: DunesColors.resolve(ctx, DunesColors.coral)),
+              style: TextStyle(
+                color: DunesColors.resolve(ctx, DunesColors.coral),
+              ),
             ),
           ),
         ],
@@ -231,10 +235,14 @@ class _HrPerformanceNoticePageState extends State<HrPerformanceNoticePage> {
   }
 
   Widget _body(Color surface, Color border, Color text, Color text3) {
-    if (widget.conversationId <= 0) {
+    final showPreview =
+        const bool.fromEnvironment('HR_FINAL_IM_PREVIEW') &&
+        isDesktopCommOnly &&
+        _showFinalPreview;
+    if (widget.conversationId <= 0 && !showPreview) {
       return _placeholder(text3, '还没有绩效提醒');
     }
-    if (_messages.isEmpty) {
+    if (_messages.isEmpty && !showPreview) {
       if (_busy || _clearing) {
         return const Center(
           child: SizedBox(
@@ -256,6 +264,68 @@ class _HrPerformanceNoticePageState extends State<HrPerformanceNoticePage> {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
           children: [
+            if (showPreview) ...[
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      '终审卡片 · 样式预览（示例数据）',
+                      style: TextStyle(fontSize: 12, color: text3),
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: '关闭预览',
+                    visualDensity: VisualDensity.compact,
+                    onPressed: () => setState(() => _showFinalPreview = false),
+                    icon: const Icon(Icons.close, size: 16),
+                  ),
+                ],
+              ),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: HrPerformanceChatCard(
+                  session: widget.session,
+                  payload: const {
+                    'hrPerformanceSummary': true,
+                    'hrPerformanceFinalSummary': true,
+                    'preview': true,
+                    'month': '2026-10',
+                    'department': '科技研发中心',
+                    'averageCoefficient': 1.03,
+                    'rows': [
+                      {
+                        'id': 1,
+                        'name': '示例员工 A',
+                        'department': 'AI研发',
+                        'total': 92.5,
+                        'grade': '良',
+                        'coefficient': 1.0,
+                        'stage': 'final',
+                      },
+                      {
+                        'id': 2,
+                        'name': '示例员工 B',
+                        'department': 'AI研发',
+                        'total': 86.0,
+                        'grade': '良',
+                        'coefficient': 1.0,
+                        'stage': 'final',
+                      },
+                      {
+                        'id': 3,
+                        'name': '示例员工 C',
+                        'department': '产品研发',
+                        'total': 95.0,
+                        'grade': '优',
+                        'coefficient': 1.1,
+                        'stage': 'final',
+                      },
+                    ],
+                  },
+                ),
+              ),
+              const SizedBox(height: 14),
+            ],
             if (_error != null)
               Padding(
                 padding: const EdgeInsets.only(bottom: 10),

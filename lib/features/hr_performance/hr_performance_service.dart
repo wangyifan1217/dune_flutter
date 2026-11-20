@@ -15,6 +15,7 @@ const hrPerformanceStageLabels = <String, String>{
   'review': '主管初评',
   'calibration': '绩效校准',
   'hr': 'HR 审核',
+  'ready_final': '待发送终审',
   'final': '总裁办终审',
   'result': '结果确认',
   'interview': '面谈',
@@ -55,6 +56,7 @@ class HrPerformanceRecord {
       userId = (json['userId'] as num).toInt(),
       departmentId = (json['departmentId'] as num?)?.toInt(),
       directSupervisorId = (json['directSupervisorId'] as num?)?.toInt(),
+      divisionSupervisorId = (json['divisionSupervisorId'] as num?)?.toInt(),
       month = '${json['month'] ?? ''}',
       stage = '${json['stage'] ?? 'opening'}',
       started = json.containsKey('startedAt')
@@ -81,6 +83,7 @@ class HrPerformanceRecord {
   final int userId;
   final int? departmentId;
   final int? directSupervisorId;
+  final int? divisionSupervisorId;
   final String month;
   final String stage;
   final bool? started;
@@ -100,6 +103,18 @@ class HrPerformanceRecord {
       const ['result', 'interview', 'archived'].contains(stage) &&
       workflow['archiveReason'] != '离职未确认';
   bool get probation => snapshot['probation'] == true;
+  bool get selfSupervised => directSupervisorId == userId;
+  bool get skipsExecutiveCalibration => const {
+    '许正阳',
+    '郑咏熹',
+  }.contains('${snapshot['divisionSupervisorName'] ?? ''}'.trim());
+  bool get skipsDirectReview =>
+      snapshot['selfReview'] == true &&
+      (selfSupervised ||
+          const {
+            '许正阳',
+            '郑咏熹',
+          }.contains('${snapshot['directSupervisorName'] ?? ''}'.trim()));
   bool get exemptionEligible => snapshot['exemptionEligible'] == true;
   List<String> get blockers =>
       (snapshot['blockers'] as List? ?? const []).map((v) => '$v').toList();

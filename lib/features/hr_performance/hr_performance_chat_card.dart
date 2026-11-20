@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../auth/auth_session.dart';
 import 'hr_performance_detail.dart';
-import 'hr_performance_department_final.dart';
 import 'hr_performance_overlay.dart';
 import 'hr_performance_service.dart';
 import 'hr_performance_sheets.dart';
@@ -265,6 +264,12 @@ class _HrPerformanceChatCardState extends State<HrPerformanceChatCard> {
         ? body.substring(reasonAt + reasonMarker.length).trim()
         : '';
     final recordId = int.tryParse('${payload['recordId']}') ?? 0;
+    final transition = RegExp(
+      r'^(\d{4}-\d{2}) · (.+)：当前节点 (.+)，请进入人事绩效查看。$',
+    ).firstMatch(body);
+    if (transition != null) {
+      return _transitionCard(transition, recordId);
+    }
     final surface = DunesColors.resolve(
       context,
       DunesColors.imSurface,
@@ -401,15 +406,6 @@ class _HrPerformanceChatCardState extends State<HrPerformanceChatCard> {
               alignment: Alignment.centerRight,
               child: Wrap(
                 children: [
-                  if (body.contains('当前节点 总裁办终审'))
-                    TextButton(
-                      onPressed: () => showHrDepartmentFinal(
-                        context,
-                        HrPerformanceService(widget.session),
-                        recordId,
-                      ),
-                      child: const Text('部门终审'),
-                    ),
                   TextButton(
                     style: TextButton.styleFrom(
                       foregroundColor: accent,
@@ -432,6 +428,124 @@ class _HrPerformanceChatCardState extends State<HrPerformanceChatCard> {
           else
             const SizedBox(height: 8),
         ],
+      ),
+    );
+  }
+
+  Widget _transitionCard(RegExpMatch transition, int recordId) {
+    final surface = DunesColors.resolve(
+      context,
+      DunesColors.imSurface,
+      role: DunesColorRole.surface,
+    );
+    final border = DunesColors.resolve(
+      context,
+      DunesColors.borderSoft,
+      role: DunesColorRole.border,
+    );
+    final soft = DunesColors.resolve(
+      context,
+      DunesColors.brandPurpleSoft,
+      role: DunesColorRole.surface,
+    );
+    final text = DunesColors.resolve(context, DunesColors.text);
+    final muted = DunesColors.resolve(context, DunesColors.text2);
+    final accent = DunesColors.resolve(context, DunesColors.brandPurple);
+    final caption = widget.caption?.trim() ?? '';
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 440),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(14, 14, 14, 8),
+          decoration: BoxDecoration(
+            color: surface,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: border),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      color: soft,
+                      borderRadius: BorderRadius.circular(9),
+                    ),
+                    child: Icon(
+                      Icons.fact_check_outlined,
+                      size: 18,
+                      color: accent,
+                    ),
+                  ),
+                  const SizedBox(width: 9),
+                  Expanded(
+                    child: Text(
+                      '绩效考核待办',
+                      style: DunesTypography.sans(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: text,
+                      ),
+                    ),
+                  ),
+                  if (caption.isNotEmpty)
+                    Text(caption, style: TextStyle(fontSize: 11, color: muted)),
+                ],
+              ),
+              const SizedBox(height: 13),
+              Text(
+                '${transition.group(2)} · ${transition.group(1)} 考核',
+                style: DunesTypography.sans(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: text,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                '发送时节点：${transition.group(3)}',
+                style: DunesTypography.sans(fontSize: 12, color: muted),
+              ),
+              const SizedBox(height: 10),
+              Container(height: 1, color: border),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      '当前进度请查看考核表',
+                      style: DunesTypography.sans(fontSize: 11, color: muted),
+                    ),
+                  ),
+                  if (recordId > 0)
+                    TextButton(
+                      style: TextButton.styleFrom(
+                        foregroundColor: accent,
+                        visualDensity: VisualDensity.compact,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        minimumSize: const Size(0, 36),
+                        textStyle: DunesTypography.sans(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      onPressed: () => openHrPerformanceRecord(
+                        context,
+                        widget.session,
+                        recordId,
+                      ),
+                      child: const Text('查看考核表'),
+                    ),
+                ],
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

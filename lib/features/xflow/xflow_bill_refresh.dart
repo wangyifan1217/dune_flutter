@@ -260,5 +260,14 @@ Future<XflowBillRefreshResult> refreshXflowApprovalBills({
       // Keep each unmatched original and mark it unavailable.
     }
   }
+  final receivable = xflowBillSelectedList(next['linkedArBills']);
+  if (next.containsKey('remainingInvoiceAmount') &&
+      receivable.isNotEmpty &&
+      receivable.every((row) => row['_billRefreshState'] == 'updated')) {
+    next['remainingInvoiceAmount'] = xflowBillSelectedRemainingSum(
+      receivable,
+      'invoice',
+    ).toStringAsFixed(2);
+  }
   return XflowBillRefreshResult(form: next, total: total, updated: updated);
 }

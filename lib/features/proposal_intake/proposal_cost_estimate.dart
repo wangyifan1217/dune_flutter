@@ -322,7 +322,10 @@ double? proposalCouponSalesReceivableRatio(
   Map<String, dynamic> form,
   List<String> skuIds,
 ) {
-  final want = skuIds.map((id) => id.trim()).where((id) => id.isNotEmpty).toSet();
+  final want = skuIds
+      .map((id) => id.trim())
+      .where((id) => id.isNotEmpty)
+      .toSet();
   var sum = 0.0;
   var found = false;
   void take(ProposalFinanceSettleTerms terms, double face) {
@@ -413,9 +416,7 @@ ProposalSettleLineView proposalSettleLineView(
         ? proposalRoundWan(scale * promotionMain.share)
         : (proposalScale > 0 ? proposalScale : scale);
     final lookupLabel = form == null ? '提案规模' : proposalTierLookupLabel(form);
-    final charge = !promotion && (lookup - scale).abs() > 0.001
-        ? scale
-        : null;
+    final charge = !promotion && (lookup - scale).abs() > 0.001 ? scale : null;
     final plans = proposalSettleTierPlans(terms);
     final results = [
       for (final plan in plans)
@@ -664,8 +665,7 @@ class ProposalProductScaleGap {
   /// 正数是还差，负数是多了。
   double get delta => proposalRoundWan(total - filled);
 
-  bool get aligned =>
-      productCount > 0 && emptyCount == 0 && delta.abs() < 0.01;
+  bool get aligned => productCount > 0 && emptyCount == 0 && delta.abs() < 0.01;
 }
 
 ProposalProductScaleGap proposalProductScaleGap(Map<String, dynamic> form) {
@@ -733,8 +733,14 @@ Map<String, String> proposalPrefillAnnualScales(Map<String, dynamic> form) {
     owned += value;
   }
   final pool = math.max(0.0, total - owned);
-  final faced = [for (final id in open) if ((faces[id] ?? 0) > 0) id];
-  final faceless = [for (final id in open) if ((faces[id] ?? 0) <= 0) id];
+  final faced = [
+    for (final id in open)
+      if ((faces[id] ?? 0) > 0) id,
+  ];
+  final faceless = [
+    for (final id in open)
+      if ((faces[id] ?? 0) <= 0) id,
+  ];
   if (faced.isNotEmpty) {
     var weight = 0.0;
     for (final id in faced) {
@@ -990,7 +996,10 @@ String _proposalProvinceOfSkuIds(
   Map<String, dynamic> form,
   Iterable<String> skuIds,
 ) {
-  final want = skuIds.map((id) => id.trim()).where((id) => id.isNotEmpty).toSet();
+  final want = skuIds
+      .map((id) => id.trim())
+      .where((id) => id.isNotEmpty)
+      .toSet();
   if (want.isEmpty) return '';
   final provinces = <String>{};
   for (final sku in proposalIntakeAllSellableSkus(form)) {
@@ -1347,10 +1356,9 @@ double _proposalVatTaxBase(
 
 double _proposalVatTierAmount(ProposalFinanceSettleTerms terms, double scale) {
   return proposalRoundWan(
-    proposalSettleTierPlans(terms).fold<double>(
-      0,
-      (sum, plan) => sum + plan.evaluate(scale).amount,
-    ),
+    proposalSettleTierPlans(
+      terms,
+    ).fold<double>(0, (sum, plan) => sum + plan.evaluate(scale).amount),
   );
 }
 
@@ -1440,8 +1448,7 @@ String proposalCostFormulaSubstitution({
     ProposalCostEstimateKind.incomeTax =>
       '(${r(revenue)} − ${r(project)} − ${r(business)} − ${r(operating)}) × 25% = ${r(incomeBase * 0.25)} 万元',
     ProposalCostEstimateKind.businessBn ||
-    ProposalCostEstimateKind.businessU =>
-      '（收入 − 项目成本）× 填写的比例',
+    ProposalCostEstimateKind.businessU => '（收入 − 项目成本）× 填写的比例',
   };
 }
 
@@ -1490,8 +1497,7 @@ double? proposalEstimateAmountForName({
     ProposalCostEstimateKind.incomeTax =>
       math.max(0.0, revenue - procurement - project - business - operating) *
           0.25,
-    ProposalCostEstimateKind.businessBn ||
-    ProposalCostEstimateKind.businessU =>
+    ProposalCostEstimateKind.businessBn || ProposalCostEstimateKind.businessU =>
       _businessCostByFilledRatio(form, name, base - operating),
   };
 }
@@ -1972,10 +1978,7 @@ Map<String, List<String>> _proposalTierProvinceGroups(
 }
 
 /// 一组产品分到的规模：自己有结算规模用自己的，没有的平分剩余总规模。
-double _proposalAllocatedScale(
-  Map<String, dynamic> form,
-  List<String> skuIds,
-) {
+double _proposalAllocatedScale(Map<String, dynamic> form, List<String> skuIds) {
   if (skuIds.isEmpty) return 0;
   final want = skuIds.toSet();
   if (proposalProductScaleManual(form)) {
@@ -2114,8 +2117,15 @@ List<ProposalPayableCostHit> proposalPayableProjectCostHits(
 }) {
   final hits = <ProposalPayableCostHit>[];
   final covered = <String>{};
+  final sharedTravelDev = <String>{};
+  final travelDevLines = <String>{};
 
-  void addHit(ProposalFinanceSettleTerms terms, List<String> skuIds) {
+  void addHit(
+    ProposalFinanceSettleTerms terms,
+    List<String> skuIds, {
+    bool shared = false,
+    String lineId = '',
+  }) {
     final costName = proposalPayableBillCostName(
       terms,
       costNames: costNames,
@@ -2136,10 +2146,22 @@ List<ProposalPayableCostHit> proposalPayableProjectCostHits(
       );
       return;
     }
-    final unused = [
-      for (final id in ids)
-        if (!covered.contains('$id|$costName')) id,
-    ];
+    final unused = <String>[];
+    for (final id in ids) {
+      final key = '$id|$costName';
+      if (costName == '应付出行-开发费') {
+        final lineKey = '$key|$lineId';
+        if ((!shared && sharedTravelDev.contains(key)) ||
+            (lineId.isNotEmpty && travelDevLines.contains(lineKey))) {
+          continue;
+        }
+        if (shared) sharedTravelDev.add(key);
+        if (lineId.isNotEmpty) travelDevLines.add(lineKey);
+        unused.add(id);
+      } else if (!covered.contains(key)) {
+        unused.add(id);
+      }
+    }
     if (unused.isEmpty) return;
     for (final id in unused) {
       covered.add('$id|$costName');
@@ -2151,7 +2173,7 @@ List<ProposalPayableCostHit> proposalPayableProjectCostHits(
 
   for (final group in proposalIntakeSharedSettlements(form)) {
     if (group.isBlank) continue;
-    addHit(group.terms, group.skuIds);
+    addHit(group.terms, group.skuIds, shared: true, lineId: group.id);
   }
   for (final sku in proposalIntakeAllSellableSkus(form)) {
     for (final settle in proposalIntakeSkuSettlements(sku)) {
@@ -2163,10 +2185,11 @@ List<ProposalPayableCostHit> proposalPayableProjectCostHits(
                 : settle.terms.billType,
           ),
           [sku.id],
+          lineId: settle.id,
         );
         continue;
       }
-      addHit(settle.terms, [sku.id]);
+      addHit(settle.terms, [sku.id], lineId: settle.id);
     }
   }
 

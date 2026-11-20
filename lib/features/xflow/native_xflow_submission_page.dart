@@ -148,9 +148,7 @@ class _NativeXflowSubmissionPageState extends State<NativeXflowSubmissionPage> {
         _assigneeNames = assigneeNames;
         _loading = false;
       });
-      if (_resolvedStatus.toUpperCase() == 'PENDING') {
-        unawaited(_refreshBills());
-      }
+      unawaited(_refreshBills());
       if (myTodo != null) {
         unawaited(_refreshPendingQueue());
       } else if (mounted) {
@@ -167,10 +165,7 @@ class _NativeXflowSubmissionPageState extends State<NativeXflowSubmissionPage> {
 
   Future<void> _refreshBills() async {
     final detail = _detail, template = _template;
-    if (detail == null ||
-        template == null ||
-        _resolvedStatus.toUpperCase() != 'PENDING')
-      return;
+    if (detail == null || template == null) return;
     final count = template.fields
         .where((field) => field.type == 'billCascade')
         .fold<int>(
@@ -739,11 +734,14 @@ class _NativeXflowSubmissionPageState extends State<NativeXflowSubmissionPage> {
                                         ),
                                       ),
                                     ),
-                                    if (!_billRefreshing &&
-                                        _billUpdated < _billTotal)
+                                    if (!_billRefreshing)
                                       TextButton(
                                         onPressed: _refreshBills,
-                                        child: const Text('重试'),
+                                        child: Text(
+                                          _billUpdated < _billTotal
+                                              ? '重试'
+                                              : '刷新账单',
+                                        ),
                                       ),
                                   ],
                                 ),

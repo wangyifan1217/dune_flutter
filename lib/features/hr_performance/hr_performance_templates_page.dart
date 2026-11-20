@@ -375,9 +375,8 @@ class _State extends State<HrPerformanceTemplatesPage> {
     }
     if (d['enabled'] == true &&
         (d['departmentIds'] as List).isEmpty &&
-        (d['userIds'] as List).isEmpty &&
-        (d['keywords'] as List).isEmpty) {
-      showDunesToast(context, '请指定适用部门、人员或岗位关键词');
+        (d['userIds'] as List).isEmpty) {
+      showDunesToast(context, '请指定适用部门或人员');
       return;
     }
     final next = [...templates],
@@ -647,7 +646,7 @@ class _State extends State<HrPerformanceTemplatesPage> {
   Widget scopeSection(BuildContext ctx) => HrConfigSection(
     title: '适用范围',
     icon: Icons.people_outline_rounded,
-    subtitle: '指定人员后，仅匹配所选人员。未指定人员时，先匹配部门，再匹配岗位关键词。',
+    subtitle: '指定人员后，仅匹配所选人员；未指定人员时按所选部门匹配。未配置人员或部门时，不自动分配模板。',
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -656,7 +655,7 @@ class _State extends State<HrPerformanceTemplatesPage> {
         scopeField(ctx, people: true),
         gap(),
         field(
-          '岗位关键词',
+          '岗位关键词（仅作备注）',
           TextFormField(
             key: ValueKey('keywords-${editing!['id']}'),
             initialValue: (editing!['keywords'] as List).join('，'),

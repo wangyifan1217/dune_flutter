@@ -1,6 +1,12 @@
 import 'package:dunes_app/features/xflow/xflow_bill_refresh.dart';
 import 'package:dunes_app/features/xflow/xflow_detail_widgets.dart';
 import 'package:dunes_app/features/xflow/xflow_models.dart';
+import 'package:dunes_app/features/xflow/approval_chat_share.dart';
+import 'package:dunes_app/features/xflow/approval_detail_dialog.dart';
+import 'package:dunes_app/features/auth/auth_session.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -29,6 +35,144 @@ Map<String, dynamic> snapshot(
   'remainingInvoiceable': 100,
 };
 void main() {
+  for (final (status, width) in [
+    ('PENDING', 800.0),
+    ('APPROVED', 800.0),
+    ('APPROVED', 390.0),
+    ('REJECTED', 800.0),
+    ('WITHDRAWN', 800.0),
+    ('VOIDED', 800.0),
+  ]) {
+    testWidgets('转发的 $status 审批打开时查询最新账单（宽度 $width）', (tester) async {
+      tester.view.physicalSize = Size(width, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      var queries = 0;
+      final client = MockClient((request) async {
+        final path = request.url.path;
+        Object data = <String, dynamic>{};
+        if (path.contains('/xflow/submissions/')) {
+          data = {
+            'id': 1,
+            'businessId': 1291,
+            'businessType': 'FINANCE_INVOICE_REQUEST',
+            'templateKey': 'finance-invoice-request',
+            'title': '发票申请',
+            'status': status,
+            'createdAt': '2026-11-11T10:54:18Z',
+            'formData': {
+              'linkedArBills': [snapshot(40999, 'AR')],
+              'remainingInvoiceAmount': '100.00',
+              'invoiceTotalLimit': '100.00',
+            },
+          };
+        } else if (path.contains('/xflow/templates/')) {
+          data = {
+            'title': '发票申请',
+            'fields': [
+              {
+                'key': 'linkedArBills',
+                'type': 'billCascade',
+                'label': '关联应收账单',
+                'billDirection': 'AR',
+                'remainingKind': 'invoice',
+              },
+            ],
+          };
+        } else if (path.endsWith('/asset/bills')) {
+          queries++;
+          data = [
+            {
+              ...snapshot(40999, 'AR'),
+              'billAmount': 100,
+              'invoiceAmount': 40,
+              'remainingInvoiceable': 60,
+            },
+          ];
+        } else if (path.endsWith('/todos') ||
+            path.endsWith('/comments') ||
+            path.endsWith('/org/users')) {
+          data = <dynamic>[];
+        }
+        return http.Response(
+          jsonEncode({'success': true, 'data': data}),
+          200,
+          headers: {'content-type': 'application/json; charset=utf-8'},
+        );
+      });
+      await http.runWithClient(() async {
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Builder(
+              builder: (context) => TextButton(
+                onPressed: () => showApprovalDetailOverlay(
+                  context: context,
+                  session: const AuthSession(
+                    phone: '',
+                    userId: 99,
+                    token: 'test',
+                    apiBase: 'https://example.com/api/v1',
+                    roles: [],
+                  ),
+                  share: ApprovalChatShare(
+                    businessType: 'FINANCE_INVOICE_REQUEST',
+                    businessId: 1291,
+                    title: '发票申请',
+                    status: status,
+                  ),
+                  preferDialog: true,
+                ),
+                child: const Text('打开转发审批'),
+              ),
+            ),
+          ),
+        );
+        await tester.tap(find.text('打开转发审批'));
+        await tester.pumpAndSettle();
+        expect(queries, 1);
+        expect(find.textContaining('账单信息已更新 · 审批金额以提交时为准'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+        await tester.ensureVisible(find.text('刷新账单'));
+        await tester.tap(find.text('刷新账单'));
+        await tester.pumpAndSettle();
+        expect(queries, 2);
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pumpAndSettle();
+      }, () => client);
+    });
+  }
+
+  test('最新剩余可开同步到展示汇总，保留申请金额与原始快照', () async {
+    final original = {
+      'linkedArBills': [snapshot(1, 'AR')],
+      'remainingInvoiceAmount': '100.00',
+      'invoiceTotalLimit': '100.00',
+    };
+    final result = await refreshXflowApprovalBills(
+      form: original,
+      fields: [billField('linkedArBills', 'AR', kind: 'invoice')],
+      fetch:
+          ({
+            required billDirection,
+            required billTypeCode,
+            required dateStart,
+            required dateEnd,
+            required pageNum,
+          }) async => [
+            {
+              ...snapshot(1, 'AR'),
+              'invoiceAmount': 40,
+              'remainingInvoiceable': 60,
+            },
+          ],
+    );
+    expect(result.form['remainingInvoiceAmount'], '60.00');
+    expect(result.form['invoiceTotalLimit'], '100.00');
+    expect(original['remainingInvoiceAmount'], '100.00');
+    expect((original['linkedArBills'] as List).first['invoiceAmount'], 0);
+  });
   test('审批中刷新账单主体、项目、账期与金额，保留提交表单', () async {
     final original = {
       'bills': [

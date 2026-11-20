@@ -665,8 +665,14 @@ Future<Map<String, dynamic>?> showHrAdjustmentSheet(
 
 Future<Map<String, dynamic>?> showHrBonusSheet(
   BuildContext context,
-  Map<String, dynamic> config,
-) {
+  Map<String, dynamic> config, {
+  HrPerformanceRecord? record,
+}) {
+  final rules = config['rules'] is Map ? config['rules'] as Map : const {};
+  final singleCap = hrNumber(
+    record?.snapshot['singleDeductionCap'] ?? rules['singleDeductionCap'] ?? 5,
+  );
+  final monthlyCap = hrNumber(rules['monthlyDeductionCap'] ?? 20);
   final items = hrMaps(
     config['adjustmentItems'],
   ).where((i) => i['enabled'] == true).toList();
@@ -674,6 +680,9 @@ Future<Map<String, dynamic>?> showHrBonusSheet(
   return hrFormSheet(
     context,
     title: '录入本月加减分',
+    message:
+        '扣分单次最多 ${singleCap.toStringAsFixed(0)} 分，每月累计最多 ${monthlyCap.toStringAsFixed(0)} 分。'
+        '${record?.snapshot['deductionInstructions'] == null ? '' : '\n${record!.snapshot['deductionInstructions']}'}',
     values: {
       'itemId': items.first['id'],
       'points': '${items.first['points']}',
@@ -711,6 +720,10 @@ Future<Map<String, dynamic>?> showHrBonusSheet(
       ),
     ],
     submit: (v) {
+      final item = items.firstWhere((i) => i['id'] == v['itemId']);
+      if (item['direction'] == 'deduct' && hrNumber(v['points']) > singleCap) {
+        throw FormatException('本模板单次扣分不得超过 ${singleCap.toStringAsFixed(0)} 分');
+      }
       if (hrNumber(v['points']) <= 0 ||
           (items.firstWhere((i) => i['id'] == v['itemId'])['requireSource'] ==
                   true &&

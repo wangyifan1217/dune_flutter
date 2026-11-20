@@ -181,7 +181,13 @@ class _DepartmentFinalDialogState extends State<_DepartmentFinalDialog> {
       context,
       title: '驳回 ${record.name}',
       minLength: 1,
-      message: '该人员将退回主管初评，其他人员不受影响。',
+      message:
+          record.snapshot['selfReview'] == true &&
+              const {'许正阳', '郑咏熹'}.contains(
+                '${record.snapshot['directSupervisorName'] ?? ''}'.trim(),
+              )
+          ? '该人员将退回本人自评，其他人员不受影响。'
+          : '该人员将退回主管初评，其他人员不受影响。',
     );
     if (reason == null || !mounted) return;
     setState(() => _busy = true);

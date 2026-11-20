@@ -36,6 +36,8 @@ const hrActionLabels = <String, String>{
   'urge': '督办',
   'initialize': '生成考核表',
   'match_template': '自动匹配考核表',
+  'grade_policy': '等级标准调整',
+  'grade_recalculate': '等级系数重算',
   'assign': '补配快照',
   'auto_indicators': '窗口结束自动确认',
   'auto_result': '超时视为确认',
@@ -80,8 +82,16 @@ class _HrPerformanceDetailState extends State<HrPerformanceDetail> {
     '许正阳',
     '郑咏熹',
   }.contains('${_record.snapshot['divisionSupervisorName'] ?? ''}'.trim());
+  bool get _skipDirectReview =>
+      _record.snapshot['selfReview'] == true &&
+      const {
+        '许正阳',
+        '郑咏熹',
+      }.contains('${_record.snapshot['directSupervisorName'] ?? ''}'.trim());
   String _actionLabel(String action) =>
-      action == 'return_hr' && _skipExecutiveCalibration
+      action == 'return_hr' && _skipDirectReview
+      ? '退回自评'
+      : action == 'return_hr' && _skipExecutiveCalibration
       ? '退回初评'
       : hrActionLabels[action] ?? action;
   @override
@@ -201,7 +211,7 @@ class _HrPerformanceDetailState extends State<HrPerformanceDetail> {
         case 'request_adjustment':
           data = await showHrAdjustmentSheet(context, _record, _options!);
         case 'add_bonus':
-          data = await showHrBonusSheet(context, config);
+          data = await showHrBonusSheet(context, config, record: _record);
         case 'assign_snapshot':
           data = await showHrAssignmentSheet(
             context,
@@ -247,8 +257,9 @@ class _HrPerformanceDetailState extends State<HrPerformanceDetail> {
             context,
             title: '处理绩效申诉',
             targets: [
-              'review',
-              if (!_skipExecutiveCalibration) 'calibration',
+              if (!_skipDirectReview) 'review',
+              if (!_skipExecutiveCalibration && !_skipDirectReview)
+                'calibration',
               'hr',
               'reject',
             ],
@@ -281,10 +292,14 @@ class _HrPerformanceDetailState extends State<HrPerformanceDetail> {
             context,
             title: _actionLabel(action),
             minLength: requiredReason ? 1 : 0,
-            message: action == 'return_hr' && _skipExecutiveCalibration
+            message: action == 'return_hr' && _skipDirectReview
+                ? '该考核跳过主管初评，将退回本人自评。'
+                : action == 'return_hr' && _skipExecutiveCalibration
                 ? '该考核跳过分管校准，将退回直属主管初评。'
                 : action == 'submit_self'
-                ? '提交自评后进入主管初评。自评分数会保留给主管查看。'
+                ? (_skipDirectReview
+                      ? '提交后自评分数将直接交由 HR 审核。'
+                      : '提交自评后进入主管初评。自评分数会保留给主管查看。')
                 : action == 'submit_calibration'
                 ? '本部门符合条件的人员全部到达校准后，将一并提交 HR；已进入后续节点的人员保持原节点。'
                 : action == 'undo_exempt'
@@ -292,7 +307,7 @@ class _HrPerformanceDetailState extends State<HrPerformanceDetail> {
                 : action == 'urge'
                 ? '向该考核当前节点的办理人发送督办消息，请填写具体提醒内容。'
                 : action == 'confirm_result'
-                ? '请核对得分 ${_record.snapshot['total'] ?? '—'}、等级 ${_record.snapshot['grade'] ?? '—'}、系数 ${_record.snapshot['coefficient'] ?? '—'}。确认后直属主管将收到面谈待办。'
+                ? '请核对得分 ${_record.snapshot['total'] ?? '—'}、等级 ${_record.snapshot['grade'] ?? '—'}、系数 ${_record.snapshot['coefficient'] ?? '—'}。确认后${_skipDirectReview ? 'HR' : '直属主管'}将收到面谈待办。'
                 : _record.warnings.isNotEmpty
                 ? _record.warnings.join('；')
                 : null,

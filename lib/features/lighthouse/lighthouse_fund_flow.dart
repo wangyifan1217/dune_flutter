@@ -225,6 +225,11 @@ class _FundFlowPageState extends State<LighthouseFundFlowPage> {
   /// 流向图里点中的节点。
   String? _catSel;
 
+  /// 四大类走势（按当前粒度：日 = 近 30 天，月 = 近 12 个月）。
+  LhFlowSeries? _series;
+  String? _seriesError;
+  bool _seriesLoading = true;
+
   @override
   void initState() {
     super.initState();
@@ -234,6 +239,62 @@ class _FundFlowPageState extends State<LighthouseFundFlowPage> {
       _flowLoading = false;
     }
     unawaited(_fetchFlow());
+    unawaited(_fetchSeries());
+  }
+
+  Future<void> _fetchSeries() async {
+    final grain = _period.grain;
+    try {
+      final data = await widget.service.fetchFlowCategorySeries(grain: grain);
+      if (!mounted || grain != _period.grain) return;
+      setState(() {
+        _series = LhFlowSeries.fromJson(data);
+        _seriesError = null;
+        _seriesLoading = false;
+      });
+    } catch (e) {
+      if (!mounted || grain != _period.grain) return;
+      setState(() {
+        _seriesError = '$e'.replaceFirst('Exception: ', '');
+        _seriesLoading = false;
+      });
+    }
+  }
+
+  /// 点走势上的柱子：下面的流向图和分类明细切到那一天 / 那个月。
+  void _selectSeriesPoint(LhFlowSeriesPoint p) {
+    final d = DateTime.tryParse(p.key.length == 7 ? '${p.key}-01' : p.key);
+    if (d == null) return;
+    final now = DateTime.now();
+    if (_period.isDay) {
+      final today = DateTime(now.year, now.month, now.day);
+      final off = (DateTime(d.year, d.month, d.day).difference(today).inHours / 24).round();
+      _setPeriod(LhZgPeriod.day(off));
+    } else {
+      _setPeriod(LhZgPeriod.month((d.year * 12 + d.month) - (now.year * 12 + now.month)));
+    }
+  }
+
+  Future<void> _refreshAll() async {
+    await Future.wait<void>([_fetchFlow(), _fetchSeries()]);
+  }
+
+  Widget? _seriesCard(BuildContext context) {
+    final s = _series;
+    if (s == null) {
+      if (_seriesLoading) {
+        return Container(
+          height: 64,
+          alignment: Alignment.center,
+          decoration: _cardDeco(context),
+          child: Text('四大类走势加载中…', style: _sans(context, size: 11, color: _kInk2)),
+        );
+      }
+      return _statusBox(context, '四大类走势：${_seriesError ?? '暂无数据'}', onRetry: _fetchSeries);
+    }
+    // 没权限 / 没配资管：下面主卡片会说明，这里不重复。
+    if (s.restricted || s.unavailable) return null;
+    return _LhFlowSeriesCard(series: s, selectedKey: _period.param, onSelect: _selectSeriesPoint);
   }
 
   Future<void> _fetchFlow() async {
@@ -257,14 +318,21 @@ class _FundFlowPageState extends State<LighthouseFundFlowPage> {
 
   void _setPeriod(LhZgPeriod p) {
     if (p == _period) return;
+    final grainChanged = p.grain != _period.grain;
     setState(() {
       _period = p;
       _flow = null;
       _flowError = null;
       _flowLoading = true;
       _catSel = null;
+      if (grainChanged) {
+        _series = null;
+        _seriesError = null;
+        _seriesLoading = true;
+      }
     });
     unawaited(_fetchFlow());
+    if (grainChanged) unawaited(_fetchSeries());
   }
 
   String get _periodLabel => _period.isDay
@@ -275,6 +343,12 @@ class _FundFlowPageState extends State<LighthouseFundFlowPage> {
   Widget build(BuildContext context) {
     final d = _flow;
     final children = <Widget>[];
+    final trend = _seriesCard(context);
+    if (trend != null) {
+      children
+        ..add(trend)
+        ..add(const SizedBox(height: 10));
+    }
     if (_flowLoading && d == null) {
       children.add(_loadingBox(context));
     } else if (d == null) {
@@ -329,7 +403,7 @@ class _FundFlowPageState extends State<LighthouseFundFlowPage> {
     }
     return _scaffold(
       context,
-      onRefresh: _fetchFlow,
+      onRefresh: _refreshAll,
       header: _pageHeader(
         context,
         '资金流水',
@@ -1155,6 +1229,420 @@ class _TransferDetailSheetState extends State<_TransferDetailSheet> {
       ),
     );
   }
+}
+
+// ═════════════════════════════ 四大类走势 ═════════════════════════════
+//
+//   只看一天或一个月，净流入忽高忽低看不出趋势，所以页面顶上放一条走势：
+//   按日 = 近 30 天，按月 = 近 12 个月。每根柱子按四大类分段，流入往上、流出往下；
+//   黑点是那一期的净流入。按月叠一条「近 3 月平均」；按日可切到「月内累计」看这个月攒下多少。
+//   没快照的点画成灰色短横（断点，不当 0），取数失败的画成橙色。点柱子 = 下面切到那一期。
+//   数据：/lighthouse/fund-flow/category-series（后端 fund_flow_series.go）。
+
+class LhFlowSeriesPoint {
+  LhFlowSeriesPoint.fromJson(Map<String, dynamic> j)
+    : key = _fpStr(j['key']),
+      label = _fpStr(j['label']),
+      generated = j['generated'] == true,
+      failed = j['failed'] == true,
+      partial = j['partial'] == true,
+      net = _fpNum(j['net']),
+      running = _fpNum(j['running']),
+      byCategory = _flowSeriesCats(j['byCategory']);
+
+  final String key;
+  final String label;
+  final bool generated;
+  final bool failed;
+  final bool partial;
+  final double? net;
+  final double? running;
+  final Map<String, double> byCategory;
+
+  bool get hasData => generated && net != null;
+}
+
+Map<String, double> _flowSeriesCats(Object? v) {
+  final out = <String, double>{};
+  if (v is Map) {
+    for (final e in v.entries) {
+      final n = _fpNum(e.value);
+      if (n != null) out[e.key.toString()] = n;
+    }
+  }
+  return out;
+}
+
+class LhFlowSeries {
+  LhFlowSeries.fromJson(Map<String, dynamic> j)
+    : restricted = j['restricted'] == true,
+      unavailable = j['unavailable'] == true,
+      fixture = j['fixture'] == true,
+      grain = _fpStr(j['grain']),
+      runningLabel = _fpStr(j['runningLabel']),
+      categories = [
+        if (j['categories'] is List)
+          for (final c in j['categories'] as List)
+            if (c.toString().trim().isNotEmpty) c.toString().trim(),
+      ],
+      points = [for (final p in _fpList(j['points'])) LhFlowSeriesPoint.fromJson(p)];
+
+  final bool restricted;
+  final bool unavailable;
+  final bool fixture;
+  final String grain;
+  final String runningLabel;
+  final List<String> categories;
+  final List<LhFlowSeriesPoint> points;
+
+  bool get isDay => grain == 'day';
+}
+
+/// 四大类的固定配色：经营活动紫、筹资蓝、经营成本铜、项目成本淡紫、业务成本橙；接口多给的分类用灰。
+Color _flowSeriesColor(String name) => switch (name) {
+  '经营活动' => _kFpIn,
+  '筹资活动' => _kFin,
+  '经营成本' => _kCopper,
+  '项目成本' => _kFlIn,
+  '业务成本' => _kFpOut,
+  _ => _kMute,
+};
+
+class _LhFlowSeriesCard extends StatefulWidget {
+  const _LhFlowSeriesCard({required this.series, required this.selectedKey, required this.onSelect});
+
+  final LhFlowSeries series;
+  final String selectedKey;
+  final ValueChanged<LhFlowSeriesPoint> onSelect;
+
+  @override
+  State<_LhFlowSeriesCard> createState() => _LhFlowSeriesCardState();
+}
+
+class _LhFlowSeriesCardState extends State<_LhFlowSeriesCard> {
+  /// 按日时切到「月内累计」：累计量级是单日的几十倍，和单日柱子放一张图会把柱子压扁，所以切着看。
+  bool _cumulative = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = widget.series;
+    final pts = s.points;
+    if (pts.isEmpty) return _statusBox(context, '四大类走势：暂无数据');
+    final cumulative = s.isDay && _cumulative;
+    final sel = pts.indexWhere((p) => p.key == widget.selectedKey);
+    final noData = pts.where((p) => !p.hasData).length;
+
+    Widget chip(String text, bool on, VoidCallback onTap) => GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          color: _bg(context, on ? _kLavender : Colors.white),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: _ln(context, on ? _kPurple : _kEdge), width: 0.8),
+        ),
+        child: Text(
+          text,
+          style: _sans(context, size: 10, weight: on ? FontWeight.w600 : FontWeight.w400, color: on ? _kDeep : _kInk2),
+        ),
+      ),
+    );
+
+    Widget legend(String text, Color c, {bool line = false}) => Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: line ? 14 : 9,
+          height: line ? 2 : 9,
+          decoration: BoxDecoration(color: _fg(context, c), borderRadius: BorderRadius.circular(line ? 1 : 2)),
+        ),
+        const SizedBox(width: 4),
+        Text(text, style: _sans(context, size: 9.5, color: _kInk2)),
+      ],
+    );
+
+    final labelIdx = <int>{0, pts.length - 1, if (pts.length > 4) (pts.length - 1) ~/ 2};
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+      decoration: _cardDeco(context),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Text('四大类走势', style: _sans(context, size: 13, weight: FontWeight.w600)),
+              const SizedBox(width: 6),
+              Text(s.isDay ? '近 ${pts.length} 天 · 按日' : '近 ${pts.length} 个月 · 按月', style: _sans(context, size: 10, color: _kMute)),
+              if (s.fixture) ...[const SizedBox(width: 6), _tag(context, '样例', _kCopper, _kCopperSoft)],
+              const Spacer(),
+              if (s.isDay) ...[
+                chip('每日', !_cumulative, () => setState(() => _cumulative = false)),
+                const SizedBox(width: 4),
+                chip(s.runningLabel.isEmpty ? '月内累计' : s.runningLabel, _cumulative, () => setState(() => _cumulative = true)),
+              ],
+            ],
+          ),
+          const SizedBox(height: 10),
+          LayoutBuilder(
+            builder: (context, box) {
+              final w = box.maxWidth;
+              return GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTapUp: (d) {
+                  final i = math.max(0, math.min(pts.length - 1, (d.localPosition.dx / (w / pts.length)).floor()));
+                  widget.onSelect(pts[i]);
+                },
+                child: SizedBox(
+                  height: 132,
+                  width: w,
+                  child: CustomPaint(
+                    painter: _FlowSeriesPainter(
+                      points: pts,
+                      categories: s.categories,
+                      selected: sel,
+                      cumulative: cumulative,
+                      overlayRunning: !s.isDay,
+                      resolve: (c) => _fg(context, c),
+                      highlight: _bg(context, _kMist),
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+          const SizedBox(height: 4),
+          SizedBox(
+            height: 12,
+            child: LayoutBuilder(
+              builder: (context, box) {
+                final slot = box.maxWidth / pts.length;
+                return Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    for (final i in labelIdx)
+                      Positioned(
+                        left: i == 0 ? 0.0 : null,
+                        right: i == pts.length - 1 ? 0.0 : null,
+                        top: 0,
+                        child: i == 0 || i == pts.length - 1
+                            ? Text(pts[i].label, style: _mono(context, size: 9, color: _kMute))
+                            : Transform.translate(
+                                offset: Offset(slot * (i + 0.5) - 14, 0),
+                                child: Text(pts[i].label, style: _mono(context, size: 9, color: _kMute)),
+                              ),
+                      ),
+                  ],
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 10,
+            runSpacing: 4,
+            children: [
+              if (cumulative)
+                legend(s.runningLabel.isEmpty ? '月内累计' : s.runningLabel, _kDeep, line: true)
+              else ...[
+                for (final c in s.categories) legend(c, _flowSeriesColor(c)),
+                legend('净流入', _kInk),
+                if (!s.isDay) legend(s.runningLabel.isEmpty ? '近3月平均' : s.runningLabel, _kDeep, line: true),
+              ],
+              if (noData > 0) legend('无快照 $noData 期', _kMute),
+            ],
+          ),
+          if (sel >= 0) ...[
+            const SizedBox(height: 10),
+            _readout(context, s, pts[sel]),
+          ] else ...[
+            const SizedBox(height: 6),
+            Text('点柱子，下面切到那一${s.isDay ? '天' : '个月'}', style: _sans(context, size: 10, color: _kMute)),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _readout(BuildContext context, LhFlowSeries s, LhFlowSeriesPoint p) {
+    String v(double? x) => x == null ? '—' : '${_signedWan(x)}万';
+    Color tone(double? x) => x == null || x.abs() < 0.5 ? _kInk2 : (x > 0 ? _kFpIn : _kFpOut);
+    Widget cell(String label, double? x, {Color? dot}) => Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (dot != null) ...[
+          Container(width: 6, height: 6, decoration: BoxDecoration(color: _fg(context, dot), shape: BoxShape.circle)),
+          const SizedBox(width: 3),
+        ],
+        Text('$label ', style: _sans(context, size: 10, color: _kInk2)),
+        Text(v(x), style: _mono(context, size: 10.5, weight: FontWeight.w600, color: tone(x))),
+      ],
+    );
+    final status = p.failed
+        ? '这一期取数失败'
+        : !p.hasData
+        ? '这一期还没生成快照'
+        : null;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(color: _bg(context, _kNeutralPanel), borderRadius: BorderRadius.circular(8)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(p.label, style: _sans(context, size: 11, weight: FontWeight.w600)),
+              if (p.partial) ...[const SizedBox(width: 6), Text(s.isDay ? '今天 · 还在变' : '本月 · 还在变', style: _sans(context, size: 9.5, color: _kMute))],
+              const Spacer(),
+              if (status == null) cell('净流入', p.net),
+            ],
+          ),
+          const SizedBox(height: 6),
+          if (status != null)
+            Text(status, style: _sans(context, size: 10, color: _kMute))
+          else
+            Wrap(
+              spacing: 12,
+              runSpacing: 4,
+              children: [
+                for (final c in s.categories) cell(c, p.byCategory[c] ?? 0.0, dot: _flowSeriesColor(c)),
+                if (p.running != null) cell(s.runningLabel.isEmpty ? (s.isDay ? '月内累计' : '近3月平均') : s.runningLabel, p.running),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FlowSeriesPainter extends CustomPainter {
+  _FlowSeriesPainter({
+    required this.points,
+    required this.categories,
+    required this.selected,
+    required this.cumulative,
+    required this.overlayRunning,
+    required this.resolve,
+    required this.highlight,
+  });
+
+  final List<LhFlowSeriesPoint> points;
+  final List<String> categories;
+  final int selected;
+  final bool cumulative;
+  final bool overlayRunning;
+  final Color Function(Color) resolve;
+  final Color highlight;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final n = points.length;
+    if (n == 0) return;
+    final slot = size.width / n;
+    const top = 4.0;
+    final h = size.height - top - 2;
+
+    // 量程：每期正段之和 / 负段之和，叠线时把线也算进去。
+    var up = 0.0, down = 0.0;
+    void take(double v) {
+      if (v > up) up = v;
+      if (-v > down) down = -v;
+    }
+
+    for (final p in points) {
+      if (cumulative) {
+        if (p.running != null) take(p.running!);
+        continue;
+      }
+      if (!p.hasData) continue;
+      var pos = 0.0, neg = 0.0;
+      for (final v in p.byCategory.values) {
+        if (v > 0) pos += v;
+        if (v < 0) neg += v;
+      }
+      take(pos);
+      take(neg);
+      take(p.net!);
+      if (overlayRunning && p.running != null) take(p.running!);
+    }
+    if (up + down <= 0) up = 1;
+    final scale = h / (up + down);
+    final zeroY = top + up * scale;
+    double y(double v) => zeroY - v * scale;
+
+    if (selected >= 0 && selected < n) {
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(Rect.fromLTWH(slot * selected, 0, slot, size.height), const Radius.circular(3)),
+        Paint()..color = highlight,
+      );
+    }
+    canvas.drawLine(Offset(0, zeroY), Offset(size.width, zeroY), Paint()
+      ..color = resolve(_kEdge)
+      ..strokeWidth = 1);
+
+    final barW = math.max(2.0, math.min(18.0, slot * 0.62));
+    for (var i = 0; i < n; i++) {
+      final p = points[i];
+      final cx = slot * (i + 0.5);
+      if (!p.hasData) {
+        canvas.drawLine(
+          Offset(cx - barW / 2, zeroY),
+          Offset(cx + barW / 2, zeroY),
+          Paint()
+            ..color = resolve(p.failed ? _kFpWarn : _kMute)
+            ..strokeWidth = 2,
+        );
+        continue;
+      }
+      if (cumulative) continue;
+      final alpha = p.partial ? 140 : 255;
+      var posY = zeroY, negY = zeroY;
+      final names = [...categories, for (final k in p.byCategory.keys) if (!categories.contains(k)) k];
+      for (final name in names) {
+        final v = p.byCategory[name] ?? 0;
+        if (v.abs() < 0.5) continue;
+        final len = v.abs() * scale;
+        final paint = Paint()..color = resolve(_flowSeriesColor(name)).withAlpha(alpha);
+        if (v > 0) {
+          canvas.drawRect(Rect.fromLTWH(cx - barW / 2, posY - len, barW, len), paint);
+          posY -= len;
+        } else {
+          canvas.drawRect(Rect.fromLTWH(cx - barW / 2, negY, barW, len), paint);
+          negY += len;
+        }
+      }
+      canvas.drawCircle(Offset(cx, y(p.net!)), math.min(2.6, barW / 2 + 0.6), Paint()..color = resolve(_kInk));
+    }
+
+    // 线：按月 = 近 3 月平均叠在柱子上；按日切到累计时只画累计。null 处断开。
+    if (cumulative || overlayRunning) {
+      final line = Paint()
+        ..color = resolve(_kDeep)
+        ..strokeWidth = 1.6
+        ..style = PaintingStyle.stroke;
+      final dot = Paint()..color = resolve(_kDeep);
+      Path? path;
+      for (var i = 0; i < n; i++) {
+        final v = points[i].running;
+        if (v == null) {
+          if (path != null) canvas.drawPath(path, line);
+          path = null;
+          continue;
+        }
+        final o = Offset(slot * (i + 0.5), y(v));
+        if (path == null) {
+          path = Path()..moveTo(o.dx, o.dy);
+        } else {
+          path.lineTo(o.dx, o.dy);
+        }
+        canvas.drawCircle(o, cumulative ? 2.2 : 1.8, dot);
+      }
+      if (path != null) canvas.drawPath(path, line);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _FlowSeriesPainter old) =>
+      old.points != points || old.selected != selected || old.cumulative != cumulative || old.highlight != highlight;
 }
 
 // ═════════════════════════════ 转发到 IM ═════════════════════════════

@@ -323,15 +323,18 @@ class LighthouseService {
     }, '可见人员加载失败');
   }
 
-  /// 2026-11-13 · 资管损益：[period] = month / quarter / year 时返回该周期按账单所属月份的损益
-  /// （已按当前用户的数据规则过滤）；日 / 周回 applicable=false。见 lighthouse-go internal/lighthouse/pnl.go。
+  /// 资管损益：返回该周期内按「发生时间」（对账那天）归属的损益，已按当前用户的数据规则过滤。
+  /// 日 / 周 / 月 / 季 / 年都有；自定义区间传 [startDate] / [endDate]。见 lighthouse-go internal/lighthouse/pnl.go。
   Future<Map<String, dynamic>> fetchPnl({
     required String period,
     int offset = 0,
+    DateTime? startDate,
+    DateTime? endDate,
   }) {
     return _getData('/lighthouse/pnl', {
       'period': period,
       'offset': '$offset',
+      ..._rangeQuery(startDate, endDate),
     }, '资管损益加载失败');
   }
 
@@ -472,6 +475,25 @@ class LighthouseService {
       if (offset != null && offset != 0) 'offset': '$offset',
       ..._rangeQuery(startDate, endDate),
     }, '灯塔经营成本加载失败');
+  }
+
+  /// 2026-11-20 · 经营性净流入（标签一 / 标签三主 Hero）：资金流水页同一份数据（资管流水分类的
+  /// 「经营活动」），按财务流水统计，不再用账本里业务数据推出来的经营性净现金流。返回结构同
+  /// [fetchOperatingCost]，secondaries 是板块（带 prevNet），另有 caliber / missingPeriods /
+  /// restricted。公司级流水，后端按净TA 权限 + 资金流水的受限规则放行。
+  Future<Map<String, dynamic>> fetchOperatingInflow({
+    String? period,
+    String? date,
+    int? offset,
+    DateTime? startDate,
+    DateTime? endDate,
+  }) {
+    return _getData('/lighthouse/operating-inflow', {
+      if (period != null && period.isNotEmpty) 'period': period,
+      if (date != null && date.isNotEmpty) 'date': date,
+      if (offset != null && offset != 0) 'offset': '$offset',
+      ..._rangeQuery(startDate, endDate),
+    }, '经营性净流入加载失败');
   }
 
   /// 分析 tab 3D 坐标 + 机会清单（懒加载）。
@@ -704,6 +726,20 @@ class LighthouseService {
   /// 资管资金流水 · 流水分类。[period] = yyyy-MM-dd（当天快照）或 yyyy-MM（该月相加）。
   Future<Map<String, dynamic>> fetchFlowCategory({required String period}) {
     return _getData('/lighthouse/fund-flow/category', <String, String>{'period': period}, '流水分类加载失败');
+  }
+
+  /// 资管资金流水 · 四大类走势。[grain] = day（近 30 天）/ month（近 12 个月）。
+  /// 每个点是同一天 / 同一月的流水分类快照，和 [fetchFlowCategory] 同一口径、同一缓存。
+  Future<Map<String, dynamic>> fetchFlowCategorySeries({required String grain, String? end, int? count}) {
+    return _getData(
+      '/lighthouse/fund-flow/category-series',
+      <String, String>{
+        'grain': grain,
+        if (end != null && end.isNotEmpty) 'end': end,
+        if (count != null && count > 0) 'count': '$count',
+      },
+      '四大类走势加载失败',
+    );
   }
 
   /// 资管资金流水 · 资金调动月汇总（账号属性 × 资金属性）。

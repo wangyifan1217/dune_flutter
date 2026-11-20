@@ -15437,15 +15437,25 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
   String? _detailKey; // non-null when detail view is open
 
   // ── 资管损益（2026-11-13）─────────────────────────────────────────────
-  // 账本利润按交易记，不含资管对账后的损益（对方少认 / 多认）。损益按整张月度账单
-  // 对出来，拆不到天，所以只在 本月 / 本季 / 本年 视图把它加进利润、净利润：
-  // 大数和产品行显示「含损益」，下面一条写清 扣前 / 损益。日 / 周 / 自定义区间不动。
-  // 绩效不读这里。
+  // 账本利润按交易记，不含资管对账后的损益（对方少认 / 多认）。2026-11-20 起损益按
+  // 「发生时间」（对账那天）归属：前面某月多记的收入，哪天对账发现就扣在哪天，账单所属
+  // 月份只作「账期」展示。所以 日 / 周 / 月 / 季 / 年 / 自定义区间都扣：
+  // 大数和产品行显示「含损益」，下面一条写清 扣前 / 损益。绩效不读这里。
   Map<String, dynamic>? _pnl;
   String _pnlKey = '';
 
-  bool get _pnlPeriod =>
-      !_isCustomRange && const {'month', 'quarter', 'year'}.contains(_period);
+  bool get _pnlPeriod => true;
+
+  String get _pnlViewKey =>
+      '$_period|$_periodOffset|${_customStart?.toIso8601String() ?? ''}|${_customEnd?.toIso8601String() ?? ''}';
+
+  /// 走势上双击落到别的点时，行上的数换成那一点的，损益是当前周期的，不能叠上去。
+  bool get _pnlMatchesView {
+    final sel = _heroPagePointIndex;
+    if (sel == null) return true;
+    final keys = _heroSeriesMetrics['heroSeriesKeys'];
+    return keys is List && sel == keys.length - 1;
+  }
 
   Future<void> _loadPnl() async {
     if (widget.sharedCard != null || !_pnlPeriod) {
@@ -15454,7 +15464,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
       _pnlKey = '';
       return;
     }
-    final key = '$_period|$_periodOffset';
+    final key = _pnlViewKey;
     if (key != _pnlKey) {
       _pnl = null;
       _pnlKey = key;
@@ -15463,8 +15473,10 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
       final data = await _service.fetchPnl(
         period: _period,
         offset: _periodOffset,
+        startDate: _isCustomRange ? _customStart : null,
+        endDate: _isCustomRange ? _customEnd : null,
       );
-      if (!mounted || _pnlKey != key || '$_period|$_periodOffset' != key) {
+      if (!mounted || _pnlKey != key || _pnlViewKey != key) {
         return;
       }
       if (!_pnlPeriod) return;
@@ -15491,7 +15503,10 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
 
   /// 主 Hero 利润 / 净利润要加的损益；null = 这一屏不扣（大数保持扣前）。
   double? _heroPnlAdjust(List<Map<String, dynamic>> rows) {
-    if (_pnl == null || _detailKey != null || widget.sharedCard != null) {
+    if (_pnl == null ||
+        _detailKey != null ||
+        widget.sharedCard != null ||
+        !_pnlMatchesView) {
       return null;
     }
     if (!const {'product', 'supply', 'channel'}.contains(_tab)) return null;
@@ -15515,7 +15530,8 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
     if (_pnl == null ||
         _tab != 'product' ||
         _detailKey != null ||
-        widget.sharedCard != null) {
+        widget.sharedCard != null ||
+        !_pnlMatchesView) {
       return rows;
     }
     final seen = <String>{};
@@ -15669,7 +15685,13 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
         it['billTypeName']?.toString() ?? '',
       ].where((s) => s.trim().isNotEmpty).join(' · ');
       final op = _pnlOperator(it['operator']?.toString() ?? '');
-      final when = short(it['reconcileTime']?.toString() ?? '');
+      // 发生日 = 扣在哪天；老接口没有 pnlDate 时退回对账时间。
+      final when = short(
+        (it['pnlDate']?.toString().trim().isNotEmpty ?? false)
+            ? it['pnlDate'].toString()
+            : (it['reconcileTime']?.toString() ?? ''),
+      );
+      final source = it['dateSource']?.toString() ?? '';
       final reason = it['reason']?.toString().trim() ?? '';
       final prod = it['product']?.toString().trim() ?? '';
       final meta = [
@@ -15677,6 +15699,8 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
           when,
           op.isEmpty || op == '系统导入' ? op : '$op 对账',
         ].where((s) => s.trim().isNotEmpty).join(' '),
+        if (source == 'update') '无对账时间，按修改日计',
+        if (source == 'bill') '无对账时间，按账期计',
         if (reason.isNotEmpty) reason,
         if (showProduct && prod.isNotEmpty) prod,
       ].where((s) => s.trim().isNotEmpty).join(' · ');
@@ -15735,7 +15759,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
             SizedBox(height: _fs(2)),
             Text(
               '${sideWord(it['side']?.toString() ?? '')}'
-              ' · ${it['month'] ?? ''}'
+              ' · 账期 ${it['month'] ?? ''}'
               ' · 账单 ${_pnlWan(amount)} · 对账 ${_pnlWan(rec)}',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -16165,6 +16189,13 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
   String _opCostKey = '';
   bool _opCostLoading = false;
   bool _opCostOpen = false;
+
+  /// 经营性净流入（/lighthouse/operating-inflow，资金流水页同一份「经营活动」，按板块）。
+  /// 只挂标签一 / 标签三主 Hero。
+  Map<String, dynamic>? _opInflow;
+  String _opInflowKey = '';
+  bool _opInflowLoading = false;
+  bool _opInflowOpen = false;
   double? _savedMainListOffset;
 
   // Sort state
@@ -27268,6 +27299,10 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
   /// 当前板块没勾「经营性现金流」时，预收净增和经营性净现金流整块不出现。
   /// 旧接口没有 cashFlowAccess 时照旧显示。行上 prepaidStatus=hidden 是服务端已经裁过的数。
   bool _showOperatingCashFlow({Map<String, dynamic>? row}) {
+    // 2026-11-20 · 例会定：标签一（产品）/ 标签三（渠道）的经营性净流入按财务流水统计，
+    // 不再展示账本里业务数据推出来的经营性净现金流（列表行、详情、横条都不出）。
+    // 主 Hero 换成「经营性净流入」格（见 _opInflowEligible）。标签二保持原口径。
+    if (_tab == 'product' || _tab == 'channel') return false;
     if (row != null && row['prepaidStatus']?.toString() == 'hidden') {
       return false;
     }
@@ -34114,6 +34149,115 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
 
   bool get _opCostFresh => _opCostKey == _opCostRequestKey && _opCost != null;
 
+  // ───── 经营性净流入（财务流水口径，2026-11-20）──────────────────────────
+  // 标签一 / 标签三主 Hero「规模」栏尾，替掉原来的经营性净现金流。财务流水是公司级的，
+  // 挂不到单个产品 / 渠道，所以跟经营成本同一套规矩：一级主 Hero、全部分类、有净TA 权限才挂。
+  //
+  // 数据和资金流水页同一个（资管流水分类的「经营活动」），二级按板块拆。标签一选了分类时
+  // 按板块名对：板块名 = 分类名，或以「分类名-」开头（能源 → 能源-中石化 + 能源-中石油）；
+  // 对不上的分类（如未分类）这一格不挂。标签三的渠道分类跟板块不是一套，选了分类就不挂。
+  bool get _opInflowEligible =>
+      _hasNetTaAccess &&
+      (_tab == 'product' || _tab == 'channel') &&
+      _detailKey == null &&
+      (_groupFilter == '全部' || _tab == 'product');
+
+  /// 主 Hero 上这一格要不要出：加载中先占位；数据范围受限 / 分类对不上板块就不出。
+  bool get _opInflowShown {
+    if (!_opInflowEligible) return false;
+    if (!_opInflowFresh) return true;
+    if (_opInflow?['restricted'] == true) return false;
+    return _groupFilter == '全部' || _opInflowView != null;
+  }
+
+  /// 板块名对分类名：相等，或以「分类名-」开头。
+  List<Map<String, dynamic>> _opInflowSegmentsFor(String group) {
+    final g = group.trim();
+    if (g.isEmpty) return const <Map<String, dynamic>>[];
+    return [
+      for (final r in _opCostRows(_opInflow))
+        if ((r['name'] ?? '').toString().trim() == g ||
+            (r['name'] ?? '').toString().trim().startsWith('$g-'))
+          r,
+    ];
+  }
+
+  /// 这一格实际展示的数据：全部 = 整个经营活动；选了分类 = 对得上的板块之和（环比用板块的 prevNet
+  /// 自己算，规则同后端 absDeltaPct）；对不上 = null。
+  Map<String, dynamic>? get _opInflowView {
+    final data = _opInflow;
+    if (data == null || _groupFilter == '全部') return data;
+    if (_tab != 'product' || data['available'] != true) return null;
+    final segs = _opInflowSegmentsFor(_groupFilter);
+    if (segs.isEmpty) return null;
+    double sum(String k) => segs.fold<double>(0, (a, r) => a + _opNum(r[k]));
+    final net = sum('net');
+    final out = <String, dynamic>{
+      'available': true,
+      'net': net,
+      'inflow': sum('inflow'),
+      'outflow': sum('outflow'),
+      'secondaries': segs,
+      'caliber':
+          '财务流水 · 经营活动 · ${segs.map((r) => r['name']).join(' + ')}',
+      'window': data['window'],
+      'missingPeriods': data['missingPeriods'],
+    };
+    if (segs.every((r) => r['prevNet'] is num)) {
+      final prev = sum('prevNet');
+      if (prev != 0) {
+        final pct = (net - prev) / prev.abs() * 100;
+        out['deltaPct'] = double.parse(pct.abs().toStringAsFixed(2));
+        out['deltaDir'] = pct > 0 ? 'up' : (pct < 0 ? 'down' : 'flat');
+      }
+    }
+    return out;
+  }
+
+  bool get _opInflowFresh =>
+      _opInflowKey == _opCostRequestKey && _opInflow != null;
+
+  void _ensureOpInflowLoaded() {
+    final key = _opCostRequestKey;
+    if (_opInflowKey == key && (_opInflow != null || _opInflowLoading)) return;
+    _opInflowKey = key;
+    _opInflow = null;
+    _opInflowLoading = true;
+    unawaited(
+      _service
+          .fetchOperatingInflow(
+            period: _period,
+            offset: _periodOffset,
+            startDate: _customStart,
+            endDate: _customEnd,
+          )
+          .then(
+            (data) {
+              if (!mounted || _opInflowKey != key) return;
+              setState(() {
+                _opInflow = data;
+                _opInflowLoading = false;
+              });
+            },
+            onError: (Object _) {
+              if (!mounted || _opInflowKey != key) return;
+              setState(() {
+                _opInflow = const <String, dynamic>{'available': false};
+                _opInflowLoading = false;
+              });
+            },
+          ),
+    );
+  }
+
+  /// 净流入带符号：净流出写「-」，单位跟其他格一样。
+  ({String number, String unit}) _opInflowAmount(double v) {
+    return (
+      number: '${v < -0.005 ? '-' : ''}${_fmt(v.abs())}',
+      unit: _unit(v.abs()),
+    );
+  }
+
   void _ensureOpCostLoaded() {
     final key = _opCostRequestKey;
     if (_opCostKey == key && (_opCost != null || _opCostLoading)) return;
@@ -34149,8 +34293,8 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
 
   double _opNum(Object? v) => v is num ? v.toDouble() : 0;
 
-  List<Map<String, dynamic>> _opCostRows() {
-    final raw = _opCost?['secondaries'];
+  List<Map<String, dynamic>> _opCostRows([Map<String, dynamic>? src]) {
+    final raw = (src ?? _opCost)?['secondaries'];
     if (raw is! List) return const <Map<String, dynamic>>[];
     return [
       for (final e in raw)
@@ -34164,25 +34308,30 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
     return (number: _fmt(v.abs()), unit: _unit(v.abs()));
   }
 
-  /// 成本栏第四格。
-  Widget _buildOpCostCell() {
-    final fresh = _opCostFresh;
-    final available = fresh && _opCost?['available'] == true;
-    final open = _opCostOpen;
-    final net = _opNum(_opCost?['net']);
+  /// 成本栏第四格；[inflow] = 规模栏尾的经营性净流入（同一种格子，数据 / 方向不同）。
+  Widget _buildOpCostCell({bool inflow = false}) {
+    final src = inflow ? _opInflowView : _opCost;
+    final fresh = inflow ? _opInflowFresh : _opCostFresh;
+    final available = fresh && src?['available'] == true;
+    final open = inflow ? _opInflowOpen : _opCostOpen;
+    final net = _opNum(src?['net']);
+    final title = inflow ? '经营性净流入' : '经营成本';
     final plum = DunesColors.resolve(context, _LhPlum.primary);
     final deep = DunesColors.resolve(context, _LhPlum.deep);
-    final amount = _opCostAmount(net);
+    final amount = inflow ? _opInflowAmount(net) : _opCostAmount(net);
     final valueText = !fresh ? '…' : (available ? amount.number : '—');
     final unitText = available ? amount.unit : '';
-    final dir = _opCost?['deltaDir']?.toString();
-    final pct = _opCost?['deltaPct'];
+    final dir = src?['deltaDir']?.toString();
+    final pct = src?['deltaPct'];
     String? deltaText;
     var deltaColor = DunesColors.resolve(context, LhColors.mute2);
     if (available && pct is num && (dir == 'up' || dir == 'down')) {
       // 后端按带符号的净额算方向；这里显示的是支出金额（正数），
       // 净额为负时方向要翻过来：净额更负 = 支出变多 = ↑。
-      final costUp = net < 0 ? dir == 'down' : dir == 'up';
+      // 经营性净流入显示的就是带符号的净额，方向不翻。
+      final costUp = inflow
+          ? dir == 'up'
+          : (net < 0 ? dir == 'down' : dir == 'up');
       // 本期 ≈ 0（显示 0.00万）还挂「↑100%」自相矛盾 —— 不写环比。
       if (!(costUp && net.abs() < 50) &&
           lighthouseDeltaPctShown(pct.toDouble())) {
@@ -34197,7 +34346,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
     return Semantics(
       button: true,
       expanded: open,
-      label: open ? '收起经营成本明细' : '展开经营成本明细',
+      label: open ? '收起$title明细' : '展开$title明细',
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: () {
@@ -34206,7 +34355,13 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
                 ? LighthouseFeedbackKind.collapse
                 : LighthouseFeedbackKind.expand,
           );
-          setState(() => _opCostOpen = !open);
+          setState(() {
+            if (inflow) {
+              _opInflowOpen = !open;
+            } else {
+              _opCostOpen = !open;
+            }
+          });
         },
         child: Padding(
           padding: const EdgeInsets.only(top: lighthouseCompactHeroMetricGap),
@@ -34265,7 +34420,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
                             children: [
                               Flexible(
                                 child: Text(
-                                  '经营成本',
+                                  title,
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: LhTypography.sans(
@@ -34380,12 +34535,22 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
         )
       : grid;
 
+  /// 规模栏尾挂经营性净流入（标签一 / 标签三主 Hero）。
+  Widget _withOpInflowCell(bool show, Widget grid) => show
+      ? Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [grid, _buildOpCostCell(inflow: true)],
+        )
+      : grid;
+
   /// 点开后的面板：跟账本同一套「格子」。合计三格（净额是结果格），
   /// 下面一格一个二级分类，右上角是占比，淡紫底按占比铺。
-  Widget _buildOpCostPanel() {
-    final fresh = _opCostFresh;
-    final data = fresh ? _opCost : null;
+  Widget _buildOpCostPanel({bool inflow = false}) {
+    final fresh = inflow ? _opInflowFresh : _opCostFresh;
+    final data = fresh ? (inflow ? _opInflowView : _opCost) : null;
     final available = data?['available'] == true;
+    final title = inflow ? '经营性净流入' : '经营成本';
     final plum = DunesColors.resolve(context, _LhPlum.primary);
     final deep = DunesColors.resolve(context, _LhPlum.deep);
     final ink = DunesColors.resolve(context, LhColors.ink);
@@ -34405,7 +34570,12 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
 
     final window = (data?['window'] ?? '').toString().trim();
     final days = data?['activeDays'];
+    final caliber = (data?['caliber'] ?? '').toString().trim();
+    final missing = data?['missingPeriods'];
     final meta = [
+      if (inflow) caliber.isNotEmpty ? caliber : '财务流水 · 经营活动',
+      // 资管某几天还没生成快照：不当 0，写出来。
+      if (inflow && missing is num && missing > 0) '${missing.toInt()} 期未生成',
       if (window.isNotEmpty) window,
       if (days is num && days > 0) '${days.toInt()} 天有流水',
     ].join(' · ');
@@ -34452,7 +34622,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
         ),
         const SizedBox(width: 6),
         Text(
-          '经营成本',
+          title,
           style: LhTypography.sans(
             size: 12.5,
             color: deep,
@@ -34482,7 +34652,13 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
           behavior: HitTestBehavior.opaque,
           onTap: () {
             LighthouseFeedback.instance.play(LighthouseFeedbackKind.collapse);
-            setState(() => _opCostOpen = false);
+            setState(() {
+              if (inflow) {
+                _opInflowOpen = false;
+              } else {
+                _opCostOpen = false;
+              }
+            });
           },
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
@@ -34635,20 +34811,23 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
                     ),
                     const SizedBox(height: 6),
                     amountText(v, plus: v > 0),
-                    const SizedBox(height: 5),
-                    Text(
-                      '$d 天 · 出 $o / 入 $i',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: _tabular(
-                        LhTypography.sans(
-                          size: 9,
-                          color: mute2,
-                          height: 1.0,
-                          context: context,
+                    // 经营性净流入的板块没有天数（资管快照不给），不写这一行。
+                    if (r['days'] is num) ...[
+                      const SizedBox(height: 5),
+                      Text(
+                        '$d 天 · 出 $o / 入 $i',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: _tabular(
+                          LhTypography.sans(
+                            size: 9,
+                            color: mute2,
+                            height: 1.0,
+                            context: context,
+                          ),
                         ),
                       ),
-                    ),
+                    ],
                   ],
                 ),
               ),
@@ -34664,7 +34843,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
         padding: const EdgeInsets.symmetric(vertical: 18),
         child: Center(
           child: Text(
-            '经营成本加载中…',
+            '$title加载中…',
             style: LhTypography.sans(size: 11, color: mute2, context: context),
           ),
         ),
@@ -34674,14 +34853,14 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
         padding: const EdgeInsets.symmetric(vertical: 18),
         child: Center(
           child: Text(
-            '暂时拿不到经营成本（银行流水日报未接通）',
+            '暂时拿不到$title（银行流水日报未接通）',
             textAlign: TextAlign.center,
             style: LhTypography.sans(size: 11, color: mute2, context: context),
           ),
         ),
       );
     } else {
-      final rows = _opCostRows();
+      final rows = _opCostRows(data);
       final outs = [
         for (final r in rows)
           if (_opNum(r['net']) < 0) r,
@@ -34848,6 +35027,18 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
     if (showOpCost && _opCostKey != _opCostRequestKey) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _ensureOpCostLoaded();
+      });
+    }
+    // 经营性净流入：标签一 / 标签三一级主 Hero，规矩同经营成本（见 _opInflowEligible）。
+    final showOpInflow =
+        interactive &&
+        entityRow == null &&
+        !whiteBackground &&
+        sectionOnly == null &&
+        _opInflowShown;
+    if (showOpInflow && _opInflowKey != _opCostRequestKey) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _ensureOpInflowLoaded();
       });
     }
 
@@ -35645,28 +35836,33 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
                 child: strip(
                   sectionKey: 'scale',
                   title: '规模',
-                  child: metricGrid(
-                    [
-                      (key: 'sales', label: '销售额', value: sales, isRate: false),
-                      (
-                        key: 'verifiedSales',
-                        label: '核销额',
-                        value: verified,
-                        isRate: false,
-                      ),
-                      (key: 'gmv', label: 'GMV', value: gmv, isRate: false),
-                      // 2026-10-30 · 主 Hero：总的经营性净现金流放在规模最后一行。
-                      if (heroHasOwnShare &&
-                          _showOperatingCashFlow(row: entityRow))
+                  // 2026-11-20 · 标签一 / 标签三：栏尾换成财务流水的经营性净流入。
+                  child: _withOpInflowCell(
+                    showOpInflow,
+                    metricGrid(
+                      [
+                        (key: 'sales', label: '销售额', value: sales, isRate: false),
                         (
-                          key: 'prepaid',
-                          label: '经营性净现金流',
-                          value: prepaid,
+                          key: 'verifiedSales',
+                          label: '核销额',
+                          value: verified,
                           isRate: false,
                         ),
-                    ],
-                    columns: 1,
-                    divider: ledgerPanels ? sectionDivider('scale') : null,
+                        (key: 'gmv', label: 'GMV', value: gmv, isRate: false),
+                        // 2026-10-30 · 主 Hero：总的经营性净现金流放在规模最后一行。
+                        // 标签一 / 标签三不再出（_showOperatingCashFlow），只剩标签二。
+                        if (heroHasOwnShare &&
+                            _showOperatingCashFlow(row: entityRow))
+                          (
+                            key: 'prepaid',
+                            label: '经营性净现金流',
+                            value: prepaid,
+                            isRate: false,
+                          ),
+                      ],
+                      columns: 1,
+                      divider: ledgerPanels ? sectionDivider('scale') : null,
+                    ),
                   ),
                 ),
               ),
@@ -35759,6 +35955,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
         ),
         // 经营成本点开：就地展开在三块下面，跟账本行点开走势同一种动作。
         if (showOpCost && _opCostOpen) _buildOpCostPanel(),
+        if (showOpInflow && _opInflowOpen) _buildOpCostPanel(inflow: true),
         // 主 Hero 的经营性净现金流在「规模」里；账本行展开没有大数卡，保留横条。
         if ((whiteBackground || sectionOnly == 'cash') &&
             _showOperatingCashFlow(row: entityRow)) ...[
@@ -46479,6 +46676,8 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
 
     void add(String key) {
       if (key.isEmpty || key == 'discount' || !seen.add(key)) return;
+      // 标签一 / 标签三不出业务口径的经营性净现金流（见 _showOperatingCashFlow）。
+      if (key == 'prepaid' && (tab == 'product' || tab == 'channel')) return;
       cols.add(
         _LedgerCol(
           key,
@@ -47248,7 +47447,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
     // 同一产品维的一/二/三级会对不齐。
     final keys = lighthouseLedgerSummaryMetricRowsForTab(
       tab,
-    ).expand((row) => row);
+    ).expand((row) => row).map((k) => _ledgerSummaryKeyForTab(tab, k));
     return keys
         .map(
           (key) => _LedgerCol(
@@ -47368,6 +47567,13 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
     }
     return null;
   }
+
+  /// 2026-11-20 · 标签一 / 标签三的账本行不再出业务口径的经营性净现金流（财务流水挂不到行上），
+  /// 那一格换成净利润，2×3 格子不留空洞。标签二不变。
+  String _ledgerSummaryKeyForTab(String tab, String key) =>
+      key == 'prepaid' && (tab == 'product' || tab == 'channel')
+      ? 'netProfit'
+      : key;
 
   String _ledgerSummaryMetricLabel(String key) => switch (key) {
     'sales' => '销售额',
@@ -53903,7 +54109,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
         product: name,
         basis: _rowMarginBasis(r),
       ))
-        ...row,
+        for (final k in row) _ledgerSummaryKeyForTab(tab, k),
       'profit',
       'grossMargin',
     };

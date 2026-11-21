@@ -64,12 +64,7 @@ class DunesWeeklyReportCard extends StatelessWidget {
     FontWeight weight = FontWeight.w500,
   }) => TextStyle(
     color: DunesColors.resolve(context, color),
-    fontSize:
-        size *
-        (context
-                .dependOnInheritedWidgetOfExactType<_ReportDensity>()
-                ?.textScale ??
-            1),
+    fontSize: size,
     fontWeight: weight,
     height: 1.15,
     fontFeatures: const [FontFeature.tabularFigures()],
@@ -123,14 +118,7 @@ class DunesWeeklyReportCard extends StatelessWidget {
   static final _annualScale = RegExp(r'^预计年化总规模 \*\*([^*]+)\*\* · (.+)$');
 
   @override
-  Widget build(BuildContext context) => LayoutBuilder(
-    builder: (context, constraints) => _ReportDensity(
-      textScale: (constraints.maxWidth / 348).clamp(1.0, 1.40).toDouble(),
-      child: Builder(builder: _content),
-    ),
-  );
-
-  Widget _content(BuildContext context) {
+  Widget build(BuildContext context) {
     final sections = markdown.trim().split(_heading);
     final header = sections.first.split('\n');
     final purple = DunesColors.resolve(context, _purple);
@@ -169,7 +157,7 @@ class DunesWeeklyReportCard extends StatelessWidget {
             borderRadius: BorderRadius.circular(20),
           ),
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(11, 6, 11, 0),
+            padding: const EdgeInsets.fromLTRB(10, 6, 10, 0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -191,7 +179,7 @@ class DunesWeeklyReportCard extends StatelessWidget {
                         children: [
                           Text(
                             header.first.replaceFirst(RegExp(r'^#\s+'), ''),
-                            style: _style(context, 21, weight: FontWeight.w900),
+                            style: _style(context, 18, weight: FontWeight.w900),
                           ),
                           if (header.length > 1)
                             Text(
@@ -229,7 +217,7 @@ class DunesWeeklyReportCard extends StatelessWidget {
                       Expanded(
                         child: Text(
                           section.split('\n').first,
-                          style: _style(context, 15, weight: FontWeight.w800),
+                          style: _style(context, 13, weight: FontWeight.w800),
                         ),
                       ),
                       if (section.startsWith('实际经营\n') &&
@@ -278,7 +266,7 @@ class DunesWeeklyReportCard extends StatelessWidget {
                       label: const Text(
                         '转发',
                         style: TextStyle(
-                          fontSize: 13,
+                          fontSize: 12,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
@@ -293,7 +281,7 @@ class DunesWeeklyReportCard extends StatelessWidget {
     );
   }
 
-  String _reportPeriod(String period) => period.replaceFirstMapped(
+  static String _reportPeriod(String period) => period.replaceFirstMapped(
     RegExp(r'^(\d{4})\.(\d{2})\.(\d{2})\s*–\s*(?:(\d{4})\.)?(\d{2})\.(\d{2})'),
     (date) {
       final firstMonth = int.parse(date[2]!);
@@ -442,7 +430,6 @@ class DunesWeeklyReportCard extends StatelessWidget {
           ceiling: 100,
           labelFlex: 5,
           trackFlex: 10,
-          compactLabel: true,
         ),
       ],
     ]);
@@ -603,10 +590,10 @@ class DunesWeeklyReportCard extends StatelessWidget {
                   ),
                   Expanded(
                     flex: 2,
-                    child: _fitted(
+                    child: _valueText(
                       context,
                       _money(scale[1]!),
-                      29,
+                      18,
                       color: _purple,
                       weight: FontWeight.w900,
                       alignment: Alignment.center,
@@ -635,7 +622,6 @@ class DunesWeeklyReportCard extends StatelessWidget {
                   ],
                   labelFlex: 7,
                   trackFlex: 10,
-                  compactLabel: true,
                 ),
             ]),
           ),
@@ -917,7 +903,7 @@ class DunesWeeklyReportCard extends StatelessWidget {
           TextSpan(
             text: parts[i],
             style: i.isOdd
-                ? _style(context, 16, color: _purple, weight: FontWeight.w900)
+                ? _style(context, 14, color: _purple, weight: FontWeight.w900)
                 : null,
           ),
       ],
@@ -947,7 +933,11 @@ class DunesWeeklyReportCard extends StatelessWidget {
     final lines = text.trim().split('\n');
     final start = lines.indexWhere((line) => line.startsWith('|'));
     if (start < 0 || start + 2 >= lines.length) {
-      return RobotMarkdown(markdown: text.trim(), selectable: false);
+      return RobotMarkdown(
+        markdown: text.trim(),
+        selectable: false,
+        compact: true,
+      );
     }
     final table = lines
         .skip(start)
@@ -956,7 +946,11 @@ class DunesWeeklyReportCard extends StatelessWidget {
     if (table.any((row) => !row.endsWith('|')) ||
         table.length < 3 ||
         !RegExp(r'^\|[ |:-]+\|$').hasMatch(table[1])) {
-      return RobotMarkdown(markdown: text.trim(), selectable: false);
+      return RobotMarkdown(
+        markdown: text.trim(),
+        selectable: false,
+        compact: true,
+      );
     }
     List<String> cells(String line) {
       final parts = line.split('|');
@@ -972,12 +966,17 @@ class DunesWeeklyReportCard extends StatelessWidget {
     ];
     if (rows.first.isEmpty ||
         rows.any((row) => row.length != rows.first.length)) {
-      return RobotMarkdown(markdown: text.trim(), selectable: false);
+      return RobotMarkdown(
+        markdown: text.trim(),
+        selectable: false,
+        compact: true,
+      );
     }
     final before = lines.take(start).join('\n').trim();
     final after = lines.skip(start + table.length).join('\n').trim();
     return _stack([
-      if (before.isNotEmpty) RobotMarkdown(markdown: before, selectable: false),
+      if (before.isNotEmpty)
+        RobotMarkdown(markdown: before, selectable: false, compact: true),
       ClipRRect(
         borderRadius: BorderRadius.circular(5),
         child: Table(
@@ -1054,7 +1053,8 @@ class DunesWeeklyReportCard extends StatelessWidget {
           ],
         ),
       ),
-      if (after.isNotEmpty) RobotMarkdown(markdown: after, selectable: false),
+      if (after.isNotEmpty)
+        RobotMarkdown(markdown: after, selectable: false, compact: true),
     ]);
   }
 
@@ -1083,19 +1083,20 @@ class DunesWeeklyReportCard extends StatelessWidget {
     icon: icon,
   );
 
-  Widget _fitted(
+  Widget _valueText(
     BuildContext context,
     String value,
     double size, {
     Color color = _ink,
     FontWeight weight = FontWeight.w500,
     Alignment alignment = Alignment.centerLeft,
-  }) => FittedBox(
-    fit: BoxFit.scaleDown,
+  }) => Align(
     alignment: alignment,
     child: Text(
       value,
-      maxLines: 1,
+      textAlign: alignment == Alignment.center
+          ? TextAlign.center
+          : TextAlign.start,
       style: _style(context, size, color: color, weight: weight),
     ),
   );
@@ -1133,7 +1134,7 @@ class DunesWeeklyReportCard extends StatelessWidget {
                             const SizedBox(width: 4),
                           ],
                           Expanded(
-                            child: _fitted(
+                            child: _valueText(
                               context,
                               tile.label,
                               10,
@@ -1142,10 +1143,10 @@ class DunesWeeklyReportCard extends StatelessWidget {
                           ),
                         ],
                       ),
-                      _fitted(
+                      _valueText(
                         context,
                         tile.value,
-                        20,
+                        16,
                         color: tile.ink,
                         weight: FontWeight.w900,
                       ),
@@ -1196,7 +1197,6 @@ class DunesWeeklyReportCard extends StatelessWidget {
     double? ceiling,
     int labelFlex = 3,
     int trackFlex = 9,
-    bool compactLabel = false,
   }) {
     final max =
         ceiling ??
@@ -1211,17 +1211,10 @@ class DunesWeeklyReportCard extends StatelessWidget {
             children: [
               Expanded(
                 flex: labelFlex,
-                child: compactLabel
-                    ? _fitted(
-                        context,
-                        rows[i].label,
-                        10,
-                        weight: FontWeight.w700,
-                      )
-                    : Text(
-                        rows[i].label,
-                        style: _style(context, 10, weight: FontWeight.w700),
-                      ),
+                child: Text(
+                  rows[i].label,
+                  style: _style(context, 10, weight: FontWeight.w600),
+                ),
               ),
               Expanded(
                 flex: trackFlex,
@@ -1247,12 +1240,66 @@ class DunesWeeklyReportCard extends StatelessWidget {
   }
 }
 
-class _ReportDensity extends InheritedWidget {
-  const _ReportDensity({required this.textScale, required super.child});
+bool isForwardedDunesWeeklyReport(Map<String, dynamic>? payload) =>
+    payload?['robotKey'] == RobotCatalog.weeklyReportKey &&
+    payload?['robotMarkdown'] == true &&
+    payload?['forwardedFromRobot'] == true;
 
-  final double textScale;
+class DunesWeeklyReportShareTile extends StatelessWidget {
+  const DunesWeeklyReportShareTile({super.key, required this.markdown});
+
+  final String markdown;
 
   @override
-  bool updateShouldNotify(_ReportDensity oldWidget) =>
-      textScale != oldWidget.textScale;
+  Widget build(BuildContext context) {
+    final lines = markdown.trim().split('\n');
+    final period = lines.length > 1 && !lines[1].startsWith('#')
+        ? DunesWeeklyReportCard._reportPeriod(lines[1].trim())
+        : '';
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 320),
+      child: Card(
+        margin: EdgeInsets.zero,
+        child: ListTile(
+          dense: true,
+          leading: const Icon(Icons.bar_chart_rounded),
+          title: const Text('沙丘经营周报'),
+          subtitle: Text(period.isEmpty ? '查看周报' : period),
+          trailing: const Icon(Icons.chevron_right_rounded),
+          onTap: () => showDialog<void>(
+            context: context,
+            builder: (context) => Dialog(
+              insetPadding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 20,
+              ),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 560),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: IconButton(
+                        tooltip: '关闭周报',
+                        onPressed: () => Navigator.of(context).pop(),
+                        icon: const Icon(Icons.close),
+                      ),
+                    ),
+                    Flexible(
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+                        child: DunesWeeklyReportCard(markdown: markdown),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }

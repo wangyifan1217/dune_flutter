@@ -140,4 +140,44 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets(
+    'a forwarded report opens directly from chat without a weekly subscription',
+    (tester) async {
+      const payload = {
+        'robotKey': 'r_dunes_weekly_report',
+        'robotMarkdown': true,
+        'forwardedFromRobot': true,
+      };
+      expect(isForwardedDunesWeeklyReport(payload), isTrue);
+      expect(isForwardedDunesWeeklyReport({'robotMarkdown': true}), isFalse);
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: DunesWeeklyReportShareTile(
+              markdown: """
+# 沙丘经营周报
+2026.11.16 – 11.22
+
+## 灯塔资管
+流入 **10746.66 万元**　流出 **9.00 万元**　净流入 **10737.66 万元**
+""",
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('沙丘经营周报'));
+      await tester.pumpAndSettle();
+      expect(find.text('流入'), findsOneWidget);
+      final inflow = tester.widget<Text>(find.text('10,746.66万'));
+      final outflow = tester.widget<Text>(find.text('9万'));
+      expect(inflow.style!.fontSize, 16);
+      expect(outflow.style!.fontSize, inflow.style!.fontSize);
+      expect(find.text('转发'), findsNothing);
+      await tester.tap(find.byTooltip('关闭周报'));
+      await tester.pumpAndSettle();
+      expect(find.text('流入'), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
 }

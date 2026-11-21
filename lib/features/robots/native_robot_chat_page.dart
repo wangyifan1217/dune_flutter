@@ -706,36 +706,7 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
     if (_forwardingWeeklyReport) return;
     setState(() => _forwardingWeeklyReport = true);
     try {
-      final users = await _service.weeklyReportRecipients();
-      if (!mounted) return;
-      if (users.isEmpty) {
-        showDunesToast(context, '暂无其他已授权接收人');
-        return;
-      }
-      final result = await showDialog<String>(
-        context: context,
-        barrierDismissible: false,
-        builder: (_) => _WeeklyReportRecipientDialog(
-          users: users,
-          onForward: (id) => _service.forwardWeeklyReport(message.id, id),
-        ),
-      );
-      if (result != null && mounted) {
-        showDunesToast(
-          context,
-          result == 'duplicate' ? '对方已收到本期周报' : '已转发到对方的沙丘周报',
-          alignment: Alignment.topCenter,
-        );
-      }
-    } catch (error) {
-      if (mounted) {
-        showDunesToast(
-          context,
-          friendlyErrorText(error, fallback: '无法打开周报接收名单，请稍后重试'),
-          alignment: Alignment.topCenter,
-          kind: DunesToastKind.error,
-        );
-      }
+      await _forwardRobotReply(message);
     } finally {
       if (mounted) setState(() => _forwardingWeeklyReport = false);
     }
@@ -1328,7 +1299,7 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
                   key: _messageKey(m.id),
                   child: Center(
                     child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 690),
+                      constraints: const BoxConstraints(maxWidth: 560),
                       child: Padding(
                         padding: const EdgeInsets.only(bottom: 18),
                         child: DunesWeeklyReportCard(
@@ -1336,7 +1307,7 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
                           deliveryLabel: time,
                           scheduledDelivery: contentIndex == 0,
                           forwardBusy: _forwardingWeeklyReport,
-                          onForward: m.payload?['weeklyReportWeek'] == null
+                          onForward: m.bodyText.trim().isEmpty
                               ? null
                               : () => unawaited(_forwardWeeklyReport(m)),
                         ),
@@ -1618,126 +1589,7 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
   }
 }
 
-/// 对方气泡样式对齐 [ChatTextBubble]；宽表靠横向滚动，气泡宽度钉死避免撑破整页。
-class _WeeklyReportRecipientDialog extends StatefulWidget {
-  const _WeeklyReportRecipientDialog({
-    required this.users,
-    required this.onForward,
-  });
-
-  final List<Map<String, dynamic>> users;
-  final Future<String> Function(int) onForward;
-
-  @override
-  State<_WeeklyReportRecipientDialog> createState() =>
-      _WeeklyReportRecipientDialogState();
-}
-
-class _WeeklyReportRecipientDialogState
-    extends State<_WeeklyReportRecipientDialog> {
-  String _query = '';
-  int? _selected;
-  String? _error;
-  bool _sending = false;
-
-  Future<void> _submit(int id) async {
-    setState(() {
-      _sending = true;
-      _error = null;
-    });
-    try {
-      final result = await widget.onForward(id);
-      if (mounted) Navigator.of(context).pop(result);
-    } catch (error) {
-      if (!mounted) return;
-      setState(() {
-        _sending = false;
-        _error = friendlyErrorText(error, fallback: '周报转发失败，请稍后重试');
-      });
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final visible = widget.users.where(
-      (user) =>
-          '${user['name']} ${user['username']}'.toLowerCase().contains(_query),
-    );
-    return PopScope(
-      canPop: !_sending,
-      child: AlertDialog(
-        title: const Text('转发周报'),
-        content: SizedBox(
-          width: 360,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                enabled: !_sending,
-                decoration: const InputDecoration(hintText: '搜索已授权接收人'),
-                onChanged: (value) =>
-                    setState(() => _query = value.trim().toLowerCase()),
-              ),
-              const SizedBox(height: 6),
-              ConstrainedBox(
-                constraints: const BoxConstraints(maxHeight: 220),
-                child: visible.isEmpty
-                    ? const Padding(
-                        padding: EdgeInsets.all(14),
-                        child: Text('没有匹配的接收人'),
-                      )
-                    : ListView(
-                        shrinkWrap: true,
-                        children: [
-                          for (final user in visible)
-                            ListTile(
-                              dense: true,
-                              selected: _selected == user['id'],
-                              title: Text('${user['name']}'),
-                              subtitle: Text('${user['username']}'),
-                              trailing: _selected == user['id']
-                                  ? const Icon(Icons.check)
-                                  : null,
-                              onTap: _sending
-                                  ? null
-                                  : () => setState(
-                                      () => _selected = (user['id'] as num)
-                                          .toInt(),
-                                    ),
-                            ),
-                        ],
-                      ),
-              ),
-              if (_error case final error?)
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Text(
-                    error,
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.error,
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: _sending ? null : () => Navigator.of(context).pop(),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: _selected == null || _sending
-                ? null
-                : () => _submit(_selected!),
-            child: Text(_sending ? '发送中…' : '转发'),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
+/// 对方气泡样式对齐 [ChatTextBubble]；宽表靠横向滚动。
 class _RobotReplyBubble extends StatelessWidget {
   const _RobotReplyBubble({required this.child, this.wide = false});
 

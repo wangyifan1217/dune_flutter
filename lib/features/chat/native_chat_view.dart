@@ -52,6 +52,7 @@ import '../profile/work_profile_chat_share.dart';
 import '../kpi/kpi_score_summary_card.dart';
 import '../hr_performance/hr_performance_chat_card.dart';
 import '../kpi/kpi_summary_person_sheet.dart';
+import '../robots/dunes_weekly_report_card.dart';
 import '../robots/robot_markdown.dart';
 import '../shell/dunes_toast.dart';
 import '../weekly_summary/native_weekly_summary_page.dart';
@@ -9862,6 +9863,12 @@ class _NativeChatViewState extends State<NativeChatView>
     if(isHrPerformancePayload(m.payload)){
       return Align(alignment:mine?Alignment.centerRight:Alignment.centerLeft,child:HrPerformanceChatCard(payload:m.payload!,session:widget.session));
     }
+    if (isForwardedDunesWeeklyReport(m.payload)) {
+      return Align(
+        alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
+        child: DunesWeeklyReportShareTile(markdown: m.bodyText),
+      );
+    }
     if (_isRobotMarkdownPayload(m.payload)) {
       // 工作台转发的月度绩效汇总：渲染成汇总卡，不再把六列表格硬塞进气泡。
       final kpiSummary = KpiScoreSummaryData.fromMessage(m.payload, m.bodyText);
@@ -10147,6 +10154,9 @@ class _NativeChatViewState extends State<NativeChatView>
       );
     }
     if(isHrPerformancePayload(e.payload)){return HrPerformanceChatCard(payload:e.payload!,session:widget.session);}
+    if (isForwardedDunesWeeklyReport(e.payload)) {
+      return DunesWeeklyReportShareTile(markdown: e.text);
+    }
     if (_isRobotMarkdownPayload(e.payload)) {
       final kpiSummary = KpiScoreSummaryData.fromMessage(e.payload, e.text);
       if (kpiSummary != null) {

@@ -5,6 +5,7 @@ import '../../core/theme/dunes_theme.dart';
 import '../auth/auth_session.dart';
 import '../shell/dunes_toast.dart';
 import 'hr_performance_service.dart';
+import 'hr_performance_sheets.dart' show hrConfirmAction;
 import 'hr_performance_category.dart';
 import 'hr_performance_template_ui.dart';
 import 'hr_performance_search.dart';
@@ -291,6 +292,14 @@ class _HrPerformanceLibraryPageState extends State<HrPerformanceLibraryPage> {
         'category': draft.category,
       });
     }
+    if (!await hrConfirmAction(
+      context,
+      title: '保存指标库',
+      message: '将保存当前指标及评分标准。',
+    )) {
+      return;
+    }
+    if (!mounted) return;
     setState(() => _saving = true);
     try {
       final data = await _service.saveLibrary(

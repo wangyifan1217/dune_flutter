@@ -194,8 +194,6 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('全员'));
-    await tester.pumpAndSettle();
     await tester.tap(find.byType(Checkbox).last);
     await tester.pumpAndSettle();
     await tester.tap(find.text('开始考核'));
@@ -283,9 +281,12 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('全员'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byType(Checkbox).last);
+    await tester.tap(
+      find.descendant(
+        of: find.byKey(const ValueKey('hr-table-row-42')),
+        matching: find.byType(Checkbox),
+      ),
+    );
     await tester.pumpAndSettle();
     expect(find.text('批量考核'), findsOneWidget);
     await tester.tap(find.text('批量考核'));

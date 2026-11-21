@@ -139,6 +139,8 @@ class _HrPerformanceChatCardState extends State<HrPerformanceChatCard> {
     final notice = p['hrPerformanceNotice'] == true;
     if (notice) return _noticeCard(p);
     final departmentFinal = p['hrPerformanceFinalSummary'] == true;
+    final readOnlySummary = p['hrPerformanceReadOnlySummary'] == true;
+    final finalStyle = departmentFinal || readOnlySummary;
     final averageCoefficient = (p['averageCoefficient'] as num?)?.toDouble();
     final progress = p['progress'] is Map
         ? Map<String, dynamic>.from(p['progress'])
@@ -198,7 +200,11 @@ class _HrPerformanceChatCardState extends State<HrPerformanceChatCard> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          departmentFinal ? '部门绩效终审' : '$hrPerformanceTitle汇总',
+                          departmentFinal
+                              ? '部门绩效终审'
+                              : readOnlySummary
+                              ? '绩效考核汇总'
+                              : '$hrPerformanceTitle汇总',
                           style: DunesTypography.sans(
                             fontSize: 13,
                             fontWeight: FontWeight.w700,
@@ -207,7 +213,7 @@ class _HrPerformanceChatCardState extends State<HrPerformanceChatCard> {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          departmentFinal
+                          finalStyle
                               ? '${p['department'] ?? ''} · ${p['month'] ?? ''}'
                               : '${p['month'] ?? ''} · 发送时快照',
                           style: DunesTypography.sans(
@@ -234,18 +240,20 @@ class _HrPerformanceChatCardState extends State<HrPerformanceChatCard> {
               child: Text(
                 departmentFinal
                     ? '发送时共 ${rows.length} 人待终审'
+                    : readOnlySummary
+                    ? '发送时共 ${rows.length} 人 · 绩效快照'
                     : '共 ${rows.length} 人${p['hasScores'] == true ? ' · 含已下发结果' : ' · 考核进度'}',
                 style: TextStyle(fontSize: 11.5, color: muted),
               ),
             ),
-            if (departmentFinal)
+            if (finalStyle)
               Padding(
                 padding: const EdgeInsets.fromLTRB(12, 2, 12, 6),
                 child: Row(
                   children: [
                     Expanded(
                       child: Text(
-                        '部门平均系数',
+                        readOnlySummary ? '已评分人员平均系数' : '部门平均系数',
                         style: DunesTypography.sans(fontSize: 12, color: muted),
                       ),
                     ),
@@ -292,11 +300,17 @@ class _HrPerformanceChatCardState extends State<HrPerformanceChatCard> {
                   for (final row
                       in _expanded
                           ? rows
-                          : departmentFinal
+                          : finalStyle
                           ? <Map<String, dynamic>>[]
                           : rows.take(5))
-                    if (departmentFinal)
-                      _finalPersonRow(row, text, muted, accent)
+                    if (finalStyle)
+                      _finalPersonRow(
+                        row,
+                        text,
+                        muted,
+                        accent,
+                        readOnly: readOnlySummary,
+                      )
                     else
                       Material(
                         color: Colors.transparent,
@@ -369,7 +383,7 @@ class _HrPerformanceChatCardState extends State<HrPerformanceChatCard> {
                 ],
               ),
             ),
-            if (!departmentFinal && rows.length > 5)
+            if (!finalStyle && rows.length > 5)
               TextButton(
                 style: TextButton.styleFrom(
                   foregroundColor: accent,
@@ -380,6 +394,14 @@ class _HrPerformanceChatCardState extends State<HrPerformanceChatCard> {
                   if (_expanded && departmentFinal) _refreshFinalRows();
                 },
                 child: Text(_expanded ? '收起人员' : '展开全部 ${rows.length} 人'),
+              ),
+            if (readOnlySummary && rows.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 2, 12, 12),
+                child: OutlinedButton(
+                  onPressed: () => setState(() => _expanded = !_expanded),
+                  child: Text(_expanded ? '收起人员' : '展开人员（${rows.length}）'),
+                ),
               ),
             if (departmentFinal && rows.isNotEmpty)
               Padding(
@@ -461,8 +483,9 @@ class _HrPerformanceChatCardState extends State<HrPerformanceChatCard> {
     Map<String, dynamic> row,
     Color text,
     Color muted,
-    Color accent,
-  ) {
+    Color accent, {
+    bool readOnly = false,
+  }) {
     final id = int.tryParse('${row['id']}') ?? 0;
     final current = _currentFinalRows[id];
     final total = _loadedFinal && current != null
@@ -471,7 +494,9 @@ class _HrPerformanceChatCardState extends State<HrPerformanceChatCard> {
     final grade = _loadedFinal && current != null
         ? current.snapshot['grade']
         : row['grade'];
-    final stage = _loadedFinal ? (current?.stageLabel ?? '无法查看') : '发送时待终审';
+    final stage = readOnly
+        ? (hrPerformanceStageLabels['${row['stage']}'] ?? '考核中')
+        : (_loadedFinal ? (current?.stageLabel ?? '无法查看') : '发送时待终审');
     final canReject =
         id > 0 &&
         !_loadingFinal &&
@@ -496,35 +521,37 @@ class _HrPerformanceChatCardState extends State<HrPerformanceChatCard> {
                 ),
                 const SizedBox(height: 3),
                 Text(
-                  '${total ?? '—'} 分${grade == null || '$grade'.isEmpty ? '' : ' · $grade'} · $stage',
+                  '${total ?? '—'} 分${grade == null || '$grade'.isEmpty ? '' : ' · $grade'}${row['coefficient'] == null ? '' : ' · 系数 ${row['coefficient']}'} · $stage',
                   style: DunesTypography.sans(fontSize: 11, color: muted),
                 ),
               ],
             ),
           ),
-          TextButton(
-            onPressed: canReject ? () => _rejectFinal(id) : null,
-            style: TextButton.styleFrom(
-              visualDensity: VisualDensity.compact,
-              padding: const EdgeInsets.symmetric(horizontal: 6),
-              minimumSize: const Size(0, 32),
+          if (!readOnly)
+            TextButton(
+              onPressed: canReject ? () => _rejectFinal(id) : null,
+              style: TextButton.styleFrom(
+                visualDensity: VisualDensity.compact,
+                padding: const EdgeInsets.symmetric(horizontal: 6),
+                minimumSize: const Size(0, 32),
+              ),
+              child: const Text('驳回'),
             ),
-            child: const Text('驳回'),
-          ),
-          TextButton(
-            onPressed: _isPreview
-                ? () => showDunesToast(context, '这是样式预览，不打开真实考核表')
-                : id > 0
-                ? () => openHrPerformanceRecord(context, widget.session, id)
-                : null,
-            style: TextButton.styleFrom(
-              foregroundColor: accent,
-              visualDensity: VisualDensity.compact,
-              padding: const EdgeInsets.symmetric(horizontal: 6),
-              minimumSize: const Size(0, 32),
+          if (!readOnly)
+            TextButton(
+              onPressed: _isPreview
+                  ? () => showDunesToast(context, '这是样式预览，不打开真实考核表')
+                  : id > 0
+                  ? () => openHrPerformanceRecord(context, widget.session, id)
+                  : null,
+              style: TextButton.styleFrom(
+                foregroundColor: accent,
+                visualDensity: VisualDensity.compact,
+                padding: const EdgeInsets.symmetric(horizontal: 6),
+                minimumSize: const Size(0, 32),
+              ),
+              child: const Text('查看'),
             ),
-            child: const Text('查看'),
-          ),
         ],
       ),
     );

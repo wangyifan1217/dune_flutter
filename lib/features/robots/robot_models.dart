@@ -16,6 +16,7 @@ class RobotRole {
     required this.accent,
     this.glasses = false,
     this.primaryScenarioId,
+
     /// 缺省 true：允许用户发起/继续会话；false=仅推送。
     this.canChat = true,
   });
@@ -28,6 +29,7 @@ class RobotRole {
   final Color hair;
   final Color accent;
   final bool glasses;
+
   /// 首页「运行」默认绑定的 N8N 场景。
   final String? primaryScenarioId;
   final bool canChat;
@@ -183,15 +185,24 @@ abstract final class RobotCatalog {
     ),
   ];
 
-  static const categories = <String>[
-    '全部',
-    '流程编排',
-    '知识处理',
-    '质量校验',
-    '通知触达',
-  ];
+  static const categories = <String>['全部', '流程编排', '知识处理', '质量校验', '通知触达'];
+
+  static const weeklyReportKey = 'r_dunes_weekly_report';
+  static const weeklyReportSchedule = '周一 08:30';
+
+  static const weeklyReport = RobotRole(
+    id: weeklyReportKey,
+    name: '沙丘周报',
+    category: '通知触达',
+    desc: '每$weeklyReportSchedule 自动投递',
+    skin: Color(0xFFEBC4A4),
+    hair: Color(0xFF40335D),
+    accent: Color(0xFF7C4DC9),
+    canChat: false,
+  );
 
   static RobotRole roleById(String id) {
+    if (id == weeklyReportKey) return weeklyReport;
     for (final r in roles) {
       if (r.id == id) return r;
     }

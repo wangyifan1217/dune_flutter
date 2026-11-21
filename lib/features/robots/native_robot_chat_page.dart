@@ -22,6 +22,7 @@ import '../conversation/inbox_format.dart';
 import '../shell/dunes_toast.dart';
 import 'robot_analyzing_coordinator.dart';
 import 'robot_catalog_cache.dart';
+import 'dunes_weekly_report_card.dart';
 import 'robot_character.dart';
 import 'robot_consult_api.dart';
 import 'robot_markdown.dart';
@@ -96,6 +97,10 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
     return (widget.conversationHint.businessType ?? '').trim();
   }
 
+  bool get _isWeeklyReport => _robotKey == RobotCatalog.weeklyReportKey;
+  int _weeklyReportClearedThrough = 0;
+  bool _forwardingWeeklyReport = false;
+
   RobotAnalyzingCoordinator get _analyzing =>
       RobotAnalyzingCoordinator.instance;
 
@@ -109,7 +114,9 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
     // 优先用目录缓存判断 canChat / 头像配色，避免仅推送机器人首帧闪用灯塔紫。
     _role = RobotCatalogCache.instance.resolve(_robotKey);
     // 有缓存则立刻展示，不再整页转圈等网络。
-    final cached = ChatMessageCache.instance.peek(_convId);
+    final cached = _isWeeklyReport
+        ? null
+        : ChatMessageCache.instance.peek(_convId);
     if (cached != null && cached.isNotEmpty) {
       _messages.addAll(cached);
       _loading = false;
@@ -123,7 +130,7 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
         (_selfAvatarUrl == null || _selfAvatarUrl!.isEmpty)) {
       unawaited(_loadSelfAvatar());
     }
-    unawaited(_loadRole());
+    if (!_isWeeklyReport) unawaited(_loadRole());
     unawaited(_bootstrap());
     _rtSub = ConversationRealtimeHub.instance
         .of(widget.session)
@@ -328,8 +335,11 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
   }) async {
     if (_convId <= 0) return;
     try {
-      final page = await _service.fetchMessages(_convId, size: 30);
+      final fetched = await _service.fetchMessages(_convId, size: 30);
       if (!mounted) return;
+      final page = _isWeeklyReport
+          ? fetched.where((m) => m.id > _weeklyReportClearedThrough).toList()
+          : fetched;
       final prevLastId = _messages.isEmpty ? 0 : _messages.last.id;
       final pendingLocal = _messages
           .where((m) => m.id < 0)
@@ -414,6 +424,11 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
 
   void _onRealtime(ConversationRealtimeEvent ev) {
     if (ev.conversationId != _convId) return;
+    final clearedThrough = ev.raw['clearedBeforeId'];
+    if (_isWeeklyReport && clearedThrough is num) {
+      _applyWeeklyReportClear(clearedThrough.toInt());
+      return;
+    }
     if (ev.type == 'oil_fund_alert_ack' || ev.type == 'oil_fund_alert_read') {
       _applyOilFundAlertTiming(
         ev.raw,
@@ -432,6 +447,9 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
         // 先把实时消息塞进列表，避免「正在分析」被清掉后刷新失败/被短路导致空白。
         try {
           final mapped = _service.mapMessage(Map<String, dynamic>.from(msg));
+          if (_isWeeklyReport && mapped.id <= _weeklyReportClearedThrough) {
+            return;
+          }
           if (mounted) {
             setState(() {
               final idx = _messages.indexWhere((m) => m.id == mapped.id);
@@ -483,7 +501,7 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
 
   void _jumpBottom({bool animate = false}) {
     if (!_scroll.hasClients) return;
-    // reverse 列表：0 = 最新消息端（靠近输入框）
+    // 偏移 0 是最新消息端。周报从首屏开始，其余机器人从气泡底部开始。
     const target = 0.0;
     if (animate) {
       unawaited(
@@ -684,6 +702,45 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
     }
   }
 
+  Future<void> _forwardWeeklyReport(NativeChatMessage message) async {
+    if (_forwardingWeeklyReport) return;
+    setState(() => _forwardingWeeklyReport = true);
+    try {
+      final users = await _service.weeklyReportRecipients();
+      if (!mounted) return;
+      if (users.isEmpty) {
+        showDunesToast(context, '暂无其他已授权接收人');
+        return;
+      }
+      final result = await showDialog<String>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => _WeeklyReportRecipientDialog(
+          users: users,
+          onForward: (id) => _service.forwardWeeklyReport(message.id, id),
+        ),
+      );
+      if (result != null && mounted) {
+        showDunesToast(
+          context,
+          result == 'duplicate' ? '对方已收到本期周报' : '已转发到对方的沙丘周报',
+          alignment: Alignment.topCenter,
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        showDunesToast(
+          context,
+          friendlyErrorText(error, fallback: '无法打开周报接收名单，请稍后重试'),
+          alignment: Alignment.topCenter,
+          kind: DunesToastKind.error,
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _forwardingWeeklyReport = false);
+    }
+  }
+
   Future<void> _forwardRobotReply(NativeChatMessage message) async {
     final markdown = message.bodyText.trim();
     if (markdown.isEmpty) {
@@ -732,14 +789,30 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
 
   bool get _canClearHistory => _robotKey != 'r_oil_fund_alert';
 
+  void _applyWeeklyReportClear(int through) {
+    if (!mounted || through < _weeklyReportClearedThrough) return;
+    _weeklyReportClearedThrough = through;
+    ChatMessageCache.instance.remove(_convId);
+    setState(() {
+      _messages.removeWhere((m) => m.id <= through);
+      _awayFromLatest = false;
+      _error = null;
+    });
+    widget.onConversationRead?.call(_convId);
+  }
+
   Future<void> _confirmClearHistory() async {
     if (!_canClearHistory || _clearing || _convId <= 0) return;
     final role = _role ?? RobotCatalogCache.instance.resolve(_robotKey);
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('清空会话？'),
-        content: Text('将清空与「${role.name}」的 IM 聊天记录，仅对你不可见，不可恢复。'),
+        title: Text(_isWeeklyReport ? '清除周报记录？' : '清空会话？'),
+        content: Text(
+          _isWeeklyReport
+              ? '将清除你在本会话中收到的历史周报，之后仍会收到新周报。'
+              : '将清空与「${role.name}」的 IM 聊天记录，仅对你不可见，不可恢复。',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -761,7 +834,12 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
     if (ok != true || !mounted) return;
     setState(() => _clearing = true);
     try {
-      await _service.clearConversationHistory(_convId);
+      final clearedThrough = await _service.clearConversationHistory(_convId);
+      if (_isWeeklyReport) {
+        if (clearedThrough != null) _applyWeeklyReportClear(clearedThrough);
+        if (mounted) showDunesToast(context, '已清除周报记录');
+        return;
+      }
       _analyzing.clear(_convId);
       ChatMessageCache.instance.remove(_convId);
       if (!mounted) return;
@@ -908,9 +986,70 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
   }
 
   bool get _canChat {
+    if (_isWeeklyReport) return false;
     final role = _role;
     if (role != null) return role.canChat;
     return RobotCatalogCache.instance.canChat(_robotKey);
+  }
+
+  Widget _weeklyReportHeader(
+    BuildContext context,
+    String title,
+    List<Widget> actions,
+  ) {
+    final color = DunesColors.resolve(context, const Color(0xFF15153E));
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 88,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: widget.showBackButton
+                  ? IconButton(
+                      tooltip: '返回',
+                      onPressed:
+                          widget.onBack ?? () => Navigator.maybePop(context),
+                      icon: Icon(
+                        Icons.chevron_left_rounded,
+                        color: color,
+                        size: 28,
+                      ),
+                    )
+                  : null,
+            ),
+          ),
+          Expanded(
+            child: Text(
+              title,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: color,
+                fontSize: 16,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+          SizedBox(
+            width: 88,
+            child: IconButtonTheme(
+              data: IconButtonThemeData(
+                style: IconButton.styleFrom(
+                  fixedSize: const Size(40, 40),
+                  minimumSize: const Size(40, 40),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: actions,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -920,13 +1059,46 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
         ? widget.conversationHint.title.trim()
         : role.name;
     final canChat = _canChat;
-    final subtitle = !canChat ? '仅推送通知' : (_waitingReply ? '正在分析…' : '文本追问');
+    final subtitle = _isWeeklyReport
+        ? RobotCatalog.weeklyReport.desc
+        : !canChat
+        ? '仅推送通知'
+        : (_waitingReply ? '正在分析…' : '文本追问');
+
+    final actions = <Widget>[
+      if (_isWeeklyReport && _awayFromLatest)
+        IconButton(
+          tooltip: '回到最新',
+          onPressed: () => _jumpBottom(animate: true),
+          icon: const Icon(Icons.vertical_align_top_rounded, size: 20),
+        ),
+      if (_canClearHistory)
+        IconButton(
+          tooltip: _isWeeklyReport ? '清除周报记录' : '清空会话',
+          onPressed: (_clearing || _loading) ? null : _confirmClearHistory,
+          icon: _clearing
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.delete_outline_rounded, size: 20),
+          color: DunesColors.resolve(context, DunesColors.text2),
+        ),
+      if (canChat && widget.onOpenConsultList != null)
+        IconButton(
+          tooltip: '咨询明细',
+          onPressed: widget.onOpenConsultList,
+          icon: const Icon(Icons.receipt_long_rounded, size: 20),
+          color: DunesColors.resolve(context, DunesColors.text2),
+        ),
+    ];
 
     return Scaffold(
       resizeToAvoidBottomInset: true,
       backgroundColor: DunesColors.resolve(
         context,
-        DunesColors.imSurface,
+        _isWeeklyReport ? const Color(0xFFECE9FC) : DunesColors.imSurface,
         role: DunesColorRole.surface,
       ),
       body: SafeArea(
@@ -939,57 +1111,23 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
                 onPointerDown: (_) => _dismissKeyboard(),
                 child: Column(
                   children: [
-                    ChatConvHeader(
-                      title: title,
-                      subtitle: subtitle,
-                      onBack:
-                          widget.onBack ?? () => Navigator.maybePop(context),
-                      showBackButton: widget.showBackButton,
-                      leadingAvatar: RobotFaceAvatar(
-                        role: role,
-                        size: 45,
-                        animate: _waitingReply,
-                        busy: _waitingReply,
+                    if (_isWeeklyReport)
+                      _weeklyReportHeader(context, title, actions)
+                    else
+                      ChatConvHeader(
+                        title: title,
+                        subtitle: subtitle,
+                        onBack:
+                            widget.onBack ?? () => Navigator.maybePop(context),
+                        showBackButton: widget.showBackButton,
+                        leadingAvatar: RobotFaceAvatar(
+                          role: role,
+                          size: 45,
+                          animate: _waitingReply,
+                          busy: _waitingReply,
+                        ),
+                        actions: actions,
                       ),
-                      actions: [
-                        if (_canClearHistory)
-                          IconButton(
-                            tooltip: '清空会话',
-                            onPressed: (_clearing || _loading)
-                                ? null
-                                : _confirmClearHistory,
-                            icon: _clearing
-                                ? const SizedBox(
-                                    width: 18,
-                                    height: 18,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                    ),
-                                  )
-                                : const Icon(
-                                    Icons.delete_outline_rounded,
-                                    size: 20,
-                                  ),
-                            color: DunesColors.resolve(
-                              context,
-                              DunesColors.text2,
-                            ),
-                          ),
-                        if (canChat && widget.onOpenConsultList != null)
-                          IconButton(
-                            tooltip: '咨询明细',
-                            onPressed: widget.onOpenConsultList,
-                            icon: const Icon(
-                              Icons.receipt_long_rounded,
-                              size: 20,
-                            ),
-                            color: DunesColors.resolve(
-                              context,
-                              DunesColors.text2,
-                            ),
-                          ),
-                      ],
-                    ),
                     Expanded(child: _buildBody(role, canChat: canChat)),
                   ],
                 ),
@@ -1012,7 +1150,7 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
                 onInputFocused: () => unawaited(_scrollToLatestForInput()),
                 onTapOutside: _dismissKeyboard,
               )
-            else
+            else if (!_isWeeklyReport)
               SafeArea(
                 top: false,
                 child: Container(
@@ -1081,7 +1219,11 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
     if (_messages.isEmpty && !_waitingReply) {
       return Center(
         child: Text(
-          canChat ? '向「${role.name}」提问，回复会出现在这里' : '暂无推送消息',
+          _isWeeklyReport
+              ? '暂无周报 · ${RobotCatalog.weeklyReport.desc}'
+              : canChat
+              ? '向「${role.name}」提问，回复会出现在这里'
+              : '暂无推送消息',
           style: DunesTypography.sans(
             fontSize: 13,
             color: DunesColors.resolve(context, DunesColors.text3),
@@ -1108,13 +1250,11 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
           child: ListView.builder(
             controller: _scroll,
             // 与私聊 IM 对齐：首帧即在最新消息端，避免进会话从顶跳到底。
-            reverse: true,
-            padding: EdgeInsets.fromLTRB(
-              wide ? 16 : 12,
-              12,
-              wide ? 16 : 12,
-              12,
-            ),
+            // 周报卡比一屏高，最新一期从标题开始阅读。
+            reverse: !_isWeeklyReport,
+            padding: _isWeeklyReport
+                ? const EdgeInsets.fromLTRB(7, 2, 7, 8)
+                : EdgeInsets.fromLTRB(wide ? 16 : 12, 12, wide ? 16 : 12, 12),
             addAutomaticKeepAlives: false,
             addRepaintBoundaries: true,
             itemCount: itemCount,
@@ -1179,6 +1319,32 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
               final contentIndex = index - (_waitingReply ? 1 : 0);
               final msgIndex = _messages.length - 1 - contentIndex;
               final m = _messages[msgIndex];
+              if (_isWeeklyReport) {
+                final time = InboxFormat.formatTime(
+                  m.createdAt,
+                  withClock: true,
+                );
+                return KeyedSubtree(
+                  key: _messageKey(m.id),
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 690),
+                      child: Padding(
+                        padding: const EdgeInsets.only(bottom: 18),
+                        child: DunesWeeklyReportCard(
+                          markdown: m.bodyText,
+                          deliveryLabel: time,
+                          scheduledDelivery: contentIndex == 0,
+                          forwardBusy: _forwardingWeeklyReport,
+                          onForward: m.payload?['weeklyReportWeek'] == null
+                              ? null
+                              : () => unawaited(_forwardWeeklyReport(m)),
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              }
               final mine = _isMine(m);
               final isRobot = m.kind.toUpperCase() == 'ROBOT_REPLY' || !mine;
               final isRobotReply = m.kind.toUpperCase() == 'ROBOT_REPLY';
@@ -1195,7 +1361,7 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
                   readLabel: null,
                   timeLabel: timeLabel,
                   showTimeForMine: mine,
-                  onLongPressStart: isRobotReply
+                  onLongPressStart: isRobotReply && !_isWeeklyReport
                       ? (details) => unawaited(
                           _showRobotReplyActions(
                             m,
@@ -1203,7 +1369,7 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
                           ),
                         )
                       : null,
-                  onSecondaryTapDown: isRobotReply
+                  onSecondaryTapDown: isRobotReply && !_isWeeklyReport
                       ? (details) => unawaited(
                           _showRobotReplyActions(
                             m,
@@ -1250,7 +1416,7 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
                                 onConfirm: () =>
                                     unawaited(_confirmOilFundAlert(m)),
                               ),
-                            if (isRobotReply)
+                            if (isRobotReply && !_isWeeklyReport)
                               _RobotReplyQuickActions(
                                 onCopy: () => unawaited(_copyRobotReply(m)),
                                 onForward: () =>
@@ -1309,7 +1475,7 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
               ),
             ),
           ),
-        if (_awayFromLatest)
+        if (_awayFromLatest && !_isWeeklyReport)
           Positioned(
             left: 0,
             right: 0,
@@ -1453,6 +1619,125 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
 }
 
 /// 对方气泡样式对齐 [ChatTextBubble]；宽表靠横向滚动，气泡宽度钉死避免撑破整页。
+class _WeeklyReportRecipientDialog extends StatefulWidget {
+  const _WeeklyReportRecipientDialog({
+    required this.users,
+    required this.onForward,
+  });
+
+  final List<Map<String, dynamic>> users;
+  final Future<String> Function(int) onForward;
+
+  @override
+  State<_WeeklyReportRecipientDialog> createState() =>
+      _WeeklyReportRecipientDialogState();
+}
+
+class _WeeklyReportRecipientDialogState
+    extends State<_WeeklyReportRecipientDialog> {
+  String _query = '';
+  int? _selected;
+  String? _error;
+  bool _sending = false;
+
+  Future<void> _submit(int id) async {
+    setState(() {
+      _sending = true;
+      _error = null;
+    });
+    try {
+      final result = await widget.onForward(id);
+      if (mounted) Navigator.of(context).pop(result);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _sending = false;
+        _error = friendlyErrorText(error, fallback: '周报转发失败，请稍后重试');
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final visible = widget.users.where(
+      (user) =>
+          '${user['name']} ${user['username']}'.toLowerCase().contains(_query),
+    );
+    return PopScope(
+      canPop: !_sending,
+      child: AlertDialog(
+        title: const Text('转发周报'),
+        content: SizedBox(
+          width: 360,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                enabled: !_sending,
+                decoration: const InputDecoration(hintText: '搜索已授权接收人'),
+                onChanged: (value) =>
+                    setState(() => _query = value.trim().toLowerCase()),
+              ),
+              const SizedBox(height: 6),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 220),
+                child: visible.isEmpty
+                    ? const Padding(
+                        padding: EdgeInsets.all(14),
+                        child: Text('没有匹配的接收人'),
+                      )
+                    : ListView(
+                        shrinkWrap: true,
+                        children: [
+                          for (final user in visible)
+                            ListTile(
+                              dense: true,
+                              selected: _selected == user['id'],
+                              title: Text('${user['name']}'),
+                              subtitle: Text('${user['username']}'),
+                              trailing: _selected == user['id']
+                                  ? const Icon(Icons.check)
+                                  : null,
+                              onTap: _sending
+                                  ? null
+                                  : () => setState(
+                                      () => _selected = (user['id'] as num)
+                                          .toInt(),
+                                    ),
+                            ),
+                        ],
+                      ),
+              ),
+              if (_error case final error?)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    error,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: _sending ? null : () => Navigator.of(context).pop(),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: _selected == null || _sending
+                ? null
+                : () => _submit(_selected!),
+            child: Text(_sending ? '发送中…' : '转发'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _RobotReplyBubble extends StatelessWidget {
   const _RobotReplyBubble({required this.child, this.wide = false});
 

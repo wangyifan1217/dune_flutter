@@ -1,7 +1,10 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import 'hr_performance_service.dart';
 import 'hr_performance_template_ui.dart';
+import 'hr_performance_task_evidence.dart';
 
 List<Map<String, dynamic>> hrMaps(dynamic value) =>
     (value is List ? value : const [])
@@ -16,6 +19,34 @@ double hrNumber(dynamic value) {
 
 String hrText(dynamic v) => '${v ?? ''}'.trim();
 
+Future<bool> hrConfirmAction(
+  BuildContext context, {
+  required String title,
+  required String message,
+}) async =>
+    await showDialog<bool>(
+      context: context,
+      builder: (context) => Theme(
+        data: hrConfigTheme(context),
+        child: AlertDialog(
+          title: Text(title.startsWith('确认') ? title : '确认$title'),
+          content: SingleChildScrollView(child: Text(message)),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              key: const ValueKey('hr-confirm-action'),
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('确认提交'),
+            ),
+          ],
+        ),
+      ),
+    ) ==
+    true;
+
 Future<Map<String, dynamic>?> hrFormSheet(
   BuildContext context, {
   required String title,
@@ -24,23 +55,22 @@ Future<Map<String, dynamic>?> hrFormSheet(
   required Map<String, dynamic> Function(Map<String, dynamic>) submit,
   String submitLabel = '提交',
   String? message,
+  bool confirmSubmission = true,
+  String Function()? confirmationMessage,
+  double maxWidth = 520,
 }) {
   String? error;
-  return showModalBottomSheet<Map<String, dynamic>>(
-    context: context,
-    isScrollControlled: true,
-    useSafeArea: true,
-    constraints: const BoxConstraints(maxWidth: 800),
-    builder: (context) => Theme(
+  return showHrConfigPanel<Map<String, dynamic>>(
+    context,
+    Theme(
       data: hrConfigTheme(context),
       child: StatefulBuilder(
         builder: (context, update) => Padding(
-          padding: EdgeInsets.only(
-            bottom: MediaQuery.viewInsetsOf(context).bottom,
-          ),
+          padding: EdgeInsets.zero,
           child: SizedBox(
-            height: MediaQuery.sizeOf(context).height * .86,
+            width: double.infinity,
             child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Padding(
                   padding: const EdgeInsets.all(16),
@@ -59,7 +89,8 @@ Future<Map<String, dynamic>?> hrFormSheet(
                     ],
                   ),
                 ),
-                Expanded(
+                Flexible(
+                  fit: FlexFit.loose,
                   child: SingleChildScrollView(
                     padding: const EdgeInsets.symmetric(horizontal: 20),
                     child: Column(
@@ -89,9 +120,20 @@ Future<Map<String, dynamic>?> hrFormSheet(
                   padding: const EdgeInsets.all(16),
                   child: FilledButton(
                     key: const ValueKey('hr-sheet-submit'),
-                    onPressed: () {
+                    onPressed: () async {
                       try {
                         final result = submit(values);
+                        if (confirmSubmission &&
+                            !await hrConfirmAction(
+                              context,
+                              title: title,
+                              message:
+                                  confirmationMessage?.call() ??
+                                  '$title\n${message ?? '请核对填写的内容，确认后提交。'}${hrText(result['reason']).isEmpty ? '' : '\n原因：${result['reason']}'}${hrText(result['target']).isEmpty ? '' : '\n目标阶段：${hrPerformanceStageLabels[hrText(result['target'])] ?? result['target']}'}',
+                            )) {
+                          return;
+                        }
+                        if (!context.mounted) return;
                         Navigator.pop(context, result);
                       } on FormatException catch (e) {
                         update(() => error = e.message);
@@ -108,6 +150,8 @@ Future<Map<String, dynamic>?> hrFormSheet(
         ),
       ),
     ),
+    maxWidth: maxWidth,
+    fitContent: true,
   );
 }
 
@@ -132,61 +176,14 @@ Widget hrReasonField(
 
 Future<Map<String, dynamic>?> showHrUrgeSheet(
   BuildContext context, {
-  required List<HrPerformanceRecord> targets,
-  required List<HrPerformanceRecord> skipped,
+  required String scope,
 }) => hrFormSheet(
   context,
   title: '发送督办',
   submitLabel: '发送督办',
-  message: '将向所列考核的当前节点办理人发送提醒，请确认名单并填写督办内容。',
+  message: '$scope\n将向所列考核的当前节点办理人发送提醒。',
   values: {'reason': ''},
   fields: (v, update) => [
-    Text(
-      '发送 ${targets.length} 人${skipped.isEmpty ? '' : ' · 跳过 ${skipped.length} 人'}',
-      style: TextStyle(
-        fontSize: 13,
-        fontWeight: FontWeight.w600,
-        color: hrConfigColor(context, hrConfigPurple),
-      ),
-    ),
-    const SizedBox(height: 8),
-    for (final r in targets)
-      Padding(
-        padding: const EdgeInsets.only(bottom: 6),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          decoration: BoxDecoration(
-            color: hrConfigSurface(context, const Color(0xFFF7F6FA)),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  '${r.name} · ${r.department}',
-                  style: const TextStyle(fontSize: 13),
-                ),
-              ),
-              Text(
-                r.stageLabel,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: hrConfigColor(context, hrConfigPurple),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    if (skipped.isNotEmpty)
-      Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        child: Text(
-          '已跳过无权督办或不在办理中的人员：${skipped.map((r) => r.name).join('、')}',
-          style: const TextStyle(fontSize: 12),
-        ),
-      ),
-    const SizedBox(height: 8),
     Text(
       '督办内容（必填）',
       style: TextStyle(
@@ -226,41 +223,64 @@ Future<Map<String, dynamic>?> showHrReasonSheet(
   List<String>? targets,
   int minLength = 0,
   String submitLabel = '确认',
-}) => hrFormSheet(
-  context,
-  title: title,
-  message: message,
-  submitLabel: submitLabel,
-  values: {'reason': '', 'target': targets?.first},
-  fields: (v, update) => [
-    if (targets != null)
-      _HrSelect<String>(
-        initialValue: hrText(v['target']),
-        decoration: const InputDecoration(labelText: '处理方式'),
-        items: targets
-            .map(
-              (x) => DropdownMenuItem(
-                value: x,
-                child: Text(
-                  hrPerformanceStageLabels[x] ?? (x == 'reject' ? '驳回申诉' : x),
+  String Function(String target)? scopePreview,
+}) {
+  final values = {'reason': '', 'target': targets?.firstOrNull};
+  return hrFormSheet(
+    context,
+    title: title,
+    message: message,
+    submitLabel: submitLabel,
+    values: values,
+    confirmationMessage: scopePreview == null
+        ? null
+        : () {
+            final target = hrText(values['target']);
+            return [
+              '目标阶段：${hrPerformanceStageLabels[target] ?? target}',
+              scopePreview(target),
+              ?message,
+              '原因：${hrText(values['reason'])}',
+            ].join('\n');
+          },
+    fields: (v, update) => [
+      if (targets != null)
+        HrSelect<String>(
+          initialValue: hrText(v['target']),
+          decoration: const InputDecoration(labelText: '处理方式'),
+          items: targets
+              .map(
+                (x) => DropdownMenuItem(
+                  value: x,
+                  child: Text(
+                    hrPerformanceStageLabels[x] ?? (x == 'reject' ? '驳回申诉' : x),
+                  ),
                 ),
-              ),
-            )
-            .toList(),
-        onChanged: (x) => update(() => v['target'] = x),
-      ),
-    hrReasonField(v),
-  ],
-  submit: (v) {
-    if (hrText(v['reason']).runes.length < minLength) {
-      throw FormatException('说明至少 $minLength 个字');
-    }
-    return {
-      'reason': hrText(v['reason']),
-      if (targets != null) 'target': v['target'],
-    };
-  },
-);
+              )
+              .toList(),
+          onChanged: (x) => update(() => v['target'] = x),
+        ),
+      if (scopePreview != null) Text(scopePreview(hrText(v['target']))),
+      hrReasonField(v),
+    ],
+    submit: (v) {
+      if (hrText(v['reason']).runes.length < minLength) {
+        throw FormatException('说明至少 $minLength 个字');
+      }
+      return {
+        'reason': hrText(v['reason']),
+        if (targets != null) 'target': v['target'],
+      };
+    },
+  );
+}
+
+String hrScoreEditImpact(HrPerformanceRecord record) =>
+    const ['ready_final', 'final'].contains(record.stage)
+    ? '保存后将退回 HR 审核，原送审或终审办理将失效，需要重新送审。'
+    : record.stage == 'hr'
+    ? '保存后保留在 HR 审核，须按修改后的分数重新审核。'
+    : '保存后保留当前阶段，按修改后的分数继续办理。';
 
 Future<Map<String, dynamic>?> showHrScoreSheet(
   BuildContext context,
@@ -269,13 +289,14 @@ Future<Map<String, dynamic>?> showHrScoreSheet(
   required String title,
   required bool initial,
   bool self = false,
+  bool hrEdit = false,
 }) {
   final lines = [
     for (final line in record.lines)
       {
         ...line,
         'score':
-            '${(self ? line['selfScore'] : line['score']) ?? line['suggestedScore'] ?? ''}',
+            '${(self ? line['selfScore'] : line['score']) ?? (hrEdit ? null : line['suggestedScore']) ?? ''}',
         'remark': '${(self ? line['selfRemark'] : line['remark']) ?? ''}',
       },
   ];
@@ -291,7 +312,7 @@ Future<Map<String, dynamic>?> showHrScoreSheet(
       return '请输入 0–$max 的得分';
     }
     final decimal = (rules['decimalPlaces'] as num?)?.toInt() ?? 1;
-    final multiplier = decimal == 0 ? 1 : 10;
+    final multiplier = math.pow(10, decimal);
     if ((score * multiplier - (score * multiplier).round()).abs() > 0.00001) {
       return '最多 $decimal 位小数';
     }
@@ -314,9 +335,12 @@ Future<Map<String, dynamic>?> showHrScoreSheet(
   return hrFormSheet(
     context,
     title: title,
+    maxWidth: 760,
     values: {'lines': lines, 'reason': ''},
     submitLabel: self ? '提交自评' : (initial ? '提交初评' : '保存并提交'),
-    message: initial
+    message: hrEdit
+        ? '请逐项核对得分并填写改分理由。${hrScoreEditImpact(record)}'
+        : initial
         ? '按每项满分填写得分；无建议分、与建议分不一致或低于备注线时须填写备注。'
         : '改动任何分数都须填写改分理由。',
     fields: (v, update) => [
@@ -516,7 +540,7 @@ Future<Map<String, dynamic>?> showHrScoreSheet(
           throw FormatException('指标分须为 0–$maxScore');
         }
         final decimal = (rules['decimalPlaces'] as num?)?.toInt() ?? 1;
-        final multiplier = decimal == 0 ? 1 : 10;
+        final multiplier = math.pow(10, decimal);
         if ((score * multiplier - (score * multiplier).round()).abs() >
             0.00001) {
           throw FormatException('最多 $decimal 位小数');
@@ -536,6 +560,9 @@ Future<Map<String, dynamic>?> showHrScoreSheet(
           'score': score,
           'remark': hrText(l['remark']),
         });
+      }
+      if (hrEdit && hrText(v['reason']).isEmpty) {
+        throw const FormatException('请填写改分理由');
       }
       if (!initial &&
           lines.any((l) {
@@ -584,6 +611,7 @@ Future<Map<String, dynamic>?> showHrAdjustmentSheet(
   return hrFormSheet(
     context,
     title: '申请调整考核指标与任务',
+    maxWidth: 760,
     values: {'reason': ''},
     message: '一次只能有一条待审批申请。主管通过前，原考核表保持不变。',
     fields: (v, update) => [
@@ -633,7 +661,7 @@ Future<Map<String, dynamic>?> showHrAdjustmentSheet(
       const Text('任务证据（仅本人在考核月完成的任务）'),
       for (final e in taskMap.entries)
         CheckboxListTile(
-          title: Text('${e.value['title']}'),
+          title: HrTaskEvidenceContent(task: e.value, ownerName: record.name),
           value: selected.contains(e.key),
           onChanged: (x) => update(() {
             if (x == true) {
@@ -689,7 +717,7 @@ Future<Map<String, dynamic>?> showHrBonusSheet(
       'source': '',
     },
     fields: (v, update) => [
-      _HrSelect<String>(
+      HrSelect<String>(
         initialValue: '${v['itemId']}',
         items: items
             .map(
@@ -752,7 +780,7 @@ Future<Map<String, dynamic>?> showHrAssignmentSheet(
   values: {'reason': ''},
   fields: (v, update) => [
     if (['opening', 'indicators'].contains(record.stage)) ...[
-      _HrSelect<int>(
+      HrSelect<int>(
         decoration: InputDecoration(labelText: '部门（当前：${record.department}）'),
         items: departments
             .map(
@@ -764,7 +792,7 @@ Future<Map<String, dynamic>?> showHrAssignmentSheet(
             .toList(),
         onChanged: (x) => v['departmentId'] = x,
       ),
-      _HrSelect<int>(
+      HrSelect<int>(
         decoration: InputDecoration(labelText: '岗位（当前：${record.position}）'),
         items: positions
             .map(
@@ -786,7 +814,7 @@ Future<Map<String, dynamic>?> showHrAssignmentSheet(
         decoration: const InputDecoration(labelText: '试用期截止（YYYY-MM-DD，可清空）'),
         onChanged: (x) => v['probationEndAt'] = x,
       ),
-      _HrSelect<String>(
+      HrSelect<String>(
         decoration: const InputDecoration(labelText: '本周期模板（留空保持）'),
         items: hrMaps(config['templates'])
             .where((t) => t['enabled'] == true)
@@ -818,22 +846,25 @@ Future<Map<String, dynamic>?> showHrAssignmentSheet(
 );
 
 /// 与绩效弹层统一的单选入口，长名单支持搜索。
-class _HrSelect<T> extends StatefulWidget {
-  const _HrSelect({
+class HrSelect<T> extends StatefulWidget {
+  const HrSelect({
+    super.key,
+    this.searchHint = '搜索',
     this.initialValue,
     this.decoration = const InputDecoration(),
     required this.items,
     required this.onChanged,
   });
+  final String searchHint;
   final T? initialValue;
   final InputDecoration decoration;
   final List<DropdownMenuItem<T>> items;
   final ValueChanged<T?> onChanged;
   @override
-  State<_HrSelect<T>> createState() => _HrSelectState<T>();
+  State<HrSelect<T>> createState() => _HrSelectState<T>();
 }
 
-class _HrSelectState<T> extends State<_HrSelect<T>> {
+class _HrSelectState<T> extends State<HrSelect<T>> {
   T? value;
   @override
   void initState() {
@@ -843,55 +874,64 @@ class _HrSelectState<T> extends State<_HrSelect<T>> {
 
   Future<void> choose() async {
     String query = '';
-    final selected = await showModalBottomSheet<DropdownMenuItem<T>>(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) => StatefulBuilder(
-        builder: (context, update) {
-          final choices = widget.items.where((item) {
-            final child = item.child;
-            final label = child is Text ? (child.data ?? '') : '';
-            return query.isEmpty ||
-                label.toLowerCase().contains(query.toLowerCase());
-          }).toList();
-          return SizedBox(
-            height: MediaQuery.sizeOf(context).height * .65,
-            child: Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: TextField(
-                    decoration: const InputDecoration(
-                      prefixIcon: Icon(Icons.search),
-                      hintText: '搜索',
-                      border: OutlineInputBorder(),
+    final selected = await showHrConfigPanel<DropdownMenuItem<T>>(
+      context,
+      HrConfigPanel(
+        title: widget.decoration.labelText ?? '选择',
+        child: StatefulBuilder(
+          builder: (context, update) {
+            final choices = widget.items.where((item) {
+              final child = item.child;
+              final label = child is Text ? (child.data ?? '') : '';
+              return query.isEmpty ||
+                  label.toLowerCase().contains(query.toLowerCase());
+            }).toList();
+            return SizedBox(
+              height: (choices.length * 48.0 + 76).clamp(
+                150.0,
+                MediaQuery.sizeOf(context).height * .6,
+              ),
+              child: Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: TextField(
+                      decoration: InputDecoration(
+                        prefixIcon: const Icon(Icons.search),
+                        hintText: widget.searchHint,
+                        border: const OutlineInputBorder(),
+                      ),
+                      onChanged: (v) => update(() => query = v.trim()),
                     ),
-                    onChanged: (v) => update(() => query = v.trim()),
                   ),
-                ),
-                Expanded(
-                  child: ListView(
-                    children: [
-                      for (final item in choices)
-                        ListTile(
-                          title: item.child,
-                          trailing: item.value == value
-                              ? const Icon(Icons.check_rounded)
-                              : null,
-                          onTap: () => Navigator.pop(context, item),
-                        ),
-                    ],
+                  Expanded(
+                    child: choices.isEmpty
+                        ? const Center(child: Text('没有匹配的选项'))
+                        : ListView(
+                            children: [
+                              for (final item in choices)
+                                ListTile(
+                                  selected: item.value == value,
+                                  selectedColor: Theme.of(
+                                    context,
+                                  ).colorScheme.primary,
+                                  title: item.child,
+                                  trailing: item.value == value
+                                      ? const Icon(Icons.check_rounded)
+                                      : null,
+                                  onTap: () => Navigator.pop(context, item),
+                                ),
+                            ],
+                          ),
                   ),
-                ),
-              ],
-            ),
-          );
-        },
+                ],
+              ),
+            );
+          },
+        ),
       ),
+      maxWidth: 440,
+      fitContent: true,
     );
     if (selected == null || !mounted) return;
     setState(() => value = selected.value);
@@ -913,7 +953,12 @@ class _HrSelectState<T> extends State<_HrSelect<T>> {
           ),
           child: selected.isEmpty
               ? const Text('请选择', style: TextStyle(color: Colors.grey))
-              : selected.first.child,
+              : DefaultTextStyle.merge(
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 13),
+                  child: selected.first.child,
+                ),
         ),
       ),
     );

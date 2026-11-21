@@ -122,6 +122,9 @@ void main() {
     await tester.ensureVisible(find.text('保存模板'));
     await tester.tap(find.text('保存模板'));
     await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('hr-confirm-action')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('hr-confirm-action')));
+    await tester.pumpAndSettle();
     expect(service.saved, isNotNull);
     expect(service.saved!.single['departmentIds'], [7]);
     expect((service.saved!.single['items'] as List).single['indicatorId'], 'a');
@@ -140,6 +143,9 @@ void main() {
     expect(find.byKey(const ValueKey('hr-template-name')), findsOneWidget);
     await tester.ensureVisible(find.text('保存模板'));
     await tester.tap(find.text('保存模板'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('hr-confirm-action')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('hr-confirm-action')));
     await tester.pumpAndSettle();
     expect(service.saved!.length, 2);
     expect(service.saved!.last['enabled'], false);
@@ -166,6 +172,9 @@ void main() {
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('保存模板'));
     await tester.tap(find.text('保存模板'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('hr-confirm-action')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('hr-confirm-action')));
     await tester.pumpAndSettle();
     final updated = service.saved!.singleWhere((t) => t['name'] == '财务模板');
     expect(updated['departmentIds'], isEmpty);
@@ -278,6 +287,9 @@ void main() {
 
     await tester.ensureVisible(find.text('保存模板'));
     await tester.tap(find.text('保存模板'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('hr-confirm-action')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('hr-confirm-action')));
     await tester.pumpAndSettle();
     final saved = (service.saved!.single['items'] as List)
         .map((item) => (item as Map)['indicatorId'])

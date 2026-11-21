@@ -1,9 +1,11 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 
 import '../../core/theme/dunes_theme.dart';
 import '../auth/auth_session.dart';
 import 'hr_performance_detail.dart';
+import 'hr_performance_management_ui.dart';
 import 'hr_performance_sheets.dart';
 import '../chat/user_avatar_widget.dart';
 import '../contacts/contact_models.dart';
@@ -52,8 +54,8 @@ const _hrStageColors = <String, Color>{
   'self': Color(0xFF5B6EE1),
   'indicators': Color(0xFF4C86E0),
   'review': Color(0xFF7B5CD8),
-  'calibration': Color(0xFF2F9E8F),
-  'hr': Color(0xFF3E8E5A),
+  'calibration': Color(0xFF9274D4),
+  'hr': Color(0xFF6949BC),
   'ready_final': Color(0xFF6F55C7),
   'final': Color(0xFFD0892B),
   'result': Color(0xFFE06A4A),
@@ -71,6 +73,13 @@ bool hrPerformanceExcludedLeader(String name) {
     default:
       return false;
   }
+}
+
+// Verified organization identities; both ID and name must match while the
+// server-side exclusion rollout is pending.
+bool hrPerformanceExcludedPerson(int userId, String name) {
+  final expected = <int, String>{72: 'IOS审核专用', 77: '肖喜凌', 91: '李俊昊'};
+  return expected[userId] == name.trim();
 }
 
 bool hrPerformanceExcludedDepartmentName(String name) =>
@@ -139,6 +148,17 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
   bool _filtersCollapsed = false;
   String? _grade;
   String _scope = 'mine';
+  bool _initialScopeResolved = false;
+  final _tableHorizontalController = ScrollController();
+
+  @override
+  void dispose() {
+    _tableHorizontalController.dispose();
+    super.dispose();
+  }
+
+  bool _onlyTodo = false;
+  String? _supervisor;
   String _query = '';
   String? _stage;
   String? _department;
@@ -146,6 +166,7 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
   String? _error;
   bool _loading = true;
   bool _monthStarted = true;
+  bool _monthStatusKnown = false;
   bool _canStartMonth = false;
   bool _supportsBatchStart = false;
   int _epoch = 0;
@@ -185,6 +206,14 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
       final access = results[0] as HrPerformanceAccess;
       var scope = _scope;
       var fetched = results[1] as List<HrPerformanceRecord>;
+      if (!_initialScopeResolved) {
+        _initialScopeResolved = true;
+        if (access.allowed) {
+          scope = access.all ? 'all' : 'team';
+          _onlyTodo = !access.hr;
+          fetched = await _service.records(_monthKey, scope);
+        }
+      }
       final pendingId = _pendingSelectId;
       if (pendingId != null && !fetched.any((r) => r.id == pendingId)) {
         for (final candidate in [
@@ -201,7 +230,7 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
           }
         }
       }
-      var started = true;
+      bool? started;
       var canStart = false;
       var supportsBatch = false;
       if (widget.service == null || access.hr) {
@@ -218,6 +247,7 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
           .where(
             (r) =>
                 !hrPerformanceExcludedLeader(r.name) &&
+                !hrPerformanceExcludedPerson(r.userId, r.name) &&
                 !hrPerformanceDepartmentExcluded(
                   departmentId: _userDept[r.userId],
                   departmentName: r.department,
@@ -226,10 +256,12 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
                 ),
           )
           .toList();
+      final requestedRecordId = _pendingSelectId;
       setState(() {
         _access = access;
         _scope = scope;
-        _monthStarted = started;
+        _monthStarted = started ?? true;
+        _monthStatusKnown = started != null;
         _canStartMonth = canStart;
         _supportsBatchStart = supportsBatch;
         _records = rows;
@@ -243,12 +275,20 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
             : matches.first;
         _loading = false;
       });
+      final requestedRecord = _selected;
+      if (requestedRecordId != null &&
+          requestedRecord?.id == requestedRecordId) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _openAssessment(requestedRecord!);
+        });
+      }
     } catch (e) {
       if (!mounted || epoch != _epoch) return;
       setState(() {
         _error = '$e';
         _loading = false;
         _monthStarted = true;
+        _monthStatusKnown = false;
         _canStartMonth = false;
         _records = [];
         _selected = null;
@@ -395,6 +435,10 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
 
   Color get _purple => DunesColors.resolve(context, DunesColors.brandPurple);
   bool _matchesStagePool(HrPerformanceRecord r) =>
+      (!_onlyTodo || r.todoGroups.isNotEmpty) &&
+      (_supervisor == null ||
+          r.snapshot['directSupervisorName'] == _supervisor ||
+          r.snapshot['divisionSupervisorName'] == _supervisor) &&
       (_query.isEmpty ||
           '${r.name} ${r.department} ${r.position}'.contains(_query)) &&
       (_grade == null || (r.scoresVisible && r.snapshot['grade'] == _grade)) &&
@@ -410,7 +454,94 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
 
   List<HrPerformanceRecord> get _operationRows => _selectedIds.isEmpty
       ? _visible
-      : _visible.where((r) => _selectedIds.contains(r.id)).toList();
+      : _records.where((r) => _selectedIds.contains(r.id)).toList();
+
+  Set<int> get _visibleIds => _visible.map((r) => r.id).toSet();
+
+  String get _selectionLabel {
+    final visible = _visibleIds;
+    final hidden = _selectedIds.where((id) => !visible.contains(id)).length;
+    return '已选 ${_selectedIds.length} 人${hidden == 0 ? '' : ' · 筛选外 $hidden 人'}';
+  }
+
+  String _recordStartLabel(HrPerformanceRecord r) {
+    if (r.stage == 'exempt') return '免考核';
+    if (r.started == true) return '已发起';
+    if (r.started == false ||
+        (!_monthStarted && _monthStatusKnown) ||
+        const ['opening', 'indicators'].contains(r.stage)) {
+      return r.stage == 'archived' ? '未发起' : '待发起';
+    }
+    return '已发起';
+  }
+
+  String _assignees(HrPerformanceRecord r) {
+    if (_recordStartLabel(r) != '已发起') return '—';
+    final direct = hrText(r.snapshot['directSupervisorName']);
+    final pending = r.requests.where(
+      (request) => request['status'] == 'pending',
+    );
+    if (pending.any((request) => request['kind'] == 'appeal')) {
+      return direct.isEmpty || r.skipsDirectReview ? 'HR' : '$direct / HR';
+    }
+    if (r.stage == 'self' &&
+        pending.any((request) => request['kind'] == 'adjustment')) {
+      return direct.isEmpty ? '—' : direct;
+    }
+    final handler = switch (r.stage) {
+      'opening' when r.blockers.isNotEmpty => 'HR',
+      'self' || 'result' => r.name,
+      'review' => direct,
+      'calibration' => hrText(r.snapshot['divisionSupervisorName']),
+      'hr' || 'ready_final' => 'HR',
+      'final' => '总裁办终审',
+      'interview' => r.skipsDirectReview ? 'HR' : direct,
+      _ => '—',
+    };
+    return handler.isEmpty ? '—' : handler;
+  }
+
+  String _batchPreview(
+    List<HrPerformanceRecord> candidates,
+    Map<HrPerformanceRecord, String> skipped,
+    Set<int> visible,
+  ) {
+    final eligible = candidates.where((r) => !skipped.containsKey(r)).toList();
+    final hidden = candidates.where((r) => !visible.contains(r.id)).length;
+    return [
+      '范围：${_selectedIds.isEmpty ? '当前筛选结果' : '已勾选人员'}'
+          '${hidden == 0 ? '' : '（含筛选外 $hidden 人）'}',
+      '将处理 ${eligible.length} 人'
+          '${eligible.isEmpty ? '' : '：${eligible.map((r) => r.name).join('、')}'}',
+      if (skipped.isNotEmpty)
+        '将跳过 ${skipped.length} 人：\n'
+            '${skipped.entries.map((e) => '${e.key.name}（${e.value}）').join('、')}',
+    ].join('\n');
+  }
+
+  String _unavailableReason(HrPerformanceRecord r) {
+    if (r.stage == 'archived') return '已归档';
+    if (r.stage == 'exempt') return '免考核';
+    if (r.workflow['confirmedAt'] != null &&
+        r.workflow['confirmationSource'] != 'auto') {
+      return '已确认锁定';
+    }
+    return '${r.stageLabel} · 当前环节或权限不支持此操作';
+  }
+
+  Future<void> _showBatchUnavailable(String message) => showDialog<void>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('没有可办理的人员'),
+      content: SingleChildScrollView(child: Text(message)),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('关闭'),
+        ),
+      ],
+    ),
+  );
 
   List<HrPerformanceRecord> _deptRecords(_HrRosterDept node) {
     final people = <HrPerformanceRecord>[...node.people];
@@ -554,7 +685,10 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
     final indent = item.depth.clamp(0, 5) * 10.0;
     final initial = r.name.trim().isEmpty ? '?' : r.name.trim().substring(0, 1);
     final subtitle = [
-      if (r.todoGroups.isNotEmpty) r.todoGroups.join(' / ') else r.stageLabel,
+      _recordStartLabel(r),
+      r.stageLabel,
+      if (_assignees(r) != '—' && _assignees(r).isNotEmpty) _assignees(r),
+      if (r.blockers.isNotEmpty) r.blockers.first,
       if (r.stage != 'self' &&
           _supervisorInPresidentOffice(r.directSupervisorId))
         '启动后先自评',
@@ -573,25 +707,7 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
         borderRadius: BorderRadius.circular(10),
         child: InkWell(
           borderRadius: BorderRadius.circular(10),
-          onTap: () {
-            setState(() => _selected = r);
-            if (!wide) {
-              Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) => Scaffold(
-                    appBar: AppBar(title: const Text(hrPerformanceTitle)),
-                    body: HrPerformanceDetail(
-                      session: widget.session,
-                      record: r,
-                      service: _service,
-                      monthStarted: _monthStarted,
-                      onChanged: () => _load(),
-                    ),
-                  ),
-                ),
-              );
-            }
-          },
+          onTap: () => _openAssessment(r),
           child: Container(
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(10),
@@ -676,7 +792,7 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
                       const SizedBox(height: 3),
                       Text(
                         subtitle,
-                        maxLines: 1,
+                        maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           fontSize: 11,
@@ -711,7 +827,7 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(title),
-        content: Text(message),
+        content: SingleChildScrollView(child: Text(message)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -727,13 +843,17 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
     return answer == true;
   }
 
+  String? _startSkipReason(HrPerformanceRecord r) {
+    if (r.stage == 'archived') return '已归档';
+    if (r.stage == 'exempt') return '免考核';
+    if (r.started == true) return '已发起';
+    if (r.started == null && _monthStarted) return '未取得个人发起状态';
+    return null;
+  }
+
   List<int> get _selectedStartIds => [
-    for (final r in _records)
-      if (_selectedIds.contains(r.id) &&
-          r.started != true &&
-          r.stage != 'archived' &&
-          r.stage != 'exempt')
-        r.id,
+    for (final r in _operationRows)
+      if (_selectedIds.contains(r.id) && _startSkipReason(r) == null) r.id,
   ];
 
   Widget _buildBatchActions() {
@@ -760,7 +880,7 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
         Icon(Icons.check_circle_rounded, size: 18, color: purple),
         const SizedBox(width: 8),
         Text(
-          '已选 ${_selectedIds.length} 人',
+          _selectionLabel,
           style: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w600,
@@ -806,9 +926,7 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
           ),
         if (_access.hr)
           FilledButton(
-            onPressed: _busy || _loading || _selectedStartIds.isEmpty
-                ? null
-                : _startSelected,
+            onPressed: _busy || _loading ? null : _startSelected,
             style: actionStyle.copyWith(
               backgroundColor: WidgetStateProperty.resolveWith(
                 (states) => states.contains(WidgetState.disabled)
@@ -856,11 +974,25 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
 
   Future<void> _startSelected() async {
     final recordIds = _selectedStartIds;
-    if (!_access.hr || _busy || recordIds.isEmpty) {
+    if (!_access.hr || _busy || _selectedIds.isEmpty) {
+      return;
+    }
+    final selected = _operationRows;
+    final visible = _visibleIds;
+    final skipped = <HrPerformanceRecord, String>{
+      for (final r in selected) r: ?_startSkipReason(r),
+    };
+    final preview = _batchPreview(selected, skipped, visible);
+    if (recordIds.isEmpty) {
+      await _showBatchUnavailable(preview);
       return;
     }
     if (!await _ensureScopedStart() || !mounted) return;
-    await _confirmStart('已勾选的 ${recordIds.length} 人', recordIds: recordIds);
+    await _confirmStart(
+      '已勾选的 ${selected.length} 人',
+      recordIds: recordIds,
+      preview: preview,
+    );
   }
 
   Future<void> _startMonth() async {
@@ -891,15 +1023,11 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
       ),
     );
     if (!mounted || mode == null) return;
-    if (mode == 'all') {
-      await _confirmStart('全员');
+    if (mode == 'selected') {
+      await _startSelected();
       return;
     }
     if (!await _ensureScopedStart() || !mounted) return;
-    if (mode == 'selected') {
-      await _confirmStart('已勾选的 ${recordIds.length} 人', recordIds: recordIds);
-      return;
-    }
     List<HrPerformanceRecord> candidates;
     setState(() => _busy = true);
     try {
@@ -908,10 +1036,9 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
       candidates = rows
           .where(
             (r) =>
-                (r.started == false || (r.started == null && !_monthStarted)) &&
-                r.stage != 'archived' &&
-                r.stage != 'exempt' &&
+                _startSkipReason(r) == null &&
                 !hrPerformanceExcludedLeader(r.name) &&
+                !hrPerformanceExcludedPerson(r.userId, r.name) &&
                 !hrPerformanceDepartmentExcluded(
                   departmentId: r.departmentId ?? _userDept[r.userId],
                   departmentName: r.department,
@@ -931,6 +1058,15 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
     if (!mounted) return;
     if (candidates.isEmpty) {
       showDunesToast(context, '本月暂无待发起考核人员');
+      return;
+    }
+    if (mode == 'all') {
+      await _confirmStart(
+        '全部符合条件的 ${candidates.length} 人',
+        recordIds: candidates.map((r) => r.id).toList(),
+        preview:
+            '将处理 ${candidates.length} 人：${candidates.map((r) => r.name).join('、')}',
+      );
       return;
     }
     List<int> chosenIds;
@@ -991,7 +1127,14 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
       chosenIds = chosen.toList();
       scopeLabel = '所选 ${chosenIds.length} 人';
     }
-    await _confirmStart(scopeLabel, recordIds: chosenIds);
+    final chosenIdSet = chosenIds.toSet();
+    final chosenNames = candidates.where((r) => chosenIdSet.contains(r.id));
+    await _confirmStart(
+      scopeLabel,
+      recordIds: chosenIds,
+      preview:
+          '将处理 ${chosenIds.length} 人：${chosenNames.map((r) => r.name).join('、')}',
+    );
   }
 
   Future<void> _sendDepartmentFinal() async {
@@ -1013,6 +1156,7 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
       final id = r.departmentId;
       if (id == null ||
           hrPerformanceExcludedLeader(r.name) ||
+          hrPerformanceExcludedPerson(r.userId, r.name) ||
           hrPerformanceDepartmentExcluded(
             departmentId: id,
             departmentName: r.department,
@@ -1179,24 +1323,20 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
 
   Future<void> _confirmStart(
     String scopeLabel, {
-    List<int> recordIds = const [],
-    List<int> departmentIds = const [],
+    required List<int> recordIds,
+    required String preview,
   }) async {
     final label = '${_month.year}年${_month.month}月';
     final month = _monthKey;
     final confirmed = await _askStart(
       '开始当月绩效考核',
-      '$label · $scopeLabel\n资料齐全的人员将直接进入主管初评或自评。已发起的考核表会保留当前进度。',
+      '$label · $scopeLabel\n$preview\n资料齐全的人员将进入主管初评或自评。待补配的考核表会显示缺失资料。',
       '确认发起',
     );
     if (!mounted || !confirmed) return;
     setState(() => _busy = true);
     try {
-      final started = await _service.startMonth(
-        month,
-        departmentIds: departmentIds,
-        recordIds: recordIds,
-      );
+      final started = await _service.startMonth(month, recordIds: recordIds);
       if (!mounted) return;
       showDunesToast(
         context,
@@ -1213,9 +1353,55 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
   }
 
   Future<void> _forward() async {
-    final rows = _operationRows;
-    if (rows.isEmpty) return;
+    final month = _monthKey;
     try {
+      final fetchedCandidates = await _service.records(
+        month,
+        _access.all
+            ? 'all'
+            : _access.team
+            ? 'team'
+            : 'mine',
+      );
+      if (!mounted) return;
+      final ownRecords = !_access.all && _access.team
+          ? await _service.records(month, 'mine')
+          : const <HrPerformanceRecord>[];
+      if (!mounted) return;
+      final candidates =
+          {
+                for (final r in [...fetchedCandidates, ...ownRecords]) r.id: r,
+              }.values
+              .where((r) => !hrPerformanceExcludedPerson(r.userId, r.name))
+              .toList();
+      final departments = [
+        for (final id in _deptName.keys)
+          {'id': id, 'name': _deptName[id], 'parentId': _deptParent[id]},
+      ];
+      // The organization catalog can be unavailable offline; retain directly
+      // assigned departments so selection remains possible within visible scope.
+      for (final record in candidates) {
+        final id = record.departmentId;
+        if (id != null && !departments.any((d) => d['id'] == id)) {
+          departments.add({
+            'id': id,
+            'name': record.department,
+            'parentId': null,
+          });
+        }
+      }
+      final selection = await showHrExportSheet(
+        context,
+        records: candidates,
+        departments: departments,
+        selectedIds: _selectedIds,
+        month: month,
+        forForward: true,
+      );
+      if (selection == null || !mounted) return;
+      final ids = (selection['ids'] as List).whereType<int>().toSet();
+      final rows = candidates.where((r) => ids.contains(r.id)).toList();
+      if (rows.isEmpty) return;
       final conv =
           widget.conversationService ??
           ConversationService(session: widget.session);
@@ -1225,49 +1411,65 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
         title: '转发绩效考核到会话',
       );
       if (id == null || !mounted) return;
-      var confirmed = false;
-      final hasScores =
-          rows.every((r) => r.released || r.stage == 'exempt') &&
-          rows.any((r) => r.snapshot['total'] != null);
-      if (hasScores) {
-        final answer = await showHrReasonSheet(
-          context,
-          title: '确认转发分数',
-          message: '会话成员都能看到卡片上的分数。请确认当前会话适合接收这些人员的成绩。',
-          submitLabel: '确认会话成员均可查看',
-        );
-        if (answer == null || !mounted) return;
-        confirmed = true;
+      final progress = <String, int>{};
+      final people = <Map<String, dynamic>>[];
+      var coefficientSum = 0.0;
+      var coefficientCount = 0;
+      var hasScores = false;
+      for (final record in rows) {
+        progress.update(record.stage, (count) => count + 1, ifAbsent: () => 1);
+        final person = <String, dynamic>{
+          'id': record.id,
+          'name': record.name,
+          'department': record.department,
+          'stage': record.stage,
+        };
+        // Use the viewer-filtered roster response and copy only card fields.
+        final total = record.snapshot['total'];
+        if (record.scoresVisible && total is num) {
+          hasScores = true;
+          person['total'] = total;
+          person['grade'] = record.snapshot['grade'];
+          final coefficient = record.snapshot['coefficient'];
+          if (coefficient is num) {
+            person['coefficient'] = coefficient;
+            coefficientSum += coefficient;
+            coefficientCount++;
+          }
+        }
+        people.add(person);
       }
+      if (!await hrConfirmAction(
+        context,
+        title: '转发绩效考核',
+        message:
+            '将向所选会话发送 $month 的 ${rows.length} 人考核快照：${rows.map((r) => r.name).join('、')}。${hasScores ? '包含分数、等级和系数，会话成员均可查看。' : '当前无可发送的分数。'}',
+      )) {
+        return;
+      }
+      if (!mounted) return;
       setState(() => _busy = true);
-      final payload = await _service.summary(
-        _monthKey,
-        rows.map((r) => r.id).toList(),
-        confirmScores: confirmed,
-      );
-      final people = hrMaps(payload['rows']);
-      final markdown = StringBuffer('### $hrPerformanceTitle · $_monthKey\n');
-      if (payload['hasScores'] == true) {
-        markdown.writeln('| 姓名 | 部门 | 得分 | 等级 | 系数 |');
-        markdown.writeln('|---|---|---|---|---|');
-        for (final p in people) {
-          markdown.writeln(
-            '| ${p['name']} | ${p['department']} | ${p['total'] ?? '—'} | ${p['grade'] ?? '—'} | ${p['coefficient'] ?? '—'} |',
-          );
-        }
-      } else {
-        markdown.writeln('共 ${people.length} 人，仅包含进度。');
-        final progress = Map<String, dynamic>.from(payload['progress'] as Map);
-        for (final e in progress.entries) {
-          markdown.writeln(
-            '- ${hrPerformanceStageLabels[e.key] ?? e.key}：${e.value} 人',
-          );
-        }
-      }
+      final names = rows
+          .map((r) => r.department)
+          .where((v) => v.isNotEmpty)
+          .toSet();
+      final caption = names.length == 1 ? names.first : '所选人员';
       await conv.sendText(
         id,
-        markdown.toString(),
-        payload: {...payload, 'robotMarkdown': true},
+        '$month · $caption · ${people.length} 人绩效考核快照',
+        payload: {
+          'type': 'hrPerformanceSummary',
+          'hrPerformanceSummary': true,
+          'month': month,
+          'createdAt': DateTime.now().toUtc().toIso8601String(),
+          'rows': people,
+          'progress': progress,
+          'hasScores': hasScores,
+          if (coefficientCount > 0)
+            'averageCoefficient': coefficientSum / coefficientCount,
+          'hrPerformanceReadOnlySummary': true,
+          'department': caption,
+        },
       );
       if (mounted) showDunesToast(context, '已转发到会话');
     } catch (e) {
@@ -1279,9 +1481,692 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
     }
   }
 
+  Future<void> _exportAssessment({HrPerformanceRecord? person}) async {
+    try {
+      final all = (await _service.records(
+        _monthKey,
+        'all',
+      )).where((r) => !hrPerformanceExcludedPerson(r.userId, r.name)).toList();
+      if (!mounted) return;
+      final catalog = await _service.catalog();
+      if (!mounted) return;
+      final selection = person == null
+          ? await showHrExportSheet(
+              context,
+              records: all,
+              departments: hrMaps(catalog['departments']),
+              selectedIds: _selectedIds,
+              month: _monthKey,
+            )
+          : <String, dynamic>{
+              'ids': [person.id],
+            };
+      if (selection == null || !mounted) return;
+      if (person != null &&
+          !await hrConfirmAction(
+            context,
+            title: '导出考核表',
+            message:
+                '月份：$_monthKey\n人员：${person.name} · ${person.department}\n将导出 1 人的考核表。',
+          )) {
+        return;
+      }
+      if (!mounted) return;
+      setState(() => _busy = true);
+      final data = await _service.exportXlsx(_monthKey, selection);
+      final name = '${data['filename']}';
+      final target = await getSaveLocation(
+        suggestedName: name,
+        acceptedTypeGroups: const [
+          XTypeGroup(label: 'Excel', extensions: ['xlsx']),
+        ],
+      );
+      if (target == null) return;
+      await XFile.fromData(
+        base64Decode('${data['content']}'),
+        mimeType: '${data['mimeType']}',
+        name: name,
+      ).saveTo(target.path);
+      if (mounted) showDunesToast(context, '已导出 ${data['count']} 份考核表');
+    } catch (e) {
+      if (mounted) {
+        showDunesToast(context, '导出失败：$e', kind: DunesToastKind.error);
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _manageBatch(String action) async {
+    if (_selectedIds.isEmpty) return;
+    final candidates = _operationRows;
+    final visible = _visibleIds;
+    final skipped = <HrPerformanceRecord, String>{
+      for (final r in candidates)
+        if (!r.actions.contains(action))
+          r: _unavailableReason(r)
+        else if (action == 'hr_skip' &&
+            r.scoresVisible &&
+            (r.lines.isEmpty || r.lines.any((line) => line['score'] == null)))
+          r: '评分未填完整',
+    };
+    var records = candidates.where((r) => !skipped.containsKey(r)).toList();
+    String preview() => _batchPreview(candidates, skipped, visible);
+    if (records.isEmpty) {
+      await _showBatchUnavailable(preview());
+      return;
+    }
+    try {
+      Map<String, dynamic>? values;
+      if (action == 'hr_assign') {
+        final options = await _service.options(records.first.id);
+        if (!mounted) return;
+        final assignment = await showHrSupervisorSheet(
+          context,
+          hrMaps(options['users']),
+          scope: preview(),
+        );
+        if (assignment == null) return;
+        values = {'assignment': assignment, 'reason': assignment['reason']};
+      } else {
+        final allowedByRecord = <HrPerformanceRecord, Set<String>>{};
+        List<String>? targets;
+        if (action == 'hr_return') {
+          for (final r in records) {
+            final allowed = r.hrReturnTargets;
+            if (allowed != null) {
+              allowedByRecord[r] = allowed.toSet();
+            } else {
+              final options = await _service.options(r.id);
+              if (!mounted) return;
+              allowedByRecord[r] = (options['hrReturnTargets'] as List? ?? [])
+                  .map((v) => '$v')
+                  .toSet();
+            }
+          }
+          targets = _hrStageFlow
+              .where(
+                (stage) => allowedByRecord.values.any((v) => v.contains(stage)),
+              )
+              .toList();
+        }
+        if (!mounted) return;
+        if (targets?.isEmpty == true) {
+          for (final r in records) {
+            skipped[r] = '${r.stageLabel} · 无可回退阶段';
+          }
+          await _showBatchUnavailable(preview());
+          return;
+        }
+        Map<HrPerformanceRecord, String> skippedFor(String target) => {
+          ...skipped,
+          for (final r in records)
+            if (!allowedByRecord[r]!.contains(target))
+              r: '${r.stageLabel} · 无法回退到${hrPerformanceStageLabels[target] ?? target}',
+        };
+        values = await showHrReasonSheet(
+          context,
+          title: action == 'hr_skip' ? '批量跳过当前审批' : '批量回退阶段',
+          targets: targets,
+          minLength: 1,
+          message: action == 'hr_skip'
+              ? '${preview()}${records.any((r) => r.stage == 'final') ? '\n跳过终审的考核将立即下发结果。' : ''}'
+              : '目标阶段及后续审批将失效。已下发的结果和自动确认将被撤销，历史记录保留。',
+          scopePreview: targets == null
+              ? null
+              : (target) =>
+                    _batchPreview(candidates, skippedFor(target), visible),
+        );
+        if (values != null && targets != null) {
+          final ineligible = skippedFor(hrText(values['target']));
+          records = records.where((r) => !ineligible.containsKey(r)).toList();
+        }
+      }
+      if (values == null || !mounted) return;
+      setState(() => _busy = true);
+      final result = await _service.batchManaged(
+        records,
+        action,
+        '${values['reason']}',
+        values: values,
+      );
+      if (!mounted) return;
+      final failures = result.where((v) => v['success'] != true).toList();
+      final names = {for (final r in records) r.id: r.name};
+      await showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text(
+            '成功 ${result.length - failures.length} 人 · 失败 ${failures.length} 人',
+          ),
+          content: SingleChildScrollView(
+            child: Text(
+              failures.isEmpty
+                  ? '操作已完成'
+                  : failures
+                        .map(
+                          (v) => '${names[v['id']] ?? v['id']}：${v['message']}',
+                        )
+                        .join('\n'),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('关闭'),
+            ),
+          ],
+        ),
+      );
+      await _load();
+    } catch (e) {
+      if (mounted) showDunesToast(context, '$e', kind: DunesToastKind.error);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _showAssessmentActions(HrPerformanceRecord record) async {
+    final actions = hrAssessmentActions(record);
+    final selection = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => Theme(
+        data: hrConfigTheme(dialogContext),
+        child: SimpleDialog(
+          title: Text('${record.name} · 考核操作'),
+          children: [
+            SimpleDialogOption(
+              onPressed: () => Navigator.pop(dialogContext, 'detail'),
+              child: const Text('查看考核详情'),
+            ),
+            for (final action in actions)
+              SimpleDialogOption(
+                onPressed: () => Navigator.pop(dialogContext, action),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(hrAssessmentActionLabel(record, action)),
+                    if (hrAssessmentActionImpact(record, action)
+                        case final impact?)
+                      Text(
+                        impact,
+                        style: Theme.of(dialogContext).textTheme.bodySmall,
+                      ),
+                  ],
+                ),
+              ),
+            if (_access.hr && !actions.contains('hr_edit_scores'))
+              if (hrAssessmentScoreBlocked(record) case final blocked?)
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 6,
+                  ),
+                  child: Text(
+                    blocked,
+                    style: Theme.of(dialogContext).textTheme.bodySmall,
+                  ),
+                ),
+            if (_access.hr)
+              SimpleDialogOption(
+                onPressed: () => Navigator.pop(dialogContext, 'export'),
+                child: const Text('导出考核表'),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (!mounted || selection == null) return;
+    if (selection == 'export') {
+      await _exportAssessment(person: record);
+    } else {
+      await _openAssessment(
+        record,
+        initialAction: selection == 'detail' ? null : selection,
+      );
+    }
+  }
+
+  Future<void> _openAssessment(
+    HrPerformanceRecord record, {
+    String? initialAction,
+  }) async {
+    await showGeneralDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: '关闭考核详情',
+      pageBuilder: (context, animation, secondary) => Align(
+        alignment: Alignment.center,
+        child: SizedBox(
+          key: const ValueKey('hr-assessment-dialog'),
+          width: (MediaQuery.sizeOf(context).width - 48)
+              .clamp(0, 1180)
+              .toDouble(),
+          height: MediaQuery.sizeOf(context).height - 64,
+          child: Theme(
+            data: hrConfigTheme(context),
+            child: Material(
+              borderRadius: BorderRadius.circular(18),
+              clipBehavior: Clip.antiAlias,
+              child: SafeArea(
+                child: Column(
+                  children: [
+                    Row(
+                      children: [
+                        IconButton(
+                          onPressed: () => Navigator.pop(context),
+                          icon: const Icon(Icons.close),
+                        ),
+                        Expanded(child: Text('${record.name} · 考核详情')),
+                        if (_access.hr)
+                          TextButton.icon(
+                            onPressed: _busy
+                                ? null
+                                : () => _exportAssessment(person: record),
+                            icon: const Icon(Icons.download),
+                            label: const Text('导出考核表'),
+                          ),
+                      ],
+                    ),
+                    Expanded(
+                      child: HrPerformanceDetail(
+                        session: widget.session,
+                        record: record,
+                        service: _service,
+                        monthStarted: _monthStarted,
+                        hrAccess: _access.hr,
+                        onChanged: _load,
+                        initialAction: initialAction,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _assessmentTable(List<HrPerformanceRecord> records) {
+    const columns = [
+      ('得分', 64.0, true),
+      ('绩效等级', 82.0, true),
+      ('部门', 120.0, false),
+      ('岗位', 146.0, false),
+      ('发起状态', 84.0, true),
+      ('当前节点', 104.0, true),
+      ('当前处理人', 128.0, true),
+      ('待处理事项', 200.0, false),
+      ('直属主管', 96.0, true),
+      ('分管主管', 96.0, true),
+      ('节点截止', 142.0, true),
+    ];
+    const checkWidth = 40.0;
+    const nameWidth = 112.0;
+    const leadingWidth = checkWidth + nameWidth;
+    const actionWidth = 100.0;
+    const rowHeight = 42.0;
+    const scrollGutter = 12.0;
+    final tableWidth = columns.fold(
+      leadingWidth + actionWidth,
+      (width, column) => width + column.$2,
+    );
+    final line = DunesColors.resolve(
+      context,
+      _hrLine,
+      role: DunesColorRole.border,
+    );
+    Color surface(Color color) =>
+        DunesColors.resolve(context, color, role: DunesColorRole.surface);
+    final headerColor = surface(DunesColors.brandPurpleSoft);
+    final text = DunesColors.resolve(context, DunesColors.text);
+    final mutedText = DunesColors.resolve(context, DunesColors.text2);
+    final actionStyle = TextButton.styleFrom(
+      foregroundColor: DunesColors.resolve(
+        context,
+        DunesColors.brandPurpleDeep,
+      ),
+      minimumSize: const Size(44, 32),
+      padding: const EdgeInsets.symmetric(horizontal: 6),
+      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+    );
+    Widget cell(
+      String value,
+      double width, {
+      bool centered = false,
+      bool header = false,
+      bool emphasize = false,
+    }) => SizedBox(
+      width: width,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        child: Align(
+          alignment: centered ? Alignment.center : Alignment.centerLeft,
+          child: Text(
+            value.isEmpty ? '—' : value,
+            textAlign: centered ? TextAlign.center : TextAlign.left,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 12,
+              color: header || emphasize ? text : mutedText,
+              fontWeight: header || emphasize
+                  ? FontWeight.w600
+                  : FontWeight.w400,
+              fontFeatures: centered ? _hrTabular : null,
+            ),
+          ),
+        ),
+      ),
+    );
+    Widget pinned(
+      Widget child,
+      Color background,
+      double viewportWidth, {
+      bool leading = false,
+    }) => AnimatedBuilder(
+      animation: _tableHorizontalController,
+      child: Container(
+        width: leading ? leadingWidth : actionWidth,
+        height: rowHeight,
+        decoration: BoxDecoration(
+          color: background,
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0x0D473060),
+              blurRadius: 6,
+              offset: Offset(leading ? 3 : -3, 0),
+            ),
+          ],
+        ),
+        foregroundDecoration: BoxDecoration(
+          border: Border(
+            left: leading ? BorderSide.none : BorderSide(color: line),
+            right: leading ? BorderSide(color: line) : BorderSide.none,
+          ),
+        ),
+        child: child,
+      ),
+      builder: (context, child) => Positioned(
+        left:
+            (leading ? 0 : viewportWidth - actionWidth) +
+            (_tableHorizontalController.hasClients
+                ? _tableHorizontalController.offset
+                : 0),
+        top: 0,
+        child: child!,
+      ),
+    );
+    return Material(
+      key: const ValueKey('hr-assessment-table'),
+      color: surface(Colors.white),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(10),
+        side: BorderSide(color: line),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: LayoutBuilder(
+        builder: (context, c) => ScrollConfiguration(
+          behavior: ScrollConfiguration.of(context).copyWith(
+            scrollbars: false,
+            dragDevices: PointerDeviceKind.values.toSet(),
+          ),
+          child: Scrollbar(
+            key: const ValueKey('hr-table-horizontal-scrollbar'),
+            controller: _tableHorizontalController,
+            thumbVisibility: true,
+            trackVisibility: true,
+            interactive: true,
+            scrollbarOrientation: ScrollbarOrientation.bottom,
+            notificationPredicate: (notification) =>
+                notification.metrics.axis == Axis.horizontal,
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: scrollGutter),
+              child: SingleChildScrollView(
+                key: const ValueKey('hr-table-horizontal-scroll'),
+                controller: _tableHorizontalController,
+                scrollDirection: Axis.horizontal,
+                child: SizedBox(
+                  width: c.maxWidth > tableWidth ? c.maxWidth : tableWidth,
+                  height: (c.maxHeight - scrollGutter)
+                      .clamp(0, c.maxHeight)
+                      .toDouble(),
+                  child: Column(
+                    children: [
+                      Container(
+                        key: const ValueKey('hr-table-header'),
+                        height: rowHeight,
+                        color: headerColor,
+                        child: Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            Row(
+                              children: [
+                                const SizedBox(width: leadingWidth),
+                                for (final col in columns)
+                                  cell(
+                                    col.$1,
+                                    col.$2,
+                                    header: true,
+                                    centered: col.$3,
+                                  ),
+                              ],
+                            ),
+                            pinned(
+                              Row(
+                                children: [
+                                  SizedBox(
+                                    width: checkWidth,
+                                    child: Checkbox(
+                                      semanticLabel: '选择当前筛选中的全部人员',
+                                      activeColor: _purple,
+                                      checkColor: Colors.white,
+                                      value:
+                                          records.isNotEmpty &&
+                                          records.every(
+                                            (r) => _selectedIds.contains(r.id),
+                                          ),
+                                      onChanged: _busy
+                                          ? null
+                                          : (checked) => setState(() {
+                                              if (checked == true) {
+                                                _selectedIds.addAll(
+                                                  records.map((r) => r.id),
+                                                );
+                                              } else {
+                                                _selectedIds.removeAll(
+                                                  records.map((r) => r.id),
+                                                );
+                                              }
+                                            }),
+                                    ),
+                                  ),
+                                  cell('姓名', nameWidth, header: true),
+                                ],
+                              ),
+                              headerColor,
+                              c.maxWidth,
+                              leading: true,
+                            ),
+                            pinned(
+                              cell(
+                                '操作',
+                                actionWidth,
+                                header: true,
+                                centered: true,
+                              ),
+                              headerColor,
+                              c.maxWidth,
+                            ),
+                          ],
+                        ),
+                      ),
+                      Expanded(
+                        child: ListView.builder(
+                          key: PageStorageKey('hr-table-$_monthKey-$_scope'),
+                          primary: false,
+                          itemExtent: rowHeight,
+                          itemCount: records.length,
+                          itemBuilder: (context, index) {
+                            final r = records[index];
+                            final values = [
+                              r.scoresVisible && r.snapshot['total'] != null
+                                  ? '${r.snapshot['total']}'
+                                  : '—',
+                              r.scoresVisible
+                                  ? hrText(r.snapshot['grade']).isEmpty
+                                        ? '—'
+                                        : hrText(r.snapshot['grade'])
+                                  : '—',
+                              r.department,
+                              r.position,
+                              _recordStartLabel(r),
+                              r.stageLabel,
+                              _assignees(r),
+                              r.blockers.isEmpty ? '—' : r.blockers.join('；'),
+                              hrText(r.snapshot['directSupervisorName']),
+                              hrText(r.snapshot['divisionSupervisorName']),
+                              hrDate(r.workflow['dueAt']),
+                            ];
+                            final rowColor = surface(
+                              _selectedIds.contains(r.id)
+                                  ? DunesColors.brandPurpleSoft
+                                  : index.isEven
+                                  ? Colors.white
+                                  : const Color(0xFFFAF8FD),
+                            );
+                            return Material(
+                              key: ValueKey('hr-table-row-${r.id}'),
+                              color: rowColor,
+                              child: InkWell(
+                                onTap: () => _openAssessment(r),
+                                child: Stack(
+                                  fit: StackFit.expand,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        const SizedBox(width: leadingWidth),
+                                        for (var i = 0; i < columns.length; i++)
+                                          cell(
+                                            values[i],
+                                            columns[i].$2,
+                                            centered: columns[i].$3,
+                                            emphasize:
+                                                i == 0 && values[i] != '—',
+                                          ),
+                                      ],
+                                    ),
+                                    pinned(
+                                      Row(
+                                        children: [
+                                          SizedBox(
+                                            width: checkWidth,
+                                            child: Checkbox(
+                                              semanticLabel: '选择${r.name}',
+                                              activeColor: _purple,
+                                              checkColor: Colors.white,
+                                              value: _selectedIds.contains(
+                                                r.id,
+                                              ),
+                                              onChanged: _busy
+                                                  ? null
+                                                  : (b) => setState(() {
+                                                      if (b == true) {
+                                                        _selectedIds.add(r.id);
+                                                      } else {
+                                                        _selectedIds.remove(
+                                                          r.id,
+                                                        );
+                                                      }
+                                                    }),
+                                            ),
+                                          ),
+                                          cell(
+                                            r.name,
+                                            nameWidth,
+                                            emphasize: true,
+                                          ),
+                                        ],
+                                      ),
+                                      rowColor,
+                                      c.maxWidth,
+                                      leading: true,
+                                    ),
+                                    pinned(
+                                      Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        children: [
+                                          TextButton(
+                                            style: actionStyle,
+                                            onPressed: () => _openAssessment(r),
+                                            child: const Text('查看'),
+                                          ),
+                                          const SizedBox(width: 4),
+                                          IconButton(
+                                            key: ValueKey(
+                                              'hr-row-actions-${r.id}',
+                                            ),
+                                            tooltip: '${r.name}的操作',
+                                            onPressed: _busy
+                                                ? null
+                                                : () =>
+                                                      _showAssessmentActions(r),
+                                            style: IconButton.styleFrom(
+                                              fixedSize: const Size(32, 32),
+                                              minimumSize: const Size(32, 32),
+                                              padding: EdgeInsets.zero,
+                                              tapTargetSize:
+                                                  MaterialTapTargetSize
+                                                      .shrinkWrap,
+                                              foregroundColor: mutedText,
+                                            ),
+                                            icon: const Icon(
+                                              Icons.more_horiz,
+                                              size: 19,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      rowColor,
+                                      c.maxWidth,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _export() async {
+    if (_access.hr) {
+      await _exportAssessment();
+      return;
+    }
     final rows = _operationRows;
     if (rows.isEmpty) return;
+    if (!await hrConfirmAction(
+      context,
+      title: '导出考核数据',
+      message: '月份：$_monthKey\n${_batchPreview(rows, {}, _visibleIds)}',
+    )) {
+      return;
+    }
+    if (!mounted) return;
     setState(() => _busy = true);
     try {
       final data = await _service.export(
@@ -1313,29 +2198,26 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
 
   Future<void> _batch(String action) async {
     final selected = _operationRows;
-    final rows = action == 'urge'
-        ? selected.where((r) => r.actions.contains(action)).toList()
-        : selected;
+    final skipped = <HrPerformanceRecord, String>{
+      for (final r in selected)
+        if (!r.actions.contains(action))
+          r: _unavailableReason(r)
+        else if (action == 'urge' && r.urgeUnavailableReason.isNotEmpty)
+          r: r.urgeUnavailableReason,
+    };
+    final rows = selected.where((r) => !skipped.containsKey(r)).toList();
+    final preview = _batchPreview(selected, skipped, _visibleIds);
     if (rows.isEmpty) {
-      if (action == 'urge') showDunesToast(context, '当前范围没有可督办的人员');
-      return;
-    }
-    if (rows.any((r) => !r.actions.contains(action))) {
-      showDunesToast(context, '选中名单包含当前无权办理的人员，请调整选择');
+      await _showBatchUnavailable(preview);
       return;
     }
     final reason = action == 'urge'
-        ? await showHrUrgeSheet(
-            context,
-            targets: rows,
-            skipped: selected
-                .where((r) => !r.actions.contains(action))
-                .toList(),
-          )
+        ? await showHrUrgeSheet(context, scope: preview)
         : await showHrReasonSheet(
             context,
-            title: action == 'urge' ? '批量督办' : '批量驳回至初评',
+            title: '批量驳回至初评',
             minLength: 1,
+            message: '$preview\n驳回后需重新初评和送审。',
           );
     if (reason == null || !mounted) return;
     setState(() => _busy = true);
@@ -1407,7 +2289,19 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
   ];
 
   Widget _filters({bool expanded = false}) {
+    final supervisors = {
+      for (final r in _records) ...[
+        hrText(r.snapshot['directSupervisorName']),
+        hrText(r.snapshot['divisionSupervisorName']),
+      ],
+    }..remove('');
     final menus = <Widget>[
+      _HrFilterMenu(
+        value: _supervisor,
+        items: [(null, '全部主管'), ...supervisors.map((s) => (s, s))],
+        expanded: expanded,
+        onChanged: (v) => setState(() => _supervisor = v),
+      ),
       _HrFilterMenu(
         value: _department,
         items: _departmentOptions,
@@ -1524,7 +2418,7 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
     _load();
   }
 
-  Widget _stageStrip() {
+  Widget _stageStrip({required bool wrap}) {
     final pool = _stagePool;
     final counts = <String, int>{};
     for (final row in pool) {
@@ -1533,9 +2427,8 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
     final known = {..._hrStageFlow, ..._hrStageAside};
     final extras = counts.keys.where((id) => !known.contains(id)).toList()
       ..sort();
-    bool shown(String id) => (counts[id] ?? 0) > 0 || _stage == id;
-    final flowIds = [..._hrStageFlow, ...extras].where(shown).toList();
-    final asideIds = _hrStageAside.where(shown).toList();
+    final flowIds = [..._hrStageFlow, ...extras];
+    const asideIds = _hrStageAside;
     final segments = [
       for (final id in flowIds)
         if ((counts[id] ?? 0) > 0)
@@ -1546,9 +2439,10 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
     ];
     Widget chip(String id) => Padding(
       key: _stageChipKey(id),
-      padding: const EdgeInsets.only(right: 8),
+      padding: EdgeInsets.only(right: wrap ? 0 : 8),
       child: _HrStageChip(
         key: ValueKey('hr-stage-$id'),
+        compact: wrap,
         label: _hrStageName(id),
         count: counts[id] ?? 0,
         color: _hrStageColors[id] ?? _hrStageFallback,
@@ -1557,6 +2451,23 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
         onTap: () => _selectStage(id),
       ),
     );
+    final chips = [
+      Padding(
+        key: _stageChipKey('all'),
+        padding: EdgeInsets.only(right: wrap ? 0 : 8),
+        child: _HrStageChip(
+          key: const ValueKey('hr-stage-all'),
+          compact: wrap,
+          label: '全部',
+          count: pool.length,
+          selected: _stage == null,
+          onTap: () => _selectStage(null),
+        ),
+      ),
+      for (final id in flowIds) chip(id),
+      if (!wrap) const _HrStageDivider(),
+      for (final id in asideIds) chip(id),
+    ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -1564,461 +2475,561 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
           _HrStageDistribution(segments: segments),
           const SizedBox(height: 8),
         ],
-        SizedBox(
-          height: 36,
-          child: SingleChildScrollView(
+        if (wrap)
+          Wrap(
             key: const ValueKey('hr-stage-strip'),
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                Padding(
-                  key: _stageChipKey('all'),
-                  padding: const EdgeInsets.only(right: 8),
-                  child: _HrStageChip(
-                    key: const ValueKey('hr-stage-all'),
-                    label: '全部',
-                    count: pool.length,
-                    selected: _stage == null,
-                    onTap: () => _selectStage(null),
-                  ),
-                ),
-                for (final id in flowIds) chip(id),
-                if (flowIds.isNotEmpty && asideIds.isNotEmpty)
-                  const _HrStageDivider(),
-                for (final id in asideIds) chip(id),
-              ],
+            spacing: 6,
+            runSpacing: 6,
+            children: chips,
+          )
+        else
+          SizedBox(
+            height: 36,
+            child: SingleChildScrollView(
+              key: const ValueKey('hr-stage-strip'),
+              scrollDirection: Axis.horizontal,
+              child: Row(children: chips),
             ),
           ),
-        ),
       ],
     );
   }
 
   @override
-  Widget build(BuildContext context) => LayoutBuilder(
-    builder: (context, constraints) {
-      final wide = constraints.maxWidth >= 640;
-      final mine = _scope == 'mine';
-      final rows = _visible;
-      final rosterItems = _rosterItems;
+  // Flutter Windows AXTree can be corrupted by Tooltip overlay reparenting.
+  // Keep the controls' own semantics; only omit redundant tooltip semantics.
+  Widget build(BuildContext context) => Theme(
+    data: hrConfigTheme(context),
+    child: Builder(builder: (context) => _buildPage(context)),
+  );
 
-      final scored = rows
-          .where(
-            (r) =>
-                r.scoresVisible &&
-                r.snapshot['total'] is num &&
-                r.stage != 'exempt',
-          )
-          .toList();
-      final grades = <String, int>{};
-      for (final r in scored) {
-        final g = '${r.snapshot['grade'] ?? ''}';
-        if (g.isNotEmpty) grades[g] = (grades[g] ?? 0) + 1;
-      }
-      final average = scored.isEmpty
-          ? null
-          : scored.fold<double>(
-                  0,
-                  (n, r) => n + (r.snapshot['total'] as num).toDouble(),
-                ) /
-                scored.length;
-      final stats = [
-        '当前 ${rows.length} 人',
-        if (average != null) '均分 ${average.toStringAsFixed(1)}',
-        for (final e in grades.entries) '${e.key} ${e.value}',
-      ].join(' · ');
-      final scopes = <MapEntry<String, String>>[
-        const MapEntry('mine', '我的'),
-        if (_access.allowed) const MapEntry('todo', '待办'),
-        if (_access.team) const MapEntry('team', '团队'),
-        if (_access.all) const MapEntry('all', '全员'),
-      ];
-      final actions = <_HrAction>[
-        _HrAction(
-          icon: Icons.forward_to_inbox_outlined,
-          label: '转发',
-          onTap: _busy || rows.isEmpty ? null : _forward,
-        ),
-        _HrAction(
-          icon: Icons.file_download_outlined,
-          label: '导出',
-          onTap: _busy || rows.isEmpty ? null : _export,
-        ),
-        if (_access.allowed && !mine)
+  Widget _buildPage(BuildContext context) => TooltipTheme(
+    data: TooltipTheme.of(context).copyWith(excludeFromSemantics: true),
+    child: LayoutBuilder(
+      builder: (context, constraints) {
+        final wide = constraints.maxWidth >= 640;
+        final mine = _scope == 'mine';
+        final rows = _visible;
+        final rosterItems = _rosterItems;
+
+        final scored = rows
+            .where(
+              (r) =>
+                  r.scoresVisible &&
+                  r.snapshot['total'] is num &&
+                  r.stage != 'exempt',
+            )
+            .toList();
+        final grades = <String, int>{};
+        for (final r in scored) {
+          final g = '${r.snapshot['grade'] ?? ''}';
+          if (g.isNotEmpty) grades[g] = (grades[g] ?? 0) + 1;
+        }
+        final average = scored.isEmpty
+            ? null
+            : scored.fold<double>(
+                    0,
+                    (n, r) => n + (r.snapshot['total'] as num).toDouble(),
+                  ) /
+                  scored.length;
+        final stats = [
+          '当前 ${rows.length} 人',
+          if (average != null) '均分 ${average.toStringAsFixed(1)}',
+          for (final e in grades.entries) '${e.key} ${e.value}',
+        ].join(' · ');
+        final scopes = <MapEntry<String, String>>[
+          const MapEntry('mine', '我的'),
+          if (_access.allowed) const MapEntry('list', '考核列表'),
+        ];
+        final actions = <_HrAction>[
           _HrAction(
-            icon: Icons.notifications_active_outlined,
-            label: '督办',
-            onTap: _busy || rows.isEmpty ? null : () => _batch('urge'),
+            icon: Icons.forward_to_inbox_outlined,
+            label: '转发',
+            onTap: _busy || _loading ? null : _forward,
           ),
-        _HrAction(
-          icon: Icons.refresh_rounded,
-          label: '刷新',
-          onTap: _loading ? null : _load,
-        ),
-        if (_access.hr && _canStartMonth)
           _HrAction(
-            icon: Icons.play_circle_outline,
-            label: '开始考核',
-            onTap: _busy || _loading ? null : _startMonth,
+            icon: Icons.file_download_outlined,
+            label: _access.hr ? '导出考核表' : '导出',
+            onTap: _busy ? null : _export,
           ),
-        if (_access.hr)
+          if (_access.allowed && !mine)
+            _HrAction(
+              icon: Icons.notifications_active_outlined,
+              label: '督办',
+              onTap: _busy || rows.isEmpty ? null : () => _batch('urge'),
+            ),
           _HrAction(
-            icon: Icons.send_outlined,
-            label: '发送部门终审',
-            onTap: _busy || _loading ? null : _sendDepartmentFinal,
+            icon: Icons.refresh_rounded,
+            label: '刷新',
+            onTap: _loading ? null : _load,
           ),
-      ];
-      return Material(
-        color: DunesColors.resolve(
-          context,
-          _hrPageBg,
-          role: DunesColorRole.surface,
-        ),
-        child: Padding(
-          padding: EdgeInsets.fromLTRB(wide ? 16 : 12, 8, wide ? 16 : 12, 0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _HrControlCard(
-                busy: _loading || _busy,
-                compact: !wide,
-                month: _HrMonthStepper(
-                  label: '${_month.year}年${_month.month}月',
-                  onPrev: _loading ? null : () => _shiftMonth(-1),
-                  onNext: _loading ? null : () => _shiftMonth(1),
-                ),
-                stats: _loading
-                    ? '加载中…'
-                    : mine
-                    ? ''
-                    : stats,
-                actions: actions,
-              ),
-              if (!_loading &&
-                  _access.hr &&
-                  _canStartMonth &&
-                  _supportsBatchStart) ...[
-                const SizedBox(height: 8),
-                Text(
-                  '可按部门或勾选人员分批发起，也可一次发起全员。',
-                  style: TextStyle(
-                    fontSize: 12,
-                    height: 1.4,
-                    color: DunesColors.resolve(context, DunesColors.text2),
+          if (_access.hr && _canStartMonth)
+            _HrAction(
+              icon: Icons.play_circle_outline,
+              label: '开始考核',
+              onTap: _busy || _loading ? null : _startMonth,
+            ),
+          if (_access.hr)
+            _HrAction(
+              icon: Icons.send_outlined,
+              label: '发送部门终审',
+              onTap: _busy || _loading ? null : _sendDepartmentFinal,
+            ),
+        ];
+        return Material(
+          color: DunesColors.resolve(
+            context,
+            _hrPageBg,
+            role: DunesColorRole.surface,
+          ),
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(wide ? 16 : 12, 8, wide ? 16 : 12, 0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _HrControlCard(
+                  busy: _loading || _busy,
+                  compact: !wide,
+                  month: _HrMonthStepper(
+                    label: '${_month.year}年${_month.month}月',
+                    onPrev: _loading ? null : () => _shiftMonth(-1),
+                    onNext: _loading ? null : () => _shiftMonth(1),
                   ),
+                  status: _loading
+                      ? '考核状态加载中'
+                      : !_monthStatusKnown
+                      ? '考核状态未获取'
+                      : !_monthStarted
+                      ? '本月未开启'
+                      : _canStartMonth
+                      ? '本月已开启 · 仍有待发起'
+                      : '本月已开启',
+                  started: !_loading && _monthStatusKnown && _monthStarted,
+                  stats: _loading
+                      ? '加载中…'
+                      : mine
+                      ? ''
+                      : stats,
+                  actions: actions,
                 ),
-              ],
-              const SizedBox(height: 10),
-              if (scopes.length > 1 || (!mine && wide))
-                Row(
-                  children: [
-                    Expanded(
-                      child: Align(
-                        alignment: Alignment.centerLeft,
-                        child: scopes.length > 1
-                            ? _HrScopeTabs(
-                                value: _scope,
-                                expand: !wide && scopes.length > 1,
-                                options: scopes,
-                                onChanged: _loading ? null : _selectScope,
-                              )
-                            : const SizedBox.shrink(),
-                      ),
-                    ),
-                    if (!mine && wide)
-                      TextButton.icon(
-                        key: const ValueKey('hr-filter-toggle'),
-                        onPressed: () => setState(
-                          () => _filtersCollapsed = !_filtersCollapsed,
-                        ),
-                        icon: Icon(
-                          _filtersCollapsed
-                              ? Icons.tune_rounded
-                              : Icons.expand_less_rounded,
-                          size: 17,
-                        ),
-                        label: Text(_filtersCollapsed ? '展开筛选' : '收起筛选'),
-                        style: TextButton.styleFrom(
-                          foregroundColor: DunesColors.resolve(
-                            context,
-                            DunesColors.brandPurpleDeep,
-                          ),
-                          visualDensity: VisualDensity.compact,
-                        ),
-                      ),
-                  ],
-                ),
-              if (!mine)
-                Visibility(
-                  visible: !wide || !_filtersCollapsed,
-                  maintainState: true,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      const SizedBox(height: 8),
-                      if (constraints.maxWidth >= 900)
-                        Row(
-                          children: [
-                            SizedBox(
-                              width: 260,
-                              child: _HrSearchField(
-                                hint: '搜索姓名、部门或岗位',
-                                onChanged: (v) => setState(() => _query = v),
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(child: _filters()),
-                          ],
-                        )
-                      else ...[
-                        _HrSearchField(
-                          hint: '搜索姓名、部门或岗位',
-                          onChanged: (v) => setState(() => _query = v),
-                          trailing: wide
-                              ? null
-                              : IconButton(
-                                  tooltip: '筛选',
-                                  onPressed: _openFilters,
-                                  icon: Icon(
-                                    Icons.filter_list_rounded,
-                                    size: 20,
-                                    color: DunesColors.resolve(
-                                      context,
-                                      DunesColors.text2,
-                                    ),
-                                  ),
-                                ),
-                        ),
-                        if (wide) ...[const SizedBox(height: 8), _filters()],
-                      ],
-                      if (_stagePool.isNotEmpty) ...[
-                        const SizedBox(height: 8),
-                        _stageStrip(),
-                      ],
-                    ],
-                  ),
-                ),
-              if (!mine &&
-                  wide &&
-                  _filtersCollapsed &&
-                  (_query.isNotEmpty ||
-                      _department != null ||
-                      _tag != null ||
-                      _grade != null ||
-                      _stage != null))
-                Padding(
-                  padding: const EdgeInsets.only(top: 4),
-                  child: Text(
-                    '已启用筛选 · 当前 ${rows.length} 人',
+                if (!_loading &&
+                    _access.hr &&
+                    _canStartMonth &&
+                    _supportsBatchStart) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    '可按部门或勾选人员分批发起，也可一次发起全员。',
                     style: TextStyle(
                       fontSize: 12,
+                      height: 1.4,
                       color: DunesColors.resolve(context, DunesColors.text2),
                     ),
                   ),
-                ),
-              if (_scope == 'todo' && _alerts.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                ConstrainedBox(
-                  constraints: const BoxConstraints(maxHeight: 132),
-                  child: ListView(
+                ],
+                const SizedBox(height: 10),
+                if (scopes.length > 1 || (!mine && wide))
+                  Row(
                     children: [
-                      for (final alert in _alerts)
-                        _HrAlertTile(
-                          title:
-                              '${alert['kind'] == 'pip' ? 'PIP' : '试用期预警'} · ${alert['name']}',
-                          subtitle: '${alert['month']} · ${alert['reason']}',
-                          onClose: _access.hr ? () => _closeAlert(alert) : null,
+                      Expanded(
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: scopes.length > 1
+                              ? _HrScopeTabs(
+                                  value: mine ? 'mine' : 'list',
+                                  expand: !wide && scopes.length > 1,
+                                  options: scopes,
+                                  onChanged: _loading
+                                      ? null
+                                      : (scope) => _selectScope(
+                                          scope == 'list'
+                                              ? (_access.all ? 'all' : 'team')
+                                              : scope,
+                                        ),
+                                )
+                              : const SizedBox.shrink(),
+                        ),
+                      ),
+                      if (!mine && wide)
+                        TextButton.icon(
+                          key: const ValueKey('hr-filter-toggle'),
+                          onPressed: () => setState(
+                            () => _filtersCollapsed = !_filtersCollapsed,
+                          ),
+                          icon: Icon(
+                            _filtersCollapsed
+                                ? Icons.tune_rounded
+                                : Icons.expand_less_rounded,
+                            size: 17,
+                          ),
+                          label: Text(_filtersCollapsed ? '展开筛选' : '收起筛选'),
+                          style: TextButton.styleFrom(
+                            foregroundColor: DunesColors.resolve(
+                              context,
+                              DunesColors.brandPurpleDeep,
+                            ),
+                            visualDensity: VisualDensity.compact,
+                          ),
                         ),
                     ],
                   ),
-                ),
-              ],
-              if (_records.any((r) => r.blockers.any((b) => b.contains('未配置'))))
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Text(
-                    '部分考核表未配置 HR 或终审人，请在组织用户访问配置中补充处理人。',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: DunesColors.resolve(context, DunesColors.amber),
+                if (!mine)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    child: Wrap(
+                      spacing: 12,
+                      runSpacing: 6,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        SegmentedButton<bool>(
+                          style: ButtonStyle(
+                            backgroundColor: WidgetStateProperty.resolveWith(
+                              (states) => states.contains(WidgetState.selected)
+                                  ? _purple
+                                  : Colors.transparent,
+                            ),
+                            foregroundColor: WidgetStateProperty.resolveWith(
+                              (states) => states.contains(WidgetState.selected)
+                                  ? Colors.white
+                                  : DunesColors.resolve(
+                                      context,
+                                      DunesColors.text2,
+                                    ),
+                            ),
+                            side: WidgetStatePropertyAll(
+                              BorderSide(
+                                color: DunesColors.resolve(
+                                  context,
+                                  DunesColors.brandPurpleLine,
+                                ),
+                              ),
+                            ),
+                            visualDensity: VisualDensity.compact,
+                          ),
+                          segments: const [
+                            ButtonSegment(value: false, label: Text('全部')),
+                            ButtonSegment(value: true, label: Text('待我处理')),
+                          ],
+                          selected: {_onlyTodo},
+                          onSelectionChanged: (s) =>
+                              setState(() => _onlyTodo = s.first),
+                        ),
+                        if (_access.team && !_access.all)
+                          const Chip(label: Text('我的团队')),
+                        if (_access.all && _access.team)
+                          FilterChip(
+                            label: const Text('我的团队'),
+                            selected: _scope == 'team',
+                            onSelected: _loading
+                                ? null
+                                : (b) => _selectScope(b ? 'team' : 'all'),
+                          ),
+                        if (_access.hr && _selectedIds.isNotEmpty) ...[
+                          TextButton(
+                            onPressed: _busy
+                                ? null
+                                : () => _manageBatch('hr_skip'),
+                            child: const Text('跳过审批'),
+                          ),
+                          TextButton(
+                            onPressed: _busy
+                                ? null
+                                : () => _manageBatch('hr_return'),
+                            child: const Text('回退阶段'),
+                          ),
+                          TextButton(
+                            onPressed: _busy
+                                ? null
+                                : () => _manageBatch('hr_assign'),
+                            child: const Text('修改主管'),
+                          ),
+                        ],
+                      ],
                     ),
                   ),
-                ),
-              if (_error != null)
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Text(
-                    _error!,
-                    style: TextStyle(
-                      color: DunesColors.resolve(context, DunesColors.coral),
+                if (!mine)
+                  Visibility(
+                    visible: !wide || !_filtersCollapsed,
+                    maintainState: true,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        const SizedBox(height: 8),
+                        if (constraints.maxWidth >= 900)
+                          Row(
+                            children: [
+                              SizedBox(
+                                width: 260,
+                                child: _HrSearchField(
+                                  hint: '搜索姓名、部门或岗位',
+                                  onChanged: (v) => setState(() => _query = v),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(child: _filters()),
+                            ],
+                          )
+                        else ...[
+                          _HrSearchField(
+                            hint: '搜索姓名、部门或岗位',
+                            onChanged: (v) => setState(() => _query = v),
+                            trailing: wide
+                                ? null
+                                : IconButton(
+                                    tooltip: '筛选',
+                                    onPressed: _openFilters,
+                                    icon: Icon(
+                                      Icons.filter_list_rounded,
+                                      size: 20,
+                                      color: DunesColors.resolve(
+                                        context,
+                                        DunesColors.text2,
+                                      ),
+                                    ),
+                                  ),
+                          ),
+                          if (wide) ...[const SizedBox(height: 8), _filters()],
+                        ],
+                      ],
                     ),
                   ),
-                ),
-              Expanded(
-                child: rows.isEmpty
-                    ? Center(
-                        child: Text(
-                          _loading
-                              ? '加载中…'
-                              : _error == null
-                              ? (mine ? '本月暂无您的考核表' : '本月暂无符合条件的考核表')
-                              : '加载失败，请重试',
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: DunesColors.resolve(
-                              context,
-                              DunesColors.text3,
+                if (!mine) ...[
+                  const SizedBox(height: 8),
+                  _stageStrip(wrap: wide),
+                ],
+                if (!mine &&
+                    wide &&
+                    _filtersCollapsed &&
+                    (_query.isNotEmpty ||
+                        _department != null ||
+                        _tag != null ||
+                        _grade != null ||
+                        _stage != null))
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(
+                      '已启用筛选 · 当前 ${rows.length} 人',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: DunesColors.resolve(context, DunesColors.text2),
+                      ),
+                    ),
+                  ),
+                if (_onlyTodo && _alerts.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxHeight: 132),
+                    child: ListView(
+                      children: [
+                        for (final alert in _alerts)
+                          _HrAlertTile(
+                            title:
+                                '${alert['kind'] == 'pip' ? 'PIP' : '试用期预警'} · ${alert['name']}',
+                            subtitle: '${alert['month']} · ${alert['reason']}',
+                            onClose: _access.hr
+                                ? () => _closeAlert(alert)
+                                : null,
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+                if (_records.any(
+                  (r) => r.blockers.any((b) => b.contains('未配置')),
+                ))
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Text(
+                      '部分考核表未配置 HR 或终审人，请在组织用户访问配置中补充处理人。',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: DunesColors.resolve(context, DunesColors.amber),
+                      ),
+                    ),
+                  ),
+                if (_error != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Text(
+                      _error!,
+                      style: TextStyle(
+                        color: DunesColors.resolve(context, DunesColors.coral),
+                      ),
+                    ),
+                  ),
+                if (!mine) SizedBox(height: wide ? 12 : 10),
+                Expanded(
+                  child: rows.isEmpty
+                      ? Center(
+                          child: Text(
+                            _loading
+                                ? '加载中…'
+                                : _error == null
+                                ? (mine ? '本月暂无您的考核表' : '本月暂无符合条件的考核表')
+                                : '加载失败，请重试',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: DunesColors.resolve(
+                                context,
+                                DunesColors.text3,
+                              ),
                             ),
                           ),
-                        ),
-                      )
-                    : mine
-                    ? HrPerformanceDetail(
-                        key: ValueKey('hr-mine-${rows.first.id}'),
-                        session: widget.session,
-                        record: rows.first,
-                        service: _service,
-                        monthStarted: _monthStarted,
-                        onChanged: () => _load(),
-                      )
-                    : Row(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          if (!wide || !_rosterCollapsed)
-                            SizedBox(
-                              width: wide
-                                  ? (constraints.maxWidth < 1200 ? 300 : 360)
-                                  : constraints.maxWidth - 24,
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
-                                children: [
-                                  if (wide)
-                                    Row(
-                                      children: [
-                                        const SizedBox(width: 6),
-                                        Expanded(
-                                          child: Text(
-                                            '人员名单 · ${rows.length}',
-                                            style: TextStyle(
-                                              fontSize: 12,
-                                              fontWeight: FontWeight.w600,
-                                              color: DunesColors.resolve(
-                                                context,
-                                                DunesColors.text2,
+                        )
+                      : mine
+                      ? HrPerformanceDetail(
+                          key: ValueKey('hr-mine-${rows.first.id}'),
+                          session: widget.session,
+                          record: rows.first,
+                          service: _service,
+                          monthStarted: _monthStarted,
+                          hrAccess: _access.hr,
+                          onChanged: _load,
+                        )
+                      : wide
+                      ? _assessmentTable(rows)
+                      : Row(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            if (!wide || !_rosterCollapsed)
+                              SizedBox(
+                                width: wide
+                                    ? (constraints.maxWidth < 1200 ? 300 : 360)
+                                    : constraints.maxWidth - 24,
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: [
+                                    if (wide)
+                                      Row(
+                                        children: [
+                                          const SizedBox(width: 6),
+                                          Expanded(
+                                            child: Text(
+                                              '人员名单 · ${rows.length}',
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w600,
+                                                color: DunesColors.resolve(
+                                                  context,
+                                                  DunesColors.text2,
+                                                ),
                                               ),
                                             ),
                                           ),
-                                        ),
-                                        IconButton(
-                                          key: const ValueKey(
-                                            'hr-roster-collapse',
+                                          IconButton(
+                                            key: const ValueKey(
+                                              'hr-roster-collapse',
+                                            ),
+                                            tooltip: '收起人员名单',
+                                            onPressed: () => setState(
+                                              () => _rosterCollapsed = true,
+                                            ),
+                                            icon: const Icon(
+                                              Icons
+                                                  .keyboard_double_arrow_left_rounded,
+                                              size: 20,
+                                            ),
+                                            color: DunesColors.resolve(
+                                              context,
+                                              DunesColors.brandPurpleDeep,
+                                            ),
+                                            visualDensity:
+                                                VisualDensity.compact,
                                           ),
-                                          tooltip: '收起人员名单',
-                                          onPressed: () => setState(
-                                            () => _rosterCollapsed = true,
-                                          ),
-                                          icon: const Icon(
-                                            Icons
-                                                .keyboard_double_arrow_left_rounded,
-                                            size: 20,
-                                          ),
-                                          color: DunesColors.resolve(
-                                            context,
-                                            DunesColors.brandPurpleDeep,
-                                          ),
-                                          visualDensity: VisualDensity.compact,
-                                        ),
-                                      ],
-                                    ),
-                                  Expanded(
-                                    child: ListView.builder(
-                                      key: PageStorageKey(
-                                        'hr-$_monthKey-$_scope',
+                                        ],
                                       ),
-                                      padding: const EdgeInsets.fromLTRB(
-                                        0,
-                                        0,
-                                        0,
-                                        12,
+                                    Expanded(
+                                      child: ListView.builder(
+                                        key: PageStorageKey(
+                                          'hr-$_monthKey-$_scope',
+                                        ),
+                                        padding: const EdgeInsets.fromLTRB(
+                                          0,
+                                          0,
+                                          0,
+                                          12,
+                                        ),
+                                        itemCount: rosterItems.length,
+                                        itemBuilder: (context, i) {
+                                          final item = rosterItems[i];
+                                          if (item is _HrRosterHeader) {
+                                            return _rosterHeader(item);
+                                          }
+                                          return _rosterPerson(
+                                            item as _HrRosterPerson,
+                                            wide,
+                                          );
+                                        },
                                       ),
-                                      itemCount: rosterItems.length,
-                                      itemBuilder: (context, i) {
-                                        final item = rosterItems[i];
-                                        if (item is _HrRosterHeader) {
-                                          return _rosterHeader(item);
-                                        }
-                                        return _rosterPerson(
-                                          item as _HrRosterPerson,
-                                          wide,
-                                        );
-                                      },
                                     ),
-                                  ),
-                                ],
+                                  ],
+                                ),
+                              )
+                            else
+                              SizedBox(
+                                width: 44,
+                                child: Column(
+                                  children: [
+                                    IconButton(
+                                      key: const ValueKey('hr-roster-expand'),
+                                      tooltip: '展开人员名单',
+                                      onPressed: () => setState(
+                                        () => _rosterCollapsed = false,
+                                      ),
+                                      icon: const Icon(
+                                        Icons
+                                            .keyboard_double_arrow_right_rounded,
+                                        size: 20,
+                                      ),
+                                      color: DunesColors.resolve(
+                                        context,
+                                        DunesColors.brandPurpleDeep,
+                                      ),
+                                      visualDensity: VisualDensity.compact,
+                                    ),
+                                    if (_selectedIds.isNotEmpty)
+                                      Tooltip(
+                                        message: '已选 ${_selectedIds.length} 人',
+                                        child: Text(
+                                          '${_selectedIds.length}',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: DunesColors.resolve(
+                                              context,
+                                              DunesColors.brandPurpleDeep,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                  ],
+                                ),
                               ),
-                            )
-                          else
-                            SizedBox(
-                              width: 44,
-                              child: Column(
-                                children: [
-                                  IconButton(
-                                    key: const ValueKey('hr-roster-expand'),
-                                    tooltip: '展开人员名单',
-                                    onPressed: () => setState(
-                                      () => _rosterCollapsed = false,
-                                    ),
-                                    icon: const Icon(
-                                      Icons.keyboard_double_arrow_right_rounded,
-                                      size: 20,
-                                    ),
-                                    color: DunesColors.resolve(
-                                      context,
-                                      DunesColors.brandPurpleDeep,
-                                    ),
-                                    visualDensity: VisualDensity.compact,
-                                  ),
-                                  if (_selectedIds.isNotEmpty)
-                                    Tooltip(
-                                      message: '已选 ${_selectedIds.length} 人',
-                                      child: Text(
-                                        '${_selectedIds.length}',
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          color: DunesColors.resolve(
-                                            context,
-                                            DunesColors.brandPurpleDeep,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                ],
+                            if (wide)
+                              Expanded(
+                                child:
+                                    _selected != null &&
+                                        rows.any((r) => r.id == _selected!.id)
+                                    ? HrPerformanceDetail(
+                                        key: ValueKey(_selected!.id),
+                                        session: widget.session,
+                                        record: _selected!,
+                                        service: _service,
+                                        monthStarted: _monthStarted,
+                                        hrAccess: _access.hr,
+                                        onChanged: () => _load(),
+                                      )
+                                    : const Center(child: Text('选择一位员工查看考核表')),
                               ),
-                            ),
-                          if (wide)
-                            Expanded(
-                              child:
-                                  _selected != null &&
-                                      rows.any((r) => r.id == _selected!.id)
-                                  ? HrPerformanceDetail(
-                                      key: ValueKey(_selected!.id),
-                                      session: widget.session,
-                                      record: _selected!,
-                                      service: _service,
-                                      monthStarted: _monthStarted,
-                                      onChanged: () => _load(),
-                                    )
-                                  : const Center(child: Text('选择一位员工查看考核表')),
-                            ),
-                        ],
-                      ),
-              ),
-              if (_selectedIds.isNotEmpty) _buildBatchActions(),
-            ],
+                          ],
+                        ),
+                ),
+                if (_selectedIds.isNotEmpty) _buildBatchActions(),
+              ],
+            ),
           ),
-        ),
-      );
-    },
+        );
+      },
+    ),
   );
 }
 
@@ -2123,12 +3134,16 @@ class _HrControlCard extends StatelessWidget {
     required this.compact,
     required this.month,
     required this.stats,
+    required this.status,
+    required this.started,
     required this.actions,
   });
   final bool busy;
   final bool compact;
   final Widget month;
   final String stats;
+  final String status;
+  final bool started;
   final List<_HrAction> actions;
 
   @override
@@ -2178,7 +3193,45 @@ class _HrControlCard extends StatelessWidget {
             padding: EdgeInsets.fromLTRB(10, 8, 12, compact ? 4 : 10),
             child: Row(
               children: [
-                month,
+                Flexible(
+                  flex: 3,
+                  child: Wrap(
+                    spacing: 8,
+                    runSpacing: 5,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      month,
+                      DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: DunesColors.resolve(
+                            context,
+                            started ? const Color(0xFFE9F6EF) : _hrPageBg,
+                          ),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 5,
+                          ),
+                          child: Text(
+                            status,
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: DunesColors.resolve(
+                                context,
+                                started
+                                    ? const Color(0xFF24734F)
+                                    : DunesColors.text2,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
@@ -2472,7 +3525,7 @@ class _HrSearchField extends StatelessWidget {
           Colors.white,
           role: DunesColorRole.surface,
         ),
-        contentPadding: const EdgeInsets.symmetric(vertical: 10),
+        contentPadding: const EdgeInsets.symmetric(vertical: 8),
         border: border,
         enabledBorder: border,
         focusedBorder: border.copyWith(
@@ -2520,7 +3573,8 @@ class _HrFilterMenu extends StatelessWidget {
             role: DunesColorRole.surface,
           ),
         ),
-        elevation: const WidgetStatePropertyAll(8),
+        maximumSize: const WidgetStatePropertyAll(Size(340, 420)),
+        elevation: const WidgetStatePropertyAll(4),
         shadowColor: WidgetStatePropertyAll(
           Colors.black.withValues(alpha: 0.12),
         ),
@@ -2533,11 +3587,12 @@ class _HrFilterMenu extends StatelessWidget {
       ),
       builder: (context, controller, child) {
         final open = controller.isOpen;
+        final highlighted = open || value != null;
         final purple = DunesColors.resolve(context, DunesColors.brandPurple);
         return Material(
           color: DunesColors.resolve(
             context,
-            open ? const Color(0xFFF4EFFB) : const Color(0xFFF5F6F8),
+            highlighted ? DunesColors.brandPurpleSoft : Colors.white,
             role: DunesColorRole.surface,
           ),
           borderRadius: BorderRadius.circular(10),
@@ -2551,9 +3606,13 @@ class _HrFilterMenu extends StatelessWidget {
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(10),
                 border: Border.all(
-                  color: open
+                  color: highlighted
                       ? purple.withValues(alpha: 0.45)
-                      : Colors.transparent,
+                      : DunesColors.resolve(
+                          context,
+                          _hrLine,
+                          role: DunesColorRole.border,
+                        ),
                 ),
               ),
               child: Row(
@@ -2578,14 +3637,21 @@ class _HrFilterMenu extends StatelessWidget {
                       ),
                     )
                   else
-                    Text(
-                      _label,
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: open ? FontWeight.w600 : FontWeight.w500,
-                        color: DunesColors.resolve(
-                          context,
-                          open ? DunesColors.brandPurpleDeep : DunesColors.text,
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 180),
+                      child: Text(
+                        _label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: open ? FontWeight.w600 : FontWeight.w500,
+                          color: DunesColors.resolve(
+                            context,
+                            open
+                                ? DunesColors.brandPurpleDeep
+                                : DunesColors.text,
+                          ),
                         ),
                       ),
                     ),
@@ -2633,6 +3699,8 @@ class _HrFilterMenu extends StatelessWidget {
                 : null,
             child: Text(
               item.$2,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: item.$1 == value
@@ -2739,6 +3807,7 @@ class _HrStageChip extends StatelessWidget {
     required this.onTap,
     this.color,
     this.tooltip,
+    this.compact = false,
   });
   final String label;
   final int count;
@@ -2746,6 +3815,7 @@ class _HrStageChip extends StatelessWidget {
   final VoidCallback onTap;
   final Color? color;
   final String? tooltip;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -2759,8 +3829,8 @@ class _HrStageChip extends StatelessWidget {
         borderRadius: BorderRadius.circular(999),
         onTap: onTap,
         child: Container(
-          height: 36,
-          padding: const EdgeInsets.symmetric(horizontal: 12),
+          height: compact ? 30 : 36,
+          padding: EdgeInsets.symmetric(horizontal: compact ? 10 : 12),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(999),
             border: Border.all(
@@ -2789,7 +3859,7 @@ class _HrStageChip extends StatelessWidget {
               Text(
                 label,
                 style: TextStyle(
-                  fontSize: 13,
+                  fontSize: compact ? 12 : 13,
                   fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
                   color: DunesColors.resolve(
                     context,
@@ -2801,7 +3871,7 @@ class _HrStageChip extends StatelessWidget {
               Text(
                 '$count',
                 style: TextStyle(
-                  fontSize: 13,
+                  fontSize: compact ? 12 : 13,
                   fontWeight: FontWeight.w600,
                   fontFeatures: _hrTabular,
                   color: DunesColors.resolve(context, DunesColors.text),

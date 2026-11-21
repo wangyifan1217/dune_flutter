@@ -1238,9 +1238,43 @@ class ConversationService {
     if (resp.statusCode < 200 || resp.statusCode >= 300) return;
   }
 
+  Future<List<Map<String, dynamic>>> weeklyReportRecipients() async {
+    final resp = await _client.get(
+      _uri('/conversations/dunes-weekly-report/recipients'),
+      headers: _headers,
+    );
+    final body = _decode(resp.body);
+    final data = body['data'];
+    if (resp.statusCode != 200 || body['success'] != true || data is! List) {
+      throw Exception(body['message'] ?? '无法读取周报接收人');
+    }
+    return data
+        .whereType<Map>()
+        .map((value) => Map<String, dynamic>.from(value))
+        .toList();
+  }
+
+  Future<String> forwardWeeklyReport(int messageId, int userId) async {
+    final resp = await _client.post(
+      _uri('/conversations/dunes-weekly-report/forward'),
+      headers: _headers,
+      body: jsonEncode({'messageId': messageId, 'userId': userId}),
+    );
+    final body = _decode(resp.body);
+    if (resp.statusCode != 200 || body['success'] != true) {
+      throw Exception(body['message'] ?? '转发周报失败');
+    }
+    final data = body['data'];
+    final status = data is Map ? data['status'] : null;
+    if (status is String && (status == 'sent' || status == 'duplicate')) {
+      return status;
+    }
+    throw Exception('暂时无法确认投递结果，请稍后重试');
+  }
+
   /// 清空当前用户可见的会话历史（服务端按 history_cleared_before_id 截断）。
-  Future<void> clearConversationHistory(int conversationId) async {
-    if (conversationId <= 0) return;
+  Future<int?> clearConversationHistory(int conversationId) async {
+    if (conversationId <= 0) return null;
     final resp = await _client.post(
       _uri('/conversations/$conversationId/clear-history'),
       headers: _headers,
@@ -1252,6 +1286,8 @@ class ConversationService {
     if (body['success'] == false) {
       throw Exception((body['message'] ?? '清空失败').toString());
     }
+    final data = body['data'];
+    return data is Map ? (data['clearedBeforeId'] as num?)?.toInt() : null;
   }
 
   /// 登记「正在前台查看该会话」，用于服务端抑制该会话的 APP TPNS。

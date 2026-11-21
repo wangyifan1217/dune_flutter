@@ -21,6 +21,7 @@ void main() {
                 'name': '任务一',
                 'weight': 20,
                 'score': 15,
+                'suggestedScore': 10,
                 'directScore': true,
                 'bands': [
                   {'description': '达到目标', 'min': 15, 'max': 20},
@@ -42,8 +43,56 @@ void main() {
     expect(find.text('自评分'), findsNothing);
     expect(find.text('加权得分'), findsNothing);
     expect(find.text('达到目标'), findsOneWidget);
+    expect(find.textContaining('建议'), findsNothing);
     expect(find.text('15–20'), findsOneWidget);
     expect(find.text('最终得分 85'), findsOneWidget);
+    expect(tester.widget<Text>(find.text('核心达成')).textAlign, TextAlign.center);
+    expect(tester.widget<Text>(find.text('任务一')).textAlign, TextAlign.center);
+    expect(tester.widget<Text>(find.text('任务二')).textAlign, TextAlign.center);
+    expect(
+      tester.getBottomLeft(find.text('任务二')).dy,
+      lessThan(tester.getTopLeft(find.text('减分项')).dy),
+    );
+    expect(
+      tester.getBottomLeft(find.text('任务一')).dy,
+      lessThan(tester.getTopLeft(find.text('任务二')).dy),
+    );
+    expect(tester.takeException(), isNull);
+  });
+  testWidgets('deduction cells remain centered beside a tall editor', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1200, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: HrAssessmentSheet(
+            lines: [],
+            scoresVisible: true,
+            deductionEditor: SizedBox(
+              key: ValueKey('tall-deduction-editor'),
+              height: 180,
+            ),
+          ),
+        ),
+      ),
+    );
+    final rowCenter = tester
+        .getCenter(find.byKey(const ValueKey('tall-deduction-editor')))
+        .dy;
+    for (final value in ['减分项', '规章制度遵守情况', '0%', '扣分', '0']) {
+      expect(
+        tester.getCenter(find.text(value).first).dy,
+        closeTo(rowCenter - 12, 10),
+      );
+      expect(
+        tester.widget<Text>(find.text(value).first).textAlign,
+        TextAlign.center,
+      );
+    }
     expect(tester.takeException(), isNull);
   });
   testWidgets(

@@ -119,6 +119,7 @@ class FakeHR extends HrPerformanceService {
     String month,
     List<int> ids, {
     bool confirmScores = false,
+    bool includeDraftScores = false,
   }) async => {
     'hrPerformanceSummary': true,
     'month': month,
@@ -278,22 +279,28 @@ void main() {
     expect(service.lastCommand?['reason'], '误操作，恢复考核');
     await tester.pump(const Duration(seconds: 4));
   });
-  testWidgets('urge previews eligible people and excludes others', (
+  testWidgets('urge previews skipped and eligible people across filters', (
     tester,
   ) async {
     final service = FakeUrge(testSession(4), [
       sample(id: 1, name: '员工甲', stage: 'review', actions: ['urge']),
       sample(id: 2, userId: 2, name: '员工乙', stage: 'exempt'),
     ]);
-    await mount(tester, 360, service);
-    await tester.tap(find.text('全员'));
+    await mount(tester, 900, service);
+    await tester.tap(find.byType(Checkbox).first);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('督办'));
+    await tester.tap(find.byKey(const ValueKey('hr-stage-exempt')));
     await tester.pumpAndSettle();
-    expect(find.text('发送 1 人 · 跳过 1 人'), findsOneWidget);
-    expect(find.textContaining('已跳过无权督办或不在办理中的人员：员工乙'), findsOneWidget);
+    expect(find.text('已选 2 人 · 筛选外 1 人'), findsOneWidget);
+    await tester.tap(find.text('批量督办'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('将处理 1 人：员工甲'), findsOneWidget);
+    expect(find.textContaining('员工乙（免考核）'), findsOneWidget);
     await tester.enterText(find.byKey(const ValueKey('hr-reason')), '请及时完成评分');
     await tester.tap(find.byKey(const ValueKey('hr-sheet-submit')));
+    await tester.pumpAndSettle();
+    expect(service.sentIds, isEmpty);
+    await tester.tap(find.byKey(const ValueKey('hr-confirm-action')));
     await tester.pumpAndSettle();
     expect(service.sentIds, [1]);
     expect(service.lastCommand?['reason'], '请及时完成评分');
@@ -450,8 +457,14 @@ void main() {
       await mount(tester, width, service, conversations: conversations);
       await tester.tap(find.text('转发'));
       await tester.pumpAndSettle();
+      await tester.tap(find.text('员工甲').hitTestable());
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('选择会话'));
+      await tester.pumpAndSettle();
       expect(find.text('人事测试会话'), findsOneWidget);
       await tester.tap(find.text('人事测试会话'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('hr-confirm-action')));
       await tester.pumpAndSettle();
       expect(conversations.sentTo, 77);
       expect(conversations.sentPayload?['hrPerformanceSummary'], isTrue);

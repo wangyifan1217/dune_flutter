@@ -7,9 +7,17 @@ import '../tasks/native_task_detail_page.dart';
 import 'hr_performance_service.dart';
 import 'hr_performance_department_final.dart';
 import 'hr_performance_sheet.dart';
+import 'hr_performance_management_ui.dart';
 import 'hr_performance_sheets.dart';
+import 'hr_performance_template_ui.dart';
+import 'hr_performance_task_evidence.dart';
 
 const hrActionLabels = <String, String>{
+  'hr_edit_scores': 'HR 修改评分',
+  'hr_skip': '跳过当前审批',
+  'hr_return': '撤回 / 回退',
+  'hr_assign': '修改本月主管',
+  'update_bonus': '修改加减分',
   'submit_self': '提交自评',
   'request_adjustment': '申请调整',
   'approve_adjustment': '通过调整',
@@ -35,6 +43,7 @@ const hrActionLabels = <String, String>{
   'assign_snapshot': '补配考核表',
   'verify_history': '核对月末资料',
   'urge': '督办',
+  'start': '发起考核',
   'initialize': '生成考核表',
   'match_template': '自动匹配考核表',
   'grade_policy': '等级标准调整',
@@ -54,6 +63,54 @@ String hrDate(dynamic value) {
   return '${t.year}-${t.month.toString().padLeft(2, '0')}-${t.day.toString().padLeft(2, '0')} ${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
 }
 
+List<String> hrAssessmentActions(HrPerformanceRecord record) => record.actions
+    .where(
+      (a) =>
+          hrActionLabels.containsKey(a) &&
+          !const [
+            'approve_department_hr',
+            'confirm_indicators',
+            'approve_adjustment',
+            'reject_adjustment',
+            'resolve_appeal',
+            'remove_bonus',
+            'assign_snapshot',
+            'verify_history',
+            'send_department_final',
+          ].contains(a),
+    )
+    .toList();
+
+String hrAssessmentActionLabel(HrPerformanceRecord record, String action) =>
+    action == 'return_hr' && record.skipsDirectReview
+    ? '退回自评'
+    : action == 'return_hr' && record.skipsExecutiveCalibration
+    ? '退回初评'
+    : hrActionLabels[action] ?? action;
+
+String? hrAssessmentActionImpact(HrPerformanceRecord record, String action) =>
+    switch (action) {
+      'hr_edit_scores' => hrScoreEditImpact(record),
+      'hr_return' =>
+        record.released
+            ? '撤销已下发结果及自动确认。回到 HR 审核后可修改评分。'
+            : '目标阶段及后续审批将失效，评分草稿和历史记录保留。',
+      'hr_skip' when record.stage == 'final' => '将立即下发结果给员工。',
+      _ => null,
+    };
+
+String? hrAssessmentScoreBlocked(HrPerformanceRecord record) {
+  if (record.stage == 'archived') return '考核已归档，评分已锁定。';
+  if (record.workflow['confirmedAt'] != null &&
+      record.workflow['confirmationSource'] != 'auto') {
+    return '考核结果已确认，评分已锁定。';
+  }
+  if (record.released && record.actions.contains('hr_return')) {
+    return '结果已下发。请撤回至 HR 审核后再修改评分。';
+  }
+  return null;
+}
+
 class HrPerformanceDetail extends StatefulWidget {
   const HrPerformanceDetail({
     super.key,
@@ -62,12 +119,16 @@ class HrPerformanceDetail extends StatefulWidget {
     required this.service,
     this.monthStarted = true,
     this.onChanged,
+    this.initialAction,
+    this.hrAccess = false,
   });
   final AuthSession session;
   final HrPerformanceRecord record;
   final HrPerformanceService service;
   final bool monthStarted;
   final VoidCallback? onChanged;
+  final String? initialAction;
+  final bool hrAccess;
   @override
   State<HrPerformanceDetail> createState() => _HrPerformanceDetailState();
 }
@@ -77,7 +138,7 @@ class _HrPerformanceDetailState extends State<HrPerformanceDetail> {
   Map<String, dynamic>? _options;
   Set<int> _missing = {};
   bool _busy = false;
-  bool _showFullAssessment = false;
+  bool _showFullAssessment = true;
   Future<List<Map<String, dynamic>>>? _logs;
   bool get _skipExecutiveCalibration => _record.skipsExecutiveCalibration;
   bool get _skipDirectReview => _record.skipsDirectReview;
@@ -94,16 +155,19 @@ class _HrPerformanceDetailState extends State<HrPerformanceDetail> {
   }
 
   String _actionLabel(String action) =>
-      action == 'return_hr' && _skipDirectReview
-      ? '退回自评'
-      : action == 'return_hr' && _skipExecutiveCalibration
-      ? '退回初评'
-      : hrActionLabels[action] ?? action;
+      hrAssessmentActionLabel(_record, action);
   @override
   void initState() {
     super.initState();
     _record = widget.record;
-    _loadOptions();
+    final action = widget.initialAction;
+    if (action != null && hrAssessmentActions(_record).contains(action)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _perform(action);
+      });
+    } else {
+      _loadOptions();
+    }
   }
 
   @override
@@ -171,6 +235,7 @@ class _HrPerformanceDetailState extends State<HrPerformanceDetail> {
       final rules = Map<String, dynamic>.from(config['rules'] as Map? ?? {});
       if (!mounted) return;
       switch (action) {
+        case 'hr_edit_scores':
         case 'submit_self':
         case 'submit_review':
         case 'save_calibration':
@@ -181,6 +246,7 @@ class _HrPerformanceDetailState extends State<HrPerformanceDetail> {
             title: hrActionLabels[action]!,
             initial: action == 'submit_review' || action == 'submit_self',
             self: action == 'submit_self',
+            hrEdit: action == 'hr_edit_scores',
           );
         case 'approve_final':
           if (adjustFinal) {
@@ -213,6 +279,60 @@ class _HrPerformanceDetailState extends State<HrPerformanceDetail> {
             );
             data = confirmed == true ? <String, dynamic>{} : null;
           }
+        case 'update_bonus':
+          final bonus = _record.bonuses
+              .where((b) => '${b['id']}' == requestId)
+              .first;
+          data = await hrFormSheet(
+            context,
+            title: '修改加减分',
+            values: {
+              'points': '${(bonus['points'] as num).abs()}',
+              'source': bonus['source'],
+              'reason': '',
+            },
+            fields: (v, update) => [
+              TextFormField(
+                initialValue: '${v['points']}',
+                decoration: const InputDecoration(labelText: '分值（正数）'),
+                onChanged: (x) => v['points'] = x,
+              ),
+              hrReasonField(v, label: '来源说明', keyName: 'source'),
+              hrReasonField(v, label: '修改原因'),
+            ],
+            submit: (v) {
+              if (hrNumber(v['points']) <= 0 ||
+                  hrText(v['source']).isEmpty ||
+                  hrText(v['reason']).isEmpty) {
+                throw const FormatException('请填写分值、来源及修改原因');
+              }
+              return {...v, 'points': hrNumber(v['points'])};
+            },
+          );
+        case 'hr_skip':
+          data = await showHrReasonSheet(
+            context,
+            title: '跳过当前审批',
+            minLength: 1,
+            message: _record.stage == 'final'
+                ? '跳过终审将立即下发结果给员工。缺少完整评分时请先使用 HR 修改评分。'
+                : '仅跳过所选人员当前审批。缺少完整评分时请先使用 HR 修改评分。',
+          );
+        case 'hr_return':
+          data = await showHrReasonSheet(
+            context,
+            title: '撤回 / 回退考核',
+            minLength: 1,
+            targets: (_options!['hrReturnTargets'] as List? ?? [])
+                .map((v) => '$v')
+                .toList(),
+            message: hrAssessmentActionImpact(_record, action),
+          );
+        case 'hr_assign':
+          data = await showHrSupervisorSheet(
+            context,
+            hrMaps(_options!['users']),
+          );
         case 'request_adjustment':
           data = await showHrAdjustmentSheet(context, _record, _options!);
         case 'add_bonus':
@@ -290,6 +410,7 @@ class _HrPerformanceDetailState extends State<HrPerformanceDetail> {
                 'urge',
                 'undo_exempt',
                 'remove_bonus',
+                'update_bonus',
               ].contains(action) ||
               (['approve_hr', 'approve_department_hr'].contains(action) &&
                   _record.warnings.any((w) => !w.contains('不阻断提交')));
@@ -318,7 +439,7 @@ class _HrPerformanceDetailState extends State<HrPerformanceDetail> {
       }
       if (data == null || !mounted) return;
       setState(() => _busy = true);
-      final result = action == 'assign_snapshot'
+      final result = (action == 'assign_snapshot' || action == 'hr_assign')
           ? await widget.service.assign(_record, data)
           : await widget.service.action(_record, {
               'action': action,
@@ -344,24 +465,59 @@ class _HrPerformanceDetailState extends State<HrPerformanceDetail> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => Theme(
+    data: hrConfigTheme(context),
+    child: Builder(builder: (context) => _buildDetail(context)),
+  );
+
+  Widget _summaryValue(String label, String value, {bool highlight = false}) =>
+      Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            '$label ',
+            style: TextStyle(
+              fontSize: 12,
+              color: DunesColors.resolve(context, DunesColors.text3),
+            ),
+          ),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: DunesColors.resolve(
+                context,
+                highlight ? DunesColors.brandPurpleDeep : DunesColors.text,
+              ),
+            ),
+          ),
+        ],
+      );
+
+  String? _hrScoreAvailability(HrPerformanceRecord record, bool started) {
+    if (!widget.hrAccess ||
+        _options == null ||
+        record.actions.contains('hr_edit_scores')) {
+      return null;
+    }
+    if (record.stage == 'exempt') return null;
+    if (hrAssessmentScoreBlocked(record) case final blocked?) return blocked;
+    if (!started || record.stage == 'opening' || record.lines.isEmpty) {
+      return '请先发起考核并补齐模板，再修改评分。';
+    }
+    if (!_options!.containsKey('hrManagementLocked')) {
+      return '当前考核服务尚未提供 HR 改分和修改主管功能。';
+    }
+    return '当前考核节点未开放 HR 改分。';
+  }
+
+  Widget _buildDetail(BuildContext context) {
     final r = _record;
     final requests = r.requests;
     final started = r.started ?? widget.monthStarted;
-    final visibleActions = r.actions
-        .where(
-          (a) => ![
-            'confirm_indicators',
-            'approve_adjustment',
-            'reject_adjustment',
-            'resolve_appeal',
-            'remove_bonus',
-            'assign_snapshot',
-            'verify_history',
-            'send_department_final',
-          ].contains(a),
-        )
-        .toList();
+    final visibleActions = hrAssessmentActions(r);
+    final scoreAvailability = _hrScoreAvailability(r, started);
     final primaryActions = {
       'submit_self',
       'submit_review',
@@ -377,625 +533,731 @@ class _HrPerformanceDetailState extends State<HrPerformanceDetail> {
         const Color(0xFFF7F4FC),
         role: DunesColorRole.surface,
       ),
-      child: ListView(
-        padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
+      child: Column(
         children: [
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final identity = _HrPanel(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      r.name,
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w700,
-                        color: DunesColors.resolve(context, DunesColors.text),
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '${_hrMonthLabel(r.month)} · ${r.department.isEmpty ? '未分配部门' : r.department} · ${r.position.isEmpty ? '未配置岗位' : r.position}',
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: DunesColors.resolve(context, DunesColors.text2),
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    Wrap(
-                      spacing: 6,
-                      runSpacing: 6,
-                      children: [
-                        _HrTag(label: r.stageLabel),
-                        if (r.probation) const _HrTag(label: '试用期'),
-                        if (r.exemptionEligible) const _HrTag(label: '可免考核'),
-                        if (r.snapshot['resigned'] == true)
-                          const _HrTag(label: '已离职'),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    if (r.snapshot['selfTotal'] != null)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 6),
-                        child: Text(
-                          '自评 ${r.snapshot['selfTotal']}',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: DunesColors.resolve(
-                              context,
-                              DunesColors.text2,
-                            ),
-                          ),
-                        ),
-                      ),
-                    if (r.scoresVisible && r.snapshot['total'] != null)
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: DunesColors.resolve(
-                            context,
-                            DunesColors.brandPurpleSoft,
-                            role: DunesColorRole.surface,
-                          ),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              r.stage == 'result' ? '请核对考核结果' : '考核结果',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: DunesColors.resolve(
-                                  context,
-                                  DunesColors.text2,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Row(
-                              children: [
-                                for (final item in [
-                                  ('得分', '${r.snapshot['total']}'),
-                                  ('等级', '${r.snapshot['grade'] ?? '—'}'),
-                                  ('系数', '${r.snapshot['coefficient'] ?? '—'}'),
-                                ])
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          item.$1,
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            color: DunesColors.resolve(
-                                              context,
-                                              DunesColors.text2,
-                                            ),
-                                          ),
-                                        ),
-                                        const SizedBox(height: 3),
-                                        Text(
-                                          item.$2,
-                                          style: TextStyle(
-                                            fontSize: 18,
-                                            fontWeight: FontWeight.w700,
-                                            color: DunesColors.resolve(
-                                              context,
-                                              DunesColors.brandPurpleDeep,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                              ],
-                            ),
-                            if (r.actions.contains('confirm_result'))
-                              const Padding(
-                                padding: EdgeInsets.only(top: 8),
-                                child: Text(
-                                  '请查看下方指标明细，确认后进入面谈。',
-                                  style: TextStyle(fontSize: 12),
-                                ),
-                              ),
-                            if (r.stage == 'result' &&
-                                r.userId == widget.session.userId)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 10),
-                                child: Text(
-                                  _resultConfirmationHint(r),
-                                  key: const ValueKey(
-                                    'hr-result-confirmation-policy',
-                                  ),
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    height: 1.5,
-                                    fontWeight: FontWeight.w600,
-                                    color: DunesColors.resolve(
-                                      context,
-                                      DunesColors.brandPurpleDeep,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                          ],
-                        ),
-                      )
-                    else if (r.stage == 'exempt')
-                      Text(
-                        '免考核：${r.workflow['exemptionReason'] ?? ''} ${r.workflow['exemptionNote'] ?? ''}',
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: DunesColors.resolve(
-                            context,
-                            DunesColors.text2,
-                          ),
-                        ),
-                      )
-                    else if (r.stage == 'archived')
-                      Text(
-                        '归档：${r.workflow['archiveReason'] ?? ''} · ${hrDate(r.workflow['archivedAt'])}',
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: DunesColors.resolve(
-                            context,
-                            DunesColors.text2,
-                          ),
-                        ),
-                      )
-                    else
-                      const Text(
-                        '结果下发后显示分数、等级和系数。',
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: Color(0xFF8A8494),
-                        ),
-                      ),
-                  ],
-                ),
-              );
-              final metadata = _HrPanel(
-                child: Column(
-                  children: [
-                    _HrMetaRow(
-                      label: '调整截止',
-                      value: started
-                          ? '${hrDate(r.adjustmentDueAt)}（北京时间）'
-                          : '开始考核后起算',
-                    ),
-                    if (started && r.workflow['dueAt'] != null)
-                      _HrMetaRow(
-                        label: '当前节点截止',
-                        value: hrDate(r.workflow['dueAt']),
-                      ),
-                    _HrMetaRow(
-                      label: '直属主管',
-                      value: '${r.snapshot['directSupervisorName'] ?? '未设置'}',
-                    ),
-                    _HrMetaRow(
-                      label: '分管主管',
-                      value: '${r.snapshot['divisionSupervisorName'] ?? '未设置'}',
-                      last: true,
-                    ),
-                  ],
-                ),
-              );
-              if (constraints.maxWidth < 700) {
-                return Column(
-                  children: [identity, const SizedBox(height: 10), metadata],
-                );
-              }
-              return Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(flex: 3, child: identity),
-                  const SizedBox(width: 10),
-                  Expanded(flex: 2, child: metadata),
-                ],
-              );
-            },
-          ),
-          if (r.blockers.isNotEmpty) ...[
-            const SizedBox(height: 10),
-            _HrNotice(
-              color: const Color(0xFFFFF8EE),
-              border: const Color(0xFFF0E2C8),
-              text: r.blockers.join('；'),
-            ),
-          ],
-          if (r.warnings.isNotEmpty) ...[
-            const SizedBox(height: 10),
-            _HrNotice(
-              color: const Color(0xFFF4EFFB),
-              border: const Color(0xFFDDD3EE),
-              text: '预警：${r.warnings.join('；')}',
-            ),
-          ],
-          if (hrText(_options?['taskSourceError']).isNotEmpty) ...[
-            const SizedBox(height: 10),
-            _HrNotice(
-              color: const Color(0xFFFFF8EE),
-              border: const Color(0xFFF0E2C8),
-              text: hrText(_options?['taskSourceError']),
-            ),
-          ],
-          if (_busy) ...[
-            const SizedBox(height: 10),
-            const LinearProgressIndicator(minHeight: 2),
-          ],
-          if (visibleActions.isNotEmpty) ...[
-            const SizedBox(height: 10),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
               children: [
-                if (r.actions.contains('approve_final'))
-                  _HrActionButton(
-                    label: '部门终审',
-                    onPressed: _busy
-                        ? null
-                        : () async {
-                            await showHrDepartmentFinal(
-                              context,
-                              widget.service,
-                              r.id,
-                            );
-                            widget.onChanged?.call();
-                            try {
-                              final latest = await widget.service.detail(r.id);
-                              if (!mounted) return;
-                              setState(() {
-                                _record = latest;
-                                _options = null;
-                                _logs = null;
-                              });
-                              await _loadOptions();
-                            } catch (e) {
-                              if (mounted) {
-                                showDunesToast(
-                                  this.context,
-                                  '刷新考核表失败：$e',
-                                  kind: DunesToastKind.error,
-                                );
-                              }
-                            }
-                          },
-                  ),
-                for (final a in visibleActions)
-                  _HrActionButton(
-                    key: ValueKey('hr-action-$a'),
-                    label: _actionLabel(a),
-                    primary: primaryActions.contains(a),
-                    onPressed: _busy ? null : () => _perform(a),
-                  ),
-                if (r.actions.contains('approve_final'))
-                  _HrActionButton(
-                    label: '调整分数后通过',
-                    onPressed: _busy
-                        ? null
-                        : () => _perform('approve_final', adjustFinal: true),
-                  ),
-              ],
-            ),
-          ],
-          const SizedBox(height: 16),
-          _HrSectionTitle(
-            '考核指标${hrText(r.snapshot['templateName']).isEmpty ? '' : ' · ${r.snapshot['templateName']}'}',
-          ),
-          const SizedBox(height: 8),
-          if (r.lines.isEmpty)
-            const _HrPanel(
-              child: Text(
-                '考核表待指定，匹配完成前没有指标。',
-                style: TextStyle(fontSize: 13, color: Color(0xFF8A8494)),
-              ),
-            )
-          else
-            LayoutBuilder(
-              builder: (context, constraints) {
-                final desktop =
-                    MediaQuery.sizeOf(context).width >= 800 &&
-                    constraints.maxWidth >= 360;
-                final sheet = HrAssessmentSheet(
-                  lines: r.lines,
-                  scoresVisible: r.scoresVisible,
-                  month: _hrMonthLabel(r.month),
-                  name: r.name,
-                  supervisor: hrText(r.snapshot['directSupervisorName']),
-                );
-                if (!desktop) return sheet;
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            '共 ${r.lines.length} 项 · 点击指标查看评分标准',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: DunesColors.resolve(
-                                context,
-                                DunesColors.text2,
-                              ),
-                            ),
-                          ),
-                        ),
-                        TextButton(
-                          onPressed: _showFullAssessment
-                              ? () =>
-                                    setState(() => _showFullAssessment = false)
-                              : null,
-                          child: const Text('指标总览'),
-                        ),
-                        TextButton(
-                          onPressed: !_showFullAssessment
-                              ? () => setState(() => _showFullAssessment = true)
-                              : null,
-                          child: const Text('完整表格'),
-                        ),
-                      ],
-                    ),
-                    if (_showFullAssessment)
-                      sheet
-                    else
-                      HrAssessmentOverview(
-                        lines: r.lines,
-                        scoresVisible: r.scoresVisible,
-                      ),
-                  ],
-                );
-              },
-            ),
-          if (r.bonuses.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            const _HrSectionTitle('本月加减分'),
-            const SizedBox(height: 8),
-            for (final b in r.bonuses) ...[
-              _HrPanel(
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Column(
+                _HrPanel(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            '${b['name']} · ${b['points']} 分',
-                            style: const TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  r.name,
+                                  key: const ValueKey('hr-detail-name'),
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    height: 1.3,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  '${_hrMonthLabel(r.month)} · ${r.department.isEmpty ? '未分配部门' : r.department} · ${r.position.isEmpty ? '未配置岗位' : r.position}',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: DunesColors.resolve(
+                                      context,
+                                      DunesColors.text2,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                          if (hrText(b['source']).isNotEmpty)
-                            Text(
-                              hrText(b['source']),
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: Color(0xFF8A8494),
-                              ),
-                            ),
+                          const SizedBox(width: 8),
+                          _HrTag(label: r.stageLabel),
                         ],
                       ),
-                    ),
-                    if (r.actions.contains('remove_bonus'))
-                      IconButton(
-                        tooltip: '移除加减分',
-                        onPressed: _busy
-                            ? null
-                            : () => _perform(
-                                'remove_bonus',
-                                requestId: '${b['id']}',
-                              ),
-                        icon: const Icon(Icons.delete_outline),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 16,
+                        runSpacing: 6,
+                        children: [
+                          if (r.snapshot['selfTotal'] != null)
+                            _summaryValue('自评', '${r.snapshot['selfTotal']}'),
+                          if (r.scoresVisible &&
+                              r.snapshot['total'] != null) ...[
+                            _summaryValue(
+                              '得分',
+                              '${r.snapshot['total']}',
+                              highlight: true,
+                            ),
+                            _summaryValue(
+                              '等级',
+                              '${r.snapshot['grade'] ?? '—'}',
+                              highlight: true,
+                            ),
+                            _summaryValue(
+                              '系数',
+                              '${r.snapshot['coefficient'] ?? '—'}',
+                            ),
+                          ],
+                          if (r.probation) const _HrTag(label: '试用期'),
+                          if (r.exemptionEligible) const _HrTag(label: '可免考核'),
+                          if (r.snapshot['resigned'] == true)
+                            const _HrTag(label: '已离职'),
+                        ],
                       ),
-                  ],
+                      if (r.stage == 'exempt')
+                        Text(
+                          '免考核：${r.workflow['exemptionReason'] ?? ''} ${r.workflow['exemptionNote'] ?? ''}',
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                      if (!r.scoresVisible && r.stage != 'exempt')
+                        const Text(
+                          '结果下发后显示分数、等级和系数。',
+                          style: TextStyle(fontSize: 12),
+                        ),
+                      if (r.stage == 'result' &&
+                          r.userId == widget.session.userId)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 6),
+                          child: Text(
+                            _resultConfirmationHint(r),
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                        ),
+                      if (r.workflow['confirmedAt'] != null)
+                        Text(
+                          r.workflow['confirmationSource'] == 'auto'
+                              ? '系统自动确认（未归档前 HR 可撤回）'
+                              : '员工已确认，考核已锁定',
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                      if (r.stage == 'archived')
+                        Text(
+                          '归档：${r.workflow['archiveReason'] ?? '—'} · ${hrDate(r.workflow['archivedAt'])}',
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                      const Divider(height: 18),
+                      LayoutBuilder(
+                        builder: (context, c) {
+                          final fields = [
+                            (
+                              '调整截止',
+                              started
+                                  ? '${hrDate(r.adjustmentDueAt)}（北京时间）'
+                                  : '开始考核后起算',
+                            ),
+                            (
+                              '当前节点截止',
+                              started ? hrDate(r.workflow['dueAt']) : '开始考核后起算',
+                            ),
+                            (
+                              '直属主管',
+                              hrText(r.snapshot['directSupervisorName']).isEmpty
+                                  ? '未设置'
+                                  : hrText(r.snapshot['directSupervisorName']),
+                            ),
+                            (
+                              '分管主管',
+                              hrText(
+                                    r.snapshot['divisionSupervisorName'],
+                                  ).isEmpty
+                                  ? '未设置'
+                                  : hrText(
+                                      r.snapshot['divisionSupervisorName'],
+                                    ),
+                            ),
+                          ];
+                          final columns = c.maxWidth >= 720 ? 2 : 1;
+                          return Wrap(
+                            spacing: 16,
+                            runSpacing: 6,
+                            children: [
+                              for (final field in fields)
+                                SizedBox(
+                                  width:
+                                      (c.maxWidth - 16 * (columns - 1)) /
+                                      columns,
+                                  child: _HrMetaRow(
+                                    label: field.$1,
+                                    value: field.$2,
+                                    last: true,
+                                  ),
+                                ),
+                            ],
+                          );
+                        },
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              const SizedBox(height: 8),
-            ],
-          ],
-          const SizedBox(height: 8),
-          _HrPanel(
-            padding: EdgeInsets.zero,
-            child: ExpansionTile(
-              key: ValueKey('hr-evidence-${r.id}'),
-              title: _HrSectionTitle('任务证据（${r.evidence.length}）'),
-              childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
-              children: [
-                if (r.evidence.isEmpty)
+                if (r.blockers.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  _HrNotice(
+                    color: const Color(0xFFFFF8EE),
+                    border: const Color(0xFFF0E2C8),
+                    text: r.blockers.join('；'),
+                  ),
+                ],
+                if (r.warnings.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  _HrNotice(
+                    color: const Color(0xFFF4EFFB),
+                    border: const Color(0xFFDDD3EE),
+                    text: '预警：${r.warnings.join('；')}',
+                  ),
+                ],
+                if (hrText(_options?['taskSourceError']).isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  _HrNotice(
+                    color: const Color(0xFFFFF8EE),
+                    border: const Color(0xFFF0E2C8),
+                    text: hrText(_options?['taskSourceError']),
+                  ),
+                ],
+                if (_busy) ...[
+                  const SizedBox(height: 10),
+                  const LinearProgressIndicator(minHeight: 2),
+                ],
+                if (scoreAvailability != null) ...[
+                  const SizedBox(height: 8),
+                  _HrNotice(
+                    color: const Color(0xFFF4EFFB),
+                    border: const Color(0xFFDDD3EE),
+                    text: scoreAvailability,
+                  ),
+                ],
+                if (visibleActions.isNotEmpty)
+                  Container(
+                    key: const ValueKey('hr-detail-actions'),
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: DunesColors.resolve(
+                        context,
+                        Colors.white,
+                        role: DunesColorRole.surface,
+                      ),
+                      border: Border(
+                        top: BorderSide(
+                          color: DunesColors.resolve(
+                            context,
+                            const Color(0xFFECE7F3),
+                          ),
+                        ),
+                      ),
+                    ),
+                    child: Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        if (r.actions.contains('approve_final'))
+                          _HrActionButton(
+                            label: '部门终审',
+                            onPressed: _busy
+                                ? null
+                                : () async {
+                                    await showHrDepartmentFinal(
+                                      context,
+                                      widget.service,
+                                      r.id,
+                                    );
+                                    widget.onChanged?.call();
+                                    try {
+                                      final latest = await widget.service
+                                          .detail(r.id);
+                                      if (!mounted) return;
+                                      setState(() {
+                                        _record = latest;
+                                        _options = null;
+                                        _logs = null;
+                                      });
+                                      await _loadOptions();
+                                    } catch (e) {
+                                      if (mounted) {
+                                        showDunesToast(
+                                          this.context,
+                                          '刷新考核表失败：$e',
+                                          kind: DunesToastKind.error,
+                                        );
+                                      }
+                                    }
+                                  },
+                          ),
+                        for (final a in visibleActions.where(
+                          (a) =>
+                              primaryActions.contains(a) ||
+                              a == 'hr_edit_scores',
+                        ))
+                          _HrActionButton(
+                            key: ValueKey('hr-action-$a'),
+                            label: _actionLabel(a),
+                            primary: primaryActions.contains(a),
+                            onPressed: _busy ? null : () => _perform(a),
+                          ),
+                        for (final a in visibleActions.where(
+                          (a) =>
+                              !primaryActions.contains(a) &&
+                              a != 'hr_edit_scores',
+                        ))
+                          _HrActionButton(
+                            key: ValueKey('hr-action-$a'),
+                            label: _actionLabel(a),
+                            onPressed: _busy ? null : () => _perform(a),
+                          ),
+                        if (r.actions.contains('approve_final'))
+                          _HrActionButton(
+                            label: '调整分数后通过',
+                            onPressed: _busy
+                                ? null
+                                : () => _perform(
+                                    'approve_final',
+                                    adjustFinal: true,
+                                  ),
+                          ),
+                      ],
+                    ),
+                  ),
+                const SizedBox(height: 8),
+                _HrSectionTitle(
+                  '考核指标${hrText(r.snapshot['templateName']).isEmpty ? '' : ' · ${r.snapshot['templateName']}'}',
+                ),
+                const SizedBox(height: 8),
+                if (r.lines.isEmpty)
                   const _HrPanel(
                     child: Text(
-                      '暂无已纳入的任务证据',
+                      '考核表待指定，匹配完成前没有指标。',
                       style: TextStyle(fontSize: 13, color: Color(0xFF8A8494)),
                     ),
                   )
                 else
-                  for (final t in r.evidence) ...[
-                    _HrPanel(
-                      child: InkWell(
-                        onTap: _missing.contains((t['id'] as num).toInt())
-                            ? null
-                            : () => Navigator.of(context).push(
-                                MaterialPageRoute<void>(
-                                  builder: (context) => Scaffold(
-                                    appBar: AppBar(title: const Text('任务证据')),
-                                    body: NativeTaskDetailView(
-                                      session: widget.session,
-                                      taskId: (t['id'] as num).toInt(),
-                                      onBack: () => Navigator.pop(context),
-                                      backLabel: '考核表',
-                                      forceReadOnly: true,
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      final desktop =
+                          MediaQuery.sizeOf(context).width >= 800 &&
+                          constraints.maxWidth >= 360;
+                      final sheet = HrAssessmentSheet(
+                        lines: r.lines,
+                        bonuses: r.bonuses,
+                        finalTotal: r.snapshot['total'] as num?,
+                        deductionInstructions: hrText(
+                          r.snapshot['deductionInstructions'],
+                        ),
+                        deductionEditor: r.actions.contains('add_bonus')
+                            ? HrInlineDeductionEditor(
+                                onSave: (points, reason) async {
+                                  final result = await widget.service
+                                      .action(_record, {
+                                        'action': 'add_bonus',
+                                        'itemId': 'hr-regulation-deduction',
+                                        'points': points,
+                                        'source': reason,
+                                      });
+                                  if (!mounted) return;
+                                  setState(() {
+                                    _record = result;
+                                    _options = null;
+                                    _logs = null;
+                                  });
+                                  widget.onChanged?.call();
+                                  await _loadOptions();
+                                },
+                              )
+                            : null,
+                        scoresVisible: r.scoresVisible,
+                        month: _hrMonthLabel(r.month),
+                        name: r.name,
+                        supervisor: hrText(r.snapshot['directSupervisorName']),
+                      );
+                      if (!desktop) return sheet;
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  _showFullAssessment
+                                      ? '共 ${r.lines.length} 项 · 标准与评分完整展示'
+                                      : '共 ${r.lines.length} 项 · 点击指标查看评分标准',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: DunesColors.resolve(
+                                      context,
+                                      DunesColors.text2,
                                     ),
                                   ),
                                 ),
                               ),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    '${t['title']}',
-                                    style: const TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w600,
+                              SegmentedButton<bool>(
+                                showSelectedIcon: false,
+                                style: ButtonStyle(
+                                  visualDensity: VisualDensity.compact,
+                                  textStyle: const WidgetStatePropertyAll(
+                                    TextStyle(fontSize: 12),
+                                  ),
+                                  padding: const WidgetStatePropertyAll(
+                                    EdgeInsets.symmetric(
+                                      horizontal: 10,
+                                      vertical: 8,
                                     ),
                                   ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    '${hrDate(t['completedAt'])}${_missing.contains((t['id'] as num).toInt()) ? ' · 原任务已不存在' : ''}',
-                                    style: const TextStyle(
-                                      fontSize: 12,
-                                      color: Color(0xFF8A8494),
-                                    ),
+                                  backgroundColor:
+                                      WidgetStateProperty.resolveWith(
+                                        (states) => DunesColors.resolve(
+                                          context,
+                                          states.contains(WidgetState.selected)
+                                              ? DunesColors.brandPurpleSoft
+                                              : Colors.white,
+                                        ),
+                                      ),
+                                  foregroundColor:
+                                      WidgetStateProperty.resolveWith(
+                                        (states) => DunesColors.resolve(
+                                          context,
+                                          states.contains(WidgetState.selected)
+                                              ? DunesColors.brandPurpleDeep
+                                              : DunesColors.text2,
+                                        ),
+                                      ),
+                                ),
+                                segments: const [
+                                  ButtonSegment(
+                                    value: false,
+                                    label: Text('指标总览'),
+                                  ),
+                                  ButtonSegment(
+                                    value: true,
+                                    label: Text('完整表格'),
                                   ),
                                 ],
-                              ),
-                            ),
-                            const Icon(
-                              Icons.chevron_right_rounded,
-                              color: Color(0xFF8A8494),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                  ],
-              ],
-            ),
-          ),
-          const SizedBox(height: 8),
-          const _HrSectionTitle('调整与申诉记录'),
-          const SizedBox(height: 8),
-          if (requests.isEmpty)
-            const _HrPanel(
-              child: Text(
-                '本周期还没有调整或申诉。',
-                style: TextStyle(fontSize: 13, color: Color(0xFF8A8494)),
-              ),
-            )
-          else
-            for (final request in requests) ...[
-              _HrPanel(
-                padding: EdgeInsets.zero,
-                child: ExpansionTile(
-                  key: ValueKey('hr-request-${request['id']}'),
-                  title: Text(
-                    '${request['kind'] == 'adjustment' ? '指标调整' : '绩效申诉'} · ${const {'pending': '待处理', 'approved': '已通过', 'rejected': '已驳回', 'expired': '超时未批'}[request['status']] ?? request['status']}',
-                  ),
-                  subtitle: Text('${request['reason']}'),
-                  children: [
-                    if (request['kind'] == 'adjustment') ...[
-                      for (final l in hrMaps(request['lines']))
-                        ListTile(
-                          title: Text('${l['name']}'),
-                          subtitle: Text(
-                            '原权重 ${r.lines.where((x) => x['indicatorId'] == l['indicatorId']).map((x) => x['weight']).firstOrNull ?? '未纳入'}% → 申请权重 ${l['weight']}%',
-                          ),
-                        ),
-                      for (final old in r.lines.where(
-                        (old) => !hrMaps(request['lines']).any(
-                          (line) => line['indicatorId'] == old['indicatorId'],
-                        ),
-                      ))
-                        ListTile(
-                          title: Text(
-                            '剔除指标：${old['name']}（原权重 ${old['weight']}%）',
-                          ),
-                        ),
-                      for (final t in hrMaps(request['evidence']))
-                        ListTile(
-                          title: Text(
-                            '${r.evidence.any((old) => old['id'] == t['id']) ? '保留任务' : '补录任务'}：${t['title']}',
-                          ),
-                        ),
-                      for (final old in r.evidence.where(
-                        (old) => !hrMaps(
-                          request['evidence'],
-                        ).any((t) => t['id'] == old['id']),
-                      ))
-                        ListTile(title: Text('剔除任务：${old['title']}')),
-                    ],
-                    if (hrText(request['resolution']).isNotEmpty)
-                      ListTile(
-                        title: Text('${request['resolution']}'),
-                        subtitle: Text('处理于 ${hrDate(request['handledAt'])}'),
-                      ),
-                    if (request['status'] == 'pending')
-                      Wrap(
-                        spacing: 8,
-                        children: [
-                          for (final a
-                              in request['kind'] == 'adjustment'
-                                  ? ['approve_adjustment', 'reject_adjustment']
-                                  : ['resolve_appeal'])
-                            if (r.actions.contains(a))
-                              _HrActionButton(
-                                label: hrActionLabels[a]!,
-                                onPressed: _busy
-                                    ? null
-                                    : () => _perform(
-                                        a,
-                                        requestId: '${request['id']}',
-                                      ),
-                              ),
-                        ],
-                      ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 8),
-            ],
-          const SizedBox(height: 8),
-          _HrPanel(
-            padding: EdgeInsets.zero,
-            child: ExpansionTile(
-              title: const Text('修改记录'),
-              onExpansionChanged: (open) {
-                if (open && _logs == null) {
-                  setState(() => _logs = widget.service.logs(r.id));
-                }
-              },
-              children: [
-                if (_logs != null)
-                  FutureBuilder<List<Map<String, dynamic>>>(
-                    future: _logs,
-                    builder: (context, s) {
-                      if (s.hasError) return Text('加载失败：${s.error}');
-                      if (!s.hasData) return const LinearProgressIndicator();
-                      return Column(
-                        children: [
-                          for (final log in s.data!)
-                            ExpansionTile(
-                              title: Text(
-                                '${hrActionLabels['${log['action']}'] ?? log['action']} · ${log['reason']}',
-                              ),
-                              subtitle: Text(
-                                '${log['actor']} · ${hrDate(log['createdAt'])}',
-                              ),
-                              children: [
-                                Padding(
-                                  padding: const EdgeInsets.all(12),
-                                  child: SelectableText(_logChanges(log)),
+                                selected: {_showFullAssessment},
+                                onSelectionChanged: (s) => setState(
+                                  () => _showFullAssessment = s.first,
                                 ),
-                              ],
+                              ),
+                            ],
+                          ),
+                          if (_showFullAssessment)
+                            sheet
+                          else
+                            HrAssessmentOverview(
+                              lines: r.lines,
+                              scoresVisible: r.scoresVisible,
                             ),
                         ],
                       );
                     },
                   ),
+                if (r.bonuses.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  const _HrSectionTitle('本月加减分'),
+                  const SizedBox(height: 8),
+                  for (final b in r.bonuses) ...[
+                    _HrPanel(
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  '${b['name']} · ${b['points']} 分',
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                if (hrText(b['source']).isNotEmpty)
+                                  Text(
+                                    hrText(b['source']),
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      color: Color(0xFF8A8494),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                          if (r.actions.contains('update_bonus'))
+                            IconButton(
+                              tooltip: '修改加减分',
+                              icon: const Icon(Icons.edit_outlined),
+                              onPressed: _busy
+                                  ? null
+                                  : () => _perform(
+                                      'update_bonus',
+                                      requestId: '${b['id']}',
+                                    ),
+                            ),
+                          if (r.actions.contains('remove_bonus'))
+                            IconButton(
+                              tooltip: '移除加减分',
+                              onPressed: _busy
+                                  ? null
+                                  : () => _perform(
+                                      'remove_bonus',
+                                      requestId: '${b['id']}',
+                                    ),
+                              icon: const Icon(Icons.delete_outline),
+                            ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+                ],
+                const SizedBox(height: 8),
+                _HrPanel(
+                  padding: EdgeInsets.zero,
+                  child: ExpansionTile(
+                    key: ValueKey('hr-evidence-${r.id}'),
+                    initiallyExpanded: false,
+                    title: _HrSectionTitle('任务证据（${r.evidence.length}）'),
+                    childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
+                    children: [
+                      if (r.evidence.isEmpty)
+                        const _HrPanel(
+                          child: Text(
+                            '暂无已纳入的任务证据',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Color(0xFF8A8494),
+                            ),
+                          ),
+                        )
+                      else
+                        for (final t in r.evidence) ...[
+                          _HrPanel(
+                            child: InkWell(
+                              onTap:
+                                  (_missing.contains(
+                                        (t['id'] as num).toInt(),
+                                      ) ||
+                                      t['missing'] == true)
+                                  ? null
+                                  : () => Navigator.of(context).push(
+                                      MaterialPageRoute<void>(
+                                        builder: (context) => Scaffold(
+                                          appBar: AppBar(
+                                            title: const Text('任务证据'),
+                                          ),
+                                          body: NativeTaskDetailView(
+                                            session: widget.session,
+                                            taskId: (t['id'] as num).toInt(),
+                                            onBack: () =>
+                                                Navigator.pop(context),
+                                            backLabel: '考核表',
+                                            forceReadOnly: true,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: HrTaskEvidenceContent(
+                                      task: t,
+                                      ownerName: r.name,
+                                      missing:
+                                          _missing.contains(
+                                            (t['id'] as num).toInt(),
+                                          ) ||
+                                          t['missing'] == true,
+                                      indicatorNames: [
+                                        for (final line in r.lines)
+                                          if ((line['taskIds'] as List? ?? [])
+                                              .contains(t['id']))
+                                            hrText(line['name']),
+                                      ],
+                                    ),
+                                  ),
+                                  const Icon(
+                                    Icons.chevron_right_rounded,
+                                    color: Color(0xFF8A8494),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                        ],
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const _HrSectionTitle('调整与申诉记录'),
+                const SizedBox(height: 8),
+                if (requests.isEmpty)
+                  const _HrPanel(
+                    child: Text(
+                      '本周期还没有调整或申诉。',
+                      style: TextStyle(fontSize: 13, color: Color(0xFF8A8494)),
+                    ),
+                  )
+                else
+                  for (final request in requests) ...[
+                    _HrPanel(
+                      padding: EdgeInsets.zero,
+                      child: ExpansionTile(
+                        key: ValueKey('hr-request-${request['id']}'),
+                        title: Text(
+                          '${request['kind'] == 'adjustment' ? '指标调整' : '绩效申诉'} · ${const {'pending': '待处理', 'approved': '已通过', 'rejected': '已驳回', 'expired': '超时未批'}[request['status']] ?? request['status']}',
+                        ),
+                        subtitle: Text('${request['reason']}'),
+                        children: [
+                          if (request['kind'] == 'adjustment') ...[
+                            for (final l in hrMaps(request['lines']))
+                              ListTile(
+                                title: Text('${l['name']}'),
+                                subtitle: Text(
+                                  '原权重 ${r.lines.where((x) => x['indicatorId'] == l['indicatorId']).map((x) => x['weight']).firstOrNull ?? '未纳入'}% → 申请权重 ${l['weight']}%',
+                                ),
+                              ),
+                            for (final old in r.lines.where(
+                              (old) => !hrMaps(request['lines']).any(
+                                (line) =>
+                                    line['indicatorId'] == old['indicatorId'],
+                              ),
+                            ))
+                              ListTile(
+                                title: Text(
+                                  '剔除指标：${old['name']}（原权重 ${old['weight']}%）',
+                                ),
+                              ),
+                            for (final t in hrMaps(request['evidence']))
+                              ListTile(
+                                title: Text(
+                                  '${r.evidence.any((old) => old['id'] == t['id']) ? '保留任务' : '补录任务'}：${t['title']}',
+                                ),
+                              ),
+                            for (final old in r.evidence.where(
+                              (old) => !hrMaps(
+                                request['evidence'],
+                              ).any((t) => t['id'] == old['id']),
+                            ))
+                              ListTile(title: Text('剔除任务：${old['title']}')),
+                          ],
+                          if (hrText(request['resolution']).isNotEmpty)
+                            ListTile(
+                              title: Text('${request['resolution']}'),
+                              subtitle: Text(
+                                '处理于 ${hrDate(request['handledAt'])}',
+                              ),
+                            ),
+                          if (request['status'] == 'pending')
+                            Wrap(
+                              spacing: 8,
+                              children: [
+                                for (final a
+                                    in request['kind'] == 'adjustment'
+                                        ? [
+                                            'approve_adjustment',
+                                            'reject_adjustment',
+                                          ]
+                                        : ['resolve_appeal'])
+                                  if (r.actions.contains(a))
+                                    _HrActionButton(
+                                      label: hrActionLabels[a]!,
+                                      onPressed: _busy
+                                          ? null
+                                          : () => _perform(
+                                              a,
+                                              requestId: '${request['id']}',
+                                            ),
+                                    ),
+                              ],
+                            ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+                const SizedBox(height: 8),
+                _HrPanel(
+                  padding: EdgeInsets.zero,
+                  child: ExpansionTile(
+                    title: const Text('修改记录'),
+                    onExpansionChanged: (open) {
+                      if (open && _logs == null) {
+                        final logs = widget.service.logs(r.id);
+                        setState(() {
+                          _logs = logs;
+                        });
+                      }
+                    },
+                    children: [
+                      if (_logs != null)
+                        FutureBuilder<List<Map<String, dynamic>>>(
+                          future: _logs,
+                          builder: (context, s) {
+                            if (s.hasError) return Text('加载失败：${s.error}');
+                            if (!s.hasData) {
+                              return const LinearProgressIndicator();
+                            }
+                            final visibleLogs = s.data!
+                                .where((log) => _showAuditLog(log))
+                                .toList();
+                            if (visibleLogs.isEmpty) {
+                              return const Padding(
+                                padding: EdgeInsets.all(12),
+                                child: Text('暂无修改记录'),
+                              );
+                            }
+                            return Column(
+                              children: [
+                                for (final log in visibleLogs)
+                                  ExpansionTile(
+                                    title: Text(
+                                      '${hrActionLabels['${log['action']}'] ?? '考核记录'}${hrText(log['reason']).isEmpty ? '' : ' · ${log['reason']}'}',
+                                    ),
+                                    subtitle: Text(
+                                      '${_auditActor(log['actor'])} · ${hrDate(log['createdAt'])}',
+                                    ),
+                                    children: [
+                                      Padding(
+                                        padding: const EdgeInsets.all(12),
+                                        child: SelectableText(_logChanges(log)),
+                                      ),
+                                    ],
+                                  ),
+                              ],
+                            );
+                          },
+                        ),
+                    ],
+                  ),
+                ),
               ],
             ),
           ),
         ],
       ),
     );
+  }
+
+  bool _showAuditLog(Map<String, dynamic> log) {
+    final actor = hrText(log['actor']).toLowerCase();
+    final parts = actor.split(':');
+    return !parts.any(
+      (part) => part.trim() == 'system' || part.trim() == 'admin',
+    );
+  }
+
+  String _auditActor(dynamic value) {
+    final actor = hrText(value);
+    if (actor.startsWith('system:') || actor == 'system') return '系统';
+    if (actor.startsWith('user:')) {
+      final parts = actor.split(':');
+      return parts.length > 2 && parts.last.trim().isNotEmpty
+          ? parts.last
+          : '操作人';
+    }
+    return actor.isEmpty ? '操作人' : actor;
   }
 
   String _logChanges(Map<String, dynamic> log) {
@@ -1089,7 +1351,7 @@ String _hrMonthLabel(String month) {
 class _HrPanel extends StatelessWidget {
   const _HrPanel({
     required this.child,
-    this.padding = const EdgeInsets.all(14),
+    this.padding = const EdgeInsets.all(12),
   });
   final Widget child;
   final EdgeInsets padding;
@@ -1131,8 +1393,8 @@ class _HrSectionTitle extends StatelessWidget {
     return Text(
       text,
       style: TextStyle(
-        fontSize: 14,
-        fontWeight: FontWeight.w700,
+        fontSize: 13,
+        fontWeight: FontWeight.w600,
         color: DunesColors.resolve(context, DunesColors.text),
       ),
     );
@@ -1180,7 +1442,7 @@ class _HrMetaRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 8),
+      padding: const EdgeInsets.symmetric(vertical: 3),
       decoration: BoxDecoration(
         border: last
             ? null
@@ -1198,11 +1460,11 @@ class _HrMetaRow extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            width: 96,
+            width: 84 * MediaQuery.textScalerOf(context).scale(1),
             child: Text(
               label,
               style: TextStyle(
-                fontSize: 13,
+                fontSize: 12,
                 color: DunesColors.resolve(context, DunesColors.text3),
               ),
             ),
@@ -1211,7 +1473,7 @@ class _HrMetaRow extends StatelessWidget {
             child: Text(
               value,
               style: TextStyle(
-                fontSize: 13,
+                fontSize: 12,
                 fontWeight: FontWeight.w600,
                 color: DunesColors.resolve(context, DunesColors.text),
               ),

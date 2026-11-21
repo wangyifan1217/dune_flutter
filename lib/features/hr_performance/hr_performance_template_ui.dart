@@ -21,16 +21,72 @@ ThemeData hrConfigTheme(BuildContext context) {
   final onAccent = base.brightness == Brightness.dark
       ? base.colorScheme.onPrimary
       : Colors.white;
+  final text = base.textTheme;
   return base.copyWith(
+    textTheme: text.copyWith(
+      titleLarge: text.titleLarge?.copyWith(
+        fontSize: 16,
+        height: 1.35,
+        fontWeight: FontWeight.w600,
+      ),
+      titleMedium: text.titleMedium?.copyWith(fontSize: 14, height: 1.4),
+      titleSmall: text.titleSmall?.copyWith(fontSize: 13, height: 1.4),
+      bodyLarge: text.bodyLarge?.copyWith(fontSize: 13, height: 1.45),
+      bodyMedium: text.bodyMedium?.copyWith(fontSize: 13, height: 1.45),
+      bodySmall: text.bodySmall?.copyWith(fontSize: 12, height: 1.4),
+      labelLarge: text.labelLarge?.copyWith(fontSize: 13, height: 1.3),
+      labelMedium: text.labelMedium?.copyWith(fontSize: 12, height: 1.3),
+    ),
+    listTileTheme: base.listTileTheme.copyWith(
+      dense: true,
+      minVerticalPadding: 6,
+      titleTextStyle: text.bodyMedium?.copyWith(fontSize: 13, height: 1.4),
+      subtitleTextStyle: text.bodySmall?.copyWith(fontSize: 12, height: 1.4),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+    ),
+    expansionTileTheme: base.expansionTileTheme.copyWith(
+      tilePadding: const EdgeInsets.symmetric(horizontal: 12),
+      childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+      shape: const Border(),
+      collapsedShape: const Border(),
+      iconColor: accent,
+      collapsedIconColor: accent,
+    ),
+    popupMenuTheme: base.popupMenuTheme.copyWith(
+      color: hrConfigSurface(context, Colors.white),
+      surfaceTintColor: Colors.transparent,
+      textStyle: text.bodyMedium?.copyWith(fontSize: 13),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      elevation: 4,
+    ),
+    menuButtonTheme: MenuButtonThemeData(
+      style: ButtonStyle(
+        textStyle: WidgetStatePropertyAll(
+          text.bodyMedium?.copyWith(fontSize: 13),
+        ),
+        minimumSize: const WidgetStatePropertyAll(Size(120, 36)),
+        padding: const WidgetStatePropertyAll(
+          EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        ),
+      ),
+    ),
     colorScheme: base.colorScheme.copyWith(
       primary: accent,
       onPrimary: onAccent,
+      primaryContainer: hrConfigSurface(context, DunesColors.brandPurpleSoft),
+      onPrimaryContainer: accent,
+      secondary: accent,
+      onSecondary: onAccent,
+      secondaryContainer: accent,
+      onSecondaryContainer: onAccent,
+      tertiary: accent,
+      onTertiary: onAccent,
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
       fillColor: hrConfigSurface(context, const Color(0xFFF7F6FA)),
       isDense: true,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       hintStyle: TextStyle(
         fontSize: 13,
         color: hrConfigColor(context, const Color(0xFFA39BAE)),
@@ -218,6 +274,7 @@ Future<T?> showHrConfigPanel<T>(
   BuildContext context,
   Widget panel, {
   double maxWidth = 660,
+  bool fitContent = false,
 }) {
   FocusManager.instance.primaryFocus?.unfocus();
   final theme = hrConfigTheme(context);
@@ -257,13 +314,23 @@ Future<T?> showHrConfigPanel<T>(
           color: hrConfigSurface(ctx, Colors.white),
           borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
           clipBehavior: Clip.antiAlias,
-          child: SizedBox(
-            height:
-                (MediaQuery.sizeOf(ctx).height -
-                    MediaQuery.viewInsetsOf(ctx).bottom) *
-                .88,
-            child: panel,
-          ),
+          child: fitContent
+              ? ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxHeight:
+                        (MediaQuery.sizeOf(ctx).height -
+                            MediaQuery.viewInsetsOf(ctx).bottom) *
+                        .88,
+                  ),
+                  child: panel,
+                )
+              : SizedBox(
+                  height:
+                      (MediaQuery.sizeOf(ctx).height -
+                          MediaQuery.viewInsetsOf(ctx).bottom) *
+                      .88,
+                  child: panel,
+                ),
         ),
       ),
     ),
@@ -292,7 +359,7 @@ class HrConfigPanel extends StatelessWidget {
               child: Text(
                 title,
                 style: TextStyle(
-                  fontSize: 17,
+                  fontSize: 15,
                   fontWeight: FontWeight.w700,
                   color: hrConfigColor(context, const Color(0xFF30263E)),
                 ),
@@ -430,7 +497,7 @@ class _HrConfigPickerState<T> extends State<_HrConfigPicker<T>> {
                           title: Text(
                             option.label,
                             style: const TextStyle(
-                              fontSize: 14,
+                              fontSize: 13,
                               fontWeight: FontWeight.w500,
                             ),
                           ),

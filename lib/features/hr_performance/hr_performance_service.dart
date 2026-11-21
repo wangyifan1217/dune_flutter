@@ -72,12 +72,18 @@ class HrPerformanceRecord {
       todoGroups = (json['todoGroups'] as List? ?? const [])
           .map((x) => '$x')
           .toList(),
+      hrReturnTargets = (json['hrReturnTargets'] as List?)
+          ?.map((v) => '$v')
+          .toList(),
+      urgeUnavailableReason = '${json['urgeUnavailableReason'] ?? ''}',
       warnings = (json['warnings'] as List? ?? const [])
           .map((x) => '$x')
           .toList();
 
   final int version;
   final bool draftVisible;
+  final List<String>? hrReturnTargets;
+  final String urgeUnavailableReason;
   final List<String> actions, todoGroups, warnings;
   final int id;
   final int userId;
@@ -241,7 +247,13 @@ class HrPerformanceService {
     List<HrPerformanceRecord> records,
     String action,
     String reason,
-  ) async {
+  ) => batchManaged(records, action, reason);
+  Future<List<Map<String, dynamic>>> batchManaged(
+    List<HrPerformanceRecord> records,
+    String action,
+    String reason, {
+    Map<String, dynamic> values = const {},
+  }) async {
     final results = <Map<String, dynamic>>[];
     for (var offset = 0; offset < records.length; offset += 200) {
       final batch = records.skip(offset).take(200);
@@ -255,6 +267,7 @@ class HrPerformanceService {
             ],
             'action': action,
             'reason': reason,
+            ...values,
           }),
         ),
       );
@@ -267,13 +280,23 @@ class HrPerformanceService {
     String month,
     List<int> ids, {
     bool confirmScores = false,
+    bool includeDraftScores = false,
   }) => _post('/hr-performance/summary', {
     'month': month,
     'ids': ids,
     'confirmScores': confirmScores,
+    if (includeDraftScores) 'includeDraftScores': true,
   });
   Future<Map<String, dynamic>> export(String month, List<int> ids) =>
       _post('/hr-performance/export', {'month': month, 'ids': ids});
+  Future<Map<String, dynamic>> exportXlsx(
+    String month,
+    Map<String, dynamic> selection,
+  ) => _post('/hr-performance/export', {
+    'month': month,
+    'format': 'xlsx',
+    ...selection,
+  });
   Future<List<Map<String, dynamic>>> alerts() async =>
       HrPerformanceRecord._maps(
         _unwrap(await dunesHttpGet(session, '/hr-performance/alerts')),

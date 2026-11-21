@@ -11,6 +11,7 @@ import '../shell/dunes_toast.dart';
 import 'hr_performance_search.dart';
 import 'hr_performance_category.dart';
 import 'hr_performance_service.dart';
+import 'hr_performance_sheets.dart' show hrConfirmAction;
 import 'hr_performance_sheet.dart';
 import 'hr_performance_template_item_editor.dart';
 import 'hr_performance_template_ui.dart';
@@ -178,6 +179,7 @@ class _State extends State<HrPerformanceTemplatesPage> {
           ),
         ),
         maxWidth: 420,
+        fitContent: true,
       );
       if (discard != true || !mounted) return;
     }
@@ -386,6 +388,14 @@ class _State extends State<HrPerformanceTemplatesPage> {
     } else {
       next[index] = d;
     }
+    if (!await hrConfirmAction(
+      context,
+      title: '保存考核模板',
+      message: '将保存当前模板、指标及适用范围。',
+    )) {
+      return;
+    }
+    if (!mounted) return;
     setState(() => saving = true);
     try {
       final res = await widget.service.saveTemplates(version, next);

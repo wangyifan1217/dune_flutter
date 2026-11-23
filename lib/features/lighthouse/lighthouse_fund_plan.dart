@@ -1788,18 +1788,25 @@ Widget _lhSubRow(BuildContext context, String name, String value, {Color color =
   return Container(
     padding: EdgeInsets.fromLTRB(depth * 12.0, 7, 0, 7),
     decoration: BoxDecoration(border: Border(top: BorderSide(color: _ln(context, _kLine), width: 0.6))),
+    // 2026-11-20 · 原来 Flexible + Spacer 平分剩余宽度，金额落在半路、每行位置不一样。
+    // 改成：名字 + 标签占满左边（Expanded），金额贴右对齐。
     child: Row(
       children: [
-        Flexible(
-          child: Text(
-            name,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: _sans(context, size: muted ? 10.5 : 11.5, weight: muted ? FontWeight.w500 : FontWeight.w600, color: muted ? _kInk2 : _kInk),
+        Expanded(
+          child: Row(
+            children: [
+              Flexible(
+                child: Text(
+                  name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: _sans(context, size: muted ? 10.5 : 11.5, weight: muted ? FontWeight.w500 : FontWeight.w600, color: muted ? _kInk2 : _kInk),
+                ),
+              ),
+              if (tag != null) ...[const SizedBox(width: 5), tag],
+            ],
           ),
         ),
-        if (tag != null) ...[const SizedBox(width: 5), tag],
-        const Spacer(),
         const SizedBox(width: 8),
         Text(value, style: _mono(context, size: 11, weight: FontWeight.w600, color: muted ? _kMute : color)),
       ],

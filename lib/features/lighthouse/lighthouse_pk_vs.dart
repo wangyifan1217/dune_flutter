@@ -105,7 +105,7 @@ const Map<String, LhPkMetricDef> lhPkMetricDefs = <String, LhPkMetricDef>{
   'revenue': LhPkMetricDef('revenue', '收入'),
   'spread': LhPkMetricDef('spread', '利差'),
   'grossMargin': LhPkMetricDef('grossMargin', '毛利率', kind: LhPkKind.pct),
-  'roi': LhPkMetricDef('roi', 'ROI', kind: LhPkKind.pct),
+  'roi': LhPkMetricDef('roi', '净利率', kind: LhPkKind.pct), // 值取行上的 rate（2026-11-23 起是净利率）
   'prepaid': LhPkMetricDef('prepaid', '经营性净现金流'),
   'verifyRate': LhPkMetricDef('verifyRate', '核销率', kind: LhPkKind.pct),
   'spreadRate': LhPkMetricDef('spreadRate', '利差率', kind: LhPkKind.pct),

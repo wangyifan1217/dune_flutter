@@ -1166,7 +1166,7 @@ void main() {
         ['revenue', '核销额 × 利差率'],
         ['spread', '已核销利差'],
         ['grossMargin', '利润 ÷ 核销额'],
-        ['rate', '利润 ÷ 成本合计'],
+        ['rate', '净利润 ÷ 核销额'],
       ],
     );
     expect(lighthouseHeroFormulaForKey('profit')?.substitutes, isFalse);
@@ -1193,14 +1193,25 @@ void main() {
       focus: 'prepaid',
       trace: 'prepaid',
     ));
-    // 利润在 ROI 里是分子、在毛利率里也是分子；成本合计在 ROI 里是分母。
+    // 净利率（rate，2026-11-23 起替代 ROI）= 净利润 ÷ 核销额：净利润是分子、核销额是分母。
     expect(
-      lighthouseHeroTraceRole('rate', 'profit'),
+      lighthouseHeroTraceRole('rate', 'netProfit'),
       LighthouseHeroFormulaRole.numerator,
     );
+    expect(lighthouseHeroTraceRole('rate', 'profit'), isNull);
     expect(
-      lighthouseHeroTraceRole('rate', 'totalCost'),
+      lighthouseHeroTraceRole('rate', 'verifiedSales'),
       LighthouseHeroFormulaRole.denominator,
+    );
+    expect(lighthouseHeroTraceRole('rate', 'totalCost'), isNull);
+    // 分母跟毛利率走：运营商 ÷ 销售额。
+    expect(
+      lighthouseHeroTraceRole('rate', 'sales', group: '运营商'),
+      LighthouseHeroFormulaRole.denominator,
+    );
+    expect(
+      lighthouseHeroFormulaForKey('rate', group: '运营商')?.expression,
+      '净利润 ÷ 销售额',
     );
     expect(lighthouseHeroTraceRole('rate', 'gmv'), isNull);
     expect(
@@ -1209,7 +1220,7 @@ void main() {
     );
     // 压暗：无关格压，来源格和被点的格子不压。
     expect(lighthouseHeroTraceDims('rate', 'gmv'), isTrue);
-    expect(lighthouseHeroTraceDims('rate', 'profit'), isFalse);
+    expect(lighthouseHeroTraceDims('rate', 'netProfit'), isFalse);
     expect(lighthouseHeroTraceDims('rate', 'rate'), isFalse);
     expect(lighthouseHeroTraceDims(null, 'gmv'), isFalse);
     expect(lighthouseHeroTraceDims('sales', 'gmv'), isFalse);

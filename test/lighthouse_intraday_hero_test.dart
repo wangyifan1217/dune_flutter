@@ -1,3 +1,5 @@
+import 'package:dunes_app/features/lighthouse/lighthouse_forecast.dart';
+import 'package:dunes_app/features/lighthouse/lighthouse_forecast_strip.dart';
 import 'package:dunes_app/features/lighthouse/lighthouse_intraday_hero.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -5,10 +7,22 @@ import 'package:flutter_test/flutter_test.dart';
 // 分时 / 近7天大数卡（原型 docs/lighthouse_7day_trend_prototype.html）。
 void main() {
   final today = DateTime(2026, 11, 23);
-  final values = [128000.0, 142000.0, 116000.0, 168000.0, 139000.0, 156500.0, 73500.0];
+  final values = [
+    128000.0,
+    142000.0,
+    116000.0,
+    168000.0,
+    139000.0,
+    156500.0,
+    73500.0,
+  ];
   final days = [
     for (var k = -6; k <= 0; k++)
-      LhIntradayDay(date: today.add(Duration(days: k)), offset: k, value: values[k + 6]),
+      LhIntradayDay(
+        date: today.add(Duration(days: k)),
+        offset: k,
+        value: values[k + 6],
+      ),
   ];
   final data = LhIntradayData.fromJson({
     'available': true,
@@ -20,7 +34,12 @@ void main() {
     'prev': [
       {'at': '09:00', 'minute': 540, 'profit': 18000, 'verifiedSales': 800000},
       {'at': '15:00', 'minute': 900, 'profit': 61500, 'verifiedSales': 2300000},
-      {'at': '23:50', 'minute': 1430, 'profit': 156500, 'verifiedSales': 5100000},
+      {
+        'at': '23:50',
+        'minute': 1430,
+        'profit': 156500,
+        'verifiedSales': 5100000,
+      },
     ],
   });
 
@@ -36,6 +55,8 @@ void main() {
     List<int>? taps,
     List<int>? commits,
     List<String>? views,
+    bool monthly = false,
+    Widget? forecastPanel,
   }) async {
     final log = <String>[];
     await tester.pumpWidget(
@@ -48,13 +69,25 @@ void main() {
                 metricKey: metric,
                 metricLabel: label,
                 isRate: isRate,
-                days: days,
+                days: monthly
+                    ? [
+                        for (var k = -6; k <= 0; k++)
+                          LhIntradayDay(
+                            date: DateTime(today.year, today.month + k),
+                            offset: k,
+                            value: values[k + 6],
+                          ),
+                      ]
+                    : days,
                 selectedOffset: selected,
                 committedOffset: committed,
                 value: value,
                 data: data,
                 todayData: data,
                 view: view,
+                monthly: monthly,
+                monthAsOf: monthly ? today : null,
+                forecastPanel: forecastPanel,
                 asOfMinute: 912,
                 onViewChanged: (v) => views?.add(v),
                 onDayTap: (o) => taps?.add(o),
@@ -124,5 +157,53 @@ void main() {
   testWidgets('比率指标没有分时累计', (tester) async {
     await pump(tester, metric: 'rate', label: '净利率', isRate: true, value: 1.46);
     expect(find.textContaining('是比率，没有分时累计'), findsOneWidget);
+  });
+
+  testWidgets('月末预测在主数右侧，窄屏换行后报告仍可点', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    var opened = 0;
+    final forecast = LighthouseForecastCard(
+      forecast: LighthousePaceForecast(
+        actual: 5076200,
+        forecast: 6310000,
+        elapsedDays: 23,
+        totalDays: 30,
+        yearTotal: 53277000,
+        beatPrevProb: .01,
+        future: [
+          LighthouseFutureMonth(month: DateTime(2026, 12), forecast: 6000000),
+        ],
+      ),
+      money: (value) => '${(value / 10000).toStringAsFixed(1)}万',
+      onOpenReport: () => opened++,
+    );
+    final panel = find.byType(LighthouseForecastCard);
+    final title = find.text('本月盈利');
+    for (final width in [380.0, 275.0]) {
+      tester.view.physicalSize = Size(width, 950);
+      await pump(
+        tester,
+        monthly: true,
+        value: 5076200,
+        forecastPanel: forecast,
+      );
+      expect(find.text('631.0万'), findsOneWidget);
+      expect(find.text('年末 5327.7万 · 超上月 1%'), findsOneWidget);
+      if (width == 380) {
+        expect(
+          tester.getTopLeft(panel).dx,
+          greaterThan(tester.getTopRight(title).dx),
+        );
+      } else {
+        expect(
+          tester.getTopLeft(panel).dy,
+          greaterThan(tester.getBottomLeft(title).dy),
+        );
+      }
+      await tester.tap(find.text('报告'));
+      expect(tester.takeException(), isNull);
+    }
+    expect(opened, 2);
   });
 }

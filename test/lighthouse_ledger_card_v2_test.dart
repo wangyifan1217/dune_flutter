@@ -4,14 +4,20 @@ import 'package:flutter_test/flutter_test.dart';
 
 // 产品卡 v2（原型 docs/lighthouse_product_list_prototype.html）。
 void main() {
-  Future<void> pump(WidgetTester tester, Widget card, {double width = 390}) async {
+  Future<void> pump(
+    WidgetTester tester,
+    Widget card, {
+    double width = 390,
+  }) async {
     tester.view.physicalSize = Size(width * 2, 1600);
     tester.view.devicePixelRatio = 2;
     addTearDown(tester.view.reset);
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: SingleChildScrollView(child: SizedBox(width: width, child: card)),
+          body: SingleChildScrollView(
+            child: SizedBox(width: width, child: card),
+          ),
         ),
       ),
     );
@@ -26,7 +32,7 @@ void main() {
     expect(lhCardToneOf(null), LhCardTone.none);
   });
 
-  testWidgets('产品卡：序号、名字、两块大数、五格 + 产品详情', (tester) async {
+  testWidgets('产品卡：利润为主指标，保留各自的点击入口', (tester) async {
     final taps = <String>[];
     await pump(
       tester,
@@ -38,14 +44,14 @@ void main() {
         meta: '能源 · 中石油',
         onOpenDetail: () => taps.add('detail'),
         profit: LhCardKpi(
-          label: '净利润',
+          label: '利润',
           number: '5.30',
           unit: '万',
           delta: '↓1.1%',
           tone: lhCardToneOf(-1.1),
           spark: const [5.9, 5.5, 6.2, 5.1, 5.6, 5.36, 5.30],
           sparkLabel: '近7天',
-          onTap: () => taps.add('netProfit'),
+          onTap: () => taps.add('profit'),
         ),
         margin: const LhCardKpi(
           label: '毛利率',
@@ -56,11 +62,35 @@ void main() {
           caption: '利润 ÷ 核销额',
         ),
         cells: [
-          LhCardCell(label: '销售额', number: '107.0', unit: '万', delta: '↓16%', tone: LhCardTone.down, onTap: () => taps.add('sales')),
-          const LhCardCell(label: '核销额', number: '120.0', unit: '万', delta: '↓7.7%', tone: LhCardTone.down),
-          const LhCardCell(label: '成本合计', number: '0.01', unit: '万', delta: '↓52%', tone: LhCardTone.down),
-          const LhCardCell(label: '利润', number: '5.30', unit: '万', delta: '↓1.1%', tone: LhCardTone.flat),
-          const LhCardCell(label: '收入', number: '5.31', unit: '万', delta: '↓1.3%', tone: LhCardTone.flat),
+          LhCardCell(
+            label: '销售额',
+            number: '107.0',
+            unit: '万',
+            delta: '↓16%',
+            tone: LhCardTone.down,
+            onTap: () => taps.add('sales'),
+          ),
+          const LhCardCell(
+            label: '核销额',
+            number: '120.0',
+            unit: '万',
+            delta: '↓7.7%',
+            tone: LhCardTone.down,
+          ),
+          const LhCardCell(
+            label: '成本合计',
+            number: '0.01',
+            unit: '万',
+            delta: '↓52%',
+            tone: LhCardTone.down,
+          ),
+          const LhCardCell(
+            label: '收入',
+            number: '5.31',
+            unit: '万',
+            delta: '↓1.3%',
+            tone: LhCardTone.flat,
+          ),
         ],
       ),
     );
@@ -73,21 +103,22 @@ void main() {
     expect(find.text('产品详情'), findsOneWidget);
 
     await tester.tap(find.text('销售额'));
-    await tester.tap(find.text('净利润'));
+    await tester.tap(find.text('利润'));
     await tester.tap(find.text('产品详情'));
-    expect(taps, ['sales', 'netProfit', 'detail']);
+    expect(taps, ['sales', 'profit', 'detail']);
   });
 
   testWidgets('细分子卡：没有序号，最后一格是细分详情；宽屏不溢出', (tester) async {
-    const card = LighthouseLedgerCardV2(
+    final card = LighthouseLedgerCardV2(
       isChild: true,
       name: '普惠切特惠',
       linkText: '细分详情',
-      profit: LhCardKpi(label: '净利润', number: '2.41', unit: '万'),
-      margin: LhCardKpi(label: '毛利率', number: '4.4', unit: '%'),
-      cells: [LhCardCell(label: '销售额', number: '48.6', unit: '万')],
+      onOpenDetail: () {},
+        profit: const LhCardKpi(label: '利润', number: '2.41', unit: '万'),
+      margin: const LhCardKpi(label: '毛利率', number: '4.4', unit: '%'),
+      cells: const [LhCardCell(label: '销售额', number: '48.6', unit: '万')],
     );
-    await pump(tester, card);
+      await pump(tester, card, width: 320);
     expect(tester.takeException(), isNull);
     expect(find.text('细分详情'), findsOneWidget);
     await pump(tester, card, width: 900);

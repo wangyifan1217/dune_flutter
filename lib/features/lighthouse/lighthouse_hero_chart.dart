@@ -1553,7 +1553,7 @@ class _LighthouseHeroTrendCardState extends State<LighthouseHeroTrendCard>
   ) {
     final title =
         '${widget.labels[sel]}'
-        '${widget.lastIsPartial && sel == widget.labels.length - 1 ? ' · 今日进行中' : ''}';
+        '${widget.lastIsPartial && sel == widget.labels.length - 1 ? ' · 进行中' : ''}';
     Widget row(Color c, String name, String v, {bool bold = false, bool round = true, Color? vc}) =>
         Padding(
           padding: const EdgeInsets.only(top: 3),

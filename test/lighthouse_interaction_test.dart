@@ -8,8 +8,10 @@ import 'package:dunes_app/features/conversation/comm_unread_notifier.dart';
 import 'package:dunes_app/features/conversation/conversation_service.dart';
 import 'package:dunes_app/features/lighthouse/lighthouse_card_share.dart';
 import 'package:dunes_app/features/lighthouse/lighthouse_feedback.dart';
+import 'package:dunes_app/features/lighthouse/lighthouse_hero_chart.dart';
 import 'package:dunes_app/features/lighthouse/lighthouse_hero_metric.dart';
-import 'package:dunes_app/features/lighthouse/lighthouse_period_bar.dart';
+import 'package:dunes_app/features/lighthouse/lighthouse_intraday_hero.dart';
+import 'package:dunes_app/features/lighthouse/lighthouse_ledger_card_v2.dart';
 import 'package:dunes_app/features/lighthouse/lighthouse_product_rules.dart';
 import 'package:dunes_app/features/lighthouse/lighthouse_shared_card_data.dart';
 import 'package:dunes_app/features/lighthouse/lighthouse_service.dart';
@@ -63,6 +65,7 @@ Future<void> mountPage(
   double width = 390,
   List<Map<String, dynamic>> notices = const [],
   List<Map<String, dynamic>> Function()? noticesProvider,
+  Map<String, dynamic>? Function()? pnlProvider,
   Duration refreshDelay = Duration.zero,
   ThemeData? theme,
 }) async {
@@ -71,17 +74,49 @@ Future<void> mountPage(
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
   final rows = [row('满减券（交易）'), row('中石化普惠现金券（交易）'), row('中石油普惠现金券（交易）')];
+  final supplyRow = {
+    ...row('湖北', child: true),
+    'group': '中石油',
+    'totalAssets': 310000,
+  };
+  final channelRow = {
+    ...row('渠道甲', child: true),
+    'group': '自然流量',
+  };
+  final detailProduct = row('交叉产品', child: true);
+  final now = DateTime.now().toUtc().add(const Duration(hours: 8));
+  final previousMonth = DateTime(now.year, now.month - 1);
+  final twoMonthsAgo = DateTime(now.year, now.month - 2);
+  String monthKey(DateTime date) =>
+      '${date.year}-${date.month.toString().padLeft(2, '0')}';
   var summaryRequests = 0;
   final client = MockClient((request) async {
     final path = request.url.path;
+    final monthly = request.url.queryParameters['period'] == 'month';
+    final tab = request.url.queryParameters['tab'];
+    final dimensionRows = switch (tab) {
+      'supply' => [supplyRow],
+      'channel' => [channelRow],
+      _ => rows,
+    };
     if (path.endsWith('/summary')) {
       summaryRequests++;
       if (summaryRequests > 1 && refreshDelay > Duration.zero) {
         await Future<void>.delayed(refreshDelay);
       }
     }
+    if (path.endsWith('/pnl') && pnlProvider != null) {
+      final pnl = pnlProvider();
+      return http.Response(
+        jsonEncode(pnl == null
+            ? {'success': false, 'message': '资管损益暂时不可用'}
+            : {'success': true, 'data': pnl}),
+        pnl == null ? 503 : 200,
+        headers: {'content-type': 'application/json; charset=utf-8'},
+      );
+    }
     final data = path.endsWith('/dimension')
-        ? {'rows': rows}
+        ? {'rows': dimensionRows}
         : path.endsWith('/summary')
         ? {
             'sales': 27000000,
@@ -92,6 +127,12 @@ Future<void> mountPage(
             'totalCost': 960000,
             'netProfit': 480000,
             'heroSeriesLabels': ['07月', '08月', '09月'],
+            if (monthly)
+              'heroSeriesKeys': [
+                monthKey(twoMonthsAgo),
+                monthKey(previousMonth),
+                monthKey(now),
+              ],
             'verifiedSalesSeries': [12000000, 14000000, 15000000],
             'salesSeries': [22000000, 25000000, 27000000],
             'revenueSeries': [700000, 800000, 900000],
@@ -100,17 +141,30 @@ Future<void> mountPage(
           }
         : path.endsWith('/trend')
         ? {
-            'trends': {for (final r in rows) '${r['name']}::能源': r['trend']},
+            'trends': {
+              for (final r in dimensionRows)
+                '${r['name']}::${r['group']}': r['trend'],
+            },
           }
         : path.endsWith('/detail')
         ? {
-            'detail': {
+            'detail': tab == 'supply' || tab == 'channel' ? {
+              ...dimensionRows.first,
+              'product': [detailProduct],
+              'product_drill': {
+                '交叉产品::能源': {...detailProduct, 'profit': 70000},
+              },
+            } : {
               ...rows.first,
+              'productL3': (rows.first['children'] as List),
               if ((request.url.queryParameters['key'] ?? '').startsWith(
                 '湖北细分::',
-              ))
+              )) ...{
                 ...row('湖北细分', child: true),
-              'productL3': (rows.first['children'] as List),
+                'profit': 55000,
+                'netProfit': 42000,
+                'productL3': const [],
+              },
               'product_drill': {'fixture': rows.first},
             },
           }
@@ -144,6 +198,18 @@ Future<void> mountPage(
 Finder card(String title) => find.byWidgetPredicate(
   (widget) => widget is LighthouseShareableCard && widget.title == title,
 );
+
+Future<void> selectCurrentMonth(WidgetTester tester) async {
+  final semantics = tester.ensureSemantics();
+  await tester.tap(find.bySemanticsLabel(RegExp(r'^切换周期，')));
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 350));
+  await tester.tap(find.bySemanticsLabel('月，本月'));
+  semantics.dispose();
+  await tester.pump(const Duration(milliseconds: 900));
+  await tester.tapAt(const Offset(920, 930));
+  await tester.pump(const Duration(milliseconds: 400));
+}
 
 Finder label(String text) => find.byWidgetPredicate(
   (widget) =>
@@ -416,32 +482,69 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     },
   );
-  testWidgets('supply asset bag stays compact and tappable at phone width', (
-    tester,
-  ) async {
-    await mountPage(tester);
-    await tester.tap(find.text('供给方').first);
-    await tester.pump(const Duration(milliseconds: 800));
+  for (final (tab, name, detailLabel) in [
+    ('供给方', '湖北', '供给详情'),
+    ('渠道', '渠道甲', '渠道详情'),
+  ]) {
+    testWidgets('$tab列表、二级和三级使用利润主卡', (tester) async {
+      await mountPage(tester, width: 940);
+      final list = find
+          .descendant(of: find.byType(ListView), matching: find.byType(Scrollable))
+          .first;
+      final nav = label(tab).first;
+      await tester.scrollUntilVisible(nav, 230, scrollable: list);
+      await tester.pump();
+      await tester.tap(nav);
+      await tester.pump(const Duration(milliseconds: 800));
 
-    final bag = find.byTooltip('总资产').first;
-    expect(bag, findsOneWidget);
-    expect(tester.getSize(bag).width, lessThan(26));
-    final rowCard = find
-        .ancestor(of: bag, matching: find.byType(LighthouseShareableCard))
-        .first;
-    final rowTitle = tester.widget<LighthouseShareableCard>(rowCard).title;
-    final name = find
-        .descendant(of: rowCard, matching: find.text(rowTitle))
-        .first;
-    expect(
-      (tester.getTopLeft(bag).dy - tester.getTopLeft(name).dy).abs(),
-      lessThan(22),
-    );
-    await tester.tap(bag);
-    await tester.pump(const Duration(milliseconds: 300));
-    expect(find.bySemanticsLabel('收起总资产'), findsWidgets);
-    expect(tester.takeException(), isNull);
-  });
+      final rowCard = find.descendant(
+        of: card(name),
+        matching: find.byType(LighthouseLedgerCardV2),
+      );
+      final l1 = tester.widget<LighthouseLedgerCardV2>(rowCard);
+      expect(l1.profit.label, '利润');
+      expect(double.parse(l1.profit.number), 20);
+      expect(l1.profit.spark.last, 200000);
+      expect(l1.cells.map((cell) => cell.label), isNot(contains('净利润')));
+      if (tab == '供给方') {
+        final asset = find.descendant(of: rowCard, matching: find.text('总资产'));
+        await tester.scrollUntilVisible(asset, 140, scrollable: list);
+        await tester.pump();
+        await tester.tap(asset);
+        await tester.pump(const Duration(milliseconds: 400));
+        final expanded = tester.widget<LighthouseLedgerCardV2>(rowCard);
+        expect(expanded.cells.singleWhere((cell) => cell.label == '总资产').active, true);
+        expect(find.descendant(of: card(name), matching: find.text('期末预付')), findsWidgets);
+      }
+
+      final open = find.descendant(of: rowCard, matching: find.text(detailLabel));
+      await tester.scrollUntilVisible(open, 140, scrollable: list);
+      await tester.pump();
+      await tester.tap(open);
+      await tester.pump(const Duration(milliseconds: 800));
+      final summary = find.byWidgetPredicate(
+        (widget) => widget is LighthouseLedgerCardV2 && !widget.showHeader,
+      );
+      expect(tester.widget<LighthouseLedgerCardV2>(summary).profit.label, '利润');
+
+      final crossLink = find.descendant(
+        of: card('交叉产品'),
+        matching: find.text('产品详情'),
+      );
+      await tester.scrollUntilVisible(crossLink, 180, scrollable: list);
+      await tester.pump();
+      await tester.tap(crossLink);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 800));
+      expect(labelContaining('交叉产品详情'), findsWidgets);
+      final drillCard = tester.widget<LighthouseLedgerCardV2>(summary);
+      expect(double.parse(drillCard.profit.number), 7);
+      expect(drillCard.profit.label, '利润');
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump(const Duration(milliseconds: 100));
+    });
+  }
   testWidgets('pull refresh reuses the period-switch soft loading animation', (
     tester,
   ) async {
@@ -467,26 +570,142 @@ void main() {
     expect(tester.takeException(), isNull);
   });
   testWidgets(
-    'current-month forecast report entry does not depend on history readiness',
+    '月度主卡展示月汇总，保留预测报告并支持预览和切月',
     (tester) async {
-      await mountPage(tester);
-      final periodBar = find.byType(LhPeriodBar);
-      await tester.tap(
-        find.descendant(of: periodBar, matching: find.text('月')),
-      );
-      await tester.pump(const Duration(milliseconds: 900));
+      await mountPage(tester, width: 940);
+      await selectCurrentMonth(tester);
 
-      expect(tester.widget<LhPeriodBar>(periodBar).selectedIndex, 2);
+      final monthCard = find.byWidgetPredicate(
+        (widget) => widget is LighthouseIntradayHero && widget.monthly,
+      );
+      expect(monthCard, findsOneWidget);
+      expect(find.text('近7个月 · 每月盈利'), findsOneWidget);
+      expect(find.text('本月不计入月均'), findsOneWidget);
+      final unit = find.descendant(of: monthCard, matching: find.text('单位：万'));
+      expect(
+        tester.getTopRight(unit).dx,
+        closeTo(tester.getTopRight(monthCard).dx, 1),
+      );
+      expect(find.byTooltip('展开走势图'), findsNothing);
+      final forecast = find.byType(LighthouseForecastCard);
       expect(
         find.descendant(
-          of: find.byType(LighthouseForecastStrip),
+          of: forecast,
           matching: find.text('报告'),
         ),
         findsOneWidget,
       );
+      expect(
+        tester.getTopLeft(forecast).dx,
+        greaterThan(tester.getTopRight(find.text('本月盈利')).dx),
+      );
+      expect(
+        tester.getBottomLeft(forecast).dy,
+        lessThan(tester.getTopLeft(find.text('近7个月 · 每月盈利')).dy),
+      );
+      expect(find.byType(LighthouseForecastStrip), findsNothing);
+      final card = tester.widget<LighthouseIntradayHero>(monthCard);
+      final previous = card.days.singleWhere((month) => month.offset == -1);
+      expect(previous.value, 510000);
+      final monthTile = find.descendant(
+        of: monthCard,
+        matching: find.text('${previous.date.month}月'),
+      );
+      await tester.ensureVisible(monthTile);
+      await tester.pump();
+      await tester.tap(monthTile);
+      await tester.pump(const Duration(milliseconds: 50));
+      expect(forecast, findsNothing);
+      expect(tester.widget<LighthouseIntradayHero>(monthCard).value, 510000);
+      expect(tester.widget<LighthouseIntradayHero>(monthCard).committedOffset, 0);
+      await tester.tap(monthTile);
+      await tester.pump(const Duration(milliseconds: 800));
+      expect(tester.widget<LighthouseIntradayHero>(monthCard).committedOffset, -1);
+
+      final settings = find.text('指标设置');
+      final hero = find.ancestor(
+        of: monthCard,
+        matching: find.byType(LighthouseShareableCard),
+      ).first;
+      expect(settings, findsOneWidget);
+      expect(tester.getTopRight(hero).dx - tester.getTopRight(settings).dx, lessThan(20));
       expect(tester.takeException(), isNull);
     },
   );
+  testWidgets('月度资金主卡上下排列，支持切换走势、构成和利润', (tester) async {
+    await mountPage(tester, width: 940);
+    await selectCurrentMonth(tester);
+    tester.view.physicalSize = const Size(470, 950);
+    await tester.pump();
+
+    await tester.tap(find.text('资金').hitTestable().first);
+    await tester.pump(const Duration(milliseconds: 350));
+
+    final trend = find.byKey(const ValueKey('hero-trend-funds'));
+    final asset = find.text('总资产').first;
+    final analysis = find.text('数据分析').first;
+    expect(tester.widget<LighthouseHeroTrendCard>(trend).compareLabel, 'vs 上月');
+    expect(tester.getBottomLeft(asset).dy, lessThan(tester.getTopLeft(trend).dy));
+    expect(
+      tester.getBottomLeft(trend).dy,
+      lessThan(tester.getTopLeft(analysis).dy),
+    );
+
+    await tester.tap(find.descendant(of: trend, matching: find.text('构成')));
+    await tester.pump(const Duration(milliseconds: 350));
+    final mix = find.byKey(const ValueKey('hero-trend-funds-mix'));
+    expect(tester.getBottomLeft(asset).dy, lessThan(tester.getTopLeft(mix).dy));
+
+    await tester.tap(find.descendant(of: mix, matching: find.text('走势')));
+    await tester.pump(const Duration(milliseconds: 350));
+    expect(trend, findsOneWidget);
+
+    await tester.tap(find.text('利润').hitTestable().first);
+    await tester.pump(const Duration(milliseconds: 350));
+    final profit = find.byType(LighthouseIntradayHero);
+    expect(tester.widget<LighthouseIntradayHero>(profit).monthly, isTrue);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('月度资管损益入口保留，重试后可展开净额为零的账单', (tester) async {
+    const product = '满减券（交易）';
+    Map<String, dynamic>? pnl;
+    await mountPage(tester, width: 940, pnlProvider: () => pnl);
+    await selectCurrentMonth(tester);
+
+    final entry = find.text('资管损益');
+    expect(entry, findsOneWidget);
+    await tester.ensureVisible(entry);
+    await tester.pump();
+    await tester.tap(entry);
+    await tester.pump(const Duration(milliseconds: 350));
+    expect(find.text('暂时无法取得资管损益数据'), findsOneWidget);
+
+    pnl = {
+      'applicable': true,
+      'total': 0,
+      'byProduct': {product: 0},
+      'items': [
+        {'product': product, 'projectName': '增益账单', 'impact': 2300},
+        {'product': product, 'projectName': '减益账单', 'impact': -2300},
+      ],
+    };
+    final retry = find.text('重试');
+    await tester.ensureVisible(retry);
+    await tester.pump();
+    await tester.tap(retry);
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.text('0.00万 · 2 张账单'), findsOneWidget);
+    expect(find.text('暂时无法取得资管损益数据'), findsNothing);
+    final productEntry = find.text(product).hitTestable().first;
+    await tester.ensureVisible(productEntry);
+    await tester.pump();
+    await tester.tap(productEntry);
+    await tester.pump(const Duration(milliseconds: 350));
+    expect(find.text('增益账单'), findsOneWidget);
+    expect(find.text('减益账单'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
   testWidgets(
     'name and margin column toggle the full row trend; square arrow alone opens detail',
     (tester) async {
@@ -541,6 +760,58 @@ void main() {
     );
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
+  });
+  testWidgets('产品二级和三级详情共用指标卡并取各自的汇总', (tester) async {
+    await mountPage(tester, width: 940);
+    final detail = find.descendant(
+      of: card('满减券（交易）'),
+      matching: find.text('产品详情'),
+    );
+    await tester.ensureVisible(detail);
+    await tester.pump();
+    await tester.tap(detail);
+    await tester.pump(const Duration(milliseconds: 800));
+
+    final summary = find.byWidgetPredicate(
+      (widget) => widget is LighthouseLedgerCardV2 && !widget.showHeader,
+    );
+    final l2 = tester.widget<LighthouseLedgerCardV2>(summary);
+    expect(l2.profit.label, '利润');
+    expect(l2.margin.caption, '利润 ÷ GMV');
+    expect(l2.cells.map((cell) => cell.label), contains('GMV'));
+
+    final scrollable = find
+        .descendant(of: find.byType(ListView), matching: find.byType(Scrollable))
+        .first;
+    final subdivisions = label('细分 1');
+    await tester.scrollUntilVisible(subdivisions, 200, scrollable: scrollable);
+    await tester.pump();
+    await tester.tap(subdivisions);
+    await tester.pump(const Duration(milliseconds: 200));
+
+    final openChild = find.descendant(
+      of: card('湖北细分'),
+      matching: find.text('细分详情'),
+    );
+    await tester.scrollUntilVisible(openChild, 120, scrollable: scrollable);
+    await tester.pump();
+    await tester.tap(openChild);
+    await tester.pump(const Duration(milliseconds: 800));
+
+    expect(labelContaining('产品三级 ·'), findsWidgets);
+    final l3Hero = find.byWidgetPredicate(
+      (widget) =>
+          widget is LighthouseShareableCard &&
+          widget.title.startsWith('产品三级 ·'),
+    );
+    final l3 = tester.widget<LighthouseLedgerCardV2>(
+      find.descendant(of: l3Hero, matching: summary),
+    );
+    expect(l3.profit.number, isNot(l2.profit.number));
+    expect(l3.margin.caption, l2.margin.caption);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(milliseconds: 100));
   });
   testWidgets(
     'interactive card previews locally and cancel does not send to IM',

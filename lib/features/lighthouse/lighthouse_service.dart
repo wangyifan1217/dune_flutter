@@ -1051,8 +1051,7 @@ class LighthouseService {
   /// 数据延迟预警（§十一）。与 overview 并行拉，单独一条 —— 预警按
   /// OPEN / expire_at 活着，跟 overview 的按期间缓存不是一回事。
   /// 任何异常都当「没有预警」，绝不让 Hero 跟着挂。
-  /// [ok] 区分「查成功、没有预警」和「压根没查到」。没有预警时界面不写字，
-  /// 没查到才显示「预警未取到」，所以不能一起塞成空列表。
+  /// [ok] 区分空结果和请求失败；两种情况在 Hero 中都显示灰色喇叭。
   Future<({List<LighthouseDelayNotice> notices, bool ok})>
   fetchDelayNotices() async {
     try {

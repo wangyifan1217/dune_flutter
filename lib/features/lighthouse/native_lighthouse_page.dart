@@ -15073,10 +15073,6 @@ class _ZgNavObserver extends NavigatorObserver {
 
 enum _DdMode { none, category, metric }
 
-/// 预警这一路查得怎么样。「查成功没有」和「压根没查到」必须分得开：
-/// 前者是好消息，后者是我们自己的问题。
-enum _LhNoticeFetch { pending, ok, failed }
-
 class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
   static const String _kPrefsMetricProduct = 'lighthouse.metrics.product';
   static const String _kPrefsMetricSupply = 'lighthouse.metrics.supply';
@@ -15382,7 +15378,6 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
   /// 用户手动收起后，30 秒轮询拿到同一批预警不再弹开，换了新预警才再展开。
   String _delayNoticeAutoOpenedFor = '';
   bool _delayNoticeLoading = false;
-  _LhNoticeFetch _delayNoticeFetch = _LhNoticeFetch.pending;
   Timer? _delayNoticeTimer;
   static const _delayNoticePollEvery = Duration(seconds: 30);
   bool _refreshing = false; // 手动点击「数据同步」刷新中
@@ -15446,6 +15441,8 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
   // 大数和产品行显示「含损益」，下面一条写清 扣前 / 损益。绩效不读这里。
   Map<String, dynamic>? _pnl;
   String _pnlKey = '';
+  int _pnlRequest = 0;
+  bool _pnlUnavailable = false;
 
   bool get _pnlPeriod => true;
 
@@ -15664,30 +15661,142 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
       _intradayPeriod &&
       const {'product', 'supply', 'channel'}.contains(_detailType);
 
-  /// 资金页配套：今日时和利润页一样上下排（只在今天；往前某天照旧左右排）。
-  bool _stackedFundsEligible(Map<String, double>? totalsOverride) =>
-      _stackedHeroBase(totalsOverride) &&
-      _periodOffset == 0 &&
-      _heroKpiPage == 1 &&
-      _heroAssetsEligible;
+  bool get _monthlyHeroBase =>
+      _period == 'month' &&
+      !_isCustomRange &&
+      widget.sharedCard == null &&
+      !_inTopic &&
+      const {'product', 'supply', 'channel'}.contains(_detailType ?? _tab);
 
-  /// 上下排两页共用的卡片外框（和 LighthouseIntradayHero 同一套）。
-  BoxDecoration _stackedHeroDecoration() => BoxDecoration(
-    color: DunesColors.resolve(
-      context,
-      Colors.white,
-      role: DunesColorRole.surface,
-    ),
-    borderRadius: BorderRadius.circular(18),
-    border: Border.all(
-      color: DunesColors.resolve(
-        context,
-        const Color(0xFFE7E3EF),
-        role: DunesColorRole.border,
-      ),
-      width: 0.8,
-    ),
-  );
+  bool _monthlyHeroEligible(String metric) =>
+      _monthlyHeroBase &&
+      (_detailKey != null || _heroKpiPage == 0) &&
+      !lighthouseHeroMetricIsCount(metric) &&
+      !lighthouseHeroMetricIsScore(metric);
+
+  ({int offset, String scope, int base})? _monthHeroPreview;
+
+  List<LhIntradayDay> _monthlyHeroBuckets(
+    String metric,
+    double committedValue,
+  ) {
+    final entity = _currentDetailSummaryForTrend();
+    final trend = entity == null ? null : _resolvedDetailTrend(entity);
+    final keys = _detailKey != null
+        ? (trend?['keys'] ?? trend?['labels'])
+        : (_heroSeriesMetrics['heroSeriesKeys'] ??
+              _heroSeriesMetrics['heroSeriesLabels']);
+    final series = _seriesForMetric(metric);
+    final monthKey = RegExp(r'^\d{4}[-.](0[1-9]|1[0-2])$');
+    final values = <int, double>{};
+    var endOffset = _periodOffset;
+    if (keys is List) {
+      final n = math.min(keys.length, series.length);
+      for (var i = 1; i <= n; i++) {
+        final key = keys[keys.length - i].toString();
+        if (!monthKey.hasMatch(key)) continue;
+        final offset = _periodOffsetForHeroKey(key.replaceAll('.', '-'), 'month');
+        final value = series[series.length - i];
+        if (offset == null || offset > 0 || !value.isFinite) continue;
+        values[offset] = value;
+        if (offset <= _periodOffset + 6) {
+          endOffset = math.max(endOffset, offset);
+        }
+      }
+    }
+    final now = _nowCST();
+    return [
+      for (var offset = endOffset - 6; offset <= endOffset; offset++)
+        LhIntradayDay(
+          date: DateTime(now.year, now.month + offset, 1),
+          offset: offset,
+          value: offset == _periodOffset ? committedValue : values[offset],
+        ),
+    ];
+  }
+
+  Widget _buildMonthlyHero({
+    required String metric,
+    required double value,
+    required bool isRate,
+    required Map<String, double> totals,
+    required ({double pct, bool isUp})? delta,
+  }) {
+    final months = _monthlyHeroBuckets(metric, value);
+    final scope = _detailKey == null ? 'l1:$_tab' : _detailRouteKey();
+    final preview = _monthHeroPreview;
+    final offset = preview != null &&
+            preview.scope == scope &&
+            preview.base == _periodOffset
+        ? preview.offset
+        : _periodOffset;
+    final selected = months.firstWhere(
+      (month) => month.offset == offset && month.value != null,
+      orElse: () => months.firstWhere((month) => month.offset == _periodOffset),
+    );
+    final isRoot = _detailKey == null;
+    final showForecast = isRoot && _isCurrentMonthView && selected.isToday;
+    final forecastMetric = lighthouseMetricSupportsPace(metric)
+        ? metric
+        : (_anchor == _LhAnchor.verified ? 'verifiedSales' : 'sales');
+    final forecast = showForecast
+        ? _heroPaceForecast(
+            forecastMetric,
+            totals[forecastMetric] ?? 0,
+            linearFallback: forecastMetric != 'profit',
+          )
+        : null;
+    return LighthouseIntradayHero(
+      monthly: true,
+      monthAsOf: _lastSyncedAt,
+      metricKey: metric,
+      metricLabel: lighthouseHeroMetricLabel(metric),
+      isRate: isRate,
+      days: months,
+      selectedOffset: selected.offset,
+      committedOffset: _periodOffset,
+      value: selected.value!,
+      data: null,
+      view: 'week',
+      onViewChanged: (_) {},
+      onDayTap: (offset) {
+        setState(() {
+          _monthHeroPreview = (offset: offset, scope: scope, base: _periodOffset);
+        });
+      },
+      onDayCommit: (offset) {
+        _monthHeroPreview = null;
+        if (offset == _periodOffset) {
+          setState(() {});
+        } else {
+          _heroPointIndex = null;
+          _applyPeriod(period: 'month', offset: offset, keepHeroChart: offset != 0);
+        }
+      },
+      fallbackDelta: selected.offset == _periodOffset ? delta : null,
+      fallbackVs: _heroCompareLabel,
+      toggle: isRoot && _heroAssetsEligible ? _stackedHeroToggle(0) : null,
+      forecastPanel: showForecast
+          ? LighthouseForecastCard(
+              forecast: forecast,
+              money: _fmtAmountWithUnit,
+              onOpenReport: () => _openForecastReport(
+                forecastMetric,
+                lighthouseHeroMetricLabel(forecastMetric),
+              ),
+            )
+          : null,
+      footer: isRoot ? _stackedHeroBiButton() : null,
+    );
+  }
+
+  /// 今日和自然月的资金主卡与利润页一样上下排。
+  bool _stackedFundsEligible(Map<String, double>? totalsOverride) =>
+      totalsOverride == null &&
+      _heroKpiPage == 1 &&
+      _heroAssetsEligible &&
+      (_monthlyHeroBase ||
+          (_periodOffset == 0 && _stackedHeroBase(totalsOverride)));
 
   /// 上下排两页共用的「利润 | 资金」切换条。
   Widget _stackedHeroToggle(int active) {
@@ -15733,7 +15842,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
         decoration: BoxDecoration(
           color: DunesColors.resolve(
             context,
-            const Color(0xFFE9E5F1),
+            const Color(0xFFF2EFF7),
             role: DunesColorRole.surface,
           ),
           borderRadius: BorderRadius.circular(10),
@@ -15783,14 +15892,13 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
     );
   }
 
-  /// 资金页（今日 · 上下排）：切换条 → 总资产大数 + 环比 → 资金走势（总资产 / 预收净增，走势 | 构成）→ 数据分析。
+  /// 资金页从上到下显示切换条、总资产和环比、资金走势或构成、数据分析。
   Widget _buildStackedFundsHero(
     Map<String, double> heroTotals,
     List<String> labels,
   ) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-      decoration: _stackedHeroDecoration(),
+    return Padding(
+      padding: const EdgeInsets.only(top: 3),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -15869,10 +15977,12 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
   }
 
   Future<void> _loadPnl() async {
+    final request = ++_pnlRequest;
     if (widget.sharedCard != null || !_pnlPeriod) {
       // 不在 setState 里清：随后的 summary setState 会一起重画。
       _pnl = null;
       _pnlKey = '';
+      _pnlUnavailable = false;
       return;
     }
     final key = _pnlViewKey;
@@ -15880,6 +15990,9 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
       _pnl = null;
       _pnlKey = key;
     }
+    if (_pnlUnavailable) setState(() => _pnlUnavailable = false);
+    bool isCurrent() =>
+        mounted && request == _pnlRequest && key == _pnlViewKey;
     try {
       final data = await _service.fetchPnl(
         period: _period,
@@ -15887,13 +16000,15 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
         startDate: _isCustomRange ? _customStart : null,
         endDate: _isCustomRange ? _customEnd : null,
       );
-      if (!mounted || _pnlKey != key || _pnlViewKey != key) {
-        return;
-      }
-      if (!_pnlPeriod) return;
-      setState(() => _pnl = data['applicable'] == true ? data : null);
+      if (!isCurrent()) return;
+      setState(() {
+        _pnl = data['applicable'] == true ? data : null;
+        _pnlUnavailable = _pnl == null;
+      });
     } catch (_) {
-      // 资管损益挂了不影响灯塔主数：保持扣前口径，不弹错。
+      if (isCurrent() && _pnl == null) {
+        setState(() => _pnlUnavailable = true);
+      }
     }
   }
 
@@ -16265,17 +16380,47 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
 
   /// 大数指标栏下面一条：扣前 / 资管损益；点开原地展开按产品排的损益。
   Widget _buildHeroPnlStrip({
-    required double applied,
+    required double? applied,
     required double before,
   }) {
     final open = _expandedPnl.contains('hero');
-    final byProduct = <MapEntry<String, double>>[
-      for (final e in ((_pnl?['byProduct'] as Map?) ?? const {}).entries)
-        if (e.value is num && (e.value as num).abs() >= 50)
-          MapEntry(e.key.toString(), (e.value as num).toDouble()),
-    ]..sort((a, b) => b.value.abs().compareTo(a.value.abs()));
-    final unassigned = _pnl?['partial'] == true ? 0.0 : _pnlUnassigned;
-    final n = byProduct.length;
+    final hasData = _pnlKey == _pnlViewKey && _pnl != null;
+    final unavailable = _pnlKey == _pnlViewKey && _pnlUnavailable;
+    final names = _tab == 'product' && _heroFilterActive
+        ? _currentRows
+              .map((row) => (row['name']?.toString() ?? '').trim())
+              .where((name) => name.isNotEmpty)
+              .toSet()
+        : null;
+    final itemsByProduct = <String, List<Map<String, dynamic>>>{};
+    if (hasData) {
+      for (final item in _pnlItems) {
+        final product = (item['product']?.toString() ?? '').trim();
+        if (names != null && !names.contains(product)) continue;
+        if (product.isEmpty && _pnl?['partial'] == true) continue;
+        (itemsByProduct[product] ??= []).add(item);
+      }
+    }
+    final totals = <String, double>{
+      for (final entry in itemsByProduct.entries)
+        entry.key: entry.key.isEmpty ? _pnlUnassigned : _pnlForProduct(entry.key),
+    };
+    final billCount = itemsByProduct.values.fold<int>(
+      0,
+      (count, items) => count + items.length,
+    );
+    final total = names == null
+        ? _pnlTotal
+        : names.fold<double>(0, (sum, name) => sum + _pnlForProduct(name));
+    final separate = _tab != 'product' && _heroFilterActive;
+    final preview = !hasData
+        ? (unavailable ? '损益暂不可用 · 展开重试' : '正在加载损益')
+        : billCount == 0 && total == 0
+        ? '本期没有损益账单'
+        : '${_pnlWan(total, signed: true)}'
+          '${applied != null ? ' · 扣前 ${_pnlWan(before)}' : ''}'
+          '${billCount > 0 ? ' · $billCount 张账单' : ''}'
+          '${separate ? ' · 未计入筛选利润' : ''}';
     return Padding(
       padding: const EdgeInsets.only(top: 8),
       child: ClipRRect(
@@ -16290,14 +16435,25 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
               groupColor: LhColors.pos,
               kicker: '损益',
               chipText: '资管损益',
-              previewText:
-                  '${_pnlWan(applied, signed: true)} · 扣前 ${_pnlWan(before)}'
-                  '${n > 0 ? ' · $n 个产品' : ''}',
+              previewText: preview,
               semanticsLabel: open ? '收起资管损益' : '展开资管损益，按产品看',
               onTap: () => _togglePnl('hero'),
             ),
-            if (open)
-              _buildHeroPnlRanking(byProduct, unassigned),
+            if (open && !hasData)
+              ListTile(
+                dense: true,
+                title: Text(unavailable ? '暂时无法取得资管损益数据' : '正在加载损益'),
+                trailing: unavailable
+                    ? TextButton(
+                        onPressed: () => unawaited(_loadPnl()),
+                        child: const Text('重试'),
+                      )
+                    : null,
+              ),
+            if (open && hasData && itemsByProduct.isEmpty)
+              const ListTile(dense: true, title: Text('本期没有可查看的损益账单')),
+            if (open && itemsByProduct.isNotEmpty)
+              _buildHeroPnlRanking(totals, itemsByProduct, separate: separate),
           ],
         ),
       ),
@@ -16305,18 +16461,22 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
   }
 
   Widget _buildHeroPnlRanking(
-    List<MapEntry<String, double>> byProduct,
-    double unassigned,
-  ) {
+    Map<String, double> totals,
+    Map<String, List<Map<String, dynamic>>> itemsByProduct, {
+    required bool separate,
+  }) {
     final mute = DunesColors.resolve(context, LhColors.mute);
-    final rows = <({String name, double v, bool product})>[
-      for (final e in byProduct) (name: e.key, v: e.value, product: true),
-      if (unassigned.abs() >= 50) (name: '未归属', v: unassigned, product: false),
-    ];
-    final maxAbs = rows.fold<double>(0, (m, r) => math.max(m, r.v.abs()));
-    Widget line(({String name, double v, bool product}) r) {
+    final rows = totals.entries.toList()
+      ..sort((a, b) => b.value.abs().compareTo(a.value.abs()));
+    final maxAbs = rows.fold<double>(0, (m, r) => math.max(m, r.value.abs()));
+    Widget line(MapEntry<String, double> row) {
+      final product = row.key.isNotEmpty;
+      final name = product ? row.key : '未归属';
+      final value = row.value;
+      final key = 'hero-pnl::${row.key}';
+      final open = _expandedPnl.contains(key);
       final nameText = Text(
-        r.name,
+        name,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
         style: LhTypography.sans(
@@ -16324,7 +16484,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
           weight: FontWeight.w500,
           color: DunesColors.resolve(
             context,
-            r.product ? _LhPlum.deep : LhColors.mute,
+            product ? _LhPlum.deep : LhColors.mute,
           ),
           context: context,
         ),
@@ -16333,42 +16493,41 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: r.product
-                    ? GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        // 点产品名：在下面列表里展开它的账单。不滚过去 ——
-                        // ensureVisible 在 web 上会把嵌套列表卡死（见 _discountFocusKey）。
-                        onTap: () {
-                          setState(() => _expandedPnl.add('p::${r.name}'));
-                          ScaffoldMessenger.maybeOf(context)
-                            ?..hideCurrentSnackBar()
-                            ..showSnackBar(
-                              SnackBar(
-                                content: Text('已在下方列表展开「${r.name}」的损益'),
-                                duration: const Duration(seconds: 2),
-                              ),
-                            );
-                        },
-                        child: nameText,
-                      )
-                    : nameText,
-              ),
-              const SizedBox(width: 8),
-              Text(
-                _pnlWan(r.v, signed: true),
-                style: _tabular(
-                  LhTypography.mono(
-                    size: 11.5,
-                    weight: FontWeight.w700,
-                    color: DunesColors.resolve(context, _pnlColor(r.v)),
-                    context: context,
-                  ),
+          Semantics(
+            button: true,
+            expanded: open,
+            label: '${open ? '收起' : '展开'}$name损益账单',
+            child: _LhScrollSafeTap(
+              onTap: () => _togglePnl(key),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 5),
+                child: Row(
+                  children: [
+                    Expanded(child: nameText),
+                    const SizedBox(width: 8),
+                    Text(
+                      _pnlWan(value, signed: true),
+                      style: _tabular(
+                        LhTypography.mono(
+                          size: 11.5,
+                          weight: FontWeight.w700,
+                          color: DunesColors.resolve(context, _pnlColor(value)),
+                          context: context,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Icon(
+                      open
+                          ? Icons.expand_less_rounded
+                          : Icons.expand_more_rounded,
+                      size: 15,
+                      color: mute,
+                    ),
+                  ],
                 ),
               ),
-            ],
+            ),
           ),
           const SizedBox(height: 3),
           ClipRRect(
@@ -16383,16 +16542,17 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
               alignment: Alignment.centerLeft,
               child: FractionallySizedBox(
                 widthFactor: maxAbs > 0
-                    ? (r.v.abs() / maxAbs).clamp(0.02, 1.0).toDouble()
+                    ? (value.abs() / maxAbs).clamp(0.0, 1.0).toDouble()
                     : 0.0,
                 child: Container(
-                  color: (r.v < 0 ? LhColors.pos : LhColors.neg).withAlpha(
-                    r.product ? 140 : 80,
+                  color: (value < 0 ? LhColors.pos : LhColors.neg).withAlpha(
+                    product ? 140 : 80,
                   ),
                 ),
               ),
             ),
           ),
+          if (open) _buildPnlBillList(key, itemsByProduct[row.key]!),
         ],
       );
     }
@@ -16416,8 +16576,9 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
           children: [
             for (final r in rows) ...[line(r), const SizedBox(height: 8)],
             Text(
-              '应收少认 = 减利润，应付少付 = 加利润；按账单所属月份计入，'
-              '重新对账后跟着变。绩效不受影响。',
+              separate
+                  ? '这里显示本期可查看的全部资管损益，未计入当前筛选后的利润。'
+                  : '按损益发生日计入，账单所属月份仅作账期展示。',
               style: LhTypography.sans(
                 size: 10,
                 color: mute,
@@ -17616,20 +17777,19 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
   }
 
   /// 查一次数据延迟预警。进页、回到灯塔、下拉刷新和 30 秒轮询都走这里；
-  /// 切期间 / 切账本 tab 不额外触发，避免一次交互重复请求。失败不弹错、
-  /// 不拦主流程，但会明确标成「预警未取到」。
+  /// 切期间 / 切账本 tab 不额外触发。取不到时，顶栏只显示灰色喇叭。
   Future<void> _loadDelayNotice() async {
     if (_delayNoticeLoading) return;
     _delayNoticeLoading = true;
     try {
       final res = await _service.fetchDelayNotices();
       if (!mounted) return;
+      final notices = res.ok ? res.notices : const <LighthouseDelayNotice>[];
       setState(() {
-        _delayNotices = res.notices;
-        _pixelCtl.storm = res.notices.any((n) => !n.isEmpty);
-        _delayNoticeFetch = res.ok ? _LhNoticeFetch.ok : _LhNoticeFetch.failed;
-        if (res.notices.isEmpty) _delayNoticeOpen = false;
-        final active = res.notices.where((n) => !n.isEmpty).toList();
+        _delayNotices = notices;
+        _pixelCtl.storm = notices.any((n) => !n.isEmpty);
+        if (notices.isEmpty) _delayNoticeOpen = false;
+        final active = notices.where((n) => !n.isEmpty).toList();
         if (active.isEmpty) {
           _delayNoticeAutoOpenedFor = '';
         } else {
@@ -17665,15 +17825,6 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
       if (!mounted || !widget.active) return;
       unawaited(_loadDelayNotice());
     });
-  }
-
-  /// 落款旁只留「查挂了」这一句。小喇叭始终存在，有记录时点开看原文。
-  ///   查成功 0 行 → 小喇叭灰显
-  ///   有 OPEN 行 → 小喇叭高亮
-  ///   404 / 表没有 / 查挂了 → 预警未取到
-  String? get _delayNoticeMissNote {
-    if (_delayNoticeFetch == _LhNoticeFetch.failed) return '预警未取到';
-    return null;
   }
 
   /// 小喇叭表达的是全局运行提醒，不属于当前账本页签。只要接口返回 OPEN
@@ -25204,6 +25355,8 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
           KeyedSubtree(
             key: _heroCardKey,
             child: _buildHeroShell(
+              dailyFrame: !_bfSubjectView &&
+                  (_stackedHeroBase(null) || _monthlyHeroBase),
               child: _bfSubjectView
                   ? LighthouseBfHero(
                       controller: _bf!,
@@ -25949,6 +26102,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
   Widget _buildHeroShell({
     required Widget child,
     bool whiteBackground = false,
+    bool dailyFrame = false,
   }) {
     // 拍平版：一级 Hero 不再是一张卡，直接坐在页面白底上。
     // 二级/三级仍然用卡 —— 那一层是「某个实体的切片」，需要一个明确的边界
@@ -25968,6 +26122,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
     }
     if (lighthouseHeroMatchesLedgerCard && !whiteBackground) {
       // v23 · 与账本外框同一套皮（见 lighthouseHeroMatchesLedgerCard）。
+      final paddingH = dailyFrame ? 14.0 : lighthouseHeroShellPaddingH;
       return Container(
         margin: const EdgeInsets.symmetric(
           horizontal: lighthouseHeroShellMarginH,
@@ -25979,23 +26134,25 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
             role: DunesColorRole.surface,
           ),
           border: Border.all(
-            color: lighthouseLedgerUsesLavenderPanelFrame
-                ? DunesColors.resolve(
-                    context,
-                    _LhPlum.line,
-                    role: DunesColorRole.border,
-                  )
-                : DunesColors.resolve(
-                    context,
-                    LhColors.line2,
-                    role: DunesColorRole.border,
-                  ),
+            color: DunesColors.resolve(
+              context,
+              dailyFrame
+                  ? const Color(0xFFE8E3EF)
+                  : (lighthouseLedgerUsesLavenderPanelFrame
+                        ? _LhPlum.line
+                        : LhColors.line2),
+              role: DunesColorRole.border,
+            ),
             width: lighthouseLedgerPanelBorderWidth,
           ),
-          borderRadius: BorderRadius.circular(lighthouseLedgerPanelRadius),
+          borderRadius: BorderRadius.circular(
+            dailyFrame ? 16 : lighthouseLedgerPanelRadius,
+          ),
           boxShadow: [
             BoxShadow(
-              color: _LhPlum.primary.withAlpha(10),
+              color: dailyFrame
+                  ? const Color(0x101F153E)
+                  : _LhPlum.primary.withAlpha(10),
               blurRadius: lighthouseLedgerPanelShadowBlur,
               spreadRadius: -3,
               offset: const Offset(0, 3),
@@ -26004,12 +26161,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
         ),
         clipBehavior: Clip.antiAlias,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(
-            lighthouseHeroShellPaddingH,
-            12,
-            lighthouseHeroShellPaddingH,
-            12,
-          ),
+          padding: EdgeInsets.symmetric(horizontal: paddingH, vertical: 12),
           child: child,
         ),
       );
@@ -26801,8 +26953,13 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
   /// 大图打开时自动往前拉到的上限（约三年日线），再早的交给手动拖到左沿。
   static const int _kHeroFullscreenHistoryCap = 1100;
 
+  static const _heroFullscreenEnabled = false;
+
   bool get _heroCanOpenFullscreen =>
-      widget.sharedCard == null && !_isCustomRange && _tab != 'netTa';
+      _heroFullscreenEnabled &&
+      widget.sharedCard == null &&
+      !_isCustomRange &&
+      _tab != 'netTa';
 
   /// 周 / 月 / 季 / 年线打开时一屏看几个（日线从 7 月起，见 _kHeroFullscreenFromMonth）。
   int? get _heroFullscreenInitialVisible => switch (_period) {
@@ -26931,7 +27088,9 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
   }
 
   void _openHeroTrendFullscreen([Rect? origin]) {
-    if (_heroFullscreenOpen || _heroTrendArgs == null) return;
+    if (!_heroCanOpenFullscreen || _heroFullscreenOpen || _heroTrendArgs == null) {
+      return;
+    }
     _heroFullscreenOpen = true;
     _heroFullscreenMetric = null;
     // 不管从哪儿点开（哪个 tab、之前选的什么分类），大图一律先看
@@ -29014,7 +29173,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
 
     return Padding(
       // 顶部留 38 给「利润 | 资金」切换条（和利润页同一个内边距）。
-      // 上下排（今日）时切换条在卡外层，这里不留。
+      // 上下排时切换条在卡外层，这里不留。
       padding: stacked
           ? EdgeInsets.zero
           : const EdgeInsets.fromLTRB(8, 38, 8, 8),
@@ -29086,6 +29245,9 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
                       const SizedBox(height: 5),
                       _heroDeltaLine(
                         pickOk ? pickDelta : _heroTotalAssetsDelta(),
+                        vsLabel: stacked && _period == 'month'
+                            ? _heroCompareLabel
+                            : null,
                       ),
                     ],
                   ),
@@ -30891,8 +31053,10 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
     List<String>? profitLabelsOverride,
     String? summaryTitle,
     Widget? summaryTitleWidget,
+    Widget? summaryCard,
     bool showFilters = true,
   }) {
+    final showMonthlyPnl = totalsOverride == null && _monthlyHeroBase;
     // 主 Hero 大数跟着底下点中的指标走；没点开时默认利润 / 净TA。
     final mastheadKey = _tab == 'netTa'
         ? _netTAHeroMastheadKey(_expandedTrendKey)
@@ -31377,6 +31541,10 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
               shareIcon,
             ],
           ),
+          if (summaryCard != null) ...[
+            const SizedBox(height: 10),
+            summaryCard,
+          ],
           // 拍平版的结构全靠线：标题行下这条是「汇总从这里开始」。
           // 比其它分隔线重一档，它是这一屏里层级最高的一条。
           if (lighthouseHeroUsesFlatLayout && totalsOverride == null) ...[
@@ -31418,6 +31586,15 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
                         totalsOverride == null &&
                         _tab != 'netTa' &&
                         _heroAssetsEligible,
+                  );
+                }
+                if (_monthlyHeroEligible(mastheadKey)) {
+                  return _buildMonthlyHero(
+                    metric: mastheadKey,
+                    value: heroMastheadValue,
+                    isRate: mastheadIsRate,
+                    totals: heroTotals,
+                    delta: profitDelta,
                   );
                 }
                 if (_stackedFundsEligible(totalsOverride)) {
@@ -32032,13 +32209,13 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
               // 利润页、专题、二级页都不出；和分区表一起折叠。
               child:
                   (_heroAssetsEligible && _heroKpiPage == 1) ||
-                      heroPnlApplied != null
+                      (!showMonthlyPnl && heroPnlApplied != null)
                   ? Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         _buildHeroStatRail(heroTotals),
-                        if (heroPnlApplied != null)
+                        if (!showMonthlyPnl && heroPnlApplied != null)
                           _buildHeroPnlStrip(
                             applied: heroPnlApplied,
                             before: heroPnlBefore ?? 0,
@@ -32051,24 +32228,12 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
             )
           else
             _buildHeroStatRail(heroTotals),
+          if (showMonthlyPnl)
+            _buildHeroPnlStrip(
+              applied: heroPnlApplied,
+              before: heroPnlBefore ?? 0,
+            ),
         ],
-      ),
-    );
-  }
-
-  /// 查挂了才在落款旁写这一句。没有记录不写，有记录走小喇叭。
-  Widget _buildDelayNoticeMissNote(String text) {
-    return Text(
-      text,
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
-      style: LhTypography.sans(
-        size: 8.5,
-        color: DunesColors.resolve(context, LhColors.mute),
-        weight: FontWeight.w600,
-        letterSpacing: 0.2,
-        height: 1.0,
-        context: context,
       ),
     );
   }
@@ -32397,10 +32562,9 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
   }
 
   Widget _buildHeroSyncStampChip(bool busy) {
-    // 刷新的点击区只包到时间为止。「预警未取到」是另一句话，不跟着重拉。
+    // 刷新的点击区只包到时间为止，喇叭单独控制提醒面板。
     // 绿点带呼吸环会比字高：必须和半句待在同一行里居中，不能先组完印章
     // 再和外面包一层 Flexible —— 两段各算各的中线，字就对不齐。
-    final missNote = busy ? null : _delayNoticeMissNote;
     Widget sep() => Container(
       width: 0.7,
       height: 8,
@@ -32489,12 +32653,6 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
           sep(),
           const SizedBox(width: 6),
           _buildDelayNoticeHorn(),
-          if (missNote != null) ...[
-            const SizedBox(width: 5),
-            sep(),
-            const SizedBox(width: 5),
-            _buildDelayNoticeMissNote(missNote),
-          ],
         ],
       ),
     );
@@ -33330,6 +33488,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
       _listLimitKeptForReload = _listLimit;
       _period = newPeriod;
       _periodOffset = newOffset;
+      _monthHeroPreview = null;
       if (!keepHeroChart) _heroPointIndex = null;
       _periodPickerOpen = false;
       _loading = true;
@@ -35323,7 +35482,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
             ),
           ),
           const SizedBox(width: 8),
-          Flexible(
+          Expanded(
             child: Text(
               _selectedRangeLabel,
               maxLines: 1,
@@ -35331,7 +35490,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
               style: LhTypography.sans(size: 11, color: mute, context: context),
             ),
           ),
-          const Spacer(),
+          const SizedBox(width: 8),
           _LhScrollSafeTap(
             onTap: _openRailSettings,
             child: Container(
@@ -56926,21 +57085,29 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
     );
   }
 
-  /// 产品卡 v2 的内容（原型 docs/lighthouse_product_list_prototype.html）。
+  bool _usesLedgerCards(String tab) =>
+      lighthouseLedgerCardV2Enabled &&
+      const {'product', 'supply', 'channel'}.contains(tab);
+
+  /// 产品、供给与渠道共用的账本卡。
   /// 外框（圆角、描边、悬停、分享截图）还是 [_buildLedgerRowGroup] 那一套，这里只换里面。
   Widget _ledgerCardV2(
     Map<String, dynamic> r,
-    int idx, {
+    int? idx, {
     required String tab,
     required String name,
     required String group,
     required Color groupColor,
     required bool isChild,
     required List<_LedgerCol> gridCols,
-    required String? soloMetricKey,
-    required VoidCallback? Function(String key) soloTapFor,
+    String? activeMetricKey,
+    VoidCallback? Function(String key)? metricTapFor,
     Widget? actions,
     VoidCallback? onOpenDetail,
+    VoidCallback? onToggleTrend,
+    String? trendKey,
+    bool trendExpanded = false,
+    bool showHeader = true,
   }) {
     // 名字末尾的（交易）/（积分）拆成小标签，名字本身独占一行不被挤断。
     var title = name;
@@ -56953,10 +57120,15 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
     final brand = title.contains('中石油')
         ? '中石油'
         : (title.contains('中石化') ? '中石化' : '');
-    final meta = [
+    final supplyGroups = r['supplyGroups'];
+    final meta = {
       if (group.isNotEmpty) group,
-      if (brand.isNotEmpty && brand != group) brand,
-    ].join(' · ');
+      if (brand.isNotEmpty) brand,
+      if (tab == 'supply' && supplyGroups is List) ...[
+        if (supplyGroups.any((g) => '$g'.contains('中石油'))) '中石油',
+        if (supplyGroups.any((g) => '$g'.contains('中石化'))) '中石化',
+      ],
+    }.join(' · ');
 
     ({String number, String unit}) amount(String key, double v) {
       final text = _fmtAmountWithUnit(lighthouseHeroMetricDisplayAmount(key, v));
@@ -56980,21 +57152,21 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
       );
     }
 
-    // ── 净利润 + 近7天 ──
-    final np = _rowMetricValueOrNull(r, 'netProfit');
-    final npAmt = np == null ? null : amount('netProfit', np);
-    final npDelta = np == null
+    // 大数、环比、小走势都走同一个利润口径。
+    final profit = _rowMetricValueOrNull(r, 'profit');
+    final profitAmount = profit == null ? null : amount('profit', profit);
+    final profitDelta = profit == null
         ? (text: null, tone: LhCardTone.none)
-        : deltaOf('netProfit');
+        : deltaOf('profit');
     final trend = _resolvedRowTrend(r);
     var spark = trend == null
         ? const <double>[]
-        : _seriesFromTrendMap(trend, 'netProfit');
-    if (spark.length < 2 && trend != null) {
-      spark = _seriesFromTrendMap(trend, 'profit');
-    }
+        : _seriesFromTrendMap(trend, 'profit');
     if (spark.length > 7) spark = spark.sublist(spark.length - 7);
-    if (trend == null && !isChild && widget.sharedCard == null) {
+    if (trend == null &&
+        !isChild &&
+        _detailKey == null &&
+        widget.sharedCard == null) {
       // 走势按维度整批拉一次（有在途 / 已拉过的保护），到了再画小走势。
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _ensureTrendLoaded(_trendLookupTabForListRow() ?? tab);
@@ -57015,7 +57187,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
         ? (text: null, tone: LhCardTone.none)
         : deltaOf('grossMargin', isRate: true);
 
-    // ── 六格：销售额 / 核销额(GMV) / 成本合计 · 利润 / 收入 · 产品详情 ──
+    // 利润已在主卡；供给在网格中保留经营性净现金流及总资产入口。
     const order = [
       'sales',
       'verifiedSales',
@@ -57023,12 +57195,13 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
       'costTotal',
       'totalCost',
       lighthouseTotalAssetsSortKey,
-      'profit',
       'revenue',
+      'prepaid',
     ];
     final cols = [
       for (final c in gridCols)
-        if (c.key != 'netProfit' &&
+        if (c.key != 'profit' &&
+            c.key != 'netProfit' &&
             c.key != lighthouseLedgerSummaryBlankKey &&
             !c.isSynthetic)
           c,
@@ -57046,8 +57219,8 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
               label: c.label,
               number: '—',
               missing: true,
-              onTap: soloTapFor(c.key),
-              active: lighthouseLedgerMetricKeysMatch(soloMetricKey, c.key),
+              onTap: metricTapFor?.call(c.key),
+              active: lighthouseLedgerMetricKeysMatch(activeMetricKey, c.key),
             );
           }
           final a = c.isRate
@@ -57060,14 +57233,15 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
             unit: a.unit,
             delta: d.text,
             tone: d.tone,
-            onTap: soloTapFor(c.key),
-            active: lighthouseLedgerMetricKeysMatch(soloMetricKey, c.key),
+            onTap: metricTapFor?.call(c.key),
+            active: lighthouseLedgerMetricKeysMatch(activeMetricKey, c.key),
           );
         }(),
     ];
 
+    final detailDim = _detailKey == null ? tab : _detailSubTab;
     return LighthouseLedgerCardV2(
-      rank: isChild ? null : (idx + 1).toString().padLeft(2, '0'),
+      rank: isChild || idx == null ? null : (idx + 1).toString().padLeft(2, '0'),
       rankTop: !isChild && idx == 0,
       name: title,
       kind: kind,
@@ -57075,19 +57249,28 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
       groupColor: groupColor,
       actions: actions,
       onOpenDetail: onOpenDetail,
+      detailButtonKey: trendKey == null
+          ? null
+          : ValueKey('ledger-detail-$trendKey'),
+      onToggleTrend: onToggleTrend,
+      trendToggleKey: trendKey == null
+          ? null
+          : ValueKey('ledger-row-toggle-$trendKey'),
+      trendExpanded: trendExpanded,
       isChild: isChild,
-      linkText: isChild ? '细分详情' : '产品详情',
+      showHeader: showHeader,
+      linkText: isChild ? '细分详情' : '${_detailDimLabel(detailDim)}详情',
       profit: LhCardKpi(
-        label: '净利润',
-        number: npAmt?.number ?? '—',
-        unit: npAmt?.unit ?? '',
-        missing: np == null,
-        delta: npDelta.text,
-        tone: npDelta.tone,
+        label: '利润',
+        number: profitAmount?.number ?? '—',
+        unit: profitAmount?.unit ?? '',
+        missing: profit == null,
+        delta: profitDelta.text,
+        tone: profitDelta.tone,
         spark: spark,
         sparkLabel: sparkLabel,
-        onTap: soloTapFor('netProfit'),
-        active: lighthouseLedgerMetricKeysMatch(soloMetricKey, 'netProfit'),
+        onTap: metricTapFor?.call('profit'),
+        active: lighthouseLedgerMetricKeysMatch(activeMetricKey, 'profit'),
       ),
       margin: LhCardKpi(
         label: '毛利率',
@@ -57097,10 +57280,54 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
         delta: gmDelta.text,
         tone: gmDelta.tone,
         caption: _grossMarginFormula(r),
-        onTap: soloTapFor('grossMargin'),
-        active: lighthouseLedgerMetricKeysMatch(soloMetricKey, 'grossMargin'),
+        onTap: metricTapFor?.call('grossMargin'),
+        active: lighthouseLedgerMetricKeysMatch(activeMetricKey, 'grossMargin'),
       ),
       cells: cells,
+    );
+  }
+
+  Widget _buildLedgerDetailSummaryCard(Map<String, dynamic> row, String tab) {
+    final useGmv = lighthouseLedgerSummaryReplacesVerifiedWithGmv(
+      product: row['name']?.toString(),
+      parent: _grossMarginContextProduct,
+      basis: _rowMarginBasis(row),
+    );
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFE4DBF2),
+            role: DunesColorRole.border,
+          ),
+        ),
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) => _ledgerCardV2(
+          row,
+          null,
+          tab: tab,
+          name: row['name']?.toString() ?? '',
+          group: '',
+          groupColor: LhColors.product,
+          isChild: false,
+          showHeader: false,
+          gridCols: [
+            for (final c in _ledgerSummaryCols(constraints.maxWidth, tab))
+              if (c.key == 'verifiedSales' && useGmv)
+                _LedgerCol('gmv', 'GMV', false, c.width)
+              else
+                c,
+          ],
+        ),
+      ),
     );
   }
 
@@ -57151,7 +57378,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
                   : c,
           ]
         : rowCols;
-    final name = rawName.isEmpty ? '未命名产品' : rawName;
+    final name = rawName.isEmpty ? '未命名${_detailDimLabel(tab)}' : rawName;
     final group = r['group']?.toString() ?? '';
     final groupColor = group.isEmpty
         ? DunesColors.resolve(context, LhColors.mute2)
@@ -57294,11 +57521,47 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
         (l3SearchHit
             ? !_expandedProductL3.contains(l3Key)
             : _expandedProductL3.contains(l3Key));
-    // 2026-11-23 · 产品卡 v2（原型 docs/lighthouse_product_list_prototype.html）：
-    // 一级产品和它的细分子卡都换成「净利润（近7天）/ 毛利率 + 六格」。供给 / 渠道照旧。
-    final useCardV2 = lighthouseLedgerCardV2Enabled && tab == 'product';
+    final useCardV2 = _usesLedgerCards(tab);
+
+    void toggleAssets() {
+      final open = fundPoolPanel == lighthouseFundPoolPanelAssets;
+      LighthouseFeedback.instance.play(
+        open ? LighthouseFeedbackKind.collapse : LighthouseFeedbackKind.expand,
+      );
+      setState(() {
+        if (open) {
+          _expandedFundPools.remove(fundPoolKey);
+        } else {
+          _expandedFundPools[fundPoolKey] = lighthouseFundPoolPanelAssets;
+          _expandedLedgerSolo.remove(trendKey);
+          _expandedTrends.remove(trendKey);
+          _expandedProductL3.remove(l3Key);
+        }
+        _fundPoolTraces.remove(fundPoolKey);
+      });
+    }
+
+    void toggleRowTrend() {
+      LighthouseFeedback.instance.play(
+        isExpanded
+            ? LighthouseFeedbackKind.collapse
+            : LighthouseFeedbackKind.expand,
+      );
+      setState(() {
+        _expandedLedgerSolo.remove(trendKey);
+        _expandedTrends.remove(trendKey);
+        if (!isExpanded) {
+          _expandedProductL3.remove(l3Key);
+          _expandedTrends.add(trendKey);
+          _expandedFundPools.remove(fundPoolKey);
+          _fundPoolTraces.remove(fundPoolKey);
+        }
+      });
+    }
+
     // 点格子看这一项的走势（和老网格格子同一套开合）。
-    VoidCallback? soloTapFor(String key) {
+    VoidCallback? metricTapFor(String key) {
+      if (key == lighthouseTotalAssetsSortKey) return toggleAssets;
       if (!lighthouseLedgerMetricOpensSoloTrend(key)) return null;
       return () {
         LighthouseFeedback.instance.play(
@@ -57392,13 +57655,13 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
                                         )))),
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(
-                  // 产品卡 v2：外框一律中性浅边，不再按排名 / 分组染色（紫边 + 紫光看着脏）。
+                  // 产品卡统一使用浅紫细描边。
                   color: useCardV2 && !isEquityFocus
                       ? DunesColors.resolve(
                           context,
                           isRowHovered
-                              ? const Color(0xFFDCD6EA)
-                              : const Color(0xFFECE9F2),
+                              ? const Color(0xFFD8CAEF)
+                              : const Color(0xFFE4DBF2),
                           role: DunesColorRole.border,
                         )
                       : isChildRow
@@ -57449,11 +57712,17 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
                         tab: tab,
                         name: name,
                         group: group,
-                        groupColor: groupColor,
+                        groupColor: tab == 'supply' ? tierColor : groupColor,
                         isChild: isChildRow,
                         gridCols: gridCols,
-                        soloMetricKey: soloMetricKey,
-                        soloTapFor: soloTapFor,
+                        activeMetricKey:
+                            fundPoolPanel == lighthouseFundPoolPanelAssets
+                            ? lighthouseTotalAssetsSortKey
+                            : soloMetricKey,
+                        metricTapFor: metricTapFor,
+                        onToggleTrend: toggleRowTrend,
+                        trendKey: trendKey,
+                        trendExpanded: isExpanded,
                         actions: _withVisibilityButton(
                           r,
                           tab,
@@ -57517,26 +57786,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
                               },
                         metricsTab: tab,
                         trendKey: trendKey,
-                        onToggle: () {
-                          LighthouseFeedback.instance.play(
-                            isExpanded
-                                ? LighthouseFeedbackKind.collapse
-                                : LighthouseFeedbackKind.expand,
-                          );
-                          setState(() {
-                            final wasOpen =
-                                _expandedTrends.contains(trendKey) ||
-                                _expandedLedgerSolo.containsKey(trendKey);
-                            _expandedLedgerSolo.remove(trendKey);
-                            _expandedTrends.remove(trendKey);
-                            if (!wasOpen) {
-                              _expandedProductL3.remove(l3Key);
-                              _expandedTrends.add(trendKey);
-                              _expandedFundPools.remove(fundPoolKey);
-                              _fundPoolTraces.remove(fundPoolKey);
-                            }
-                          });
-                        },
+                        onToggle: toggleRowTrend,
                       ),
                       grid: Padding(
                         padding: EdgeInsets.symmetric(
@@ -57568,71 +57818,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
                                         soloMetricKey,
                                         c.key,
                                       ),
-                                onSoloTrendTap:
-                                    c.key == lighthouseTotalAssetsSortKey
-                                    ? () {
-                                        // 总资产格 = 原来的钱袋子：展开 / 收起资产明细。
-                                        LighthouseFeedback.instance.play(
-                                          fundPoolPanel ==
-                                                  lighthouseFundPoolPanelAssets
-                                              ? LighthouseFeedbackKind.collapse
-                                              : LighthouseFeedbackKind.expand,
-                                        );
-                                        setState(() {
-                                          if (fundPoolPanel ==
-                                              lighthouseFundPoolPanelAssets) {
-                                            _expandedFundPools.remove(
-                                              fundPoolKey,
-                                            );
-                                          } else {
-                                            _expandedFundPools[fundPoolKey] =
-                                                lighthouseFundPoolPanelAssets;
-                                            // 打开资产就收起指标走势，一次只展开一样。
-                                            _expandedLedgerSolo.remove(
-                                              trendKey,
-                                            );
-                                            _expandedTrends.remove(trendKey);
-                                          }
-                                          _fundPoolTraces.remove(fundPoolKey);
-                                        });
-                                      }
-                                    : lighthouseLedgerMetricOpensSoloTrend(c.key)
-                                    ? () {
-                                        LighthouseFeedback.instance.play(
-                                          lighthouseLedgerMetricKeysMatch(
-                                                soloMetricKey,
-                                                c.key,
-                                              )
-                                              ? LighthouseFeedbackKind.collapse
-                                              : LighthouseFeedbackKind.expand,
-                                        );
-                                        final lookup =
-                                            _trendLookupTabForListRow() ?? tab;
-                                        _ensureTrendLoaded(lookup);
-                                        setState(() {
-                                          _expandedTrends.remove(trendKey);
-                                          final next =
-                                              lighthouseLedgerSoloTrendAfterTap(
-                                                soloMetricKey,
-                                                c.key,
-                                              );
-                                          if (next == null) {
-                                            _expandedLedgerSolo.remove(
-                                              trendKey,
-                                            );
-                                          } else {
-                                            _expandedProductL3.remove(l3Key);
-                                            _expandedLedgerSolo[trendKey] =
-                                                next;
-                                            // 点指标看走势：钱袋子的总资产面板收起来。
-                                            _expandedFundPools.remove(
-                                              fundPoolKey,
-                                            );
-                                            _fundPoolTraces.remove(fundPoolKey);
-                                          }
-                                        });
-                                      }
-                                    : null,
+                                onSoloTrendTap: metricTapFor(c.key),
                               ),
                               columns: lighthouseLedgerSummaryColumns,
                               cellHeight: summaryCellH,
@@ -57650,6 +57836,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
                         groupColor: tierColor,
                         kicker: '阶梯',
                         chipText: '阶梯 ${tierRules.length}',
+                        productCard: useCardV2,
                         previewText: lighthouseSupplyTierPreview(tierRules),
                         semanticsLabel: tierOpen
                             ? '收起阶梯价格'
@@ -57668,6 +57855,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
                         open: l3Open,
                         groupColor: groupColor,
                         kicker: '细分',
+                        productCard: useCardV2,
                         onTap: () {
                           final opening = !_expandedProductL3.contains(l3Key);
                           LighthouseFeedback.instance.play(
@@ -58040,10 +58228,15 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
     String? previewText,
     String? semanticsLabel,
     String? actionText,
+    bool productCard = false,
   }) {
     final real = lighthouseProductL3RealCount(children);
     final preview = lighthouseProductL3Preview(children);
     final hasUnassigned = children.length > real;
+    final actionColor = DunesColors.resolve(
+      context,
+      productCard ? const Color(0xFF6944D4) : _LhPlum.primary,
+    );
     return Semantics(
       button: true,
       label:
@@ -58066,14 +58259,19 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 150),
             curve: Curves.easeOutCubic,
-            constraints: BoxConstraints(minHeight: _fs(34)),
-            padding: EdgeInsets.fromLTRB(11, _fs(6), 8, _fs(6)),
+            constraints: BoxConstraints(minHeight: _fs(productCard ? 36 : 34)),
+            padding: EdgeInsets.fromLTRB(
+              productCard ? 13 : 11,
+              _fs(6),
+              productCard ? 10 : 8,
+              _fs(6),
+            ),
             decoration: BoxDecoration(
               color: Color.alphaBlend(
                 groupColor.withAlpha(open ? 20 : (hovered ? 12 : 0)),
                 DunesColors.resolve(
                   context,
-                  const Color(0xFFFAF9FD),
+                  productCard ? const Color(0xFFF6F3FC) : const Color(0xFFFAF9FD),
                   role: DunesColorRole.surface,
                 ),
               ),
@@ -58092,7 +58290,10 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
             ),
             child: Row(
               children: [
-                LhProductL3BranchMark(color: groupColor, size: _fs(16)),
+                LhProductL3BranchMark(
+                  color: groupColor,
+                  size: _fs(productCard ? 18 : 16),
+                ),
                 SizedBox(width: _fs(5)),
                 Container(
                   padding: EdgeInsets.symmetric(
@@ -58105,7 +58306,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
                       groupColor.withAlpha(26),
                       role: DunesColorRole.surface,
                     ),
-                    borderRadius: BorderRadius.circular(_fs(4)),
+                    borderRadius: BorderRadius.circular(_fs(productCard ? 5 : 4)),
                   ),
                   child: Text(
                     chipText ?? '$kicker $real',
@@ -58113,7 +58314,9 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
                       LhTypography.sans(
                         size: _fs(10),
                         weight: FontWeight.w700,
-                        color: DunesColors.resolve(context, _LhPlum.deep),
+                        color: productCard
+                            ? actionColor
+                            : DunesColors.resolve(context, _LhPlum.deep),
                         height: 1.2,
                         context: context,
                       ),
@@ -58143,8 +58346,8 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
                   actionText ?? (open ? '收起' : '展开'),
                   style: LhTypography.sans(
                     size: _fs(10.5),
-                    weight: FontWeight.w600,
-                    color: DunesColors.resolve(context, _LhPlum.primary),
+                    weight: productCard ? FontWeight.w700 : FontWeight.w600,
+                    color: actionColor,
                     height: 1.2,
                     context: context,
                   ),
@@ -58153,7 +58356,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
                   Icon(
                     Icons.chevron_right_rounded,
                     size: _fs(17),
-                    color: DunesColors.resolve(context, _LhPlum.primary),
+                    color: actionColor,
                   )
                 else
                   AnimatedRotation(
@@ -58162,7 +58365,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
                     child: Icon(
                       Icons.keyboard_arrow_down_rounded,
                       size: _fs(17),
-                      color: DunesColors.resolve(context, _LhPlum.primary),
+                      color: actionColor,
                     ),
                   ),
               ],
@@ -61347,6 +61550,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
 
     // 二级汇总：一律直读详情接口 payload（L2/L3），禁止回退列表行拼凑。
     final summaryEntity = Map<String, dynamic>.from(viewDict);
+    final summaryTotals = _heroTotalsFromRow(summaryEntity);
 
     final rawProductL3 = detailDict[lighthouseProductL3SubTab];
     final hasProductL3 =
@@ -61511,8 +61715,10 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
                 children: [
                   // ── Hero：与一级同壳同版式；数值取详情 payload ──────────────
                   _buildHeroShell(
+                    dailyFrame: _detailIntradayBase(summaryTotals) ||
+                        _monthlyHeroBase,
                     child: _buildHero(
-                      totalsOverride: _heroTotalsFromRow(summaryEntity),
+                      totalsOverride: summaryTotals,
                       profitDeltaOverride: _profitDeltaFromRow(summaryEntity),
                       profitSeriesOverride: _profitSeriesFromRow(summaryEntity),
                       profitLabelsOverride: _trendLabelsFromRow(summaryEntity),
@@ -61523,6 +61729,10 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
                         rootGroupLabel: rootGroupLabel,
                         isDrill: isDrill,
                       ),
+                      summaryCard:
+                          _usesLedgerCards(type)
+                          ? _buildLedgerDetailSummaryCard(summaryEntity, type)
+                          : null,
                       showFilters: false,
                     ),
                   ),

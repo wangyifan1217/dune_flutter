@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../../core/theme/dunes_theme.dart';
+import 'lighthouse_hero_chart.dart' show LighthouseChartSemantics;
 import 'lighthouse_press.dart';
 import 'lighthouse_theme.dart';
 
@@ -1183,7 +1184,10 @@ class _LighthouseIntradayHeroState extends State<LighthouseIntradayHero> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        chart,
+        LighthouseChartSemantics(
+          label: widget.monthly ? '月度趋势图' : '近7天趋势图',
+          child: chart,
+        ),
         const SizedBox(height: 4),
         Wrap(
           spacing: 14,

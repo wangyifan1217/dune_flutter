@@ -180,4 +180,58 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets('forwarded report adapts to a narrow screen and large text', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(320, 640));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(
+            context,
+          ).copyWith(textScaler: const TextScaler.linear(1.5)),
+          child: child!,
+        ),
+        home: const Scaffold(
+          body: DunesWeeklyReportShareTile(
+            markdown: """
+# 沙丘经营周报
+2026.11.16 – 11.22
+
+## 灯塔资管
+流入 **10746.66 万元**　流出 **9.00 万元**　净流入 **10737.66 万元**
+
+## 部门一览
+| 部门 | 提案完成 | 成本获批 | 纪要 | 差旅 |
+| --- | ---: | ---: | ---: | ---: |
+| 企业服务与运营管理部 | 15 笔 | 536.22 万元 | 31 份 | 19.25 万元 |
+""",
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('沙丘经营周报'));
+    await tester.pumpAndSettle();
+
+    final report = find.byType(DunesWeeklyReportCard);
+    expect(tester.getSize(report).width, greaterThanOrEqualTo(296));
+    final inflow = find.text('10,746.66万');
+    final outflow = find.text('9万');
+    expect(
+      tester.getTopLeft(outflow).dy,
+      greaterThan(tester.getTopLeft(inflow).dy),
+    );
+    expect(tester.widget<Text>(inflow).style!.fontSize, 16);
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is SingleChildScrollView &&
+            widget.scrollDirection == Axis.horizontal,
+      ),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+  });
 }

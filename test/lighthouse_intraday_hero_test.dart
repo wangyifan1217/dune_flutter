@@ -1,6 +1,7 @@
 import 'package:dunes_app/features/lighthouse/lighthouse_forecast.dart';
 import 'package:dunes_app/features/lighthouse/lighthouse_forecast_strip.dart';
 import 'package:dunes_app/features/lighthouse/lighthouse_intraday_hero.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -147,6 +148,38 @@ void main() {
     await tester.tap(find.text('分时'));
     expect(views, ['min']);
   });
+
+  testWidgets(
+    'Windows 趋势图双击切换日期时无障碍节点保持稳定',
+    (tester) async {
+      final semantics = tester.ensureSemantics();
+      try {
+        final commits = <int>[];
+        await pump(tester, view: 'week', commits: commits);
+
+        final chart = find.bySemanticsLabel('近7天趋势图');
+        final chartNodeId = tester.getSemantics(chart).id;
+        final rect = tester.getRect(chart);
+        final point = Offset(rect.center.dx, rect.bottom - 20);
+        await tester.tapAt(point);
+        await tester.pump();
+        expect(find.text('看当天分时 →'), findsOneWidget);
+        expect(find.bySemanticsLabel('看当天分时 →'), findsNothing);
+        expect(tester.getSemantics(chart).id, chartNodeId);
+        expect(commits, isEmpty);
+
+        await tester.tapAt(point);
+        await tester.pumpAndSettle();
+        expect(commits, [-3]);
+        expect(find.text('看当天分时 →'), findsNothing);
+        expect(tester.getSemantics(chart).id, chartNodeId);
+        expect(tester.takeException(), isNull);
+      } finally {
+        semantics.dispose();
+      }
+    },
+    variant: TargetPlatformVariant({TargetPlatform.windows}),
+  );
 
   testWidgets('换成核销额：标题、分时都跟着指标走', (tester) async {
     await pump(tester, metric: 'verifiedSales', label: '核销额', value: 2600000);

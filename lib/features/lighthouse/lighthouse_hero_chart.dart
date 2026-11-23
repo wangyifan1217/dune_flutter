@@ -1,12 +1,38 @@
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/theme/dunes_theme.dart';
 import 'lighthouse_day_compare.dart';
 import 'lighthouse_hero_swipe.dart';
 import 'lighthouse_theme.dart';
+
+/// Keeps the animated plot and its transient readouts behind one accessibility
+/// node on Windows. Flutter's native hit test can crash on stale child nodes
+/// while a point selection rebuilds the plot (flutter/flutter#192180).
+class LighthouseChartSemantics extends StatelessWidget {
+  const LighthouseChartSemantics({
+    super.key,
+    required this.label,
+    required this.child,
+  });
+
+  final String label;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.windows) return child;
+    return Semantics(
+      container: true,
+      label: label,
+      excludeSemantics: true,
+      child: child,
+    );
+  }
+}
 
 // ═════════════════════════════════════════════════════════════════════════════
 // 主 Hero 走势卡（2026-10-21 · 对齐「产品汇总卡片改版」原型）
@@ -1398,7 +1424,7 @@ class _LighthouseHeroTrendCardState extends State<LighthouseHeroTrendCard>
                   _n > 1 &&
                   (0.05 + 0.9 * selJ / (_n - 1)) > 0.55;
               final pan = _canPan || _handoff != null;
-              return LighthouseHDrag(
+              final plot = LighthouseHDrag(
                 behavior: HitTestBehavior.opaque,
                 onStart: pan ? _panStart : null,
                 onUpdate: pan ? (d) => _panUpdate(d, w) : null,
@@ -1506,6 +1532,10 @@ class _LighthouseHeroTrendCardState extends State<LighthouseHeroTrendCard>
                   ],
                 ),
               ),
+              );
+              return LighthouseChartSemantics(
+                label: '${widget.title}走势图',
+                child: plot,
               );
             },
           ),

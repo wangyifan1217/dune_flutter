@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../../core/theme/dunes_theme.dart';
@@ -22,13 +24,21 @@ class DunesWeeklyReportCard extends StatelessWidget {
     this.forwardBusy = false,
     this.deliveryLabel,
     this.scheduledDelivery = false,
-  });
+  }) : _readingMode = false;
+
+  const DunesWeeklyReportCard._reading({required this.markdown})
+    : _readingMode = true,
+      onForward = null,
+      forwardBusy = false,
+      deliveryLabel = null,
+      scheduledDelivery = false;
 
   final String markdown;
   final VoidCallback? onForward;
   final bool forwardBusy;
   final String? deliveryLabel;
   final bool scheduledDelivery;
+  final bool _readingMode;
 
   static const _ink = Color(0xFF15153E);
   static const _purple = Color(0xFF3B10B9);
@@ -64,7 +74,7 @@ class DunesWeeklyReportCard extends StatelessWidget {
     FontWeight weight = FontWeight.w500,
   }) => TextStyle(
     color: DunesColors.resolve(context, color),
-    fontSize: size,
+    fontSize: _readingMode && size <= 13 ? size + 2 : size,
     fontWeight: weight,
     height: 1.15,
     fontFeatures: const [FontFeature.tabularFigures()],
@@ -157,7 +167,7 @@ class DunesWeeklyReportCard extends StatelessWidget {
             borderRadius: BorderRadius.circular(20),
           ),
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(10, 6, 10, 0),
+            padding: EdgeInsets.fromLTRB(10, 6, 10, _readingMode ? 10 : 0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -936,7 +946,7 @@ class DunesWeeklyReportCard extends StatelessWidget {
       return RobotMarkdown(
         markdown: text.trim(),
         selectable: false,
-        compact: true,
+        compact: !_readingMode,
       );
     }
     final table = lines
@@ -949,7 +959,7 @@ class DunesWeeklyReportCard extends StatelessWidget {
       return RobotMarkdown(
         markdown: text.trim(),
         selectable: false,
-        compact: true,
+        compact: !_readingMode,
       );
     }
     List<String> cells(String line) {
@@ -969,93 +979,132 @@ class DunesWeeklyReportCard extends StatelessWidget {
       return RobotMarkdown(
         markdown: text.trim(),
         selectable: false,
-        compact: true,
+        compact: !_readingMode,
       );
     }
     final before = lines.take(start).join('\n').trim();
     final after = lines.skip(start + table.length).join('\n').trim();
     return _stack([
       if (before.isNotEmpty)
-        RobotMarkdown(markdown: before, selectable: false, compact: true),
-      ClipRRect(
-        borderRadius: BorderRadius.circular(5),
-        child: Table(
-          border: TableBorder.all(color: _line(context)),
-          columnWidths: withCoverage ? const {3: FlexColumnWidth(2)} : null,
-          defaultVerticalAlignment: TableCellVerticalAlignment.middle,
-          children: [
-            for (var i = 0; i < rows.length; i++)
-              TableRow(
-                decoration: BoxDecoration(
-                  color: _surface(
-                    context,
-                    i == 0 ? const Color(0xFFE2DDF8) : const Color(0xFFF6F4FC),
+        RobotMarkdown(
+          markdown: before,
+          selectable: false,
+          compact: !_readingMode,
+        ),
+      _reportTable(
+        context,
+        rows.first.length,
+        ClipRRect(
+          borderRadius: BorderRadius.circular(5),
+          child: Table(
+            border: TableBorder.all(color: _line(context)),
+            columnWidths: withCoverage ? const {3: FlexColumnWidth(2)} : null,
+            defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+            children: [
+              for (var i = 0; i < rows.length; i++)
+                TableRow(
+                  decoration: BoxDecoration(
+                    color: _surface(
+                      context,
+                      i == 0
+                          ? const Color(0xFFE2DDF8)
+                          : const Color(0xFFF6F4FC),
+                    ),
                   ),
-                ),
-                children: [
-                  for (var j = 0; j < rows[i].length; j++)
-                    Padding(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: 3,
-                        vertical: compact ? 0.75 : 1.5,
-                      ),
-                      child:
-                          withCoverage &&
-                              i > 0 &&
-                              j == 3 &&
-                              rows[i][j].endsWith('%')
-                          ? Row(
-                              children: [
-                                SizedBox(
-                                  width: 30,
-                                  child: Text(
-                                    rows[i][j],
-                                    textAlign: TextAlign.right,
-                                    style: _style(
-                                      context,
-                                      10,
-                                      weight: FontWeight.w700,
+                  children: [
+                    for (var j = 0; j < rows[i].length; j++)
+                      Padding(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: 3,
+                          vertical: compact ? 0.75 : 1.5,
+                        ),
+                        child:
+                            withCoverage &&
+                                i > 0 &&
+                                j == 3 &&
+                                rows[i][j].endsWith('%')
+                            ? Row(
+                                children: [
+                                  SizedBox(
+                                    width: _readingMode
+                                        ? MediaQuery.textScalerOf(
+                                            context,
+                                          ).scale(38)
+                                        : 30,
+                                    child: Text(
+                                      rows[i][j],
+                                      textAlign: TextAlign.right,
+                                      style: _style(
+                                        context,
+                                        10,
+                                        weight: FontWeight.w700,
+                                      ),
                                     ),
                                   ),
-                                ),
-                                const SizedBox(width: 5),
-                                Expanded(
-                                  child: _progress(
-                                    context,
-                                    (double.tryParse(
-                                              rows[i][j].replaceFirst('%', ''),
-                                            ) ??
-                                            0) /
-                                        100,
-                                    _palette[0],
-                                    height: 6,
+                                  const SizedBox(width: 5),
+                                  Expanded(
+                                    child: _progress(
+                                      context,
+                                      (double.tryParse(
+                                                rows[i][j].replaceFirst(
+                                                  '%',
+                                                  '',
+                                                ),
+                                              ) ??
+                                              0) /
+                                          100,
+                                      _palette[0],
+                                      height: 6,
+                                    ),
                                   ),
+                                ],
+                              )
+                            : Text(
+                                (i > 0
+                                        ? _money(rows[i][j])
+                                        : rows[i][j].replaceFirst(
+                                            '当前审批中',
+                                            '在审',
+                                          ))
+                                    .replaceAll('**', ''),
+                                textAlign: TextAlign.center,
+                                style: _style(
+                                  context,
+                                  compact ? 9 : 9.5,
+                                  weight: i == 0
+                                      ? FontWeight.w800
+                                      : FontWeight.w600,
                                 ),
-                              ],
-                            )
-                          : Text(
-                              (i > 0
-                                      ? _money(rows[i][j])
-                                      : rows[i][j].replaceFirst('当前审批中', '在审'))
-                                  .replaceAll('**', ''),
-                              textAlign: TextAlign.center,
-                              style: _style(
-                                context,
-                                compact ? 9 : 9.5,
-                                weight: i == 0
-                                    ? FontWeight.w800
-                                    : FontWeight.w600,
                               ),
-                            ),
-                    ),
-                ],
-              ),
-          ],
+                      ),
+                  ],
+                ),
+            ],
+          ),
         ),
       ),
       if (after.isNotEmpty)
-        RobotMarkdown(markdown: after, selectable: false, compact: true),
+        RobotMarkdown(
+          markdown: after,
+          selectable: false,
+          compact: !_readingMode,
+        ),
     ]);
+  }
+
+  Widget _reportTable(BuildContext context, int columns, Widget table) {
+    if (!_readingMode) return table;
+    final textScale = MediaQuery.textScalerOf(context).scale(12) / 12;
+    final minimum = columns * 76 * textScale;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth >= minimum) return table;
+        return SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: SizedBox(width: minimum, child: table),
+        );
+      },
+    );
   }
 
   Widget _stack(List<Widget> children) => Column(
@@ -1101,82 +1150,118 @@ class DunesWeeklyReportCard extends StatelessWidget {
     ),
   );
 
-  Widget _tiles(BuildContext context, List<_Kpi> tiles) => Row(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    spacing: 6,
-    children: [
+  Widget _tiles(BuildContext context, List<_Kpi> tiles) {
+    const spacing = 6.0;
+    final cards = [
       for (final tile in tiles)
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              DecoratedBox(
-                decoration: BoxDecoration(
-                  color: _surface(context, tile.fill),
-                  borderRadius: BorderRadius.circular(7),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 9,
-                    vertical: 3,
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          if (tile.icon case final icon?) ...[
-                            Icon(
-                              icon,
-                              size: 12,
-                              color: DunesColors.resolve(context, tile.ink),
-                            ),
-                            const SizedBox(width: 4),
-                          ],
-                          Expanded(
-                            child: _valueText(
-                              context,
-                              tile.label,
-                              10,
-                              weight: FontWeight.w700,
-                            ),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            DecoratedBox(
+              decoration: BoxDecoration(
+                color: _surface(context, tile.fill),
+                borderRadius: BorderRadius.circular(7),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        if (tile.icon case final icon?) ...[
+                          Icon(
+                            icon,
+                            size: 12,
+                            color: DunesColors.resolve(context, tile.ink),
                           ),
+                          const SizedBox(width: 4),
                         ],
-                      ),
-                      _valueText(
-                        context,
-                        tile.value,
-                        16,
-                        color: tile.ink,
-                        weight: FontWeight.w900,
-                      ),
-                    ],
-                  ),
+                        Expanded(
+                          child: _valueText(
+                            context,
+                            tile.label,
+                            10,
+                            weight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                    _valueText(
+                      context,
+                      tile.value,
+                      16,
+                      color: tile.ink,
+                      weight: FontWeight.w900,
+                    ),
+                  ],
                 ),
               ),
-              if (tile.note.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(8, 3, 8, 0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    spacing: 4,
-                    children: [
-                      Text(tile.note, style: _style(context, 10)),
-                      if (_delta.firstMatch(tile.note) case final delta?)
-                        _progress(
-                          context,
-                          double.parse(delta[1]!).abs() / 10,
-                          delta[1]!.startsWith('-') ? _coral : _palette[0],
-                          height: 5,
-                        ),
-                    ],
-                  ),
+            ),
+            if (tile.note.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(8, 3, 8, 0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  spacing: 4,
+                  children: [
+                    Text(tile.note, style: _style(context, 10)),
+                    if (_delta.firstMatch(tile.note) case final delta?)
+                      _progress(
+                        context,
+                        double.parse(delta[1]!).abs() / 10,
+                        delta[1]!.startsWith('-') ? _coral : _palette[0],
+                        height: 5,
+                      ),
+                  ],
                 ),
-            ],
-          ),
+              ),
+          ],
         ),
-    ],
-  );
+    ];
+    if (!_readingMode || cards.length < 2) {
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        spacing: spacing,
+        children: [for (final card in cards) Expanded(child: card)],
+      );
+    }
+
+    final painter = TextPainter(
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+      maxLines: 1,
+    );
+    var minimum = 112.0;
+    for (final tile in tiles) {
+      painter.text = TextSpan(
+        text: tile.value,
+        style: DefaultTextStyle.of(context).style.merge(
+          _style(context, 16, color: tile.ink, weight: FontWeight.w900),
+        ),
+      );
+      painter.layout();
+      minimum = math.max(minimum, painter.width.ceilToDouble() + 18);
+    }
+    painter.dispose();
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final available = constraints.maxWidth;
+        final columns = ((available + spacing) / (minimum + spacing))
+            .floor()
+            .clamp(1, cards.length);
+        final width = (available - (columns - 1) * spacing) / columns;
+        return Wrap(
+          spacing: spacing,
+          runSpacing: spacing,
+          children: [
+            for (final card in cards) SizedBox(width: width, child: card),
+          ],
+        );
+      },
+    );
+  }
 
   Widget _progress(
     BuildContext context,
@@ -1266,34 +1351,30 @@ class DunesWeeklyReportShareTile extends StatelessWidget {
           title: const Text('沙丘经营周报'),
           subtitle: Text(period.isEmpty ? '查看周报' : period),
           trailing: const Icon(Icons.chevron_right_rounded),
-          onTap: () => showDialog<void>(
-            context: context,
-            builder: (context) => Dialog(
-              insetPadding: const EdgeInsets.symmetric(
-                horizontal: 12,
-                vertical: 20,
-              ),
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 560),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: IconButton(
-                        tooltip: '关闭周报',
-                        onPressed: () => Navigator.of(context).pop(),
-                        icon: const Icon(Icons.close),
+          onTap: () => Navigator.of(context, rootNavigator: true).push(
+            MaterialPageRoute<void>(
+              fullscreenDialog: true,
+              builder: (context) => Scaffold(
+                appBar: AppBar(
+                  leading: IconButton(
+                    tooltip: '关闭周报',
+                    onPressed: () => Navigator.of(context).pop(),
+                    icon: const Icon(Icons.close),
+                  ),
+                ),
+                body: SafeArea(
+                  top: false,
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(10, 0, 10, 16),
+                    child: Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 720),
+                        child: DunesWeeklyReportCard._reading(
+                          markdown: markdown,
+                        ),
                       ),
                     ),
-                    Flexible(
-                      child: SingleChildScrollView(
-                        padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
-                        child: DunesWeeklyReportCard(markdown: markdown),
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
               ),
             ),

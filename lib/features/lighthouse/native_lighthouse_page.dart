@@ -12269,12 +12269,15 @@ class _TrendChartState extends State<_TrendChart>
             ),
           ),
         );
-        final interactive = widget.hoverSelects
+        final plot = widget.hoverSelects
             ? MouseRegion(
                 onHover: (e) => _setSelectionFromX(e.localPosition.dx, w),
                 child: gesture,
               )
             : gesture;
+        final interactive = widget.onSelectedIndexCommitted == null
+            ? plot
+            : LighthouseChartSemantics(label: '灯塔趋势图', child: plot);
         if (!widget.zoomable) return interactive;
         return Listener(
           onPointerDown: _onZoomPointerDown,

@@ -19,7 +19,7 @@ class LighthouseForecastStrip extends StatelessWidget {
     required this.accent,
     this.onOpenReport,
   });
-  final LighthousePaceForecast forecast;
+  final LighthousePaceForecast? forecast;
   final String Function(double) money;
   final Color accent;
   final VoidCallback? onOpenReport;
@@ -35,9 +35,10 @@ class LighthouseForecastStrip extends StatelessWidget {
       height: 1.0,
       context: context,
     );
-    final prob = f.beatPrevProb == null
+    final beatPrevProb = f?.beatPrevProb;
+    final prob = beatPrevProb == null
         ? null
-        : lighthouseForecastProbabilityLabel(f.beatPrevProb);
+        : lighthouseForecastProbabilityLabel(beatPrevProb);
 
     final body = SizedBox(
       height: 20,
@@ -47,20 +48,23 @@ class LighthouseForecastStrip extends StatelessWidget {
             child: Text.rich(
               TextSpan(
                 children: [
-                  TextSpan(text: '月末预测 ', style: quiet),
-                  TextSpan(
-                    text: money(f.forecast),
-                    style: LhTypography.sans(
-                      size: 12.5,
-                      color: accent,
-                      weight: FontWeight.w800,
-                      height: 1.0,
-                      context: context,
+                  TextSpan(text: f == null ? '月末预测' : '月末预测 ', style: quiet),
+                  if (f != null)
+                    TextSpan(
+                      text: money(f.forecast),
+                      style: LhTypography.sans(
+                        size: 12.5,
+                        color: accent,
+                        weight: FontWeight.w800,
+                        height: 1.0,
+                        context: context,
+                      ),
                     ),
-                  ),
                   // 年末：同一个日模型顺着走到 12 月 31 日的全年合计。
                   // 12 月没有「之后的月」，年末就是月末，不重复写。
-                  if (f.yearTotal != null && f.future.isNotEmpty) ...[
+                  if (f != null &&
+                      f.yearTotal != null &&
+                      f.future.isNotEmpty) ...[
                     TextSpan(text: ' · 年末 ', style: quiet),
                     TextSpan(
                       text: money(f.yearTotal!),
@@ -74,7 +78,8 @@ class LighthouseForecastStrip extends StatelessWidget {
                     ),
                   ],
                   // 窄屏放不下时省略号先吃掉这一段。
-                  if (prob != null) TextSpan(text: ' · 超上月 $prob', style: quiet),
+                  if (prob != null)
+                    TextSpan(text: ' · 超上月 $prob', style: quiet),
                 ],
               ),
               maxLines: 1,
@@ -106,6 +111,114 @@ class LighthouseForecastStrip extends StatelessWidget {
         onTap: onOpenReport,
         borderRadius: BorderRadius.circular(6),
         child: body,
+      ),
+    );
+  }
+}
+
+/// 月度主卡中与实际金额并排的预测摘要。
+class LighthouseForecastCard extends StatelessWidget {
+  const LighthouseForecastCard({
+    super.key,
+    required this.forecast,
+    required this.money,
+    required this.onOpenReport,
+  });
+
+  final LighthousePaceForecast? forecast;
+  final String Function(double) money;
+  final VoidCallback onOpenReport;
+
+  @override
+  Widget build(BuildContext context) {
+    final f = forecast;
+    final accent = DunesColors.resolve(context, LhColors.purple);
+    final quiet = LhTypography.sans(
+      context: context,
+      size: 11,
+      color: DunesColors.resolve(context, LhColors.ink2),
+      height: 1.25,
+    );
+    final details = [
+      if (f != null && f.yearTotal != null && f.future.isNotEmpty)
+        '年末 ${money(f.yearTotal!)}',
+      if (f?.beatPrevProb != null)
+        '超上月 ${lighthouseForecastProbabilityLabel(f!.beatPrevProb)}',
+    ];
+    final shape = RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(11),
+      side: BorderSide(
+        color: DunesColors.resolve(
+          context,
+          const Color(0xFFE5DCF3),
+          role: DunesColorRole.border,
+        ),
+      ),
+    );
+    return Semantics(
+      button: true,
+      label: '打开月末预测报告',
+      child: Material(
+        color: DunesColors.resolve(
+          context,
+          const Color(0xFFF8F5FD),
+          role: DunesColorRole.surface,
+        ),
+        shape: shape,
+        child: InkWell(
+          customBorder: shape,
+          onTap: onOpenReport,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(11, 8, 9, 9),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        '月末预测',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: quiet,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      '报告',
+                      style: quiet.copyWith(
+                        color: accent,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    Icon(Icons.chevron_right_rounded, size: 13, color: accent),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                if (f == null)
+                  Text('暂无预测值', style: quiet)
+                else
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      money(f.forecast),
+                      style: LhTypography.number(
+                        context: context,
+                        size: 20,
+                        color: accent,
+                      ),
+                    ),
+                  ),
+                if (details.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(details.join(' · '), style: quiet),
+                ],
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

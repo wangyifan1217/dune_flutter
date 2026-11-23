@@ -276,7 +276,10 @@ class LighthouseIntradayHero extends StatefulWidget {
     this.fallbackVs = 'vs 上月同日',
     this.toggle,
     this.footer,
+    this.forecastPanel,
     this.asOfMinute,
+    this.monthly = false,
+    this.monthAsOf,
   });
 
   /// 当前指标（利润 / 核销额 / 成本合计…，跟着底下七格走）。
@@ -326,8 +329,15 @@ class LighthouseIntradayHero extends StatefulWidget {
   /// 底下「数据分析」入口。
   final Widget? footer;
 
+  /// 本月预测，放在实际汇总旁，与走势共用 Hero 外框。
+  final Widget? forecastPanel;
+
   /// 今天的大数对应的时刻（当天第几分钟，上海时间）；今天没有快照时用它推曲线、写「截至」。
   final int? asOfMinute;
+
+  /// 同一张卡可用月度桶展示近 7 个月，月视图不展示日内分时。
+  final bool monthly;
+  final DateTime? monthAsOf;
 
   @override
   State<LighthouseIntradayHero> createState() => _LighthouseIntradayHeroState();
@@ -345,8 +355,16 @@ class _LighthouseIntradayHeroState extends State<LighthouseIntradayHero> {
   @override
   void didUpdateWidget(covariant LighthouseIntradayHero old) {
     super.didUpdateWidget(old);
-    if (old.metricKey != widget.metricKey || old.view != widget.view) {
+    if (old.metricKey != widget.metricKey ||
+        old.view != widget.view ||
+        old.monthly != widget.monthly ||
+        old.committedOffset != widget.committedOffset) {
       _tipIndex = null;
+    }
+    if (old.monthly != widget.monthly ||
+        old.committedOffset != widget.committedOffset) {
+      _lastTapOffset = null;
+      _lastTapAt = null;
     }
   }
 
@@ -383,11 +401,17 @@ class _LighthouseIntradayHeroState extends State<LighthouseIntradayHero> {
   /// 「盈利」/「核销额」…
   String get _word => widget.metricKey == 'profit' ? '盈利' : widget.metricLabel;
 
-  String _dayName(LhIntradayDay d) => switch (d.offset) {
-    0 => '今日',
-    -1 => '昨日',
-    _ => '${_md(d.date)} ',
-  };
+  String _dayName(LhIntradayDay d) {
+    if (widget.monthly) return d.isToday ? '本月' : '${d.date.month}月';
+    return switch (d.offset) {
+      0 => '今日',
+      -1 => '昨日',
+      _ => '${_md(d.date)} ',
+    };
+  }
+
+  String _bucketLabel(DateTime date) =>
+      widget.monthly ? '${date.month}月' : _md(date);
 
   int get _selIndex {
     final i = widget.days.indexWhere((d) => d.offset == widget.selectedOffset);
@@ -413,18 +437,18 @@ class _LighthouseIntradayHeroState extends State<LighthouseIntradayHero> {
 
     // ── 分时：真快照 / 推算 ──
     final metric = widget.metricKey;
-    final snapOk = !widget.isRate && lhIntradayHasSnapshot(metric);
+    final snapOk = !widget.monthly && !widget.isRate && lhIntradayHasSnapshot(metric);
     final d = widget.data;
     final realDay = snapOk && d != null ? _snapPoints(d.today, metric) : const <_Pt>[];
     final realPrev = snapOk && d != null ? _snapPoints(d.prev, metric) : const <_Pt>[];
     final asOf = widget.asOfMinute;
-    final estDay = realDay.isEmpty && !widget.isRate;
+    final estDay = !widget.monthly && realDay.isEmpty && !widget.isRate;
     final dayPts = !estDay
         ? realDay
         : (isToday
               ? (asOf != null && asOf > 0 ? _estimateCurve(widget.value, asOf) : const <_Pt>[])
               : _estimateCurve(widget.value, 1440));
-    final estPrev = realPrev.isEmpty && !widget.isRate;
+    final estPrev = !widget.monthly && realPrev.isEmpty && !widget.isRate;
     final prevPts = !estPrev
         ? realPrev
         : (prevTotal != null ? _estimateCurve(prevTotal, 1440) : const <_Pt>[]);
@@ -441,7 +465,10 @@ class _LighthouseIntradayHeroState extends State<LighthouseIntradayHero> {
     }
 
     // ── 大数右边的比较 ──
-    final yLabel = isToday ? '昨日' : '前一日';
+    final yLabel = widget.monthly
+        ? (isToday ? '上月' : '前一月')
+        : (isToday ? '昨日' : '前一日');
+    final whole = widget.monthly ? '全月' : '全天';
     String? cmpMain;
     Color cmpColor = red;
     final cmpSubs = <String>[];
@@ -455,24 +482,30 @@ class _LighthouseIntradayHeroState extends State<LighthouseIntradayHero> {
       if (prevTotal != null) cmpSubs.add('昨日全天 ${_withUnit(prevTotal)}');
       cmpSubs.add('昨日同时 ${_withUnit(prevSame.v)}');
     } else if (isToday && prevTotal != null && prevTotal > 0 && !widget.isRate) {
-      cmpMain = '已达昨日全天 ${(widget.value / prevTotal * 100).toStringAsFixed(0)}%';
+      cmpMain = '已达$yLabel$whole ${(widget.value / prevTotal * 100).toStringAsFixed(0)}%';
       cmpColor = valueColor;
-      cmpSubs.add('昨日全天 ${_withUnit(prevTotal)}');
+      cmpSubs.add('$yLabel$whole ${_withUnit(prevTotal)}');
     } else if (prevTotal != null) {
       final diff = widget.value - prevTotal;
       cmpColor = diff >= 0 ? red : green;
       final pct = !widget.isRate && prevTotal.abs() >= 1 ? diff / prevTotal.abs() * 100 : null;
       cmpMain = '较$yLabel ${_signed(_diff(diff), diff)}'
           '${pct == null ? '' : '  ${_signed('${pct.abs().toStringAsFixed(1)}%', pct)}'}';
-      cmpSubs.add('$yLabel${isToday ? '' : ' ${_md(prevDay!.date)}'}全天 ${_withUnit(prevTotal)}');
+      cmpSubs.add('$yLabel${isToday ? '' : ' ${_bucketLabel(prevDay!.date)}'}$whole ${_withUnit(prevTotal)}');
     } else if (!previewing && widget.fallbackDelta != null) {
       final fd = widget.fallbackDelta!;
       cmpColor = fd.isUp ? red : green;
-      cmpMain = '${fd.isUp ? '▲' : '▼'} ${fd.pct.abs().toStringAsFixed(1)}%';
+      final suffix = widget.monthly && widget.isRate ? 'pp' : '%';
+      cmpMain = '${fd.isUp ? '▲' : '▼'} ${fd.pct.abs().toStringAsFixed(1)}$suffix';
       cmpSubs.add(widget.fallbackVs);
     }
 
-    final stamp = isToday
+    final monthAsOf = widget.monthAsOf;
+    final stamp = widget.monthly
+        ? (isToday
+            ? (monthAsOf == null ? '进行中' : '截至 ${_md(monthAsOf)} · 进行中')
+            : '${day.date.year}年${day.date.month}月 · 全月')
+        : isToday
         ? (nowPt != null
               ? '截至 ${nowPt.at} · 进行中'
               : (asOf != null ? '截至 ${_hhmm(asOf)} · 进行中' : '进行中'))
@@ -490,141 +523,193 @@ class _LighthouseIntradayHeroState extends State<LighthouseIntradayHero> {
       if (minI == null || days[i].value! < days[minI].value!) minI = i;
     }
 
-    final week = widget.view == 'week';
+    final week = widget.monthly || widget.view == 'week';
 
-    return Container(
-      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-      decoration: BoxDecoration(
-        color: _c(Colors.white, role: DunesColorRole.surface),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: _c(const Color(0xFFE7E3EF), role: DunesColorRole.border), width: 0.8),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (widget.toggle != null) ...[widget.toggle!, const SizedBox(height: 10)],
-          // ── 今日盈利 +「截至 15:12 · 进行中」──
-          Row(
+    final amount = FittedBox(
+      fit: BoxFit.scaleDown,
+      alignment: Alignment.centerLeft,
+      child: TweenAnimationBuilder<double>(
+        key: ValueKey('big|${widget.metricKey}'),
+        tween: Tween<double>(end: widget.value),
+        duration: const Duration(milliseconds: 480),
+        curve: Curves.easeOutCubic,
+        builder: (context, shown, _) => Text.rich(
+          TextSpan(
             children: [
-              Flexible(
-                child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 200),
-                  layoutBuilder: (cur, prev) => Stack(
-                    alignment: Alignment.centerLeft,
-                    children: [...prev, if (cur != null) cur],
-                  ),
-                  child: Text(
-                    '${_dayName(day)}$_word'.replaceAll('  ', ' '),
-                    key: ValueKey('title|${day.offset}|${widget.metricKey}'),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: LhTypography.sans(context: context, size: 13, weight: FontWeight.w700, color: ink),
-                  ),
-                ),
+              TextSpan(
+                text: _num(shown),
+                style: LhTypography.number(
+                  context: context, size: 34, color: valueColor,
+                ).copyWith(letterSpacing: -0.6, height: 1),
               ),
-              const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2.5),
-                decoration: BoxDecoration(
-                  color: _c(LhColors.purpleSoft, role: DunesColorRole.surface),
-                  borderRadius: BorderRadius.circular(99),
-                ),
-                child: AnimatedSize(
-                  duration: const Duration(milliseconds: 200),
-                  curve: Curves.easeOut,
-                  child: AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 200),
-                    child: Text(
-                      stamp,
-                      key: ValueKey('stamp|$stamp'),
-                      style: LhTypography.sans(context: context, size: 10.5, weight: FontWeight.w600, color: purple),
-                    ),
-                  ),
+              TextSpan(
+                text: _unit,
+                style: LhTypography.sans(
+                  context: context, size: 14, weight: FontWeight.w600, color: valueColor,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 6),
-          // ── 大数 │ 比较 ──
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
+        ),
+      ),
+    );
+    final comparison = cmpMain == null
+        ? null
+        : Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Flexible(
-                flex: 5,
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  alignment: Alignment.centerLeft,
-                  // 换天 / 换指标：数字从旧值滚到新值（同一指标内才滚，换指标直接换）。
-                  child: TweenAnimationBuilder<double>(
-                    key: ValueKey('big|${widget.metricKey}'),
-                    tween: Tween<double>(end: widget.value),
-                    duration: const Duration(milliseconds: 480),
-                    curve: Curves.easeOutCubic,
-                    builder: (context, shown, _) => Text.rich(
-                    TextSpan(
-                      children: [
-                        TextSpan(
-                          text: _num(shown),
-                          // 2026-11-23 · 46 / w800 太抢，压到 34 / w700，和页面其它大数同一档。
-                          style: LhTypography.number(context: context, size: 34, color: valueColor)
-                              .copyWith(letterSpacing: -0.6, height: 1.0),
-                        ),
-                        TextSpan(
-                          text: _unit,
-                          style: LhTypography.sans(context: context, size: 14, weight: FontWeight.w600, color: valueColor),
-                        ),
-                      ],
-                    ),
-                  ),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  cmpMain,
+                  style: LhTypography.sans(
+                    context: context, size: 12.5, weight: FontWeight.w600, color: cmpColor,
                   ),
                 ),
               ),
-              if (cmpMain != null) ...[
-                const SizedBox(width: 12),
-                Container(width: 1, height: 34, color: _c(const Color(0xFFECE8F4), role: DunesColorRole.border)),
-                const SizedBox(width: 12),
-                Expanded(
-                  flex: 7,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      FittedBox(
-                        fit: BoxFit.scaleDown,
-                        alignment: Alignment.centerLeft,
-                        child: Text(
-                          cmpMain,
-                          style: LhTypography.sans(context: context, size: 12.5, weight: FontWeight.w600, color: cmpColor),
-                        ),
-                      ),
-                      if (cmpSubs.isNotEmpty) ...[
-                        const SizedBox(height: 4),
-                        FittedBox(
-                          fit: BoxFit.scaleDown,
-                          alignment: Alignment.centerLeft,
-                          child: Text(
-                            cmpSubs.join('  ｜  '),
-                            style: LhTypography.sans(context: context, size: 11, color: mute),
-                          ),
-                        ),
-                      ],
-                    ],
+              if (cmpSubs.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    cmpSubs.join('  ｜  '),
+                    style: LhTypography.sans(context: context, size: 11, color: mute),
                   ),
                 ),
               ],
             ],
+          );
+    Widget actualSummary({bool compact = false}) => Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Wrap(
+          spacing: 8,
+          runSpacing: 4,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 200),
+              layoutBuilder: (cur, prev) => Stack(
+                alignment: Alignment.centerLeft,
+                children: [...prev, if (cur != null) cur],
+              ),
+              child: Text(
+                '${_dayName(day)}$_word'.replaceAll('  ', ' '),
+                key: ValueKey('title|${day.offset}|${widget.metricKey}'),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: LhTypography.sans(
+                  context: context, size: 13, weight: FontWeight.w700, color: ink,
+                ),
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2.5),
+              decoration: BoxDecoration(
+                color: _c(LhColors.purpleSoft, role: DunesColorRole.surface),
+                borderRadius: BorderRadius.circular(99),
+              ),
+              child: AnimatedSize(
+                duration: const Duration(milliseconds: 200),
+                curve: Curves.easeOut,
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 200),
+                  child: Text(
+                    stamp,
+                    key: ValueKey('stamp|$stamp'),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: LhTypography.sans(
+                      context: context, size: 10.5, weight: FontWeight.w600, color: purple,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        if (compact) ...[
+          amount,
+          if (comparison != null) ...[const SizedBox(height: 5), comparison],
+        ] else
+          Row(
+            children: [
+              Flexible(flex: 5, child: amount),
+              if (comparison != null) ...[
+                const SizedBox(width: 12),
+                Container(
+                  width: 1,
+                  height: 34,
+                  color: _c(const Color(0xFFECE8F4), role: DunesColorRole.border),
+                ),
+                const SizedBox(width: 12),
+                Expanded(flex: 7, child: comparison),
+              ],
+            ],
           ),
-          const SizedBox(height: 12),
-          _viewTabs(week),
-          const SizedBox(height: 12),
+      ],
+    );
+    final forecastPanel = widget.forecastPanel;
+
+    // 汇总 Hero 已有外框，图表和日期区共用它的内容边缘。
+    return Padding(
+      padding: const EdgeInsets.only(top: 3),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (widget.toggle != null) ...[widget.toggle!, const SizedBox(height: 10)],
+          if (forecastPanel == null)
+            actualSummary()
+          else
+            LayoutBuilder(
+              builder: (context, box) {
+                final width = box.maxWidth;
+                final textScale = MediaQuery.textScalerOf(context).scale(1);
+                if (width < 310 * textScale) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      actualSummary(compact: width < 245 * textScale),
+                      const SizedBox(height: 10),
+                      forecastPanel,
+                    ],
+                  );
+                }
+                const gap = 12.0;
+                final forecastWidth = (width * .41).clamp(124.0, 200.0).toDouble();
+                return Row(
+                  children: [
+                    Expanded(
+                      child: actualSummary(
+                        compact: width - forecastWidth - gap < 260 * textScale,
+                      ),
+                    ),
+                    const SizedBox(width: gap),
+                    SizedBox(width: forecastWidth, child: forecastPanel),
+                  ],
+                );
+              },
+            ),
+          const SizedBox(height: 14),
+          if (!widget.monthly) ...[
+            _viewTabs(week),
+            const SizedBox(height: 15),
+          ],
           // ── 小标题 ──
           Row(
             children: [
               Icon(Icons.bar_chart_rounded, size: 16, color: purple),
               const SizedBox(width: 5),
-              Flexible(
+              Expanded(
                 child: Text(
-                  week
+                  widget.monthly
+                      ? '近7个月 · 每月$_word'
+                      : week
                       ? '近7天 · 每日$_word'
                       : '${isToday ? '今日' : '${_md(day.date)} '}${widget.isRate ? widget.metricLabel : '累计$_word'}',
                   maxLines: 1,
@@ -632,14 +717,20 @@ class _LighthouseIntradayHeroState extends State<LighthouseIntradayHero> {
                   style: LhTypography.sans(context: context, size: 13, weight: FontWeight.w700, color: ink),
                 ),
               ),
-              const Spacer(),
-              Text('单位：$_unit', style: LhTypography.sans(context: context, size: 11, color: mute)),
+              const SizedBox(width: 8),
+              Text(
+                '单位：$_unit',
+                textAlign: TextAlign.right,
+                style: LhTypography.sans(context: context, size: 11, color: mute),
+              ),
             ],
           ),
           if (week) ...[
             const SizedBox(height: 2),
             Text(
-              '每个点是当天$_word${widget.isRate ? '' : '（非累计）'} · 今天仍在累计',
+              widget.monthly
+                  ? '每个点是当月$_word${!widget.isRate && days.last.isToday ? ' · 本月仍在累计' : ''}'
+                  : '每个点是当天$_word${widget.isRate ? '' : '（非累计）'} · 今天仍在累计',
               style: LhTypography.sans(context: context, size: 11, color: mute),
             ),
           ],
@@ -670,10 +761,18 @@ class _LighthouseIntradayHeroState extends State<LighthouseIntradayHero> {
                     ),
                   ),
           ),
-          const SizedBox(height: 14),
-          Text('选择日期查看分时', style: LhTypography.sans(context: context, size: 13, weight: FontWeight.w700, color: ink)),
+          Padding(
+            padding: const EdgeInsets.only(top: 12, bottom: 12),
+            child: SizedBox(
+              height: 1,
+              child: ColoredBox(
+                color: _c(const Color(0xFFEEEBF3), role: DunesColorRole.border),
+              ),
+            ),
+          ),
+          Text(widget.monthly ? '选择月份查看汇总' : '选择日期查看分时', style: LhTypography.sans(context: context, size: 13, weight: FontWeight.w700, color: ink)),
           const SizedBox(height: 8),
-          _dateStrip(days, week),
+          _dateStrip(days),
           if (widget.footer != null) ...[const SizedBox(height: 12), widget.footer!],
         ],
       ),
@@ -708,11 +807,11 @@ class _LighthouseIntradayHeroState extends State<LighthouseIntradayHero> {
     }
 
     return Container(
-      height: 38,
+      height: 36,
       padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
-        color: _c(const Color(0xFFEFECF5), role: DunesColorRole.surface),
-        borderRadius: BorderRadius.circular(12),
+        color: _c(const Color(0xFFF2EFF7), role: DunesColorRole.surface),
+        borderRadius: BorderRadius.circular(11),
       ),
       child: Stack(
         children: [
@@ -729,9 +828,9 @@ class _LighthouseIntradayHeroState extends State<LighthouseIntradayHero> {
               child: DecoratedBox(
                 decoration: BoxDecoration(
                   color: _c(Colors.white, role: DunesColorRole.surface),
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(8),
                   boxShadow: const [
-                    BoxShadow(color: Color(0x14281A5A), blurRadius: 6, offset: Offset(0, 1)),
+                    BoxShadow(color: Color(0x10281A5A), blurRadius: 5, offset: Offset(0, 1)),
                   ],
                 ),
               ),
@@ -990,6 +1089,7 @@ class _LighthouseIntradayHeroState extends State<LighthouseIntradayHero> {
                         tipIndex: tip,
                         progress: t,
                         isRate: widget.isRate,
+                        monthly: widget.monthly,
                         red: red,
                         redSoft: _c(const Color(0xFFFDF1EF), role: DunesColorRole.surface),
                         purple: _c(_kLinePurple),
@@ -1054,16 +1154,16 @@ class _LighthouseIntradayHeroState extends State<LighthouseIntradayHero> {
           ? [
               stat('日均', avg == null ? null : _num(avg)),
               vline(),
-              stat(maxI == null ? '最高' : '最高 · ${_md(days[maxI].date)}', maxI == null ? null : _num(days[maxI].value!)),
+              stat(maxI == null ? '最高' : '最高 · ${_bucketLabel(days[maxI].date)}', maxI == null ? null : _num(days[maxI].value!)),
               vline(),
-              stat(minI == null ? '最低' : '最低 · ${_md(days[minI].date)}', minI == null ? null : _num(days[minI].value!)),
+              stat(minI == null ? '最低' : '最低 · ${_bucketLabel(days[minI].date)}', minI == null ? null : _num(days[minI].value!)),
             ]
           : [
-              stat('$doneCount日累计', doneCount == 0 ? null : _num(sum)),
+              stat(widget.monthly ? '$doneCount个月累计' : '$doneCount日累计', doneCount == 0 ? null : _num(sum)),
               vline(),
-              stat('日均$_word', avg == null ? null : _num(avg)),
+              stat('${widget.monthly ? '月均' : '日均'}$_word', avg == null ? null : _num(avg)),
               vline(),
-              stat(maxI == null ? '最高' : '最高 · ${_md(days[maxI].date)}', maxI == null ? null : _num(days[maxI].value!)),
+              stat(maxI == null ? '最高' : '最高 · ${_bucketLabel(days[maxI].date)}', maxI == null ? null : _num(days[maxI].value!)),
             ],
     );
 
@@ -1072,11 +1172,11 @@ class _LighthouseIntradayHeroState extends State<LighthouseIntradayHero> {
     TextStyle ts(Color c, {FontWeight w = FontWeight.w500}) =>
         LhTypography.sans(context: context, size: 12, weight: w, color: c);
     if (maxI != null) {
-      spans.add(TextSpan(text: '${_md(days[maxI].date)} 最高', style: ts(ink2)));
+      spans.add(TextSpan(text: '${_bucketLabel(days[maxI].date)} 最高', style: ts(ink2)));
     }
     if (todayValue != null && avg != null && avg.abs() >= 1e-9 && !widget.isRate) {
       spans
-        ..add(TextSpan(text: '${spans.isEmpty ? '' : ' · '}今天已达日均 ', style: ts(ink2)))
+        ..add(TextSpan(text: '${spans.isEmpty ? '' : ' · '}${widget.monthly ? '本月已达月均' : '今天已达日均'} ', style: ts(ink2)))
         ..add(TextSpan(text: '${(todayValue / avg * 100).toStringAsFixed(0)}%', style: ts(red, w: FontWeight.w700)));
     }
 
@@ -1089,21 +1189,24 @@ class _LighthouseIntradayHeroState extends State<LighthouseIntradayHero> {
           spacing: 14,
           runSpacing: 4,
           children: [
-            _legend(Container(width: 16, height: 2.5, color: _c(_kLinePurple)), '完整日'),
+            _legend(Container(width: 16, height: 2.5, color: _c(_kLinePurple)), widget.monthly ? '完整月' : '完整日'),
             _legend(
               SizedBox(width: 16, height: 4, child: CustomPaint(painter: _DashPainter(_c(_kLinePurple).withAlpha(150)))),
-              '前${doneCount}日日均',
+              widget.monthly ? '完整月均值' : '前${doneCount}日日均',
             ),
-            _legend(Container(width: 16, height: 2.5, color: red), '今天（进行中）'),
+            if (!widget.monthly || todayI >= 0)
+              _legend(Container(width: 16, height: 2.5, color: red), widget.monthly ? '本月（进行中）' : '今天（进行中）'),
             if (prevSame != null)
               _legend(SizedBox(width: 16, height: 4, child: CustomPaint(painter: _DashPainter(_c(const Color(0xFFA9A3BA))))), '昨日同时'),
           ],
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 11),
         stats,
         if (spans.isNotEmpty) ...[
           const SizedBox(height: 10),
-          _infoBar(spans, '今天不计入日均'),
+          _infoBar(spans, widget.monthly
+              ? (todayI < 0 ? null : '本月不计入月均')
+              : '今天不计入日均'),
         ],
       ],
     );
@@ -1119,7 +1222,9 @@ class _LighthouseIntradayHeroState extends State<LighthouseIntradayHero> {
     final lines = <Widget>[];
     TextStyle s(double size, Color c, {FontWeight w = FontWeight.w500}) =>
         LhTypography.sans(context: context, size: size, weight: w, color: c);
-    if (day.isToday) {
+    if (widget.monthly) {
+      lines.add(Text('${day.date.year}年${day.date.month}月${day.isToday ? ' · 进行中' : ' · 全月'}', style: s(11, ink2)));
+    } else if (day.isToday) {
       lines.add(Text('今天 · 周${_weekday(day.date)}${widget.asOfMinute == null ? '' : ' 截至${_hhmm(widget.asOfMinute!)}'}', style: s(11, ink2)));
     } else {
       lines.add(Text('${_md(day.date)} 周${_weekday(day.date)}', style: s(11, ink2)));
@@ -1130,7 +1235,7 @@ class _LighthouseIntradayHeroState extends State<LighthouseIntradayHero> {
       extra.add(TextSpan(text: '  比昨日同时 ${_signed(_diff(diff), diff)}', style: s(11, diff >= 0 ? red : green, w: FontWeight.w600)));
     } else if (!day.isToday && avg != null) {
       final diff = v - avg;
-      extra.add(TextSpan(text: '  较日均 ${_signed(_diff(diff), diff)}', style: s(11, diff >= 0 ? red : green, w: FontWeight.w600)));
+      extra.add(TextSpan(text: '  较${widget.monthly ? '月均' : '日均'} ${_signed(_diff(diff), diff)}', style: s(11, diff >= 0 ? red : green, w: FontWeight.w600)));
     }
     lines.add(
       Text.rich(
@@ -1146,20 +1251,20 @@ class _LighthouseIntradayHeroState extends State<LighthouseIntradayHero> {
       ),
     );
     if (day.isToday && avg != null && avg.abs() >= 1e-9 && !widget.isRate) {
-      lines.add(Text('已达日均 ${(v / avg * 100).toStringAsFixed(0)}%', style: s(11, ink2)));
+      lines.add(Text('已达${widget.monthly ? '月均' : '日均'} ${(v / avg * 100).toStringAsFixed(0)}%', style: s(11, ink2)));
     }
-    if (!widget.isRate) {
+    if (widget.monthly || !widget.isRate) {
       lines.add(
         GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: () {
             setState(() => _tipIndex = null);
             widget.onDayTap(day.offset);
-            widget.onViewChanged('min');
+            if (!widget.monthly) widget.onViewChanged('min');
           },
           child: Padding(
             padding: const EdgeInsets.only(top: 5),
-            child: Text(day.isToday ? '看今天分时 →' : '看当天分时 →', style: s(11, purple, w: FontWeight.w700)),
+            child: Text(widget.monthly ? '预览该月 →' : (day.isToday ? '看今天分时 →' : '看当天分时 →'), style: s(11, purple, w: FontWeight.w700)),
           ),
         ),
       );
@@ -1206,11 +1311,10 @@ class _LighthouseIntradayHeroState extends State<LighthouseIntradayHero> {
   }
 
   // ── 选择日期查看分时 ──
-  Widget _dateStrip(List<LhIntradayDay> days, bool week) {
+  Widget _dateStrip(List<LhIntradayDay> days) {
     final ink = _c(LhColors.ink);
     final mute = _c(LhColors.mute2);
     final purple = _c(LhColors.purple);
-    final line = _c(const Color(0xFFECE8F4), role: DunesColorRole.border);
     return Row(
       children: [
         for (var i = 0; i < days.length; i++) ...[
@@ -1220,31 +1324,34 @@ class _LighthouseIntradayHeroState extends State<LighthouseIntradayHero> {
               builder: (context) {
                 final day = days[i];
                 final selected = day.offset == widget.selectedOffset;
-                final filled = selected && !week;
                 final committed = day.offset == widget.committedOffset && widget.committedOffset != widget.selectedOffset;
-                final top = day.isToday ? '今天' : _weekday(day.date);
                 final v = day.value;
+                final top = widget.monthly
+                    ? (day.isToday ? '本月' : '${day.date.year}')
+                    : (day.isToday ? '今天' : _weekday(day.date));
                 final sub = day.isToday ? '进行中' : (v == null ? '—' : _num1(v));
                 final deep = _c(_kLinePurpleDeep);
-                final fg = filled ? deep : ink;
-                final fgSoft = filled ? purple : mute;
+                final fg = selected ? deep : ink;
+                final fgSoft = selected ? purple : mute;
                 return LhPressScale(
                   scale: 0.93,
                   child: GestureDetector(
                   behavior: HitTestBehavior.opaque,
-                  onTap: () => _tapDay(day.offset),
+                  onTap: widget.monthly && v == null ? null : () => _tapDay(day.offset),
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 200),
                     padding: const EdgeInsets.symmetric(vertical: 6),
                     decoration: BoxDecoration(
                       // 2026-11-23 · 选中格不再用实心紫渐变：浅紫底 + 紫边 + 紫字。
-                      color: filled
-                          ? _c(LhColors.purpleSoft, role: DunesColorRole.surface)
-                          : _c(Colors.white, role: DunesColorRole.surface),
+                      color: _c(
+                        selected ? const Color(0xFFF0EAFB) : const Color(0xFFF8F7FA),
+                        role: DunesColorRole.surface,
+                      ),
                       borderRadius: BorderRadius.circular(10),
                       border: Border.all(
-                        color: selected ? purple : line,
-                        width: selected ? 1.2 : 1,
+                        color: selected
+                            ? _c(LhColors.purple, role: DunesColorRole.border)
+                            : Colors.transparent,
                       ),
                     ),
                     child: Stack(
@@ -1257,7 +1364,7 @@ class _LighthouseIntradayHeroState extends State<LighthouseIntradayHero> {
                             Text(top, textAlign: TextAlign.center, style: LhTypography.sans(context: context, size: 11, color: fgSoft)),
                             const SizedBox(height: 1),
                             Text(
-                              '${day.date.day}',
+                              widget.monthly ? '${day.date.month}月' : '${day.date.day}',
                               textAlign: TextAlign.center,
                               style: LhTypography.number(context: context, size: 14, color: fg).copyWith(fontWeight: FontWeight.w700),
                             ),
@@ -1590,6 +1697,7 @@ class _WeekPainter extends CustomPainter {
     required this.tipIndex,
     required this.progress,
     required this.isRate,
+    required this.monthly,
     required this.red,
     required this.redSoft,
     required this.purple,
@@ -1614,6 +1722,7 @@ class _WeekPainter extends CustomPainter {
   final int? tipIndex;
   final double progress;
   final bool isRate;
+  final bool monthly;
   final Color red;
   final Color redSoft;
   final Color purple;
@@ -1683,7 +1792,9 @@ class _WeekPainter extends CustomPainter {
       final today = i == todayIndex;
       final tp = _tp(
         textScale,
-        today ? '今天' : _md(days[i].date),
+        monthly
+            ? (today ? '本月' : '${days[i].date.month}月')
+            : (today ? '今天' : _md(days[i].date)),
         10.5,
         today ? red : mute,
         weight: today ? FontWeight.w600 : FontWeight.w400,
@@ -1852,6 +1963,7 @@ class _WeekPainter extends CustomPainter {
       old.progress != progress ||
       old.tipIndex != tipIndex ||
       old.selectedIndex != selectedIndex ||
+      old.monthly != monthly ||
       old.geom.values != geom.values ||
       old.geom.size != geom.size ||
       old.red != red;

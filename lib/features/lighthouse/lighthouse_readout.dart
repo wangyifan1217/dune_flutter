@@ -136,11 +136,11 @@ class LhReadoutTotals {
       ? null
       : profit! / verifiedSales! * 100;
 
-  /// ROI = 利润 ÷ 成本合计。
-  double? get roi =>
-      (profit == null || costTotal == null || costTotal!.abs() < 1e-9)
+  /// 净利率 = 净利润 ÷ 核销额（2026-11-23 起替代原来那格 ROI，和 Hero 同口径）。
+  double? get netMargin =>
+      (netProfit == null || verifiedSales == null || verifiedSales!.abs() < 1e-9)
       ? null
-      : profit! / costTotal! * 100;
+      : netProfit! / verifiedSales! * 100;
 
   /// 变现率 = 收入 ÷ 核销额。核销一块钱能收上来多少。
   double? get takeRate =>
@@ -167,7 +167,7 @@ class LhReadoutTotals {
     'prepaid' => prepaid,
     'spread' => spread,
     'grossMargin' => grossMargin,
-    'rate' => roi,
+    'rate' => netMargin,
     _ => null,
   };
 }
@@ -602,29 +602,30 @@ LhFact? _r8TakeRate(LhReadoutInput i, LhMoneyFormat m) {
   );
 }
 
-/// R9 · ROI。比值口径。
+/// R9 · 净利率（2026-11-23 起替代 ROI）。比值口径：净利润 ÷ 核销额。
 LhFact? _r9Roi(LhReadoutInput i, LhMoneyFormat m) {
   if (!LhReadoutGate.allowsConclusion(i.period)) return null;
-  final r0 = i.prev.roi, r1 = i.cur.roi;
+  final r0 = i.prev.netMargin, r1 = i.cur.netMargin;
   if (r0 == null || r1 == null) return null;
-  final ct = _pair(i, 'costTotal');
-  if (ct.base < LhReadoutGate.minBase(i.period)) return null;
+  final vs = _pair(i, 'verifiedSales');
+  if (vs.base < LhReadoutGate.minBase(i.period)) return null;
   final diff = r1 - r0;
-  if (diff.abs() < 1.0) return null;
-  final gp = _pair(i, 'profit').growth;
-  final gc = ct.growth;
-  final note = (gp != null && gc != null)
-      ? '利润 ${_pct(gp * 100)}、成本合计 ${_pct(gc * 100)}'
+  // 净利率在 1%～3% 这个量级，0.1 个百分点就值得说。
+  if (diff.abs() < 0.1) return null;
+  final gp = _pair(i, 'netProfit').growth;
+  final gv = vs.growth;
+  final note = (gp != null && gv != null)
+      ? '净利润 ${_pct(gp * 100)}、核销额 ${_pct(gv * 100)}'
       : '';
   return LhFact(
-    id: 'R9-roi',
+    id: 'R9-net-margin',
     kind: LhFactKind.conclusion,
     level: diff < 0 ? LhFactLevel.warning : LhFactLevel.info,
     text: diff < 0
-        ? 'ROI ${_pp(diff)}，这一期的利润是花钱换来的'
-        : 'ROI ${_pp(diff)}，同样的成本产出更多利润',
-    derivation: 'ROI = 利润 ÷ 成本合计 = '
-        '${r0.toStringAsFixed(1)}% → ${r1.toStringAsFixed(1)}%；$note',
+        ? '净利率 ${_pp(diff, digits: 2)}，每笔核销留下的净利润变少'
+        : '净利率 ${_pp(diff, digits: 2)}，每笔核销留下的净利润变多',
+    derivation: '净利率 = 净利润 ÷ 核销额 = '
+        '${r0.toStringAsFixed(2)}% → ${r1.toStringAsFixed(2)}%；$note',
     amount: null,
   );
 }

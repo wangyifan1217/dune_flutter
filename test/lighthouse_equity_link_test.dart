@@ -210,28 +210,32 @@ void main() {
     );
   });
 
-  test('筛选后的 ROI / 毛利率环比是百分点差，不是各省百分比平均', () {
+  test('筛选后的净利率 / 毛利率环比是百分点差，不是各省百分比平均', () {
+    // 净利润 18 / 36，上期 9 / 18（deltas.netProfit = 100%）。
     final rows = <Map<String, dynamic>>[
       {
         'name': '福建省',
         'profit': 20,
         'prevProfit': 10,
+        'netProfit': 18,
         'totalCost': 100,
         'verifiedSales': 200,
-        'deltas': {'totalCost': 0.0, 'verifiedSales': 0.0},
+        'deltas': {'totalCost': 0.0, 'verifiedSales': 0.0, 'netProfit': 100.0},
       },
       {
         'name': '广东省',
         'profit': 40,
         'prevProfit': 20,
+        'netProfit': 36,
         'totalCost': 100,
         'verifiedSales': 200,
-        'deltas': {'totalCost': 0.0, 'verifiedSales': 0.0},
+        'deltas': {'totalCost': 0.0, 'verifiedSales': 0.0, 'netProfit': 100.0},
       },
     ];
+    // 净利率 = 54 / 400 = 13.5%，上期 27 / 400 = 6.75% → +6.75pp
     expect(
       lighthouseAggregateRowsDeltaPct(rows, key: 'rate'),
-      closeTo(15, 0.001),
+      closeTo(6.75, 0.001),
     );
     expect(
       lighthouseAggregateRowsDeltaPct(rows, key: 'grossMargin'),

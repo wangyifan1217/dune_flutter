@@ -15,7 +15,6 @@ part of 'lighthouse_zg.dart';
 // ════════════════════════════════════════════════════════════════════════
 
 const _kFlIn = Color(0xFF9C82E6);
-const _kFlOut = Color(0xFFE0A877);
 const _kFlCross = Color(0xFF7B5CD8);
 const _kFlSelf = Color(0xFFDCD5EA);
 
@@ -110,97 +109,443 @@ class LhTransfer {
   double? get crossShare => volume > 0 ? crossVolume / volume : null;
 }
 
-/// 进图的一侧：小额（< 4%）合并成一条「其他 · n 项」，只有一条时保留原名，图上不挤。
-List<(String, String, double)> _flowSide(List<(String, LhFlowNode)> items, bool positive) {
-  final side = items.where((e) => positive ? e.$2.net > 0 : e.$2.net < 0).toList();
-  final total = side.fold<double>(0, (a, e) => a + e.$2.net.abs());
-  final big = <(String, String, double)>[];
-  final small = <(String, String, double)>[];
-  for (final e in side) {
-    final v = e.$2.net.abs();
-    final row = (e.$2.name, e.$1, v);
-    if (total > 0 && v / total < 0.04 && side.length > 3) {
-      small.add(row);
-    } else {
-      big.add(row);
-    }
-  }
-  if (small.length == 1) {
-    big.add(small.first);
-  } else if (small.isNotEmpty) {
-    final cats = small.map((e) => e.$2).toSet();
-    big.add(('其他 ${small.length} 项', cats.length == 1 ? cats.first : '${cats.length} 类', small.fold<double>(0, (a, e) => a + e.$3)));
-  }
-  big.sort((a, b) => b.$3.compareTo(a.$3));
-  return big;
+// ═════════════════════════════ 钱从哪来，到哪去 ═════════════════════════════
+//
+//   2026-11-23 · 按原型重做（桑基 → 瀑布都被财务说看不懂）：
+//     · 先一句话：进来多少、主要是哪两项；出去多少、主要是哪两项；账上多了 / 少了多少。
+//     · 三个框：进来的钱 − 出去的钱 = 留在账上。
+//     · 两根同一把尺的条：多的那一侧满格，少的那一侧剩下的部分画虚框（留在账上 / 账上少了）。
+//     · 两张排行：钱从哪来 / 钱到哪去，带一级分类色点、金额、占比。
+//     · 底下一行：期初 + 净流入 = 期末（资管还没给余额，先写「暂无」）。
+//   资管只给二级净额：同一项有收有付取差额，正的算进来、负的算出去，所以成本类里的退款也可能在「进来」。
+
+class _FlowMoneyItem {
+  const _FlowMoneyItem(this.cat, this.name, this.v, this.oil);
+
+  final String cat;
+  final String name;
+  final double v; // 元，正数
+  final bool oil;
 }
 
-Widget _flowSankey(
-  BuildContext context,
-  LhFlowCategory d, {
-  required String pool,
-  String? selected,
-  ValueChanged<String?>? onSelect,
-}) {
-  final ins = _flowSide(d.items, true);
-  final outs = _flowSide(d.items, false);
-  final left = <_SkNode>[
-    for (var i = 0; i < ins.length; i++)
-      _SkNode('i$i', ins[i].$1, _wu(ins[i].$3), ins[i].$3, _kDeep, share: _skShare('本期流入', ins[i].$3, d.inflow)),
-  ];
-  final right = <_SkNode>[
-    for (var i = 0; i < outs.length; i++)
-      _SkNode('o$i', outs[i].$1, '${_wu(outs[i].$3)} · ${outs[i].$2}', outs[i].$3, _kDeep, share: _skShare('本期流出', outs[i].$3, d.outflow)),
-  ];
-  final links = <_SkLink>[
-    for (var i = 0; i < ins.length; i++) _SkLink('i$i', 'pool', ins[i].$3, _kFlIn, 0.55),
-    for (var i = 0; i < outs.length; i++) _SkLink('pool', 'o$i', outs[i].$3, _kFlOut, 0.6),
-  ];
-  final gap = d.outflow - d.inflow;
-  if (gap > 0.5) {
-    left.add(_SkNode('bal', '动用存量', _wu(gap), gap, _kFpWarn, dashed: true, share: _skShare('本期流出', gap, d.outflow)));
-    links.add(_SkLink('bal', 'pool', gap, _kFpWarn, 0.3));
-  } else if (gap < -0.5) {
-    right.add(_SkNode('bal', '净留存', _wu(-gap), -gap, _kFlCross, dashed: true, share: _skShare('本期流入', -gap, d.inflow)));
-    links.add(_SkLink('pool', 'bal', -gap, _kFlCross, 0.3));
-  }
-  if (left.isEmpty || right.isEmpty) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 14),
-      child: Text('这一期没有收付', textAlign: TextAlign.center, style: _sans(context, size: 11.5, color: _kInk2)),
+/// 元 → 万，千分位，[digits] 位小数；负数用全角减号。
+String _flWan(double yuan, {int digits = 2}) {
+  final fixed = (yuan.abs() / 10000).toStringAsFixed(digits);
+  final parts = fixed.split('.');
+  final head = parts[0].replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (m) => ',');
+  final s = parts.length > 1 ? '$head.${parts[1]}' : head;
+  final zero = s.replaceAll(RegExp(r'[0.,]'), '').isEmpty;
+  return yuan < 0 && !zero ? '−$s' : s;
+}
+
+String _flPct(double v, double total) => total > 0 ? '${(v / total * 100).toStringAsFixed(1)}%' : '—';
+
+const _kFlowMoneyShown = 8;
+const _kFlowFadeAlpha = [255, 204, 153, 119];
+
+class _LhFlowMoneyCard extends StatefulWidget {
+  const _LhFlowMoneyCard({required this.data, required this.periodLabel, required this.isDay});
+
+  final LhFlowCategory data;
+  final String periodLabel;
+  final bool isDay;
+
+  @override
+  State<_LhFlowMoneyCard> createState() => _LhFlowMoneyCardState();
+}
+
+class _LhFlowMoneyCardState extends State<_LhFlowMoneyCard> {
+  bool _allIn = false;
+  bool _allOut = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final d = widget.data;
+    final ins = [
+      for (final e in d.items)
+        if (e.$2.net > 0) _FlowMoneyItem(e.$1, e.$2.name, e.$2.net, e.$2.isOilSegment),
+    ]..sort((a, b) => b.v.compareTo(a.v));
+    final outs = [
+      for (final e in d.items)
+        if (e.$2.net < 0) _FlowMoneyItem(e.$1, e.$2.name, -e.$2.net, e.$2.isOilSegment),
+    ]..sort((a, b) => b.v.compareTo(a.v));
+    final inT = ins.fold<double>(0, (a, e) => a + e.v);
+    final outT = outs.fold<double>(0, (a, e) => a + e.v);
+    final net = inT - outT;
+    final periodName = widget.periodLabel;
+
+    String top2(List<_FlowMoneyItem> xs, double total) => xs
+        .take(2)
+        .map((e) => '${e.name}（${total > 0 ? (e.v / total * 100).toStringAsFixed(0) : '0'}%）')
+        .join('、');
+    // 2026-11-23 · 文案改正式（用户：说得正规一点）。
+    final story = StringBuffer('$periodName资金流入 ${_flWan(inT)} 万元');
+    if (ins.isNotEmpty) story.write('，主要来自${top2(ins, inT)}');
+    story.write('；资金流出 ${_flWan(outT)} 万元');
+    if (outs.isNotEmpty) story.write('，主要用于${top2(outs, outT)}');
+    story.write(net >= 0
+        ? '；收支相抵，净流入 ${_flWan(net)} 万元。'
+        : '；收支相抵，净流出 ${_flWan(-net)} 万元。');
+
+    final cats = <String>{for (final e in ins) e.cat, for (final e in outs) e.cat};
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+      decoration: _cardDeco(context),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _sectionHead(
+            context,
+            icon: Icons.waves_rounded,
+            title: '资金来源与去向',
+            chip: widget.periodLabel,
+            trailing: Text(
+              '${net < 0 ? '−' : '+'}${_flWan(net.abs())}万',
+              style: _mono(context, size: 15, weight: FontWeight.w700, color: net < 0 ? _kFpOut : _kDeep),
+            ),
+          ),
+          if (d.fixture) ...[
+            const SizedBox(height: 4),
+            Padding(
+              padding: const EdgeInsets.only(left: 30),
+              child: Text('样例数据', style: _sans(context, size: 10.5, color: _kCopper)),
+            ),
+          ],
+          const SizedBox(height: 10),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(color: _bg(context, _kNeutralPanel), borderRadius: BorderRadius.circular(10)),
+            child: Text(story.toString(), style: _sans(context, size: 12.5, height: 1.65)),
+          ),
+          const SizedBox(height: 12),
+          _equation(context, inT, outT, net, ins.length, outs.length),
+          const SizedBox(height: 14),
+          _bars(context, ins, outs, inT, outT, net),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 12,
+            runSpacing: 4,
+            children: [
+              for (final c in cats)
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 9,
+                      height: 9,
+                      decoration: BoxDecoration(color: _fg(context, _flowSeriesColor(c)), borderRadius: BorderRadius.circular(2)),
+                    ),
+                    const SizedBox(width: 4),
+                    Text(c, style: _sans(context, size: 10.5, color: _kInk2)),
+                  ],
+                ),
+              Text('流入、流出按同一比例尺绘制', style: _sans(context, size: 10.5, color: _kMute)),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Container(height: 1, color: _ln(context, _kLine)),
+          const SizedBox(height: 10),
+          LayoutBuilder(
+            builder: (context, box) {
+              final left = _list(context, '资金来源', '占流入比例', _kFpIn, ins, inT, _allIn, () => setState(() => _allIn = !_allIn));
+              final right = _list(context, '资金去向', '占流出比例', _kFpOut, outs, outT, _allOut, () => setState(() => _allOut = !_allOut));
+              if (box.maxWidth >= 620) {
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [Expanded(child: left), const SizedBox(width: 20), Expanded(child: right)],
+                );
+              }
+              return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [left, const SizedBox(height: 14), right]);
+            },
+          ),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: _ln(context, _kEdge), width: 0.8),
+            ),
+            child: Wrap(
+              spacing: 10,
+              runSpacing: 4,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                Text('期初余额 暂无', style: _sans(context, size: 11.5, color: _kInk2)),
+                Text('+ 本期净流入 ${net < 0 ? '−' : '+'}${_flWan(net.abs())}万', style: _sans(context, size: 11.5, weight: FontWeight.w600, color: _kDeep)),
+                Text('= 期末余额 暂无', style: _sans(context, size: 11.5, color: _kInk2)),
+                Text('待资管接口提供期初余额后自动衔接账户余额', style: _sans(context, size: 10, color: _kMute)),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '口径说明：按二级分类净额统计，同一分类同时发生收付时以差额计列，差额为正计入流入、为负计入流出；'
+            '因此成本类中的退款、返佣回收可能列入「资金来源」。'
+            '${widget.isDay ? '数据为当日快照。' : '数据为当月每日快照汇总。'}',
+            style: _sans(context, size: 10, color: _kMute, height: 1.5),
+          ),
+        ],
+      ),
     );
   }
-  final poolV = math.max(d.inflow, d.outflow);
-  final n = math.max(left.length, right.length);
-  final cb = onSelect;
-  final cols = [
-    left,
-    [_SkNode('pool', pool, _wu(poolV), poolV, _kInk)],
-    right,
-  ];
-  return Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [
-      _SkChart(
-        height: 64.0 + 38.0 * n,
-        dataKey: Object.hashAll([d.period, for (final l in links) l.v]),
-        selected: selected,
-        onSelect: onSelect,
-        builder: (t) => _SkPainter(
-          t: t,
-          cols: cols,
-          links: links,
-          selected: selected,
-          label: _sans(context, size: 11, weight: FontWeight.w600),
-          sub: _mono(context, size: 9.5, color: _kMute),
-          halo: _bg(context, Colors.white),
-          resolve: (c) => _fg(context, c),
-          midLabelTop: true,
-        ),
+
+  Widget _equation(BuildContext context, double inT, double outT, double net, int nIn, int nOut) {
+    Widget box(String label, double v, String sub, Color color, {bool strong = false}) => Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+      decoration: BoxDecoration(
+        color: _bg(context, strong ? _kMist : Colors.white),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: _ln(context, strong ? _kPurple : _kEdge), width: strong ? 1.2 : 0.8),
       ),
-      if (cb != null) _skFocus(context, cols: cols, links: links, selected: selected, onClear: () => cb(null)),
-    ],
-  );
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: _sans(context, size: 11, weight: strong ? FontWeight.w600 : FontWeight.w400, color: strong ? _kDeep : _kInk2)),
+          const SizedBox(height: 4),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text('${_flWan(v)}万', style: _mono(context, size: 16, weight: FontWeight.w700, color: color)),
+          ),
+          const SizedBox(height: 3),
+          Text(sub, maxLines: 1, overflow: TextOverflow.ellipsis, style: _sans(context, size: 10, color: _kMute)),
+        ],
+      ),
+    );
+    Widget op(String t) => SizedBox(
+      width: 20,
+      child: Text(t, textAlign: TextAlign.center, style: _sans(context, size: 17, color: _kMute)),
+    );
+    return Row(
+      children: [
+        Expanded(child: box('资金流入', inT, '$nIn 个来源', _kFpIn)),
+        op('−'),
+        Expanded(child: box('资金流出', outT, '$nOut 个去向', _kFpOut)),
+        op('='),
+        Expanded(child: box(net >= 0 ? '净流入' : '净流出', net.abs(), '流入 − 流出', net >= 0 ? _kDeep : _kFpOut, strong: true)),
+      ],
+    );
+  }
+
+  /// 进来 / 出去两根条，同一把尺（取两边大的那个当满格）。
+  Widget _bars(BuildContext context, List<_FlowMoneyItem> ins, List<_FlowMoneyItem> outs, double inT, double outT, double net) {
+    final scale = math.max(inT, outT);
+    if (scale <= 0) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        child: Text('这一期没有收付', textAlign: TextAlign.center, style: _sans(context, size: 11.5, color: _kInk2)),
+      );
+    }
+    Widget bar(String label, List<_FlowMoneyItem> xs, double minShare, String? restLabel) => Row(
+      children: [
+        SizedBox(width: 40, child: Text(label, style: _sans(context, size: 12, weight: FontWeight.w600))),
+        Expanded(
+          child: LayoutBuilder(
+            builder: (context, box) {
+              final w = box.maxWidth;
+              final segs = <(String, double, Color, bool)>[]; // 名称, 金额, 颜色, 浅底
+              final seen = <String, int>{};
+              var restV = 0.0;
+              var restN = 0;
+              for (final e in xs) {
+                if (e.v / scale >= minShare) {
+                  final k = seen[e.cat] ?? 0;
+                  seen[e.cat] = k + 1;
+                  final alpha = _kFlowFadeAlpha[math.min(k, _kFlowFadeAlpha.length - 1)];
+                  segs.add((e.name, e.v, _fg(context, _flowSeriesColor(e.cat)).withAlpha(alpha), alpha < 160));
+                } else {
+                  restV += e.v;
+                  restN += 1;
+                }
+              }
+              if (restN > 0) segs.add(('其他 $restN 项', restV, _fg(context, const Color(0xFFC9C3D6)), true));
+              final used = segs.fold<double>(0, (a, s) => a + s.$2);
+              final rest = math.max(0.0, scale - used);
+              int flex(double v) => math.max(1, (v / scale * 10000).round());
+              return ClipRRect(
+                borderRadius: BorderRadius.circular(6),
+                child: SizedBox(
+                  height: 40,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      for (final s in segs)
+                        Expanded(
+                          flex: flex(s.$2),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6),
+                            decoration: BoxDecoration(
+                              color: s.$3,
+                              border: Border(right: BorderSide(color: _bg(context, Colors.white), width: 1.5)),
+                            ),
+                            child: s.$2 / scale * w >= 64
+                                ? Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        s.$1,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: _sans(context, size: 10.5, weight: FontWeight.w600, color: s.$4 ? _kInk : Colors.white),
+                                      ),
+                                      Text(
+                                        '${_flWan(s.$2)}万',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.clip,
+                                        softWrap: false,
+                                        style: _mono(context, size: 9.5, color: s.$4 ? _kInk : Colors.white),
+                                      ),
+                                    ],
+                                  )
+                                : null,
+                          ),
+                        ),
+                      if (rest / scale * w >= 1)
+                        Expanded(
+                          flex: flex(rest),
+                          child: restLabel == null
+                              ? const SizedBox.shrink()
+                              : Container(
+                                  alignment: Alignment.center,
+                                  decoration: BoxDecoration(
+                                    color: _bg(context, _kMist),
+                                    border: Border.all(color: _ln(context, _kFlIn), width: 1.2),
+                                    borderRadius: const BorderRadius.horizontal(right: Radius.circular(6)),
+                                  ),
+                                  child: rest / scale * w >= 90
+                                      ? Text(
+                                          restLabel,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: _sans(context, size: 11, weight: FontWeight.w600, color: net >= 0 ? _kDeep : _kFpOut),
+                                        )
+                                      : null,
+                                ),
+                        ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+    final keep = '${net >= 0 ? '净流入' : '净流出'} ${_flWan(net.abs())}万 · ${_flPct(net.abs(), scale)}';
+    return Column(
+      children: [
+        bar('流入', ins, 0.04, net < 0 ? keep : null),
+        const SizedBox(height: 8),
+        bar('流出', outs, 0.02, net >= 0 ? keep : null),
+      ],
+    );
+  }
+
+  Widget _list(
+    BuildContext context,
+    String title,
+    String hint,
+    Color tone,
+    List<_FlowMoneyItem> xs,
+    double total,
+    bool all,
+    VoidCallback onToggle,
+  ) {
+    final shown = all ? xs : xs.take(_kFlowMoneyShown).toList();
+    final first = xs.isEmpty ? 1.0 : xs.first.v;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Text(title, style: _sans(context, size: 13.5, weight: FontWeight.w700, color: tone)),
+            const SizedBox(width: 6),
+            Text(hint, style: _sans(context, size: 10.5, color: _kMute)),
+          ],
+        ),
+        const SizedBox(height: 4),
+        if (xs.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            child: Text('这一期没有', style: _sans(context, size: 11, color: _kMute)),
+          ),
+        for (var i = 0; i < shown.length; i++)
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 7),
+            decoration: BoxDecoration(border: Border(bottom: BorderSide(color: _ln(context, _kLine), width: 0.8))),
+            child: Row(
+              children: [
+                SizedBox(width: 18, child: Text('${i + 1}', style: _mono(context, size: 10, color: _kMute))),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              shown[i].name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: _sans(context, size: 12, weight: FontWeight.w600),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Container(
+                            width: 7,
+                            height: 7,
+                            decoration: BoxDecoration(color: _fg(context, _flowSeriesColor(shown[i].cat)), shape: BoxShape.circle),
+                          ),
+                          const SizedBox(width: 3),
+                          Text(shown[i].cat, style: _sans(context, size: 10, color: _kInk2)),
+                          if (shown[i].oil) ...[const SizedBox(width: 4), _tag(context, '石油板块', _kFin, _kFinSoft)],
+                        ],
+                      ),
+                      const SizedBox(height: 5),
+                      Container(
+                        height: 5,
+                        alignment: Alignment.centerLeft,
+                        decoration: BoxDecoration(color: _bg(context, _kLine), borderRadius: BorderRadius.circular(3)),
+                        child: FractionallySizedBox(
+                          widthFactor: (shown[i].v / first).clamp(0.0, 1.0).toDouble(),
+                          heightFactor: 1,
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(color: _fg(context, _flowSeriesColor(shown[i].cat)), borderRadius: BorderRadius.circular(3)),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 10),
+                SizedBox(
+                  width: 92,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text('${_flWan(shown[i].v)}万', maxLines: 1, softWrap: false, overflow: TextOverflow.fade, style: _mono(context, size: 11.5, weight: FontWeight.w600)),
+                      const SizedBox(height: 3),
+                      Text(_flPct(shown[i].v, total), style: _mono(context, size: 9.5, color: _kMute)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        if (xs.length > _kFlowMoneyShown)
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton(
+              onPressed: onToggle,
+              child: Text(all ? '收起' : '展开全部 ${xs.length} 项', style: _sans(context, size: 11, weight: FontWeight.w600, color: _kDeep)),
+            ),
+          ),
+      ],
+    );
+  }
 }
 
 // ═════════════════════════════ 资金流水 · 页面 ═════════════════════════════
@@ -222,8 +567,6 @@ class _FundFlowPageState extends State<LighthouseFundFlowPage> {
   String? _flowError;
   bool _flowLoading = true;
 
-  /// 流向图里点中的节点。
-  String? _catSel;
 
   /// 四大类走势（按当前粒度：日 = 近 30 天，月 = 近 12 个月）。
   LhFlowSeries? _series;
@@ -310,6 +653,7 @@ class _FundFlowPageState extends State<LighthouseFundFlowPage> {
     } catch (e) {
       if (!mounted || p != _period) return;
       setState(() {
+        _flow = null; // 旧期数据不能冒充新期，报错时清掉，露出重试框。
         _flowError = '$e'.replaceFirst('Exception: ', '');
         _flowLoading = false;
       });
@@ -321,10 +665,10 @@ class _FundFlowPageState extends State<LighthouseFundFlowPage> {
     final grainChanged = p.grain != _period.grain;
     setState(() {
       _period = p;
-      _flow = null;
+      // 2026-11-20 · 切期时不清空旧数据：清空会让流向图 + 分类明细整块换成 96 高的转圈，
+      // 页面高度塌掉再撑回来，滚动位置跟着跳。旧数据淡显着等新数据到。
       _flowError = null;
       _flowLoading = true;
-      _catSel = null;
       if (grainChanged) {
         _series = null;
         _seriesError = null;
@@ -360,46 +704,18 @@ class _FundFlowPageState extends State<LighthouseFundFlowPage> {
     } else if (!d.generated) {
       children.add(_statusBox(context, _period.isDay ? '$_periodLabel 的流水分类快照还没生成（管理端补跑后才有）' : '该月还没有任何一天生成快照'));
     } else {
+      // 切期加载中：旧数据淡显、不可点，高度不变，页面不跳。
+      final stale = _flowLoading;
+      Widget fade(Widget w) => IgnorePointer(
+        ignoring: stale,
+        child: AnimatedOpacity(opacity: stale ? 0.4 : 1, duration: const Duration(milliseconds: 160), child: w),
+      );
       children
         ..add(
-          Container(
-            padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
-            decoration: _cardDeco(context),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _sectionHead(
-                  context,
-                  icon: Icons.waves_rounded,
-                  title: '钱从哪来，到哪去',
-                  chip: _periodLabel,
-                  trailing: Text(
-                    _swu(d.net),
-                    style: _mono(context, size: 14, weight: FontWeight.w700, color: d.net < 0 ? _kFpOut : _kFpIn),
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Padding(
-                  padding: const EdgeInsets.only(left: 30),
-                  child: Text(
-                    '流入 ${_wu(d.inflow)} · 流出 ${_wu(d.outflow)}${_period.isDay ? ' · 单日快照' : ' · 该月每日快照相加'}${d.fixture ? ' · 样例数据' : ''}',
-                    style: _sans(context, size: 10.5, color: _kInk2),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                _flowSankey(
-                  context,
-                  d,
-                  pool: _period.isDay ? '当日资金池' : '本月资金池',
-                  selected: _catSel,
-                  onSelect: (id) => setState(() => _catSel = id),
-                ),
-              ],
-            ),
-          ),
+          fade(_LhFlowMoneyCard(data: d, periodLabel: _periodLabel, isDay: _period.isDay)),
         )
         ..add(const SizedBox(height: 10))
-        ..add(_treeCard(context, d));
+        ..add(fade(_treeCard(context, d)));
     }
     return _scaffold(
       context,
@@ -410,7 +726,7 @@ class _FundFlowPageState extends State<LighthouseFundFlowPage> {
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (d != null && d.generated && !d.restricted && !d.unavailable) ...[
+            if (d != null && !_flowLoading && d.generated && !d.restricted && !d.unavailable) ...[
               lhZgShareButton(context, session: widget.session, data: () => lhZgFlowShare(d, _period)),
               const SizedBox(width: 6),
             ],
@@ -1299,14 +1615,84 @@ class LhFlowSeries {
 }
 
 /// 四大类的固定配色：经营活动紫、筹资蓝、经营成本铜、项目成本淡紫、业务成本橙；接口多给的分类用灰。
+/// 2026-11-23 · 分类配色：净流入橙（[_kFlowChart]），经营活动紫、筹资活动蓝、经营成本玫红、业务成本青、项目成本橄榄绿。
+/// 走势卡片的小柱、主图的柱子都用分类色的浅色，选中那一期用实色。
 Color _flowSeriesColor(String name) => switch (name) {
-  '经营活动' => _kFpIn,
-  '筹资活动' => _kFin,
-  '经营成本' => _kCopper,
-  '项目成本' => _kFlIn,
-  '业务成本' => _kFpOut,
+  '净流入' => _kFlowChart,
+  '经营活动' => Color(0xFF7B5CD8),
+  '筹资活动' => Color(0xFF3B82C4),
+  '经营成本' => Color(0xFFC2577E),
+  '项目成本' => Color(0xFF7F9A2E),
+  '业务成本' => Color(0xFF2E9C8F),
   _ => _kMute,
 };
+
+// 2026-11-23 · 四大类走势按原型重做（财务：看不出单类升降起落）：
+//   · 上面一排卡片：净流入 + 每个一级分类，各写这一期金额、比上一期 ▲▼ 多少 / 百分比、一条小柱走势；点卡片换分类。
+//   · 中间一句话：这一期多少、比上期、月均、最高 / 最低、连续几期上升 / 下降。
+//   · 主图：选中分类的柱图，带刻度、每根柱子的数、最高 / 最低标签、月均虚线，月份下面写环比 ▲▼。
+//   · 底下明细表：分类 × 每一期，格子里数 + ▲▼。
+//   成本类（整段以流出为主）一律按流出金额显示：▲ = 花出去的钱变多。涨红跌绿，同灯塔差额。
+//   还在变的这一期（今天 / 本月）画淡、不算均值和最高最低；没快照 = 空，不当 0。
+
+class _FlowTrendCat {
+  const _FlowTrendCat(this.name, this.color, this.outflow, this.values);
+
+  final String name;
+  final Color color;
+  final bool outflow;
+
+  /// 展示口径（元）：流出类取反，流出金额为正。null = 没快照。
+  final List<double?> values;
+
+  String get word => name == '净流入' ? '净流入' : (outflow ? '流出' : '流入');
+}
+
+/// 这一期算不算有数：没快照不算；按月时一整月所有分类都是 0，也当没数
+/// （窗口开头资管还没开始出快照的月份会这样，按 0 算会把月均拉低、下个月平白多一个 ▲）。
+/// 按日不这样判断：周末确实可能一笔都没有。
+bool _flowHasValue(LhFlowSeries s, LhFlowSeriesPoint p) {
+  if (!p.hasData) return false;
+  if (s.isDay) return true;
+  if ((p.net ?? 0).abs() >= 0.5) return true;
+  return p.byCategory.values.any((v) => v.abs() >= 0.5);
+}
+
+List<_FlowTrendCat> _flowTrendCats(LhFlowSeries s) {
+  final pts = s.points;
+  final ok = [for (final p in pts) _flowHasValue(s, p)];
+  final out = <_FlowTrendCat>[
+    _FlowTrendCat('净流入', _kFlowChart, false, [for (var i = 0; i < pts.length; i++) ok[i] ? pts[i].net : null]),
+  ];
+  final names = <String>{...s.categories, for (final p in pts) ...p.byCategory.keys};
+  for (final n in names) {
+    final raw = <double?>[for (var i = 0; i < pts.length; i++) ok[i] ? (pts[i].byCategory[n] ?? 0.0) : null];
+    var sum = 0.0;
+    for (var i = 0; i < pts.length; i++) {
+      final v = raw[i];
+      if (v != null && !pts[i].partial) sum += v;
+    }
+    final outflow = sum < 0;
+    out.add(_FlowTrendCat(n, _flowSeriesColor(n), outflow, [for (final v in raw) v == null ? null : (outflow ? -v : v)]));
+  }
+  return out;
+}
+
+/// 这一期比上一期：(差额, 百分比)；上一期没数 → null。
+(double, double?)? _flowDelta(List<double?> v, int i) {
+  if (i <= 0 || i >= v.length) return null;
+  final a = v[i];
+  final b = v[i - 1];
+  if (a == null || b == null) return null;
+  return (a - b, b.abs() > 0.5 ? (a - b) / b.abs() * 100 : null);
+}
+
+String _flowPctText(double? p) => p == null ? '' : '${p >= 0 ? '+' : '−'}${p.abs().toStringAsFixed(1)}%';
+
+/// 净流入的颜色（橙）。其他分类见 [_flowSeriesColor]。
+const _kFlowChart = Color(0xFFD08A3C);
+
+Color _flowUpDown(double d) => d > 0.5 ? LhColors.neg : (d < -0.5 ? LhColors.pos : _kInk2);
 
 class _LhFlowSeriesCard extends StatefulWidget {
   const _LhFlowSeriesCard({required this.series, required this.selectedKey, required this.onSelect});
@@ -1320,329 +1706,821 @@ class _LhFlowSeriesCard extends StatefulWidget {
 }
 
 class _LhFlowSeriesCardState extends State<_LhFlowSeriesCard> {
-  /// 按日时切到「月内累计」：累计量级是单日的几十倍，和单日柱子放一张图会把柱子压扁，所以切着看。
-  bool _cumulative = false;
+  int _cat = 0;
 
   @override
   Widget build(BuildContext context) {
     final s = widget.series;
     final pts = s.points;
     if (pts.isEmpty) return _statusBox(context, '四大类走势：暂无数据');
-    final cumulative = s.isDay && _cumulative;
-    final sel = pts.indexWhere((p) => p.key == widget.selectedKey);
-    final noData = pts.where((p) => !p.hasData).length;
+    final cats = _flowTrendCats(s);
+    final ci = math.min(math.max(_cat, 0), cats.length - 1);
+    final cat = cats[ci];
+    var sel = pts.indexWhere((p) => p.key == widget.selectedKey);
+    if (sel < 0) {
+      for (var i = pts.length - 1; i >= 0; i--) {
+        if (pts[i].hasData && !pts[i].partial) {
+          sel = i;
+          break;
+        }
+      }
+      if (sel < 0) sel = pts.length - 1;
+    }
+    final unit = s.isDay ? '天' : '月';
+    final prevWord = s.isDay ? '前一天' : '上月';
+    final span = s.isDay ? '近 ${pts.length} 天' : '近 ${pts.length} 个月';
 
-    Widget chip(String text, bool on, VoidCallback onTap) => GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-        decoration: BoxDecoration(
-          color: _bg(context, on ? _kLavender : Colors.white),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: _ln(context, on ? _kPurple : _kEdge), width: 0.8),
-        ),
-        child: Text(
-          text,
-          style: _sans(context, size: 10, weight: on ? FontWeight.w600 : FontWeight.w400, color: on ? _kDeep : _kInk2),
-        ),
-      ),
-    );
-
-    Widget legend(String text, Color c, {bool line = false}) => Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: line ? 14 : 9,
-          height: line ? 2 : 9,
-          decoration: BoxDecoration(color: _fg(context, c), borderRadius: BorderRadius.circular(line ? 1 : 2)),
-        ),
-        const SizedBox(width: 4),
-        Text(text, style: _sans(context, size: 9.5, color: _kInk2)),
-      ],
-    );
-
-    final labelIdx = <int>{0, pts.length - 1, if (pts.length > 4) (pts.length - 1) ~/ 2};
     return Container(
-      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
       decoration: _cardDeco(context),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
             children: [
-              Text('四大类走势', style: _sans(context, size: 13, weight: FontWeight.w600)),
+              Text('四大类走势', style: _sans(context, size: 13.5, weight: FontWeight.w700)),
               const SizedBox(width: 6),
-              Text(s.isDay ? '近 ${pts.length} 天 · 按日' : '近 ${pts.length} 个月 · 按月', style: _sans(context, size: 10, color: _kMute)),
+              Text('$span · ${s.isDay ? '按日' : '按月'}', style: _sans(context, size: 10.5, color: _kMute)),
               if (s.fixture) ...[const SizedBox(width: 6), _tag(context, '样例', _kCopper, _kCopperSoft)],
-              const Spacer(),
-              if (s.isDay) ...[
-                chip('每日', !_cumulative, () => setState(() => _cumulative = false)),
-                const SizedBox(width: 4),
-                chip(s.runningLabel.isEmpty ? '月内累计' : s.runningLabel, _cumulative, () => setState(() => _cumulative = true)),
-              ],
             ],
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.end,
+            children: [
+              Text(
+                '${pts[sel].label}${pts[sel].partial ? '（统计中）' : ''}',
+                style: _sans(context, size: 12.5, weight: FontWeight.w600),
+              ),
+              Text(
+                sel > 0 ? '较 ${pts[sel - 1].label} · 点击卡片切换分类，点击柱形切换${unit == '天' ? '日期' : '月份'}' : '点击卡片切换分类，点击柱形切换${unit == '天' ? '日期' : '月份'}',
+                style: _sans(context, size: 10.5, color: _kInk2),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
           LayoutBuilder(
             builder: (context, box) {
-              final w = box.maxWidth;
-              return GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTapUp: (d) {
-                  final i = math.max(0, math.min(pts.length - 1, (d.localPosition.dx / (w / pts.length)).floor()));
-                  widget.onSelect(pts[i]);
-                },
-                child: SizedBox(
-                  height: 132,
-                  width: w,
-                  child: CustomPaint(
-                    painter: _FlowSeriesPainter(
-                      points: pts,
-                      categories: s.categories,
-                      selected: sel,
-                      cumulative: cumulative,
-                      overlayRunning: !s.isDay,
-                      resolve: (c) => _fg(context, c),
-                      highlight: _bg(context, _kMist),
-                    ),
+              const gap = 6.0;
+              final fit = (box.maxWidth - gap * (cats.length - 1)) / cats.length;
+              final cards = [
+                for (var k = 0; k < cats.length; k++)
+                  _card(context, cats[k], sel, k == ci, prevWord, () => setState(() => _cat = k)),
+              ];
+              if (fit >= 120) {
+                return IntrinsicHeight(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      for (var k = 0; k < cards.length; k++) ...[
+                        if (k > 0) const SizedBox(width: gap),
+                        Expanded(child: cards[k]),
+                      ],
+                    ],
+                  ),
+                );
+              }
+              return SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: IntrinsicHeight(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      for (var k = 0; k < cards.length; k++) ...[
+                        if (k > 0) const SizedBox(width: gap),
+                        SizedBox(width: 112, child: cards[k]),
+                      ],
+                    ],
                   ),
                 ),
               );
             },
           ),
+          const SizedBox(height: 12),
+          _insight(context, s, cat, sel),
+          const SizedBox(height: 12),
+          _focusLegend(context, s, cat),
           const SizedBox(height: 4),
-          SizedBox(
-            height: 12,
-            child: LayoutBuilder(
-              builder: (context, box) {
-                final slot = box.maxWidth / pts.length;
-                return Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    for (final i in labelIdx)
-                      Positioned(
-                        left: i == 0 ? 0.0 : null,
-                        right: i == pts.length - 1 ? 0.0 : null,
-                        top: 0,
-                        child: i == 0 || i == pts.length - 1
-                            ? Text(pts[i].label, style: _mono(context, size: 9, color: _kMute))
-                            : Transform.translate(
-                                offset: Offset(slot * (i + 0.5) - 14, 0),
-                                child: Text(pts[i].label, style: _mono(context, size: 9, color: _kMute)),
-                              ),
-                      ),
-                  ],
-                );
-              },
-            ),
+          LayoutBuilder(
+            builder: (context, box) {
+              final w = box.maxWidth;
+              final painter = _FlowFocusPainter(
+                values: cat.values,
+                labels: [for (final p in pts) p.label],
+                partial: [for (final p in pts) p.partial],
+                selected: sel,
+                color: _fg(context, cat.color),
+                ink: _fg(context, _kInk),
+                ink2: _fg(context, _kInk2),
+                mute: _fg(context, _kMute),
+                grid: _ln(context, _kLine),
+                axis: _ln(context, _kEdge),
+                highlight: _bg(context, _kMist),
+                up: _fg(context, LhColors.neg),
+                down: _fg(context, LhColors.pos),
+                avgWord: s.isDay ? '日均' : '月均',
+                textScale: MediaQuery.textScalerOf(context),
+              );
+              return GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTapUp: (d) {
+                  final i = painter.indexAt(d.localPosition.dx, w);
+                  if (i != null) widget.onSelect(pts[i]);
+                },
+                child: SizedBox(width: w, height: _FlowFocusPainter.height, child: CustomPaint(painter: painter)),
+              );
+            },
           ),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 10,
-            runSpacing: 4,
+          const SizedBox(height: 14),
+          Container(height: 1, color: _ln(context, _kLine)),
+          const SizedBox(height: 10),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              if (cumulative)
-                legend(s.runningLabel.isEmpty ? '月内累计' : s.runningLabel, _kDeep, line: true)
-              else ...[
-                for (final c in s.categories) legend(c, _flowSeriesColor(c)),
-                legend('净流入', _kInk),
-                if (!s.isDay) legend(s.runningLabel.isEmpty ? '近3月平均' : s.runningLabel, _kDeep, line: true),
-              ],
-              if (noData > 0) legend('无快照 $noData 期', _kMute),
+              Text(s.isDay ? '每日明细' : '月度明细', style: _sans(context, size: 13, weight: FontWeight.w700)),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  '单位：万元 · ▲▼ 为较$prevWord变动 · 点击行切换分类',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: _sans(context, size: 10.5, color: _kMute),
+                ),
+              ),
             ],
           ),
-          if (sel >= 0) ...[
-            const SizedBox(height: 10),
-            _readout(context, s, pts[sel]),
-          ] else ...[
-            const SizedBox(height: 6),
-            Text('点柱子，下面切到那一${s.isDay ? '天' : '个月'}', style: _sans(context, size: 10, color: _kMute)),
-          ],
+          const SizedBox(height: 6),
+          _table(context, s, cats, ci, sel),
+          const SizedBox(height: 8),
+          Text(
+            '说明：▲▼ 均为较$prevWord变动。流入类 ▲ 表示流入增加；标注「流出」的分类按流出金额列示，▲ 表示流出增加。'
+            '统计中的${s.isDay ? '当日' : '当月'}以浅色显示，不计入${s.isDay ? '日均' : '月均'}及最高 / 最低；无快照的${unit == '天' ? '日期' : '月份'}留空。',
+            style: _sans(context, size: 10, color: _kMute, height: 1.5),
+          ),
         ],
       ),
     );
   }
 
-  Widget _readout(BuildContext context, LhFlowSeries s, LhFlowSeriesPoint p) {
-    String v(double? x) => x == null ? '—' : '${_signedWan(x)}万';
-    Color tone(double? x) => x == null || x.abs() < 0.5 ? _kInk2 : (x > 0 ? _kFpIn : _kFpOut);
-    Widget cell(String label, double? x, {Color? dot}) => Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (dot != null) ...[
-          Container(width: 6, height: 6, decoration: BoxDecoration(color: _fg(context, dot), shape: BoxShape.circle)),
-          const SizedBox(width: 3),
-        ],
-        Text('$label ', style: _sans(context, size: 10, color: _kInk2)),
-        Text(v(x), style: _mono(context, size: 10.5, weight: FontWeight.w600, color: tone(x))),
-      ],
-    );
-    final status = p.failed
-        ? '这一期取数失败'
-        : !p.hasData
-        ? '这一期还没生成快照'
-        : null;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      decoration: BoxDecoration(color: _bg(context, _kNeutralPanel), borderRadius: BorderRadius.circular(8)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Text(p.label, style: _sans(context, size: 11, weight: FontWeight.w600)),
-              if (p.partial) ...[const SizedBox(width: 6), Text(s.isDay ? '今天 · 还在变' : '本月 · 还在变', style: _sans(context, size: 9.5, color: _kMute))],
-              const Spacer(),
-              if (status == null) cell('净流入', p.net),
-            ],
-          ),
-          const SizedBox(height: 6),
-          if (status != null)
-            Text(status, style: _sans(context, size: 10, color: _kMute))
-          else
-            Wrap(
-              spacing: 12,
-              runSpacing: 4,
+  /// 2026-11-23 · 手机上卡片要小：一行名称、一行金额、一行 ▲▼ 差额 + 百分比、一条小柱。
+  /// 「比上月多流入 …」整句挪到下面那句话里，卡片里不再写。
+  Widget _card(BuildContext context, _FlowTrendCat c, int sel, bool on, String prevWord, VoidCallback onTap) {
+    final v = c.values[sel];
+    final dl = _flowDelta(c.values, sel);
+    var text = v == null ? '无快照' : '—';
+    var tone = _kMute;
+    if (dl != null) {
+      if (dl.$1.abs() < 0.5) {
+        text = '持平';
+        tone = _kInk2;
+      } else {
+        final pct = _flowPctText(dl.$2);
+        text = '${dl.$1 > 0 ? '▲' : '▼'} ${_flWan(dl.$1.abs(), digits: 1)}万${pct.isEmpty ? '' : '  $pct'}';
+        tone = _flowUpDown(dl.$1);
+      }
+    }
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(8, 7, 8, 6),
+        decoration: BoxDecoration(
+          color: on ? _fg(context, c.color).withAlpha(22) : _bg(context, Colors.white),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: on ? _fg(context, c.color) : _ln(context, _kEdge), width: on ? 1.4 : 0.8),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
               children: [
-                for (final c in s.categories) cell(c, p.byCategory[c] ?? 0.0, dot: _flowSeriesColor(c)),
-                if (p.running != null) cell(s.runningLabel.isEmpty ? (s.isDay ? '月内累计' : '近3月平均') : s.runningLabel, p.running),
+                Container(width: 6, height: 6, decoration: BoxDecoration(color: _fg(context, c.color), shape: BoxShape.circle)),
+                const SizedBox(width: 4),
+                Flexible(
+                  child: Text(
+                    c.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: _sans(context, size: 11, weight: FontWeight.w600),
+                  ),
+                ),
+                if (c.outflow) ...[
+                  const SizedBox(width: 3),
+                  Text('流出', style: _sans(context, size: 9, weight: FontWeight.w600, color: _kFpOut)),
+                ],
               ],
             ),
-        ],
+            const SizedBox(height: 3),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text.rich(
+                TextSpan(
+                  children: [
+                    TextSpan(text: v == null ? '—' : _flWan(v), style: _mono(context, size: 14.5, weight: FontWeight.w700)),
+                    TextSpan(text: ' 万', style: _sans(context, size: 9.5, color: _kInk2)),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 2),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(text, maxLines: 1, style: _mono(context, size: 9.5, weight: FontWeight.w600, color: tone)),
+            ),
+            const Spacer(),
+            const SizedBox(height: 4),
+            SizedBox(
+              height: 16,
+              child: CustomPaint(
+                size: Size.infinite,
+                painter: _FlowMiniBarsPainter(
+                  values: c.values,
+                  partial: [for (final p in widget.series.points) p.partial],
+                  selected: sel,
+                  on: _fg(context, c.color),
+                  off: _fg(context, c.color).withAlpha(95),
+                  faded: _fg(context, c.color).withAlpha(45),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 主图图例：柱 = 每期金额，实线 = 走势，虚线 = 均值（均值数写在这里，不压在图上）。
+  Widget _focusLegend(BuildContext context, LhFlowSeries s, _FlowTrendCat c) {
+    final pts = s.points;
+    var sum = 0.0;
+    var n = 0;
+    for (var i = 0; i < c.values.length; i++) {
+      final x = c.values[i];
+      if (x == null || pts[i].partial) continue;
+      sum += x;
+      n += 1;
+    }
+    final color = _fg(context, c.color);
+    Widget item(Widget mark, String text) => Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [mark, const SizedBox(width: 4), Text(text, style: _sans(context, size: 10, color: _kInk2))],
+    );
+    return Wrap(
+      spacing: 12,
+      runSpacing: 4,
+      children: [
+        item(
+          Container(width: 9, height: 9, decoration: BoxDecoration(color: color.withAlpha(110), borderRadius: BorderRadius.circular(2))),
+          '${c.name}${c.outflow ? '（流出金额）' : ''}',
+        ),
+        item(
+          SizedBox(
+            width: 16,
+            height: 9,
+            child: CustomPaint(painter: _FlowLegendLinePainter(color: color, dashed: false)),
+          ),
+          '走势',
+        ),
+        if (n > 0)
+          item(
+            SizedBox(
+              width: 16,
+              height: 9,
+              child: CustomPaint(painter: _FlowLegendLinePainter(color: color, dashed: true)),
+            ),
+            '${s.isDay ? '日均' : '月均'} ${_flWan(sum / n)}万',
+          ),
+      ],
+    );
+  }
+
+  Widget _insight(BuildContext context, LhFlowSeries s, _FlowTrendCat c, int sel) {
+    final pts = s.points;
+    final v = c.values;
+    final cur = v[sel];
+    final prevWord = s.isDay ? '前一天' : '上月';
+    final avgWord = s.isDay ? '日均' : '月均';
+    var sum = 0.0;
+    var n = 0;
+    int? maxI;
+    int? minI;
+    for (var i = 0; i < v.length; i++) {
+      final x = v[i];
+      if (x == null || pts[i].partial) continue;
+      sum += x;
+      n += 1;
+      if (maxI == null || x > v[maxI]!) maxI = i;
+      if (minI == null || x < v[minI]!) minI = i;
+    }
+    final title = '${c.name}${c.outflow ? '（流出）' : ''} · ${pts[sel].label}：';
+    final body = StringBuffer();
+    if (cur == null) {
+      body.write('本期暂无快照数据。');
+    } else {
+      body.write('${c.word} ${_flWan(cur)}万');
+      final dl = _flowDelta(v, sel);
+      if (dl != null) {
+        final pct = _flowPctText(dl.$2);
+        body.write('，较$prevWord${dl.$1 >= 0 ? '增加' : '减少'} ${_flWan(dl.$1.abs())}万${pct.isEmpty ? '' : '（$pct）'}');
+      }
+      if (n > 0 && maxI != null && minI != null) {
+        final avg = sum / n;
+        body.write('。近 ${pts.length} ${s.isDay ? '天' : '个月'}$avgWord ${_flWan(avg)}万，'
+            '最高 ${pts[maxI].label} ${_flWan(v[maxI]!)}万，最低 ${pts[minI].label} ${_flWan(v[minI]!)}万');
+        if (!pts[sel].partial) {
+          body.write('；${pts[sel].label}${cur >= avg ? '高于' : '低于'}$avgWord ${_flWan((cur - avg).abs())}万');
+        }
+      }
+      body.write('。');
+    }
+    // 连续几期同方向（还在变的这一期不算）。
+    var streak = 0;
+    var dir = 0;
+    if (cur != null && !pts[sel].partial) {
+      for (var i = sel; i > 0; i--) {
+        final a = v[i];
+        final b = v[i - 1];
+        if (a == null || b == null) break;
+        final d = a - b;
+        final sg = d > 0.5 ? 1 : (d < -0.5 ? -1 : 0);
+        if (sg == 0 || (dir != 0 && sg != dir)) break;
+        dir = sg;
+        streak += 1;
+      }
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(color: _bg(context, _kNeutralPanel), borderRadius: BorderRadius.circular(10)),
+      child: Text.rich(
+        TextSpan(
+          children: [
+            TextSpan(text: title, style: _sans(context, size: 12.5, weight: FontWeight.w700, color: c.name == '净流入' ? _kFpWarn : c.color)),
+            TextSpan(text: body.toString(), style: _sans(context, size: 12.5, height: 1.65)),
+            if (streak >= 2)
+              TextSpan(
+                text: '已连续 $streak ${s.isDay ? '天' : '个月'}${dir > 0 ? '上升' : '下降'}。',
+                style: _sans(context, size: 12.5, weight: FontWeight.w600, color: dir > 0 ? LhColors.neg : LhColors.pos, height: 1.65),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 明细表从最近一期往前排（2026-11-23）；▲▼ 仍是和它的上一期比。
+  Widget _table(BuildContext context, LhFlowSeries s, List<_FlowTrendCat> cats, int ci, int sel) {
+    final pts = s.points;
+    const nameW = 104.0;
+    const cellW = 66.0;
+    const rowH = 42.0;
+    Color colBg(int i) => i == sel ? _bg(context, _kLavender) : Colors.transparent;
+    final header = Row(
+      children: [
+        SizedBox(width: nameW, child: Text('分类', style: _sans(context, size: 10.5, color: _kInk2))),
+        for (var i = pts.length - 1; i >= 0; i--)
+          Container(
+            width: cellW,
+            height: 28,
+            alignment: Alignment.centerRight,
+            padding: const EdgeInsets.only(right: 6),
+            color: colBg(i),
+            child: Text(
+              pts[i].partial ? '${pts[i].label}*' : pts[i].label,
+              maxLines: 1,
+              style: _sans(context, size: 10.5, weight: i == sel ? FontWeight.w700 : FontWeight.w400, color: _kInk),
+            ),
+          ),
+      ],
+    );
+    Widget row(int k) {
+      final c = cats[k];
+      final strong = k == 0;
+      return GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => setState(() => _cat = k),
+        child: Container(
+          decoration: BoxDecoration(
+            color: k == ci ? _bg(context, _kMist) : null,
+            border: Border(top: BorderSide(color: _ln(context, _kLine), width: 0.8)),
+          ),
+          child: Row(
+            children: [
+              SizedBox(
+                width: nameW,
+                height: rowH,
+                child: Row(
+                  children: [
+                    Container(width: 7, height: 7, decoration: BoxDecoration(color: _fg(context, c.color), shape: BoxShape.circle)),
+                    const SizedBox(width: 5),
+                    Flexible(
+                      child: Text(
+                        '${c.name}${c.outflow ? '（流出）' : ''}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: _sans(context, size: 11.5, weight: strong ? FontWeight.w700 : FontWeight.w500),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              for (var i = pts.length - 1; i >= 0; i--)
+                Builder(
+                  builder: (context) {
+                    final x = c.values[i];
+                    final dl = _flowDelta(c.values, i);
+                    var a = '';
+                    var aTone = _kInk2;
+                    if (pts[i].partial) {
+                      a = '统计中';
+                    } else if (dl != null) {
+                      a = dl.$1 > 0.5 ? '▲' : (dl.$1 < -0.5 ? '▼' : '–');
+                      aTone = _flowUpDown(dl.$1);
+                    }
+                    return Container(
+                      width: cellW,
+                      height: rowH,
+                      color: colBg(i),
+                      padding: const EdgeInsets.only(right: 6),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(
+                            x == null ? '—' : _flWan(x, digits: 1),
+                            maxLines: 1,
+                            softWrap: false,
+                            overflow: TextOverflow.fade,
+                            style: _mono(
+                              context,
+                              size: 11,
+                              weight: strong ? FontWeight.w700 : FontWeight.w500,
+                              color: pts[i].partial ? _kInk2 : _kInk,
+                            ),
+                          ),
+                          if (a.isNotEmpty) ...[
+                            const SizedBox(height: 3),
+                            Text(a, style: _sans(context, size: 9.5, color: aTone)),
+                          ],
+                        ],
+                      ),
+                    );
+                  },
+                ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [header, for (var k = 0; k < cats.length; k++) row(k)],
       ),
     );
   }
 }
 
-class _FlowSeriesPainter extends CustomPainter {
-  _FlowSeriesPainter({
-    required this.points,
-    required this.categories,
+/// 卡片底部的小柱：这一类每期的量（取绝对值），选中的一期上色，还在变的画淡，没快照不画。
+class _FlowMiniBarsPainter extends CustomPainter {
+  _FlowMiniBarsPainter({
+    required this.values,
+    required this.partial,
     required this.selected,
-    required this.cumulative,
-    required this.overlayRunning,
-    required this.resolve,
-    required this.highlight,
+    required this.on,
+    required this.off,
+    required this.faded,
   });
 
-  final List<LhFlowSeriesPoint> points;
-  final List<String> categories;
+  final List<double?> values;
+  final List<bool> partial;
   final int selected;
-  final bool cumulative;
-  final bool overlayRunning;
-  final Color Function(Color) resolve;
-  final Color highlight;
+  final Color on;
+  final Color off;
+  final Color faded;
 
   @override
   void paint(Canvas canvas, Size size) {
-    final n = points.length;
+    final n = values.length;
     if (n == 0) return;
+    var mx = 0.0;
+    for (final v in values) {
+      if (v != null && v.abs() > mx) mx = v.abs();
+    }
+    if (mx <= 0) mx = 1;
     final slot = size.width / n;
-    const top = 4.0;
-    final h = size.height - top - 2;
-
-    // 量程：每期正段之和 / 负段之和，叠线时把线也算进去。
-    var up = 0.0, down = 0.0;
-    void take(double v) {
-      if (v > up) up = v;
-      if (-v > down) down = -v;
-    }
-
-    for (final p in points) {
-      if (cumulative) {
-        if (p.running != null) take(p.running!);
-        continue;
-      }
-      if (!p.hasData) continue;
-      var pos = 0.0, neg = 0.0;
-      for (final v in p.byCategory.values) {
-        if (v > 0) pos += v;
-        if (v < 0) neg += v;
-      }
-      take(pos);
-      take(neg);
-      take(p.net!);
-      if (overlayRunning && p.running != null) take(p.running!);
-    }
-    if (up + down <= 0) up = 1;
-    final scale = h / (up + down);
-    final zeroY = top + up * scale;
-    double y(double v) => zeroY - v * scale;
-
-    if (selected >= 0 && selected < n) {
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(Rect.fromLTWH(slot * selected, 0, slot, size.height), const Radius.circular(3)),
-        Paint()..color = highlight,
-      );
-    }
-    canvas.drawLine(Offset(0, zeroY), Offset(size.width, zeroY), Paint()
-      ..color = resolve(_kEdge)
-      ..strokeWidth = 1);
-
-    final barW = math.max(2.0, math.min(18.0, slot * 0.62));
+    final bw = math.max(1.0, slot * (n > 20 ? 0.7 : 0.78));
     for (var i = 0; i < n; i++) {
-      final p = points[i];
-      final cx = slot * (i + 0.5);
-      if (!p.hasData) {
-        canvas.drawLine(
-          Offset(cx - barW / 2, zeroY),
-          Offset(cx + barW / 2, zeroY),
-          Paint()
-            ..color = resolve(p.failed ? _kFpWarn : _kMute)
-            ..strokeWidth = 2,
-        );
-        continue;
-      }
-      if (cumulative) continue;
-      final alpha = p.partial ? 140 : 255;
-      var posY = zeroY, negY = zeroY;
-      final names = [...categories, for (final k in p.byCategory.keys) if (!categories.contains(k)) k];
-      for (final name in names) {
-        final v = p.byCategory[name] ?? 0;
-        if (v.abs() < 0.5) continue;
-        final len = v.abs() * scale;
-        final paint = Paint()..color = resolve(_flowSeriesColor(name)).withAlpha(alpha);
-        if (v > 0) {
-          canvas.drawRect(Rect.fromLTWH(cx - barW / 2, posY - len, barW, len), paint);
-          posY -= len;
-        } else {
-          canvas.drawRect(Rect.fromLTWH(cx - barW / 2, negY, barW, len), paint);
-          negY += len;
-        }
-      }
-      canvas.drawCircle(Offset(cx, y(p.net!)), math.min(2.6, barW / 2 + 0.6), Paint()..color = resolve(_kInk));
-    }
-
-    // 线：按月 = 近 3 月平均叠在柱子上；按日切到累计时只画累计。null 处断开。
-    if (cumulative || overlayRunning) {
-      final line = Paint()
-        ..color = resolve(_kDeep)
-        ..strokeWidth = 1.6
-        ..style = PaintingStyle.stroke;
-      final dot = Paint()..color = resolve(_kDeep);
-      Path? path;
-      for (var i = 0; i < n; i++) {
-        final v = points[i].running;
-        if (v == null) {
-          if (path != null) canvas.drawPath(path, line);
-          path = null;
-          continue;
-        }
-        final o = Offset(slot * (i + 0.5), y(v));
-        if (path == null) {
-          path = Path()..moveTo(o.dx, o.dy);
-        } else {
-          path.lineTo(o.dx, o.dy);
-        }
-        canvas.drawCircle(o, cumulative ? 2.2 : 1.8, dot);
-      }
-      if (path != null) canvas.drawPath(path, line);
+      final v = values[i];
+      if (v == null) continue;
+      final h = math.max(2.0, v.abs() / mx * size.height);
+      final c = i == selected ? on : (partial[i] ? faded : off);
+      canvas.drawRRect(
+        RRect.fromRectAndCorners(
+          Rect.fromLTWH(slot * i + (slot - bw) / 2, size.height - h, bw, h),
+          topLeft: const Radius.circular(1.5),
+          topRight: const Radius.circular(1.5),
+        ),
+        Paint()..color = c,
+      );
     }
   }
 
   @override
-  bool shouldRepaint(covariant _FlowSeriesPainter old) =>
-      old.points != points || old.selected != selected || old.cumulative != cumulative || old.highlight != highlight;
+  bool shouldRepaint(covariant _FlowMiniBarsPainter old) => true;
+}
+
+class _FlowLegendLinePainter extends CustomPainter {
+  _FlowLegendLinePainter({required this.color, required this.dashed});
+
+  final Color color;
+  final bool dashed;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final y = size.height / 2;
+    final p = Paint()
+      ..color = color
+      ..strokeWidth = dashed ? 1.3 : 2;
+    if (dashed) {
+      for (var x = 0.0; x < size.width; x += 5) {
+        canvas.drawLine(Offset(x, y), Offset(math.min(x + 3, size.width), y), p);
+      }
+    } else {
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), p);
+      canvas.drawCircle(Offset(size.width / 2, y), 2.6, Paint()..color = color);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _FlowLegendLinePainter old) => old.color != color || old.dashed != dashed;
+}
+
+/// 主图：一类的柱图。左边刻度，柱顶写数，最高 / 最低贴标签，均值画虚线，底下写期名和环比。
+class _FlowFocusPainter extends CustomPainter {
+  _FlowFocusPainter({
+    required this.values,
+    required this.labels,
+    required this.partial,
+    required this.selected,
+    required this.color,
+    required this.ink,
+    required this.ink2,
+    required this.mute,
+    required this.grid,
+    required this.axis,
+    required this.highlight,
+    required this.up,
+    required this.down,
+    required this.avgWord,
+    required this.textScale,
+  });
+
+  static const double height = 262;
+  static const double _left = 50;
+  static const double _top = 42;
+  static const double _bottom = 40;
+  static const double _negRoom = 34;
+
+  final List<double?> values;
+  final List<String> labels;
+  final List<bool> partial;
+  final int selected;
+  final Color color;
+  final Color ink;
+  final Color ink2;
+  final Color mute;
+  final Color grid;
+  final Color axis;
+  final Color highlight;
+  final Color up;
+  final Color down;
+  final String avgWord;
+  final TextScaler textScale;
+
+  int? indexAt(double dx, double width) {
+    final n = values.length;
+    if (n == 0 || dx < _left) return null;
+    final slot = (width - _left) / n;
+    return math.max(0, math.min(n - 1, ((dx - _left) / slot).floor()));
+  }
+
+  static double _niceStep(double x) {
+    if (x <= 0) return 1;
+    final pow = math.pow(10, (math.log(x) / math.ln10).floor()).toDouble();
+    final m = x / pow;
+    final k = m <= 1 ? 1.0 : (m <= 2 ? 2.0 : (m <= 2.5 ? 2.5 : (m <= 5 ? 5.0 : 10.0)));
+    return k * pow;
+  }
+
+  TextPainter _tp(String text, double size, Color c, {FontWeight weight = FontWeight.w500, bool mono = false}) {
+    return TextPainter(
+      text: TextSpan(
+        text: text,
+        style: TextStyle(
+          fontSize: size,
+          color: c,
+          fontWeight: weight,
+          fontFamily: mono ? DunesTypography.monoFamily : null,
+          fontFamilyFallback: mono ? DunesTypography.monoFallback : null,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+      textScaler: textScale,
+      maxLines: 1,
+    )..layout();
+  }
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final n = values.length;
+    if (n == 0) return;
+    final plotW = size.width - _left;
+    final slot = plotW / n;
+
+    var lo = 0.0, hi = 0.0, sum = 0.0;
+    var cnt = 0;
+    int? maxI;
+    int? minI;
+    for (var i = 0; i < n; i++) {
+      final v = values[i];
+      if (v == null) continue;
+      if (v < lo) lo = v;
+      if (v > hi) hi = v;
+      if (partial[i]) continue;
+      sum += v;
+      cnt += 1;
+      if (maxI == null || v > values[maxI]!) maxI = i;
+      if (minI == null || v < values[minI]!) minI = i;
+    }
+    final step = _niceStep((hi - lo) / 4);
+    final top = (hi / step).ceil() * step;
+    final bottom = (lo / step).floor() * step;
+    final range = (top - bottom) <= 0 ? step : top - bottom;
+    // 有负数时，图底下留一截给负数柱下面的数和「最低」标签，不压到月份上。
+    final negRoom = lo < 0 ? _negRoom : 0.0;
+    final plotH = size.height - _top - _bottom - negRoom;
+    double y(double v) => _top + (top - v) / range * plotH;
+    final zeroY = y(0);
+
+    // 选中列底色
+    if (selected >= 0 && selected < n) {
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(Rect.fromLTWH(_left + slot * selected, _top - 26, slot, plotH + 26 + negRoom + _bottom), const Radius.circular(6)),
+        Paint()..color = highlight,
+      );
+    }
+
+    // 刻度 + 网格
+    final gridPaint = Paint()
+      ..color = grid
+      ..strokeWidth = 1;
+    for (var t = bottom; t <= top + step / 2; t += step) {
+      final ty = y(t);
+      canvas.drawLine(Offset(_left, ty), Offset(size.width, ty), gridPaint);
+      final tp = _tp(_flWan(t, digits: 0), 10, mute, mono: true);
+      tp.paint(canvas, Offset(_left - 6 - tp.width, ty - tp.height / 2));
+    }
+    canvas.drawLine(Offset(_left, zeroY), Offset(size.width, zeroY), Paint()
+      ..color = axis
+      ..strokeWidth = 1.2);
+
+    final roomy = slot >= 38;
+    final labelEvery = math.max(1, (44 / slot).ceil());
+    final bw = math.max(3.0, math.min(30.0, slot * 0.58));
+    for (var i = 0; i < n; i++) {
+      final v = values[i];
+      final cx = _left + slot * (i + 0.5);
+      final isSel = i == selected;
+      if (v == null) {
+        canvas.drawLine(Offset(cx - bw / 2, zeroY), Offset(cx + bw / 2, zeroY), Paint()
+          ..color = mute
+          ..strokeWidth = 2);
+      } else {
+        final y0 = math.min(zeroY, y(v));
+        final h = math.max(2.0, (y(v) - zeroY).abs());
+        final rect = Rect.fromLTWH(cx - bw / 2, y0, bw, h);
+        final fill = Paint()
+          ..color = isSel ? color : color.withAlpha(partial[i] ? 60 : 110);
+        canvas.drawRRect(RRect.fromRectAndRadius(rect, const Radius.circular(3)), fill);
+        if (partial[i]) {
+          canvas.drawRRect(
+            RRect.fromRectAndRadius(rect, const Radius.circular(3)),
+            Paint()
+              ..color = color.withAlpha(160)
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = 1,
+          );
+        }
+        // 柱顶的数
+        var labelTop = v >= 0 ? y0 - 7 : y0 + h + 7;
+        if (roomy || isSel) {
+          final tp = _tp(_flWan(v, digits: 1), 10, isSel ? ink : ink2, weight: isSel ? FontWeight.w700 : FontWeight.w500, mono: true);
+          final ly = v >= 0 ? labelTop - tp.height : labelTop;
+          tp.paint(canvas, Offset(cx - tp.width / 2, ly));
+          labelTop = v >= 0 ? ly - 2 : ly + tp.height + 2;
+        }
+        // 最高 / 最低
+        if (i == maxI || i == minI) {
+          final isMax = i == maxI;
+          final tp = _tp(isMax ? '最高' : '最低', 9, isMax ? up : down, weight: FontWeight.w700);
+          final ty = v >= 0 ? labelTop - tp.height - 2 : labelTop + 2;
+          final r = Rect.fromLTWH(cx - tp.width / 2 - 3, ty - 1, tp.width + 6, tp.height + 2);
+          canvas.drawRRect(RRect.fromRectAndRadius(r, const Radius.circular(3)), Paint()..color = (isMax ? up : down).withAlpha(30));
+          tp.paint(canvas, Offset(cx - tp.width / 2, ty));
+        }
+      }
+      // 底下：期名 + 环比
+      // 窄屏隔 labelEvery 个写一个月份；选中的月份一定写，它左右 labelEvery 以内的让开，免得叠字。
+      final nearSel = selected >= 0 && i != selected && (i - selected).abs() < labelEvery;
+      final showLabel = isSel || (!nearSel && i % labelEvery == 0);
+      if (showLabel) {
+        final tp = _tp(labels[i], 10, isSel ? ink : ink2, weight: isSel ? FontWeight.w700 : FontWeight.w500);
+        tp.paint(canvas, Offset(cx - tp.width / 2, size.height - _bottom + 6));
+      }
+      if (roomy || isSel) {
+        String text;
+        Color tone;
+        if (partial[i]) {
+          text = '统计中';
+          tone = mute;
+        } else {
+          final dl = _flowDelta(values, i);
+          if (dl == null || dl.$2 == null) {
+            text = '—';
+            tone = mute;
+          } else {
+            text = '${dl.$1 > 0.5 ? '▲' : (dl.$1 < -0.5 ? '▼' : '')}${dl.$2!.abs().toStringAsFixed(1)}%';
+            tone = dl.$1 > 0.5 ? up : (dl.$1 < -0.5 ? down : mute);
+          }
+        }
+        final tp = _tp(text, 9.5, tone, weight: FontWeight.w600, mono: true);
+        tp.paint(canvas, Offset(cx - tp.width / 2, size.height - _bottom + 22));
+      }
+    }
+
+    // 均值虚线 + 标签
+    if (cnt > 0) {
+      final avg = sum / cnt;
+      final ay = y(avg);
+      final dash = Paint()
+        ..color = color
+        ..strokeWidth = 1.3;
+      for (var x = _left; x < size.width; x += 7) {
+        canvas.drawLine(Offset(x, ay), Offset(math.min(x + 4, size.width), ay), dash);
+      }
+    }
+    // 走势线：连每根柱子的顶，没快照处断开；接到还在变的那一期画虚线。
+    final line = Paint()
+      ..color = color
+      ..strokeWidth = 2
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
+    final lineFaded = Paint()
+      ..color = color.withAlpha(130)
+      ..strokeWidth = 1.6
+      ..style = PaintingStyle.stroke;
+    Offset? prev;
+    for (var i = 0; i < n; i++) {
+      final v = values[i];
+      if (v == null) {
+        prev = null;
+        continue;
+      }
+      final o = Offset(_left + slot * (i + 0.5), y(v));
+      if (prev != null) {
+        if (partial[i]) {
+          final d = o - prev;
+          final len = d.distance;
+          for (var t = 0.0; t < len; t += 6) {
+            final a = prev + d * (t / len);
+            final b = prev + d * (math.min(t + 3, len) / len);
+            canvas.drawLine(a, b, lineFaded);
+          }
+        } else {
+          canvas.drawLine(prev, o, line);
+        }
+      }
+      prev = o;
+    }
+    final ring = Paint()..color = highlight;
+    final dot = Paint()..color = color;
+    for (var i = 0; i < n; i++) {
+      final v = values[i];
+      if (v == null) continue;
+      final o = Offset(_left + slot * (i + 0.5), y(v));
+      final r = i == selected ? 4.2 : 3.0;
+      canvas.drawCircle(o, r + 1.4, ring);
+      canvas.drawCircle(o, r, partial[i] ? (Paint()..color = color.withAlpha(130)) : dot);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _FlowFocusPainter old) => true;
 }
 
 // ═════════════════════════════ 转发到 IM ═════════════════════════════

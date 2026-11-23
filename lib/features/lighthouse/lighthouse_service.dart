@@ -338,6 +338,16 @@ class LighthouseService {
     }, '资管损益加载失败');
   }
 
+  /// 分时快照（那一天 + 前一天每次同步的全公司合计），「今日盈利」大数卡用。
+  /// [date] = YYYY-MM-DD（日期条点到昨天 / 前天）；不传 = 今天。
+  Future<Map<String, dynamic>> fetchIntraday({String? date}) {
+    return _getData(
+      '/lighthouse/intraday',
+      date == null ? const {} : {'date': date},
+      '分时数据加载失败',
+    );
+  }
+
   /// 许正阳在「谁能看到」里开 / 关某人对这一行（坐标全空 = 整个板块）的权限。
   /// [validTo] 为空 = 永久；[reset] 去掉单独设置，回到板块授权 ∩ 数据规则。
   Future<void> putVisibilityOverride({

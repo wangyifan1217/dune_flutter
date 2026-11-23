@@ -961,6 +961,10 @@ const bool lighthouseHeroShowsMetricFormulas = false;
 /// 主 Hero 底部「成本合计 = 项目成本 + 业务成本 …」口径条。关掉，只留格子和走势。
 const bool lighthouseHeroShowsFormulaBar = false;
 
+/// 2026-11-23 · 主 Hero 的「规模 / 成本 / 利润」走经营概览 v2
+/// （原型 docs/lighthouse_overview_rail_prototype.html）；关掉回到原来的三栏。
+const bool lighthouseOverviewRailV2Enabled = true;
+
 /// 底下不再堆每条指标一张图；点格子只改顶部那一张。
 const bool lighthouseHeroShowsAllMetricTrends = false;
 
@@ -1414,7 +1418,7 @@ const String lighthouseDeltaFlatMark = '→';
 /// 率的环比有没有资格出现在屏幕上（含持平）。
 ///
 /// 分母不够 = 噪声，不画；算出没动（|Δ| < 0.05pp）= 画 [lighthouseDeltaFlatMark]。
-/// [base] 是率的分母（毛利率 = 核销额或销售额，ROI = 成本合计）。取不到就不画 ——
+/// [base] 是率的分母（毛利率、净利率 = 核销额或销售额 / GMV）。取不到就不画 ——
 /// 率的分母不在屏幕上，核不了，所以宁可不画。
 bool lighthouseRateDeltaShouldShow(double? pp, {double? base}) {
   if (pp == null || !pp.isFinite) return false;
@@ -2533,7 +2537,7 @@ double? _lighthouseRowPreviousAmount(Map<String, dynamic> row, String key) {
 }
 
 /// 筛选后的账本行重算 Hero 环比：先加总本期/上期金额，再算相对涨幅。
-/// 毛利率 / ROI 返回百分点差，不是相对涨幅。
+/// 毛利率 / 净利率（rate）返回百分点差，不是相对涨幅。
 double? lighthouseAggregateRowsDeltaPct(
   Iterable<Map<String, dynamic>> rows, {
   required String key,
@@ -2548,9 +2552,18 @@ double? lighthouseAggregateRowsDeltaPct(
     var verified = 0.0, prevVerified = 0.0;
     var gmv = 0.0, prevGmv = 0.0;
     var revenue = 0.0, prevRevenue = 0.0;
+    var net = 0.0, prevNet = 0.0;
+    var netPrevKnown = true;
     var hasPrev = false;
     for (final row in rows) {
       profit += _lighthouseRowAmount(row, 'profit');
+      net += _lighthouseRowAmount(row, 'netProfit');
+      final pNet = _lighthouseRowPreviousAmount(row, 'netProfit');
+      if (pNet == null) {
+        netPrevKnown = false;
+      } else {
+        prevNet += pNet;
+      }
       totalCost += _lighthouseRowAmount(row, 'totalCost');
       sales += _lighthouseRowAmount(row, 'sales');
       verified += _lighthouseRowAmount(row, 'verifiedSales');
@@ -2574,6 +2587,8 @@ double? lighthouseAggregateRowsDeltaPct(
       if (pRevenue != null) prevRevenue += pRevenue;
     }
     if (!hasPrev) return null;
+    // 净利率要上期净利润；推不出来就不给环比，不拿利润顶。
+    if (key == 'rate' && !netPrevKnown) return null;
     double rate(
       double p,
       double cost,
@@ -2581,10 +2596,17 @@ double? lighthouseAggregateRowsDeltaPct(
       double v,
       double rev,
       double g,
+      double n,
     ) {
+      final marginBase = usesGmvGrossMargin
+          ? g
+          : usesSalesGrossMargin
+          ? s
+          : v;
       switch (key) {
         case 'rate':
-          return cost.abs() < 50 ? 0 : p / cost * 100;
+          // 净利率 = 净利润 ÷ 毛利率同一个分母（2026-11-23 起替代 ROI）。
+          return marginBase.abs() < 50 ? 0 : n / marginBase * 100;
         case 'grossMargin':
           final base = usesGmvGrossMargin
               ? g
@@ -2600,7 +2622,7 @@ double? lighthouseAggregateRowsDeltaPct(
       }
     }
 
-    final cur = rate(profit, totalCost, sales, verified, revenue, gmv);
+    final cur = rate(profit, totalCost, sales, verified, revenue, gmv, net);
     final prev = rate(
       prevProfit,
       prevTotalCost,
@@ -2608,6 +2630,7 @@ double? lighthouseAggregateRowsDeltaPct(
       prevVerified,
       prevRevenue,
       prevGmv,
+      prevNet,
     );
     final pp = cur - prev;
     if (pp.abs() < 1e-9) return null;
@@ -3054,7 +3077,7 @@ const lighthouseFundPoolReconSection = LighthouseFundPoolSectionSpec(
 /// 算出来的格子会点亮来源、压暗无关格；取数项只出式子，不压暗别人。
 enum LighthouseHeroFormulaRole { plus, minus, numerator, denominator }
 
-/// 角标文案 —— ROI 和毛利率都点亮「利润」，一个当分子一个当分母，
+/// 角标文案 —— 毛利率点亮「利润」当分子、净利率点亮「净利润」当分子，分母同为核销额，
 /// 光靠点亮分不出谁除谁。
 String lighthouseHeroFormulaRoleBadge(LighthouseHeroFormulaRole role) =>
     switch (role) {
@@ -3212,15 +3235,17 @@ const lighthouseHeroFormulas = <LighthouseHeroFormula>[
   ),
   LighthouseHeroFormula(
     resultKey: 'rate',
-    result: 'ROI',
-    expression: '利润 ÷ 成本合计',
+    // 2026-11-23 · 这一格从 ROI 换成净利率（字段名还叫 rate）：净利润 ÷ 核销额，
+    // 分母和毛利率同一个（运营商 ÷ 销售额、部分产品 ÷ GMV，见 lighthouseHeroFormulaForKey）。
+    result: '净利率',
+    expression: '净利润 ÷ 核销额',
     sources: [
       LighthouseHeroFormulaSource(
-        'profit',
+        'netProfit',
         LighthouseHeroFormulaRole.numerator,
       ),
       LighthouseHeroFormulaSource(
-        'totalCost',
+        'verifiedSales',
         LighthouseHeroFormulaRole.denominator,
       ),
     ],
@@ -3251,6 +3276,31 @@ LighthouseHeroFormula? lighthouseHeroFormulaForKey(
   String? basis,
 }) {
   final canonical = lighthouseHeroFormulaCanonicalKey(metricKey);
+  // 净利率：分母跟毛利率走。
+  if (canonical == 'rate') {
+    final den = lighthouseGrossMarginDenominatorKey(
+      product: product,
+      basis: basis,
+      group: group,
+    );
+    if (den != 'verifiedSales') {
+      return LighthouseHeroFormula(
+        resultKey: 'rate',
+        result: '净利率',
+        expression: '净利润 ÷ ${den == 'gmv' ? 'GMV' : '销售额'}',
+        sources: [
+          const LighthouseHeroFormulaSource(
+            'netProfit',
+            LighthouseHeroFormulaRole.numerator,
+          ),
+          LighthouseHeroFormulaSource(
+            den,
+            LighthouseHeroFormulaRole.denominator,
+          ),
+        ],
+      );
+    }
+  }
   if (canonical == 'grossMargin' &&
       lighthouseGrossMarginDenominatorKey(
             product: product,
@@ -4770,7 +4820,7 @@ String lighthouseHeroMetricLabel(String key) {
     'cost': '业务成本',
     'businessCost': '业务成本',
     'grossMargin': '毛利率',
-    'rate': 'ROI',
+    'rate': '净利率',
     'spreadRate': '利差率',
     'gmv': 'GMV',
     'prepaid': '预收净增',

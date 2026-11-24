@@ -192,9 +192,9 @@ class _LighthouseOpsPageState extends State<LighthouseOpsPage> {
   String _mode = 'day';
 
   /// 汇报视图页签：1 渠道（标签二为省份），2 人员。
-  int _view = 1;
+  final Map<int, int> _reportViews = {};
 
-  /// 汇报视图里展开了的渠道 / 人员（key = c|渠道 或 p|人）。
+  /// 汇报视图里展开的分组（key = c|标签|渠道或省份，或 p|人）。
   final Map<(String, String), String> _openTag3Details = {};
   final Map<(String, String, String, String), Future<Tag3DailyDrilldown>> _tag3Details = {};
 
@@ -1093,7 +1093,7 @@ class _LighthouseOpsPageState extends State<LighthouseOpsPage> {
                                         ? '这一天没有上月月结的行'
                                         : tag == 3
                                         ? '这一天没有你能看的标签三明细'
-                                        : '这一天没有你负责的主体',
+                                        : '这一天没有可查看的供给明细',
                                   )
                                 else ...[
                                   _buildReport(rows, tag),
@@ -1908,8 +1908,11 @@ class _LighthouseOpsPageState extends State<LighthouseOpsPage> {
     }
     final list = [for (final e in map.entries) (e.key, e.value)];
     int pending((String, List<_OpsRow>) c) =>
-        c.$2.where((r) => r.group != _OpsGroup.done).length;
-    list.sort((a, b) => pending(b).compareTo(pending(a)));
+        c.$2.where((r) => r.group != _OpsGroup.done && r.group != _OpsGroup.readOnly).length;
+    list.sort((a, b) {
+      final order = pending(b).compareTo(pending(a));
+      return order != 0 ? order : a.$1.compareTo(b.$1);
+    });
     return list;
   }
 
@@ -1967,12 +1970,13 @@ class _LighthouseOpsPageState extends State<LighthouseOpsPage> {
     ),
   );
 
-  Widget _okWait(int ok, int wait) => Wrap(
+  Widget _okWait(int ok, int wait, int readOnly) => Wrap(
     spacing: 6,
     runSpacing: 6,
     children: [
       _pillTag('已确认 $ok', _kOkText, _kOkBg, icon: Icons.done_rounded),
       _pillTag('待确认 $wait', _kWaitText, _kWaitBg),
+      if (readOnly > 0) _pillTag('只读 $readOnly', _kMute, _kGreyBg),
     ],
   );
 
@@ -1985,7 +1989,7 @@ class _LighthouseOpsPageState extends State<LighthouseOpsPage> {
     final total = rows.length;
     final done = rows.where((r) => r.group == _OpsGroup.done).length;
     final mine = rows.where((r) => r.group == _OpsGroup.mine).toList();
-    final channels = _reportChannels(rows);
+    final channels = _reportChannels(tag == 2 ? all : rows);
     final people = _reportPeople(rows);
     final unassigned = rows
         .where((r) => r.assignees.any((p) => p.unassigned && !p.done))
@@ -1999,7 +2003,7 @@ class _LighthouseOpsPageState extends State<LighthouseOpsPage> {
         ? '日清汇报'
         : '${asOf.month}月${asOf.day}日 日清汇报';
     final allDone = total > 0 && done == total;
-    final view = _view == 2 ? 2 : 1;
+    final view = _reportViews[tag] ?? 1;
     final me = people.where((p) => p.isMe).toList();
     final myProjects = {for (final r in mine) '${r.channel}|${r.project}'}.length;
 
@@ -2090,7 +2094,7 @@ class _LighthouseOpsPageState extends State<LighthouseOpsPage> {
                     ),
                     onPressed: () {
                       setState(() {
-                        _view = 2;
+                        _reportViews[tag] = 2;
                         if (me.isNotEmpty) _openReport.add('p|${me.first.key}');
                       });
                       _openRow(mine.first);
@@ -2104,10 +2108,10 @@ class _LighthouseOpsPageState extends State<LighthouseOpsPage> {
           const SizedBox(height: 10),
           Row(
             children: [
-              for (final (i, label) in [(1, groupLabel), (2, '人员')])
+              for (final (i, label) in [(1, tag == 2 ? '省份列表' : groupLabel), (2, '人员')])
                 Expanded(
                   child: InkWell(
-                    onTap: () => setState(() => _view = i),
+                    onTap: () => setState(() => _reportViews[tag] = i),
                     child: Container(
                       padding: const EdgeInsets.symmetric(vertical: 10),
                       decoration: BoxDecoration(
@@ -2148,7 +2152,7 @@ class _LighthouseOpsPageState extends State<LighthouseOpsPage> {
             if (tag == 3) _channelSummaryLine(heading: true),
             for (final c in channels)
               _reportGroup(
-                key: 'c|${c.$1}',
+                key: 'c|$tag|${c.$1}',
                 title: c.$1,
                 items: [for (final r in c.$2) (r, r.group == _OpsGroup.done)],
                 channelAmounts: tag == 3 ? _sumChannelAmounts(c.$2) : null,
@@ -2166,7 +2170,7 @@ class _LighthouseOpsPageState extends State<LighthouseOpsPage> {
             )
           else
             for (final p in people) _reportPerson(p),
-          if (readOnly > 0)
+          if (readOnly > 0 && (tag != 2 || view == 2))
             Padding(
               padding: const EdgeInsets.only(top: 10),
               child: Text(
@@ -2414,14 +2418,9 @@ class _LighthouseOpsPageState extends State<LighthouseOpsPage> {
     return days >= 2 ? days : 0;
   }
 
-  /// 报表下面：18:00 自动汇报的说明 + 转发到群。
+  /// 报表下面的群转发入口。
   Widget _buildReportFooter(Tag3DailySnapshot? tag3, Tag2EntitySnapshot? tag2, int tag) {
     final canShare = tag == 3 ? tag3 != null : tag2 != null;
-    final (title, sub) = _mode == 'month'
-        ? ('月结不在每天的汇报里', '可以转发到群，大家在卡里看进度')
-        : tag == 2
-        ? ('每天 18:00 的汇报只含标签三', '标签二可以转发到群，大家在卡里看进度')
-        : ('每天 18:00 自动汇报', '开启推送后，对账助手私聊汇报进度；全部确认后会提前发');
     return Container(
       margin: const EdgeInsets.only(top: 12),
       padding: const EdgeInsets.fromLTRB(14, 10, 6, 10),
@@ -2432,9 +2431,9 @@ class _LighthouseOpsPageState extends State<LighthouseOpsPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: _t(13, weight: FontWeight.w700)),
+                Text(_mode == 'month' ? '分享月结' : '分享日清', style: _t(13, weight: FontWeight.w700)),
                 const SizedBox(height: 2),
-                Text(sub, style: _t(11, color: _kMute, height: 1.4)),
+                Text('转发到群，群成员可在卡片里查看进度', style: _t(11, color: _kMute, height: 1.4)),
               ],
             ),
           ),
@@ -2532,6 +2531,7 @@ class _LighthouseOpsPageState extends State<LighthouseOpsPage> {
   }) {
     final open = _openReport.contains(key);
     final ok = items.where((e) => e.$2).length;
+    final readOnly = items.where((e) => e.$1.group == _OpsGroup.readOnly).length;
     final projects = {for (final e in items) (e.$1.channel, e.$1.project)}.length;
     final itemLabel = (_mode == 'month' ? 3 : _tag) == 2 ? '主体' : '项目';
     int rank((_OpsRow, bool) e) => e.$1.group == _OpsGroup.mine
@@ -2645,7 +2645,7 @@ class _LighthouseOpsPageState extends State<LighthouseOpsPage> {
                     padding: const EdgeInsets.only(left: 24, top: 6),
                     child: Row(
                       children: [
-                        Expanded(child: _okWait(ok, items.length - ok)),
+                        Expanded(child: _okWait(ok, items.length - ok - readOnly, readOnly)),
                         if (trailing != null) trailing,
                       ],
                     ),
@@ -2788,8 +2788,8 @@ class _LighthouseOpsPageState extends State<LighthouseOpsPage> {
     LighthouseFeedback.instance.play(LighthouseFeedbackKind.navigate);
     if (r.tag3 != null) {
       setState(() {
-        _view = 1;
-        _openReport.add('c|${r.channel}');
+        _reportViews[3] = 1;
+        _openReport.add('c|3|${r.channel}');
         _reportTargetId = r.id;
       });
       WidgetsBinding.instance.addPostFrameCallback((_) {

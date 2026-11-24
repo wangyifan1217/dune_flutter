@@ -164,6 +164,13 @@ class ProposalSlaNode {
 class ProposalSlaScore {
   const ProposalSlaScore({
     required this.id,
+    this.proposalId = 0,
+    this.round = 0,
+    this.sector = '',
+    this.overdueAt = '',
+    this.createdAt = '',
+    this.reviewedAt = '',
+    this.appealDeadline = '',
     required this.code,
     required this.title,
     required this.kind,
@@ -181,6 +188,13 @@ class ProposalSlaScore {
   });
 
   final int id;
+  final int proposalId;
+  final int round;
+  final String sector;
+  final String overdueAt;
+  final String createdAt;
+  final String reviewedAt;
+  final String appealDeadline;
   final String code;
   final String title;
   final String kind;
@@ -196,9 +210,46 @@ class ProposalSlaScore {
   final String reviewerName;
   final String reviewComment;
 
+  ProposalSlaScore withReviewResult({
+    required String status,
+    required int points,
+    required String comment,
+  }) => ProposalSlaScore(
+    id: id,
+    proposalId: proposalId,
+    round: round,
+    sector: sector,
+    overdueAt: overdueAt,
+    createdAt: createdAt,
+    appealDeadline: appealDeadline,
+    code: code,
+    title: title,
+    kind: kind,
+    nodeLabel: nodeLabel,
+    userName: userName,
+    sourceUserName: sourceUserName,
+    suggestedPoints: suggestedPoints,
+    finalPoints: points,
+    overdueMinutes: overdueMinutes,
+    status: status,
+    appealStatus: appealStatus == 'pending'
+        ? (status == 'exempt' || status == 'rejected' ? 'approved' : 'rejected')
+        : appealStatus,
+    appealReason: appealReason,
+    reviewerName: '',
+    reviewComment: comment,
+  );
+
   factory ProposalSlaScore.fromJson(Map<String, dynamic> json) {
     return ProposalSlaScore(
       id: _int(json['id']),
+      proposalId: _int(json['proposalId']),
+      round: _int(json['round']),
+      sector: '${json['sector'] ?? ''}',
+      overdueAt: '${json['overdueAt'] ?? ''}',
+      createdAt: '${json['createdAt'] ?? ''}',
+      reviewedAt: '${json['reviewedAt'] ?? ''}',
+      appealDeadline: '${json['appealDeadline'] ?? ''}',
       code: '${json['code'] ?? ''}',
       title: '${json['title'] ?? ''}',
       kind: '${json['kind'] ?? ''}',
@@ -206,7 +257,9 @@ class ProposalSlaScore {
       userName: '${json['userName'] ?? ''}',
       sourceUserName: '${json['sourceUserName'] ?? ''}',
       suggestedPoints: _int(json['suggestedPoints']),
-      finalPoints: json['finalPoints'] == null ? null : _int(json['finalPoints']),
+      finalPoints: json['finalPoints'] == null
+          ? null
+          : _int(json['finalPoints']),
       overdueMinutes: _int(json['overdueMinutes']),
       status: '${json['status'] ?? ''}',
       appealStatus: '${json['appealStatus'] ?? ''}',
@@ -331,10 +384,13 @@ class ProposalSlaLookupApi {
     return ProposalSlaDashboard.fromJson(_map(data));
   }
 
-  Future<List<ProposalSlaScore>> fetchScores({required String status, String q = ''}) async {
+  Future<List<ProposalSlaScore>> fetchScores({
+    required String status,
+    String q = '',
+  }) async {
     final data = await _data(
       'GET',
-      '/xflow/proposal-sla/scores${_query({'status': status, 'q': q.trim()})}',
+      '/xflow/proposal-sla/scores${_query({'status': status, 'q': q.trim(), 'grouped': '1'})}',
     );
     return _list(data, ProposalSlaScore.fromJson);
   }

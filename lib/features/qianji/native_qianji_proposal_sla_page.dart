@@ -853,6 +853,7 @@ class _ScoresPaneState extends State<_ScoresPane> {
   List<ProposalSlaScore> _list = const [];
   bool _loading = true;
   String? _error;
+  int _loadVersion = 0;
 
   @override
   void initState() {
@@ -867,6 +868,7 @@ class _ScoresPaneState extends State<_ScoresPane> {
   }
 
   Future<void> _load() async {
+    final version = ++_loadVersion;
     setState(() {
       _loading = true;
       _error = null;
@@ -876,13 +878,13 @@ class _ScoresPaneState extends State<_ScoresPane> {
         status: _status,
         q: _search.text,
       );
-      if (!mounted) return;
+      if (!mounted || version != _loadVersion) return;
       setState(() {
         _list = rows;
         _loading = false;
       });
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted || version != _loadVersion) return;
       setState(() {
         _error = _msg(e);
         _loading = false;
@@ -890,10 +892,13 @@ class _ScoresPaneState extends State<_ScoresPane> {
     }
   }
 
-  Future<void> _review(ProposalSlaScore row) async {
+  Future<ProposalSlaScore?> _review(
+    BuildContext context,
+    ProposalSlaScore row,
+  ) async {
     var action = row.appealStatus == 'pending' ? 'reject' : 'confirm';
     var points = row.finalPoints ?? row.suggestedPoints;
-    final comment = TextEditingController();
+    var comment = '';
     final saved = await _showAppleSheet<bool>(
       context: context,
       title: '复核 · ${row.userName}',
@@ -984,7 +989,7 @@ class _ScoresPaneState extends State<_ScoresPane> {
             ),
             const SizedBox(height: 6),
             TextField(
-              controller: comment,
+              onChanged: (value) => comment = value,
               decoration: _appleInputDeco(context, hint: '选填或填写复核说明'),
               minLines: 2,
               maxLines: 4,
@@ -993,9 +998,8 @@ class _ScoresPaneState extends State<_ScoresPane> {
         );
       },
     );
-    final text = comment.text.trim();
-    comment.dispose();
-    if (saved != true) return;
+    if (saved != true || !mounted) return null;
+    final text = comment.trim();
     try {
       await widget.api.reviewScore(
         id: row.id,
@@ -1003,11 +1007,23 @@ class _ScoresPaneState extends State<_ScoresPane> {
         points: action == 'adjust' ? points : null,
         comment: text,
       );
-      if (!mounted) return;
-      showDunesToast(context, '已复核');
-      await _load();
+      if (!mounted) return null;
+      showDunesToast(this.context, '已复核');
+      final (status, finalPoints) = switch (action) {
+        'adjust' => ('adjusted', points),
+        'reject' => ('rejected', 0),
+        'exempt' => ('exempt', 0),
+        _ => ('confirmed', row.suggestedPoints),
+      };
+      unawaited(_load());
+      return row.withReviewResult(
+        status: status,
+        points: finalPoints,
+        comment: text,
+      );
     } catch (e) {
-      if (mounted) showDunesToast(context, _msg(e));
+      if (mounted) showDunesToast(this.context, _msg(e));
+      return null;
     }
   }
 
@@ -1049,135 +1065,544 @@ class _ScoresPaneState extends State<_ScoresPane> {
     );
   }
 
+  Future<void> _openProposal(_ScoreProposal proposal) => showDialog<void>(
+    context: context,
+    builder: (context) =>
+        _ScoreProposalDialog(proposal: proposal, onReview: _review),
+  );
+
   Widget _buildBody() {
     if (_loading) {
       return const Center(child: CupertinoActivityIndicator(radius: 12));
     }
     if (_error != null) return _ErrorBox(message: _error!, onRetry: _load);
-    if (_list.isEmpty) return const _Empty(text: '没有符合条件的记录');
-    return LayoutBuilder(
-      builder: (context, box) {
-        if (box.maxWidth < 760) {
-          return ListView.separated(
-            padding: const EdgeInsets.all(12),
-            itemCount: _list.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 10),
-            itemBuilder: (context, index) => _ScoreMobileCard(
-              row: _list[index],
-              onReview: () => _review(_list[index]),
+    if (_list.isEmpty) return const _Empty(text: '没有符合条件的提案');
+
+    final groups = <Object, List<ProposalSlaScore>>{};
+    for (final row in _list) {
+      final key = row.proposalId > 0
+          ? row.proposalId
+          : row.code.isNotEmpty
+          ? row.code
+          : (row.id, row.title);
+      groups.putIfAbsent(key, () => []).add(row);
+    }
+    final proposals = groups.values.map(_ScoreProposal.new).toList();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          decoration: BoxDecoration(
+            color: _cHead(context),
+            border: Border(bottom: BorderSide(color: _cLine(context))),
+          ),
+          child: Text(
+            '${proposals.length} 项提案 · ${_list.length} 条记录',
+            style: TextStyle(
+              color: _cSub(context),
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
             ),
-          );
-        }
-        return Column(
-          children: [
-            Container(
-              color: _cHead(context),
-              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
-              child: Row(
-                children: [
-                  Expanded(flex: 3, child: _th(context, '提案')),
-                  Expanded(flex: 2, child: _th(context, '类型 / 节点')),
-                  Expanded(flex: 2, child: _th(context, '责任人')),
-                  Expanded(flex: 2, child: _th(context, '超时')),
-                  Expanded(child: _th(context, '扣分')),
-                  Expanded(child: _th(context, '状态')),
-                  Expanded(flex: 2, child: _th(context, '申诉')),
-                  SizedBox(width: 78, child: _th(context, '操作')),
-                ],
-              ),
-            ),
-            Expanded(
-              child: ListView.builder(
-                itemCount: _list.length,
-                itemBuilder: (context, index) {
-                  final row = _list[index];
-                  final scoreText =
-                      row.finalPoints != null && row.status != 'pending'
-                      ? '${row.finalPoints} 分'
-                      : '建议 ${row.suggestedPoints} 分';
-                  return Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 18,
-                      vertical: 12,
-                    ),
-                    decoration: BoxDecoration(
-                      border: Border(top: BorderSide(color: _cLine(context))),
-                    ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          flex: 3,
-                          child: _ProposalCell(title: row.title, code: row.code),
-                        ),
-                        Expanded(
-                          flex: 2,
-                          child: _td(context, 
-                            '${proposalSlaKindLabel(row.kind)}'
-                            '${row.nodeLabel.isEmpty ? '' : ' · ${row.nodeLabel}'}',
-                          ),
-                        ),
-                        Expanded(
-                          flex: 2,
-                          child: _td(context, 
-                            row.sourceUserName.isEmpty
-                                ? row.userName
-                                : '${row.userName}（因 ${row.sourceUserName}）',
-                          ),
-                        ),
-                        Expanded(
-                          flex: 2,
-                          child: _td(context, 
-                            row.overdueMinutes > 0
-                                ? proposalSlaMinutes(row.overdueMinutes)
-                                : '—',
-                          ),
-                        ),
-                        Expanded(child: _td(context, scoreText)),
-                        Expanded(
-                          child: Align(
-                            alignment: Alignment.centerLeft,
-                            child: _StatusBadge(status: row.status),
-                          ),
-                        ),
-                        Expanded(
-                          flex: 2,
-                          child: row.appealStatus == 'pending'
-                              ? Text(
-                                  '申诉中：${row.appealReason}',
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: DunesColors.resolve(
-                                      context,
-                                      const Color(0xFFB25000),
-                                    ),
-                                  ),
-                                )
-                              : _td(context, '—'),
-                        ),
-                        SizedBox(
-                          width: 78,
-                          child: Align(
-                            alignment: Alignment.centerLeft,
-                            child: _ActionPill(
-                              label: '复核',
-                              onTap: () => _review(row),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                },
-              ),
-            ),
-            _TableFooter(count: _list.length),
-          ],
-        );
-      },
+          ),
+        ),
+        Expanded(
+          child: ListView.separated(
+            itemCount: proposals.length,
+            separatorBuilder: (_, _) =>
+                Divider(height: 1, color: _cLine(context)),
+            itemBuilder: (context, index) {
+              final proposal = proposals[index];
+              return _ScoreProposalTile(
+                proposal: proposal,
+                onTap: () => _openProposal(proposal),
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
+}
+
+class _ScoreProposal {
+  _ScoreProposal(this.rows)
+    : total = rows.where((row) => row.kind == 'total').toList(),
+      single = rows.where((row) => row.kind != 'total').toList();
+
+  final List<ProposalSlaScore> rows;
+  final List<ProposalSlaScore> total;
+  final List<ProposalSlaScore> single;
+  ProposalSlaScore get first => rows.first;
+  int get pending => rows.where((row) => row.status == 'pending').length;
+  int get appeals => rows.where((row) => row.appealStatus == 'pending').length;
+  String get title => first.title.trim().isEmpty ? first.code : first.title;
+}
+
+class _ScoreProposalTile extends StatelessWidget {
+  const _ScoreProposalTile({required this.proposal, required this.onTap});
+  final _ScoreProposal proposal;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final title = _ProposalCell(
+      title: proposal.title,
+      code: proposal.first.code,
+    );
+    final summary = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      spacing: 4,
+      children: [
+        if (proposal.total.isNotEmpty)
+          _summary(context, '总时长超时', proposal.total),
+        if (proposal.single.isNotEmpty)
+          _summary(context, '单环节超时', proposal.single),
+      ],
+    );
+    final status = Wrap(
+      spacing: 5,
+      runSpacing: 3,
+      children: [
+        if (proposal.pending > 0)
+          _PillTag(
+            label: '待复核 ${proposal.pending} 条',
+            fg: _cPurple(context),
+            bg: _cSoft(context),
+          ),
+        if (proposal.appeals > 0)
+          _PillTag(
+            label: '申诉中 ${proposal.appeals} 条',
+            fg: _cPurple(context),
+            bg: _cFill(context),
+          ),
+        if (proposal.pending == 0 && proposal.appeals == 0)
+          _PillTag(label: '已处理', fg: _cSub(context), bg: _cFill(context)),
+      ],
+    );
+    return Material(
+      color: _cCard(context),
+      child: InkWell(
+        onTap: onTap,
+        hoverColor: _cSoft(context),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+          child: LayoutBuilder(
+            builder: (context, box) => Row(
+              spacing: 10,
+              children: [
+                if (box.maxWidth >= 680) ...[
+                  Expanded(flex: 3, child: title),
+                  Expanded(flex: 6, child: summary),
+                  SizedBox(width: 110, child: status),
+                ] else
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      spacing: 5,
+                      children: [
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(child: title),
+                            ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 90),
+                              child: status,
+                            ),
+                          ],
+                        ),
+                        summary,
+                      ],
+                    ),
+                  ),
+                Icon(
+                  CupertinoIcons.chevron_right,
+                  size: 13,
+                  color: _cSub(context),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _summary(
+    BuildContext context,
+    String label,
+    List<ProposalSlaScore> records,
+  ) {
+    final assignments = records.map((row) {
+      final name = row.userName.trim().isEmpty ? '责任人未记录' : row.userName;
+      return row.nodeLabel.isEmpty ? name : '${row.nodeLabel}：$name';
+    }).toSet();
+    return Row(
+      children: [
+        SizedBox(
+          width: 84,
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              color: _cPurple(context),
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+        Expanded(
+          child: Text(
+            '${records.length} 条 · ${assignments.join('；')}',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(fontSize: 12, color: _cInk(context)),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ScoreProposalDialog extends StatefulWidget {
+  const _ScoreProposalDialog({required this.proposal, required this.onReview});
+
+  final _ScoreProposal proposal;
+  final Future<ProposalSlaScore?> Function(BuildContext, ProposalSlaScore)
+  onReview;
+
+  @override
+  State<_ScoreProposalDialog> createState() => _ScoreProposalDialogState();
+}
+
+class _ScoreProposalDialogState extends State<_ScoreProposalDialog> {
+  late _ScoreProposal proposal = widget.proposal;
+  bool _reviewing = false;
+
+  Future<void> _reviewRow(ProposalSlaScore row) async {
+    if (_reviewing) return;
+    setState(() => _reviewing = true);
+    try {
+      final updated = await widget.onReview(context, row);
+      if (mounted && updated != null) {
+        setState(() {
+          proposal = _ScoreProposal([
+            for (final record in proposal.rows)
+              if (record.id == updated.id) updated else record,
+          ]);
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _reviewing = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final size = MediaQuery.sizeOf(context);
+    return Dialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 20),
+      backgroundColor: _cCard(context),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      clipBehavior: Clip.antiAlias,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: 740,
+          maxHeight: size.height * .86,
+        ),
+        child: SizedBox(
+          width: 740,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(14, 8, 6, 8),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        spacing: 3,
+                        children: [
+                          Text(
+                            proposal.title,
+                            style: TextStyle(
+                              fontSize: 15,
+                              color: _cInk(context),
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          Text(
+                            [
+                              proposal.first.code,
+                              proposal.first.sector,
+                              '${proposal.rows.length} 条记录',
+                            ].where((value) => value.isNotEmpty).join(' · '),
+                            style: TextStyle(
+                              fontSize: 11.5,
+                              color: _cSub(context),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: '关闭提案详情',
+                      visualDensity: VisualDensity.compact,
+                      onPressed: () => Navigator.pop(context),
+                      icon: const Icon(CupertinoIcons.xmark, size: 15),
+                    ),
+                  ],
+                ),
+              ),
+              Divider(height: 1, color: _cLine(context)),
+              Flexible(
+                child: LayoutBuilder(
+                  builder: (context, box) {
+                    final wide = box.maxWidth >= 620;
+                    return ListView(
+                      shrinkWrap: true,
+                      padding: const EdgeInsets.fromLTRB(12, 9, 12, 12),
+                      children: [
+                        if (proposal.total.isNotEmpty)
+                          _section(context, '总时长超时', proposal.total, wide),
+                        if (proposal.total.isNotEmpty &&
+                            proposal.single.isNotEmpty)
+                          const SizedBox(height: 10),
+                        if (proposal.single.isNotEmpty)
+                          _section(context, '单环节超时', proposal.single, wide),
+                      ],
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _section(
+    BuildContext context,
+    String label,
+    List<ProposalSlaScore> records,
+    bool wide,
+  ) {
+    final caption = Text(
+      '$label · ${records.length} 条',
+      style: TextStyle(
+        fontSize: 12,
+        fontWeight: FontWeight.w700,
+        color: _cPurple(context),
+      ),
+    );
+    Widget heading(String label) => Text(
+      label,
+      style: TextStyle(
+        color: _cSub(context),
+        fontSize: 11,
+        fontWeight: FontWeight.w600,
+      ),
+    );
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        border: Border.all(color: _cLine(context)),
+        borderRadius: BorderRadius.circular(9),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(9),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            ColoredBox(
+              color: _cSoft(context),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
+                child: caption,
+              ),
+            ),
+            if (wide)
+              ColoredBox(
+                color: _cHead(context),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 5,
+                  ),
+                  child: _columns(
+                    person: heading('责任人 / 节点'),
+                    overdue: heading('超时'),
+                    points: heading('扣分'),
+                    status: heading('状态'),
+                    action: heading('操作'),
+                  ),
+                ),
+              ),
+            for (final row in records) ...[
+              Divider(height: 1, color: _cLine(context)),
+              _record(context, row, wide),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _columns({
+    required Widget person,
+    required Widget overdue,
+    required Widget points,
+    required Widget status,
+    required Widget action,
+  }) => Row(
+    spacing: 8,
+    children: [
+      Expanded(flex: 4, child: person),
+      Expanded(flex: 2, child: overdue),
+      Expanded(flex: 2, child: points),
+      Expanded(
+        flex: 2,
+        child: Align(alignment: Alignment.centerLeft, child: status),
+      ),
+      SizedBox(
+        width: 66,
+        child: Align(alignment: Alignment.centerLeft, child: action),
+      ),
+    ],
+  );
+
+  Widget _record(BuildContext context, ProposalSlaScore row, bool wide) {
+    final isTotal = row.kind == 'total';
+    final eventTime = isTotal ? row.createdAt : row.overdueAt;
+    final node = [
+      row.nodeLabel.isEmpty ? '节点未记录' : row.nodeLabel,
+      if (row.round > 0) '第 ${row.round} 轮',
+      if (row.kind == 'leader') '负责人连带',
+      if (row.sourceUserName.isNotEmpty) '关联 ${row.sourceUserName}',
+    ].join(' · ');
+    final person = Text(
+      row.userName.isEmpty ? '责任人未记录' : row.userName,
+      style: TextStyle(
+        fontSize: 13,
+        fontWeight: FontWeight.w700,
+        color: _cInk(context),
+      ),
+    );
+    final nodeText = Text(
+      node,
+      style: TextStyle(fontSize: 11.5, color: _cSub(context)),
+    );
+    final duration = Text(
+      row.overdueMinutes == 0 && isTotal
+          ? '—'
+          : '超时 ${proposalSlaMinutes(row.overdueMinutes)}',
+      style: TextStyle(
+        fontSize: 12,
+        color: _cPurple(context),
+        fontWeight: FontWeight.w600,
+      ),
+    );
+    final points = Text(
+      row.finalPoints == null
+          ? '建议扣 ${row.suggestedPoints} 分'
+          : '扣 ${row.finalPoints} 分',
+      style: TextStyle(fontSize: 12, color: _cInk(context)),
+    );
+    final status = _StatusBadge(status: row.status);
+    final action = TextButton(
+      style: TextButton.styleFrom(
+        foregroundColor: _cPurple(context),
+        minimumSize: const Size(0, 30),
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        visualDensity: VisualDensity.compact,
+        textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+      ),
+      onPressed: _reviewing ? null : () => _reviewRow(row),
+      child: Text(row.status == 'pending' ? '复核' : '重新复核'),
+    );
+    final timestamps = [
+      if (eventTime.isNotEmpty)
+        _detail(
+          context,
+          isTotal ? '记录时间' : '超时发生',
+          proposalSlaTimeText(eventTime),
+        ),
+      if (row.status == 'pending' && row.appealDeadline.isNotEmpty)
+        _detail(context, '申诉截止', proposalSlaTimeText(row.appealDeadline)),
+      if (row.reviewerName.isNotEmpty || row.reviewedAt.isNotEmpty)
+        _detail(
+          context,
+          '复核记录',
+          [
+            row.reviewerName,
+            if (row.reviewedAt.isNotEmpty) proposalSlaTimeText(row.reviewedAt),
+          ].where((value) => value.isNotEmpty).join(' · '),
+        ),
+    ];
+    return Padding(
+      key: ValueKey('proposal-sla-score-row-${row.id}'),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        spacing: 4,
+        children: [
+          if (wide)
+            _columns(
+              person: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                spacing: 2,
+                children: [person, nodeText],
+              ),
+              overdue: duration,
+              points: points,
+              status: status,
+              action: action,
+            )
+          else ...[
+            Row(
+              spacing: 7,
+              children: [
+                Expanded(child: person),
+                status,
+                action,
+              ],
+            ),
+            nodeText,
+            Wrap(spacing: 8, runSpacing: 3, children: [duration, points]),
+          ],
+          if (timestamps.isNotEmpty)
+            Wrap(spacing: 12, runSpacing: 4, children: timestamps),
+          if (row.appealReason.isNotEmpty || row.appealStatus == 'pending')
+            _detail(
+              context,
+              row.appealStatus == 'pending' ? '申诉理由（处理中）' : '申诉理由',
+              row.appealReason.isEmpty ? '未填写' : row.appealReason,
+            ),
+          if (row.reviewComment.isNotEmpty)
+            _detail(context, '复核意见', row.reviewComment),
+        ],
+      ),
+    );
+  }
+
+  Widget _detail(BuildContext context, String label, String text) => Text.rich(
+    TextSpan(
+      children: [
+        TextSpan(
+          text: '$label  ',
+          style: TextStyle(color: _cSub(context)),
+        ),
+        TextSpan(text: text),
+      ],
+    ),
+    style: TextStyle(fontSize: 11.5, color: _cInk(context)),
+  );
 }
 
 class _ExemptPane extends StatefulWidget {
@@ -1630,70 +2055,6 @@ class _InstanceMobileCard extends StatelessWidget {
                 ),
             ],
           ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ScoreMobileCard extends StatelessWidget {
-  const _ScoreMobileCard({required this.row, required this.onReview});
-
-  final ProposalSlaScore row;
-  final VoidCallback onReview;
-
-  @override
-  Widget build(BuildContext context) {
-    final scoreText = row.finalPoints != null && row.status != 'pending'
-        ? '${row.finalPoints} 分'
-        : '建议 ${row.suggestedPoints} 分';
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: _cHead(context),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _cLine(context)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(child: _ProposalCell(title: row.title, code: row.code)),
-              _StatusBadge(status: row.status),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            '${proposalSlaKindLabel(row.kind)}${row.nodeLabel.isEmpty ? '' : ' · ${row.nodeLabel}'} · '
-            '${row.sourceUserName.isEmpty ? row.userName : '${row.userName}（因 ${row.sourceUserName}）'}',
-            style: TextStyle(fontSize: 12, color: _cInk(context)),
-          ),
-          const SizedBox(height: 6),
-          Row(
-            children: [
-              _PillTag(label: scoreText, fg: _cPurple(context), bg: _cSoft(context)),
-              const SizedBox(width: 6),
-              if (row.overdueMinutes > 0)
-                _PillTag(
-                  label: '超时 ${proposalSlaMinutes(row.overdueMinutes)}',
-                  fg: const Color(0xFFFF3B30),
-                  bg: const Color(0xFFFFF1F0),
-                ),
-              const Spacer(),
-              _ActionPill(label: '复核', onTap: onReview),
-            ],
-          ),
-          if (row.appealStatus == 'pending') ...[
-            const SizedBox(height: 8),
-            Text(
-              '申诉中：${row.appealReason}',
-              style: TextStyle(
-                fontSize: 12,
-                color: DunesColors.resolve(context, const Color(0xFFB25000)),
-              ),
-            ),
-          ],
         ],
       ),
     );

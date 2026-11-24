@@ -371,8 +371,10 @@ class ChatReconciliationShareCard extends StatefulWidget {
 class _ChatReconciliationShareCardState
     extends State<ChatReconciliationShareCard> {
   static const _purple = Color(0xff6248d6);
-  static const _confirmed = Color(0xffc8494c);
-  static const _pending = Color(0xff238767);
+  // 2026-11-24 配色纠正：已确认=绿，待确认=橙，未确认（一条都没确认）=红。
+  static const _confirmed = Color(0xff2f7a3a);
+  static const _pending = Color(0xff9a6100);
+  static const _none = Color(0xffb3261e);
   static const _muted = Color(0xff858994);
   int _tab = 0;
   final Set<String> _open = {};
@@ -502,8 +504,8 @@ class _ChatReconciliationShareCardState
             Wrap(spacing: 5, runSpacing: 5, children: [
               _pill('${_groupLabel} ${_channels.length}', const Color(0xfff3f4f6), const Color(0xff555b66)),
               _pill('${_itemLabel} ${_projectCount(_rows)}', const Color(0xfff3f4f6), const Color(0xff555b66)),
-              _pill('已确认 $confirmed', const Color(0xffffeeee), _confirmed),
-              _pill('待确认 ${activeRows.length - confirmed}', const Color(0xffe7f6ef), _pending),
+              _pill('已确认 $confirmed', const Color(0xffe7f4ea), _confirmed),
+              _pill('待确认 ${activeRows.length - confirmed}', const Color(0xfffdf1dc), _pending),
             ]),
             const SizedBox(height: 8),
             Row(
@@ -582,9 +584,9 @@ class _ChatReconciliationShareCardState
       padding: const EdgeInsets.only(top: 10, bottom: 6),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Row(children: [
-          Expanded(child: _overviewCount('全部确认', fullyConfirmed, _confirmed, const Color(0xffffeeee))),
+          Expanded(child: _overviewCount('全部确认', fullyConfirmed, _confirmed, const Color(0xffe7f4ea))),
           const SizedBox(width: 7),
-          Expanded(child: _overviewCount('仍待确认', groups.length - fullyConfirmed, _pending, const Color(0xffe7f6ef))),
+          Expanded(child: _overviewCount('仍待确认', groups.length - fullyConfirmed, _pending, const Color(0xfffdf1dc))),
         ]),
         const SizedBox(height: 11),
         Container(
@@ -620,7 +622,7 @@ class _ChatReconciliationShareCardState
     final done = rows.where((row) => row['confirmed'] == true).length;
     final allDone = rows.isNotEmpty && done == rows.length;
     final status = allDone ? '已确认' : done == 0 ? '未确认' : '部分确认';
-    final color = allDone ? _confirmed : _pending;
+    final color = allDone ? _confirmed : done == 0 ? _none : _pending;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 10),
       decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: Color(0xffeff0f2)))),
@@ -688,8 +690,8 @@ class _ChatReconciliationShareCardState
             Padding(
               padding: const EdgeInsets.only(left: 22, top: 5),
               child: Wrap(spacing: 5, runSpacing: 5, children: [
-                _pill('已确认 $confirmedCount', const Color(0xffffeeee), _confirmed),
-                _pill('待确认 $pendingCount', const Color(0xffe7f6ef), _pending),
+                _pill('已确认 $confirmedCount', const Color(0xffe7f4ea), _confirmed),
+                _pill('待确认 $pendingCount', const Color(0xfffdf1dc), _pending),
               ]),
             ),
             if (_open.contains(key))
@@ -802,7 +804,7 @@ class _ChatReconciliationShareCardState
             Expanded(child: Text(period.isEmpty ? '对账记录' : period,
               style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xff343944)))),
             _pill(done ? '已确认' : '待确认',
-              done ? const Color(0xffffeeee) : const Color(0xffe7f6ef),
+              done ? const Color(0xffe7f4ea) : const Color(0xfffdf1dc),
               done ? _confirmed : _pending),
           ]),
           const SizedBox(height: 8),
@@ -826,7 +828,7 @@ class _ChatReconciliationShareCardState
             Container(
               width: double.infinity,
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-              decoration: BoxDecoration(color: const Color(0xffe7f6ef), borderRadius: BorderRadius.circular(6)),
+              decoration: BoxDecoration(color: const Color(0xfffdf1dc), borderRadius: BorderRadius.circular(6)),
               child: Text('待确认意见：${opinions.first}', style: const TextStyle(fontSize: 10, height: 1.4, color: _pending)),
             ),
           ],

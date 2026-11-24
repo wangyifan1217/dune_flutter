@@ -281,6 +281,11 @@ class LighthouseIntradayHero extends StatefulWidget {
     this.asOfMinute,
     this.monthly = false,
     this.monthAsOf,
+    this.beforePnl = false,
+    this.pnlAfter,
+    this.onOpenPnl,
+    this.forecastValue,
+    this.onOpenForecast,
   });
 
   /// 当前指标（利润 / 核销额 / 成本合计…，跟着底下七格走）。
@@ -339,6 +344,19 @@ class LighthouseIntradayHero extends StatefulWidget {
   /// 同一张卡可用月度桶展示近 7 个月，月视图不展示日内分时。
   final bool monthly;
   final DateTime? monthAsOf;
+
+  /// 2026-11-24 · 利润是账面口径（不含资管损益）：标题写「利润」、走势标「（账面）」。
+  final bool beforePnl;
+
+  /// 含资管损益的利润（账面 + 资管损益）。有值时月度大数换成「本月利润 账面 | 含资管损益 | 月末预测」三栏。
+  final double? pnlAfter;
+
+  /// 「损益明细 ›」。
+  final VoidCallback? onOpenPnl;
+
+  /// 三栏里的月末预测；null = 不出预测那一栏。
+  final double? forecastValue;
+  final VoidCallback? onOpenForecast;
 
   @override
   State<LighthouseIntradayHero> createState() => _LighthouseIntradayHeroState();
@@ -400,7 +418,9 @@ class _LighthouseIntradayHeroState extends State<LighthouseIntradayHero> {
   String _diff(double d) => widget.isRate ? '${d.abs().toStringAsFixed(1)}pt' : '${_lhWan(d.abs())}万';
 
   /// 「盈利」/「核销额」…
-  String get _word => widget.metricKey == 'profit' ? '盈利' : widget.metricLabel;
+  String get _word => widget.metricKey == 'profit'
+      ? (widget.beforePnl ? '利润' : '盈利')
+      : widget.metricLabel;
 
   String _dayName(LhIntradayDay d) {
     if (widget.monthly) return d.isToday ? '本月' : '${d.date.month}月';
@@ -664,7 +684,9 @@ class _LighthouseIntradayHeroState extends State<LighthouseIntradayHero> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           if (widget.toggle != null) ...[widget.toggle!, const SizedBox(height: 10)],
-          if (forecastPanel == null)
+          if (widget.monthly && widget.pnlAfter != null)
+            _pnlSummary(day: day, stamp: stamp, valueColor: valueColor)
+          else if (forecastPanel == null)
             actualSummary()
           else
             LayoutBuilder(
@@ -709,7 +731,7 @@ class _LighthouseIntradayHeroState extends State<LighthouseIntradayHero> {
               Expanded(
                 child: Text(
                   widget.monthly
-                      ? '近7个月 · 每月$_word'
+                      ? '近7个月 · 每月$_word${widget.beforePnl ? '（账面）' : ''}'
                       : week
                       ? '近7天 · 每日$_word'
                       : '${isToday ? '今日' : '${_md(day.date)} '}${widget.isRate ? widget.metricLabel : '累计$_word'}',
@@ -730,7 +752,7 @@ class _LighthouseIntradayHeroState extends State<LighthouseIntradayHero> {
             const SizedBox(height: 2),
             Text(
               widget.monthly
-                  ? '每个点是当月$_word${!widget.isRate && days.last.isToday ? ' · 本月仍在累计' : ''}'
+                  ? '每个点是当月${widget.beforePnl ? '账面利润，不含资管损益' : _word}${!widget.isRate && days.last.isToday ? ' · 本月仍在累计' : ''}'
                   : '每个点是当天$_word${widget.isRate ? '' : '（非累计）'} · 今天仍在累计',
               style: LhTypography.sans(context: context, size: 11, color: mute),
             ),
@@ -777,6 +799,238 @@ class _LighthouseIntradayHeroState extends State<LighthouseIntradayHero> {
           if (widget.footer != null) ...[const SizedBox(height: 12), widget.footer!],
         ],
       ),
+    );
+  }
+
+  // ── 2026-11-24 · 月度利润三栏（原型 A）：本月利润 账面 | 含资管损益 · 损益 ±x万 › | 月末预测 · 报告 › ──
+  //   三栏同三行：标签 22 / 数字 40（底对齐）/ 链接 20 —— 标签、数字、链接各自排成一条线。
+  Widget _pnlSummary({
+    required LhIntradayDay day,
+    required String stamp,
+    required Color valueColor,
+  }) {
+    final ink = _c(LhColors.ink);
+    final ink2 = _c(LhColors.ink2);
+    final mute = _c(LhColors.mute2);
+    final purple = _c(LhColors.purple);
+    final plum = _c(const Color(0xFF3B2A7A));
+    final lilac = _c(const Color(0xFF9B85E6));
+    final line = _c(const Color(0xFFECE8F3), role: DunesColorRole.border);
+    final after = widget.pnlAfter!;
+    final impact = after - widget.value;
+    final impactColor = impact.abs() < 50
+        ? mute
+        : (impact > 0 ? _c(_kIntradayRed) : _c(LhColors.pos));
+
+    const labelH = 22.0;
+    const numberH = 40.0;
+    const footH = 20.0;
+    const gapV = 8.0;
+    const mainSize = 34.0;
+
+    // 数字单行不换行，放不下整体缩；小号数字往上垫一点，让三栏的数字底边落在同一条线上。
+    Widget money(double v, {required double size, required Color color}) => Padding(
+      padding: EdgeInsets.only(bottom: (mainSize - size) * 0.18),
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        alignment: Alignment.bottomLeft,
+        child: Text.rich(
+          TextSpan(
+            children: [
+              TextSpan(
+                text: _num(v),
+                style: LhTypography.number(context: context, size: size, color: color)
+                    .copyWith(
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: size >= 30 ? -0.6 : -0.4,
+                      height: 1,
+                    ),
+              ),
+              TextSpan(
+                text: _unit,
+                style: LhTypography.sans(
+                  context: context,
+                  size: size >= 30 ? 14 : 12,
+                  weight: FontWeight.w700,
+                  color: color,
+                ),
+              ),
+            ],
+          ),
+          maxLines: 1,
+          softWrap: false,
+        ),
+      ),
+    );
+
+    TextStyle linkStyle([Color? color]) => LhTypography.sans(
+      context: context,
+      size: 12,
+      weight: FontWeight.w700,
+      color: color ?? purple,
+    );
+
+    Widget link(List<InlineSpan> spans, VoidCallback? onTap, String semantics) {
+      final text = FittedBox(
+        fit: BoxFit.scaleDown,
+        alignment: Alignment.centerLeft,
+        child: Text.rich(
+          TextSpan(children: [...spans, TextSpan(text: ' ›', style: linkStyle())]),
+          maxLines: 1,
+          softWrap: false,
+        ),
+      );
+      if (onTap == null) return text;
+      return Semantics(
+        button: true,
+        label: semantics,
+        child: LhPressScale(
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: onTap,
+            child: text,
+          ),
+        ),
+      );
+    }
+
+    Widget label(String text) => Text(
+      text,
+      maxLines: 1,
+      softWrap: false,
+      overflow: TextOverflow.ellipsis,
+      style: LhTypography.sans(
+        context: context, size: 13, weight: FontWeight.w600, color: ink2,
+      ),
+    );
+
+    Widget column({
+      required Widget head,
+      required Widget number,
+      required Widget foot,
+      bool divider = false,
+    }) => Container(
+      padding: EdgeInsets.only(left: divider ? 16 : 0),
+      decoration: divider
+          ? BoxDecoration(border: Border(left: BorderSide(color: line)))
+          : null,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(height: labelH, child: Align(alignment: Alignment.centerLeft, child: head)),
+          const SizedBox(height: gapV),
+          SizedBox(height: numberH, child: Align(alignment: Alignment.bottomLeft, child: number)),
+          const SizedBox(height: gapV),
+          SizedBox(height: footH, child: Align(alignment: Alignment.centerLeft, child: foot)),
+        ],
+      ),
+    );
+
+    final main = column(
+      head: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Flexible(
+            child: Text(
+              '${_dayName(day)}利润',
+              maxLines: 1,
+              softWrap: false,
+              overflow: TextOverflow.ellipsis,
+              style: LhTypography.sans(
+                context: context, size: 15, weight: FontWeight.w800, color: ink,
+              ),
+            ),
+          ),
+          const SizedBox(width: 6),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: _c(LhColors.purpleSoft, role: DunesColorRole.surface),
+              borderRadius: BorderRadius.circular(5),
+            ),
+            child: Text(
+              '账面',
+              style: LhTypography.sans(
+                context: context, size: 11, weight: FontWeight.w700, color: purple,
+              ),
+            ),
+          ),
+        ],
+      ),
+      number: TweenAnimationBuilder<double>(
+        key: ValueKey('big-book|${widget.metricKey}'),
+        tween: Tween<double>(end: widget.value),
+        duration: const Duration(milliseconds: 480),
+        curve: Curves.easeOutCubic,
+        builder: (context, shown, _) => money(shown, size: mainSize, color: valueColor),
+      ),
+      foot: Text(
+        stamp,
+        maxLines: 1,
+        softWrap: false,
+        overflow: TextOverflow.ellipsis,
+        style: LhTypography.sans(context: context, size: 12, color: mute),
+      ),
+    );
+
+    final withPnl = column(
+      divider: true,
+      head: label('含资管损益'),
+      number: money(after, size: 24, color: plum),
+      foot: link(
+        [
+          TextSpan(text: '损益 ', style: linkStyle()),
+          TextSpan(
+            text: '${impact >= 0 ? '+' : '−'}${_lhWan(impact.abs())}万',
+            style: linkStyle(impactColor),
+          ),
+        ],
+        widget.onOpenPnl,
+        '查看资管损益',
+      ),
+    );
+
+    final forecast = widget.forecastValue;
+    final forecastCol = forecast == null
+        ? null
+        : column(
+            divider: true,
+            head: label('月末预测'),
+            number: money(forecast, size: 24, color: lilac),
+            foot: link([TextSpan(text: '报告', style: linkStyle())], widget.onOpenForecast, '打开月末预测报告'),
+          );
+
+    return LayoutBuilder(
+      builder: (context, box) {
+        final textScale = MediaQuery.textScalerOf(context).scale(1);
+        if (box.maxWidth < 340 * textScale) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              main,
+              const SizedBox(height: 12),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(child: withPnl),
+                  if (forecastCol != null) Expanded(child: forecastCol),
+                ],
+              ),
+            ],
+          );
+        }
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(flex: 135, child: main),
+            Expanded(flex: 100, child: Padding(padding: const EdgeInsets.only(left: 14), child: withPnl)),
+            if (forecastCol != null)
+              Expanded(flex: 90, child: Padding(padding: const EdgeInsets.only(left: 14), child: forecastCol)),
+          ],
+        );
+      },
     );
   }
 

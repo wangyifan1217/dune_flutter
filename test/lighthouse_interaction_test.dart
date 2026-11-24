@@ -667,7 +667,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('月度资管损益入口保留，重试后可展开净额为零的账单', (tester) async {
+  testWidgets('月度资管损益卡：重试后显示两格，全部账单弹层可看净额为零的账单', (tester) async {
     const product = '满减券（交易）';
     Map<String, dynamic>? pnl;
     await mountPage(tester, width: 940, pnlProvider: () => pnl);
@@ -677,7 +677,6 @@ void main() {
     expect(entry, findsOneWidget);
     await tester.ensureVisible(entry);
     await tester.pump();
-    await tester.tap(entry);
     await tester.pump(const Duration(milliseconds: 350));
     expect(find.text('暂时无法取得资管损益数据'), findsOneWidget);
 
@@ -691,19 +690,42 @@ void main() {
       ],
     };
     final retry = find.text('重试');
-    await tester.ensureVisible(retry);
+    await Scrollable.ensureVisible(tester.element(retry), alignment: 0.5);
     await tester.pump();
     await tester.tap(retry);
     await tester.pump(const Duration(milliseconds: 400));
-    expect(find.text('0.00万 · 2 张账单'), findsOneWidget);
     expect(find.text('暂时无法取得资管损益数据'), findsNothing);
-    final productEntry = find.text(product).hitTestable().first;
-    await tester.ensureVisible(productEntry);
+    // 页面上只有总数 + 两格（这里没有未归属，只剩「已归属产品」一格），不铺明细。
+    expect(find.text('2 张账单'), findsOneWidget);
+    expect(find.text('已归属产品'), findsOneWidget);
+    expect(find.text('1 个产品 · 1 个已对平'), findsOneWidget);
+    expect(find.text('增益账单'), findsNothing);
+
+    final all = find.text('全部账单 ›');
+    await tester.ensureVisible(all);
     await tester.pump();
-    await tester.tap(productEntry);
-    await tester.pump(const Duration(milliseconds: 350));
+    await tester.tap(all);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    // 弹层：没有未归属时右栏直接看第一个已归属产品：费用类型 → 项目 → 账单表。
+    expect(find.text('资管损益明细'), findsOneWidget);
+    expect(find.text('其他费用'), findsOneWidget);
     expect(find.text('增益账单'), findsOneWidget);
     expect(find.text('减益账单'), findsOneWidget);
+    expect(find.text('账期'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    final tableHeader = find.text('账单金额');
+    final desktopTitleSize = tester.widget<Text>(entry).style!.fontSize!;
+    final desktopTableSize = tester.widget<Text>(tableHeader).style!.fontSize!;
+    tester.view.physicalSize = const Size(430, 950);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
+    expect(tester.widget<Text>(entry).style!.fontSize, lessThan(desktopTitleSize));
+    expect(
+      tester.widget<Text>(tableHeader).style!.fontSize,
+      lessThan(desktopTableSize),
+    );
     expect(tester.takeException(), isNull);
   });
   testWidgets(

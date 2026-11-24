@@ -610,6 +610,8 @@ class LhBrandSwitch extends StatelessWidget {
     this.showAsset = true,
     this.bizSelected = false,
     this.onBiz,
+    this.opsSelected = false,
+    this.onOps,
   });
 
   final bool assetSelected;
@@ -623,20 +625,28 @@ class LhBrandSwitch extends StatelessWidget {
   final bool bizSelected;
   final VoidCallback? onBiz;
 
+  /// 2026-11-24 · 第四格「运营」（日清月结）。宿主不给 [onOps] 就不出现。
+  final bool opsSelected;
+  final VoidCallback? onOps;
+
   @override
   Widget build(BuildContext context) {
     final segments = <(String, VoidCallback)>[
       ('灯塔', onLighthouse),
       if (showAsset) ('资管', onAsset),
       if (onBiz != null) ('业务', onBiz!),
+      if (onOps != null) ('运营', onOps!),
     ];
-    final selectedLabel = bizSelected && onBiz != null
+    final selectedLabel = opsSelected && onOps != null
+        ? '运营'
+        : bizSelected && onBiz != null
         ? '业务'
         : (assetSelected && showAsset ? '资管' : '灯塔');
     final hit = segments.indexWhere((e) => e.$1 == selectedLabel);
     final selectedIndex = hit < 0 ? 0 : hit;
     return SizedBox(
-      width: 74.0 * segments.length,
+      // 四格（含「运营」）时每格收窄一点，手机顶栏放得下。
+      width: (segments.length > 3 ? 64.0 : 74.0) * segments.length,
       height: 34,
       child: DecoratedBox(
         decoration: BoxDecoration(

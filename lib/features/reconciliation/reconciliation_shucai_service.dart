@@ -451,6 +451,33 @@ class ReconciliationShucaiService {
     return Tag2EntityDrilldown.fromJson(data);
   }
 
+  /// 灯塔 › 运营「催一下」：flow-go 用对账助手私聊这个人，告诉他名下还有几条日清没确认。
+  /// 同一个人 30 分钟内只能催一次；返回被催人的名字。
+  Future<String> nudgeTag3Daily({
+    required String asOfDate,
+    required String phone,
+    required String name,
+    required String role,
+  }) async {
+    final base = _session.apiBase.replaceAll(RegExp(r'/$'), '');
+    final uri = Uri.parse('$base/reconciliation/tag3-daily/nudge');
+    final resp = await _client
+        .post(
+          uri,
+          headers: {..._headers, 'Content-Type': 'application/json'},
+          body: jsonEncode({
+            'asOfDate': asOfDate.trim(),
+            'phone': phone.trim(),
+            'name': name.trim(),
+            'role': role.trim(),
+          }),
+        )
+        .timeout(const Duration(seconds: 40));
+    final data = _decodeEnvelope(resp, fallback: '催办失败');
+    final sent = (data['name'] ?? '').toString().trim();
+    return sent.isEmpty ? name : sent;
+  }
+
   Future<void> confirmTag2Entity({
     required String asOfDate,
     required String rowKey,

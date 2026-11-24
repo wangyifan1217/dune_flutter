@@ -24281,12 +24281,11 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
               child: LayoutBuilder(
                 builder: (context, constraints) {
                   final bounded = constraints.maxWidth.isFinite;
+                  // 窄屏（浮岛内宽 < 120）放不下「周期名 + 日期 + 箭头」：
+                  // 收掉日期（读屏 label 里仍有），周期名可缩、超长省略，避免溢出。
+                  final compact = bounded && constraints.maxWidth < 120;
                   final rangeLabel = _buildIslandRangeLabel(range);
-                  return Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // 切期时这颗字块从下往上翻过来（老的往下淡出）。
-                  AnimatedSwitcher(
+                  final namePill = AnimatedSwitcher(
                     duration: _islandDur(280),
                     switchInCurve: Curves.easeOutBack,
                     switchOutCurve: Curves.easeInCubic,
@@ -24308,7 +24307,6 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
                       key: ValueKey('island-$name'),
                       height: _kIslandH - 8,
                       padding: const EdgeInsets.symmetric(horizontal: 12),
-                      alignment: Alignment.center,
                       decoration: const BoxDecoration(
                         gradient: kDunesIslandPillGradient,
                         borderRadius: BorderRadius.all(
@@ -24316,22 +24314,35 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
                         ),
                         boxShadow: kDunesIslandPillShadow,
                       ),
-                      child: Text(
-                        name,
-                        maxLines: 1,
-                        style: LhTypography.sans(
-                          size: 13,
-                          weight: FontWeight.w700,
-                          color: Colors.white,
-                          letterSpacing: 0.4,
-                          height: 1.0,
-                          context: context,
+                      // widthFactor: 1 → 宽度贴字，放进 Flexible 也不会被撑满。
+                      child: Center(
+                        widthFactor: 1,
+                        child: Text(
+                          name,
+                          maxLines: 1,
+                          softWrap: false,
+                          overflow: TextOverflow.ellipsis,
+                          style: LhTypography.sans(
+                            size: 13,
+                            weight: FontWeight.w700,
+                            color: Colors.white,
+                            letterSpacing: 0.4,
+                            height: 1.0,
+                            context: context,
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 9),
-                  if (bounded) Flexible(child: rangeLabel) else rangeLabel,
+                  );
+                  return Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // 切期时这颗字块从下往上翻过来（老的往下淡出）。
+                  if (compact) Flexible(child: namePill) else namePill,
+                  if (!compact) ...[
+                    const SizedBox(width: 9),
+                    if (bounded) Flexible(child: rangeLabel) else rangeLabel,
+                  ],
                   const SizedBox(width: 2),
                   AnimatedRotation(
                     turns: _periodSheetOpen ? 0.5 : 0,

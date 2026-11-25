@@ -5,6 +5,7 @@ import 'dart:typed_data';
 
 import '../../core/theme/dunes_theme.dart';
 import '../conversation/conversation_service.dart';
+import 'im_ui_kit.dart';
 import 'sticker_disk_cache.dart';
 
 /// 聊天表情面板高度（与键盘区域接近，便于顶起消息列表）。
@@ -225,14 +226,8 @@ class _ChatEmojiGifPanelState extends State<ChatEmojiGifPanel> {
                           categoryViewConfig: CategoryViewConfig(
                             tabBarHeight: 52,
                             backgroundColor: surface,
-                            indicatorColor: DunesColors.resolve(
-                              context,
-                              DunesColors.accent,
-                            ),
-                            iconColorSelected: DunesColors.resolve(
-                              context,
-                              DunesColors.accent,
-                            ),
+                            indicatorColor: ImVisualTokens.accent(context),
+                            iconColorSelected: ImVisualTokens.accent(context),
                             customCategoryView:
                                 (
                                   config,
@@ -290,47 +285,48 @@ class _ChatEmojiGifPanelState extends State<ChatEmojiGifPanel> {
     );
   }
 
-  Widget _emojiTab(bool selected, VoidCallback onTap) => InkWell(
-    onTap: onTap,
-    child: Container(
-      width: 56,
-      height: 52,
-      padding: const EdgeInsets.only(top: 2),
-      decoration: BoxDecoration(
-        border: Border(
-          bottom: BorderSide(
+  Widget _emojiTab(bool selected, VoidCallback onTap) {
+    final accent = ImVisualTokens.accent(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+      child: ImTapScale(
+        borderRadius: BorderRadius.circular(12),
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: ImVisualTokens.fastAnim,
+          curve: ImVisualTokens.iosCurve,
+          width: 54,
+          height: 40,
+          decoration: BoxDecoration(
             color: selected
-                ? DunesColors.resolve(context, DunesColors.accent)
+                ? ImVisualTokens.accentSoftSurface(context)
                 : Colors.transparent,
-            width: 2,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.emoji_emotions_outlined,
+                size: 21,
+                color: selected ? accent : null,
+              ),
+              const SizedBox(height: 1),
+              Text(
+                '表情',
+                maxLines: 1,
+                style: TextStyle(
+                  fontSize: 9.5,
+                  color: selected ? ImVisualTokens.accentText(context) : null,
+                  fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                ),
+              ),
+            ],
           ),
         ),
       ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            Icons.emoji_emotions_outlined,
-            size: 25,
-            color: selected
-                ? DunesColors.resolve(context, DunesColors.accent)
-                : null,
-          ),
-          Text(
-            '表情',
-            maxLines: 1,
-            style: TextStyle(
-              fontSize: 9,
-              color: selected
-                  ? DunesColors.resolve(context, DunesColors.accent)
-                  : null,
-              fontWeight: selected ? FontWeight.w600 : null,
-            ),
-          ),
-        ],
-      ),
-    ),
-  );
+    );
+  }
 
   Widget _packTab(
     Map<String, dynamic> pack,
@@ -343,48 +339,52 @@ class _ChatEmojiGifPanelState extends State<ChatEmojiGifPanel> {
         : assets.isEmpty
         ? null
         : Map<String, dynamic>.from(assets.first);
-    final accent = DunesColors.resolve(context, DunesColors.accent);
-    return InkWell(
-      onTap: onTap,
-      child: Container(
-        width: 64,
-        height: 52,
-        padding: const EdgeInsets.only(top: 2),
-        decoration: BoxDecoration(
-          border: Border(
-            bottom: BorderSide(
-              color: selected ? accent : Colors.transparent,
-              width: 2,
-            ),
+    final accent = ImVisualTokens.accent(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 6),
+      child: ImTapScale(
+        borderRadius: BorderRadius.circular(12),
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: ImVisualTokens.fastAnim,
+          curve: ImVisualTokens.iosCurve,
+          width: 62,
+          height: 40,
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          decoration: BoxDecoration(
+            color: selected
+                ? ImVisualTokens.accentSoftSurface(context)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(12),
           ),
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            SizedBox.square(
-              dimension: 28,
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(7),
-                child: cover == null
-                    ? Icon(
-                        Icons.photo_outlined,
-                        size: 23,
-                        color: selected ? accent : null,
-                      )
-                    : _stickerImage(cover),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              SizedBox.square(
+                dimension: 24,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(7),
+                  child: cover == null
+                      ? Icon(
+                          Icons.photo_outlined,
+                          size: 20,
+                          color: selected ? accent : null,
+                        )
+                      : _stickerImage(cover),
+                ),
               ),
-            ),
-            Text(
-              (pack['name'] ?? '表情').toString(),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 9,
-                color: selected ? accent : null,
-                fontWeight: selected ? FontWeight.w600 : null,
+              Text(
+                (pack['name'] ?? '表情').toString(),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 9.5,
+                  color: selected ? ImVisualTokens.accentText(context) : null,
+                  fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

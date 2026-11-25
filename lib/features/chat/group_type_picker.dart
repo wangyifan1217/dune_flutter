@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:dunes_app/core/theme/dunes_theme.dart';
+import 'im_ui_kit.dart';
 
 /// 建群类型。创建后群主可在群资料里转换。
 enum NewGroupType {
@@ -41,71 +42,64 @@ class _CreateGroupTypeDialogState extends State<_CreateGroupTypeDialog> {
 
   Widget _option(NewGroupType type, String title, String desc) {
     final selected = _type == type;
-    return InkWell(
-      borderRadius: BorderRadius.circular(10),
+    final accent = ImVisualTokens.accent(context);
+    return ImTapScale(
+      borderRadius: BorderRadius.circular(14),
       onTap: () => setState(() => _type = type),
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(10, 10, 12, 10),
+      child: AnimatedContainer(
+        duration: ImVisualTokens.fastAnim,
+        curve: ImVisualTokens.iosCurve,
+        padding: const EdgeInsets.fromLTRB(12, 12, 14, 12),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(14),
           border: Border.all(
             color: selected
-                ? _accent
-                : DunesColors.resolve(
-                    context,
-                    const Color(0xFFE3E5EA),
-                    role: DunesColorRole.border,
-                  ),
-            width: selected ? 1.5 : 1,
+                ? accent
+                : ImVisualTokens.hairlineBorder(context),
+            width: selected ? 1.4 : 0.8,
           ),
           color: selected
-              ? DunesColors.resolve(
-                  context,
-                  const Color(0xFFF4F0FD),
-                  role: DunesColorRole.surface,
-                )
-              : DunesColors.resolve(
-                  context,
-                  Colors.white,
-                  role: DunesColorRole.surface,
-                ),
+              ? ImVisualTokens.accentSoftSurface(context)
+              : ImVisualTokens.cardSurface(context),
+          boxShadow: selected
+              ? [
+                  BoxShadow(
+                    color: accent.withValues(alpha: 0.12),
+                    blurRadius: 12,
+                    offset: const Offset(0, 3),
+                  ),
+                ]
+              : const [],
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(
-              selected ? Icons.radio_button_checked : Icons.radio_button_off,
-              size: 20,
-              color: selected
-                  ? _accent
-                  : DunesColors.resolve(context, const Color(0xFFB0B4BD)),
+            Padding(
+              padding: const EdgeInsets.only(top: 1),
+              child: ImSelectCircle(selected: selected, size: 20),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 10),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     title,
-                    style: TextStyle(
+                    style: DunesTypography.sans(
                       fontSize: 15,
                       fontWeight: FontWeight.w600,
-                      color: DunesColors.resolveNullable(
-                        context,
-                        Color(0xFF1F2329),
-                      ),
+                      color: DunesColors.resolve(context, DunesColors.text),
+                      context: context,
                     ),
                   ),
-                  const SizedBox(height: 2),
+                  const SizedBox(height: 3),
                   Text(
                     desc,
-                    style: TextStyle(
+                    style: DunesTypography.sans(
                       fontSize: 12.5,
-                      height: 1.35,
-                      color: DunesColors.resolveNullable(
-                        context,
-                        Color(0xFF6B7078),
-                      ),
+                      height: 1.4,
+                      color: DunesColors.resolve(context, DunesColors.text2),
+                      context: context,
                     ),
                   ),
                 ],

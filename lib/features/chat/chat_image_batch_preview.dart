@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'chat_image_editor.dart';
 import 'chat_image_utils.dart';
 import 'package:dunes_app/core/theme/dunes_theme.dart';
+import 'im_ui_kit.dart';
 
 /// 待发送的聊天图片（可多次编辑；可选原图上传）。
 class ChatImageDraft {
@@ -241,8 +242,8 @@ class _ChatImageBatchPreviewPageState extends State<ChatImageBatchPreviewPage> {
               _preparing
                   ? '处理中'
                   : (_drafts.length == 1 ? '发送' : '发送(${_drafts.length})'),
-              style: TextStyle(
-                color: DunesColors.resolveNullable(context, Color(0xFF07C160)),
+              style: const TextStyle(
+                color: ImVisualTokens.purpleLight,
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -292,10 +293,7 @@ class _ChatImageBatchPreviewPageState extends State<ChatImageBatchPreviewPage> {
                                 width: 24,
                                 child: Checkbox(
                                   value: _sendAsOriginal,
-                                  activeColor: DunesColors.resolve(
-                                    context,
-                                    const Color(0xFF07C160),
-                                  ),
+                                  activeColor: ImVisualTokens.purple,
                                   side: BorderSide(
                                     color: DunesColors.resolve(
                                       context,
@@ -358,14 +356,10 @@ class _ChatImageBatchPreviewPageState extends State<ChatImageBatchPreviewPage> {
                                     child: Container(
                                       width: 72,
                                       decoration: BoxDecoration(
-                                        borderRadius: BorderRadius.circular(6),
+                                        borderRadius: BorderRadius.circular(8),
                                         border: Border.all(
                                           color: selected
-                                              ? DunesColors.resolve(
-                                                  context,
-                                                  const Color(0xFF07C160),
-                                                  role: DunesColorRole.border,
-                                                )
+                                              ? ImVisualTokens.purpleLight
                                               : DunesColors.resolve(
                                                   context,
                                                   Colors.white24,
@@ -435,10 +429,7 @@ class _ChatImageBatchPreviewPageState extends State<ChatImageBatchPreviewPage> {
                                                   Icons.check_circle,
                                                   size: 16,
                                                   color:
-                                                      DunesColors.resolveNullable(
-                                                        context,
-                                                        Color(0xFF07C160),
-                                                      ),
+                                                      ImVisualTokens.purpleLight,
                                                 ),
                                               ),
                                             ),

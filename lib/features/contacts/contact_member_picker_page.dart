@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/dunes_theme.dart';
 import '../auth/auth_session.dart';
+import '../chat/im_ui_kit.dart';
 import '../chat/user_avatar_widget.dart';
 import '../conversation/conversation_service.dart';
 import 'contact_models.dart';
@@ -262,14 +263,15 @@ class ContactMemberPickerPanelState extends State<ContactMemberPickerPanel> {
       children: [
         for (final dep in _departments)
           Container(
-            margin: const EdgeInsets.only(bottom: 8),
+            margin: const EdgeInsets.only(bottom: 10),
             decoration: BoxDecoration(
-              color: DunesColors.resolve(
-                context,
-                const Color(0xFFF0F1F3),
-                role: DunesColorRole.surface,
+              color: ImVisualTokens.cardSurface(context),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: ImVisualTokens.hairlineBorder(context),
+                width: 0.7,
               ),
-              borderRadius: BorderRadius.circular(12),
+              boxShadow: ImVisualTokens.softCardShadow(context),
             ),
             clipBehavior: Clip.antiAlias,
             child: DeptBlockTile(
@@ -333,7 +335,7 @@ class ContactMemberPickerPanelState extends State<ContactMemberPickerPanel> {
                     _selected.isEmpty ? '完成' : '完成（${_selected.length}）',
                     style: TextStyle(
                       fontSize: 16,
-                      color: DunesColors.resolveNullable(context, _driveAccent),
+                      color: ImVisualTokens.accent(context),
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -427,22 +429,40 @@ class ContactMemberPickerPanelState extends State<ContactMemberPickerPanel> {
             ),
           ),
         Padding(
-          padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
+          padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
           child: TextField(
             controller: _search,
+            cursorColor: ImVisualTokens.accent(context),
             decoration: InputDecoration(
               hintText: '搜索姓名 / 部门',
               isDense: true,
               filled: true,
-              fillColor: DunesColors.resolve(
-                context,
-                const Color(0xFFEDEEF1),
-                role: DunesColorRole.surface,
+              fillColor: ImVisualTokens.cardSurface(context),
+              prefixIcon: Icon(
+                Icons.search_rounded,
+                size: 19,
+                color: ImVisualTokens.accent(context),
               ),
-              prefixIcon: const Icon(Icons.search, size: 20),
               border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: BorderSide.none,
+                borderRadius: BorderRadius.circular(14),
+                borderSide: BorderSide(
+                  color: ImVisualTokens.hairlineBorder(context),
+                  width: 0.8,
+                ),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: BorderSide(
+                  color: ImVisualTokens.hairlineBorder(context),
+                  width: 0.8,
+                ),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: BorderSide(
+                  color: ImVisualTokens.accent(context).withValues(alpha: 0.55),
+                  width: 1.1,
+                ),
               ),
             ),
           ),
@@ -452,8 +472,6 @@ class ContactMemberPickerPanelState extends State<ContactMemberPickerPanel> {
     );
   }
 }
-
-const _driveAccent = Color(0xFF3B82F6);
 
 /// 全页包装（兼容旧调用）。
 class ContactMemberPickerPage extends StatelessWidget {
@@ -481,17 +499,9 @@ class ContactMemberPickerPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: DunesColors.resolve(
-        context,
-        DunesColors.bgApp,
-        role: DunesColorRole.surface,
-      ),
+      backgroundColor: ImVisualTokens.groupedBackground(context),
       appBar: AppBar(
-        backgroundColor: DunesColors.resolve(
-          context,
-          DunesColors.bgApp,
-          role: DunesColorRole.surface,
-        ),
+        backgroundColor: ImVisualTokens.cardSurface(context),
         foregroundColor: DunesColors.resolve(context, DunesColors.text),
         elevation: 0,
         title: Text(

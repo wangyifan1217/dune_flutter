@@ -8,6 +8,7 @@ import 'chat_voice_player.dart';
 import 'chat_voice_temp_stub.dart'
     if (dart.library.io) 'chat_voice_temp_io.dart'
     as voice_temp;
+import 'im_ui_kit.dart';
 
 enum VoiceTranscriptAction { text, original }
 
@@ -299,7 +300,7 @@ class _VoiceTranscriptPanelState extends State<VoiceTranscriptPanel>
               color: DunesColors.resolve(context, Colors.white),
               context: context,
             ),
-            cursorColor: DunesColors.resolve(context, const Color(0xFF07C160)),
+            cursorColor: ImVisualTokens.purpleLight,
             decoration: InputDecoration.collapsed(
               hintText: '识别结果',
               hintStyle: TextStyle(
@@ -375,14 +376,14 @@ class _VoiceTranscriptPanelState extends State<VoiceTranscriptPanel>
       onTap: _togglePlay,
       behavior: HitTestBehavior.opaque,
       child: _preparingPlay
-          ? SizedBox(
+          ? const SizedBox(
               width: 30,
               height: 30,
               child: Padding(
                 padding: EdgeInsets.all(6),
                 child: CircularProgressIndicator(
                   strokeWidth: 2,
-                  color: DunesColors.resolve(context, Color(0xFF07C160)),
+                  color: ImVisualTokens.purpleLight,
                 ),
               ),
             )
@@ -391,11 +392,7 @@ class _VoiceTranscriptPanelState extends State<VoiceTranscriptPanel>
               height: 30,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: DunesColors.resolveNullable(
-                  context,
-                  Color(0xFF07C160),
-                  role: DunesColorRole.surface,
-                ),
+                gradient: ImVisualTokens.primaryGradient(context),
               ),
               child: Icon(
                 playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
@@ -498,33 +495,33 @@ class _SendCapsule extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    return ImTapScale(
       onTap: enabled ? onTap : null,
-      behavior: HitTestBehavior.opaque,
+      borderRadius: BorderRadius.circular(19),
       child: Container(
         height: 38,
         padding: const EdgeInsets.symmetric(horizontal: 26),
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: enabled
-              ? DunesColors.resolve(
-                  context,
-                  const Color(0xFF07C160),
-                  role: DunesColorRole.surface,
-                )
-              : DunesColors.resolve(
-                  context,
-                  const Color(0xFF07C160),
-                  role: DunesColorRole.surface,
-                ).withValues(alpha: 0.35),
+          gradient: enabled ? ImVisualTokens.primaryGradient(context) : null,
+          color: enabled ? null : ImVisualTokens.purple.withValues(alpha: 0.35),
           borderRadius: BorderRadius.circular(19),
+          boxShadow: enabled
+              ? [
+                  BoxShadow(
+                    color: ImVisualTokens.purple.withValues(alpha: 0.32),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  ),
+                ]
+              : null,
         ),
         child: Text(
           '发送',
           style: DunesTypography.sans(
             fontSize: 14.5,
             fontWeight: FontWeight.w600,
-            color: DunesColors.resolve(context, Colors.white),
+            color: Colors.white,
             context: context,
           ),
         ),
@@ -541,7 +538,7 @@ class _VoicePrintBars extends StatelessWidget {
   final bool playing;
 
   static const _barCount = 24;
-  static const _green = Color(0xFF07C160);
+  static const _accent = ImVisualTokens.purpleLight;
 
   @override
   Widget build(BuildContext context) {
@@ -565,11 +562,7 @@ class _VoicePrintBars extends StatelessWidget {
               width: 2.5,
               height: base + sway,
               decoration: BoxDecoration(
-                color: DunesColors.resolveNullable(
-                  context,
-                  _green.withValues(alpha: playing ? 0.95 : 0.42),
-                  role: DunesColorRole.surface,
-                ),
+                color: _accent.withValues(alpha: playing ? 0.95 : 0.45),
                 borderRadius: BorderRadius.circular(2),
               ),
             );

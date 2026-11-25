@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 
-import '../../core/theme/dunes_theme.dart';
 import '../auth/auth_session.dart';
 import '../conversation/conversation_models.dart';
 import '../conversation/conversation_service.dart';
+import 'chat_widgets.dart';
 import 'group_info_widgets.dart';
+import 'im_ui_kit.dart';
 
 class NativeSelfMemoSettingsPage extends StatefulWidget {
   const NativeSelfMemoSettingsPage({
@@ -57,41 +58,75 @@ class _NativeSelfMemoSettingsPageState
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: DunesColors.resolve(
-        context,
-        DunesColors.bgApp,
-        role: DunesColorRole.surface,
-      ),
-      appBar: AppBar(
-        leading: IconButton(
-          onPressed: widget.onBack,
-          icon: const Icon(Icons.arrow_back_rounded),
+      backgroundColor: ImVisualTokens.groupedBackground(context),
+      body: SafeArea(
+        child: Column(
+          children: [
+            ChatConvHeader(
+              title: '文件传输助手',
+              subtitle: '个人备忘与跨端文件传输',
+              onBack: widget.onBack,
+            ),
+            Expanded(
+              child: groupInfoPageShell(
+                child: ListView(
+                  padding: const EdgeInsets.only(bottom: 28),
+                  children: [
+                    GroupInfoHero(
+                      title: '文件传输助手',
+                      subtitle: '安全存放个人消息与临时文件',
+                      leading: Container(
+                        width: 56,
+                        height: 56,
+                        decoration: BoxDecoration(
+                          gradient: ImVisualTokens.primaryGradient(context),
+                          borderRadius: BorderRadius.circular(16),
+                          boxShadow: ImVisualTokens.softCardShadow(context),
+                        ),
+                        child: const Icon(
+                          Icons.folder_copy_rounded,
+                          color: Colors.white,
+                          size: 28,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    ImGroupedCard(
+                      dividerIndent: 16,
+                      children: [
+                        GroupInfoRow(
+                          icon: Icons.notifications_off_outlined,
+                          title: '消息免打扰',
+                          trailing: GroupInfoToggle(value: _muted),
+                          onTap: () => _patch(muted: !_muted),
+                        ),
+                        GroupInfoRow(
+                          icon: Icons.push_pin_outlined,
+                          title: '置顶聊天',
+                          trailing: GroupInfoToggle(value: _pinned),
+                          onTap: () => _patch(pinned: !_pinned),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    ImGroupedCard(
+                      dividerIndent: 16,
+                      children: [
+                        GroupInfoRow(
+                          icon: Icons.search_rounded,
+                          title: '查找聊天内容',
+                          trailing: const GroupInfoChevron(),
+                          onTap: () =>
+                              widget.onOpenSearch(widget.conversation.id),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ),
-        title: const Text('文件传输助手'),
-      ),
-      body: ListView(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        children: [
-          GroupInfoRow(
-            icon: Icons.notifications_off_outlined,
-            title: '消息免打扰',
-            trailing: GroupInfoToggle(value: _muted),
-            onTap: () => _patch(muted: !_muted),
-          ),
-          GroupInfoRow(
-            icon: Icons.push_pin_outlined,
-            title: '置顶聊天',
-            trailing: GroupInfoToggle(value: _pinned),
-            onTap: () => _patch(pinned: !_pinned),
-          ),
-          const SizedBox(height: 10),
-          GroupInfoRow(
-            icon: Icons.search,
-            title: '查找聊天内容',
-            trailing: const GroupInfoChevron(),
-            onTap: () => widget.onOpenSearch(widget.conversation.id),
-          ),
-        ],
       ),
     );
   }

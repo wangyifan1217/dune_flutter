@@ -10,6 +10,7 @@ import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
 import '../chat/chat_widgets.dart';
 import '../chat/group_info_widgets.dart';
+import '../chat/im_ui_kit.dart';
 import '../chat/user_avatar_preview.dart';
 import '../chat/user_avatar_widget.dart';
 import '../conversation/conversation_service.dart';
@@ -288,13 +289,7 @@ class _NativeContactProfilePageState extends State<NativeContactProfilePage> {
         : '联系人';
 
     return Scaffold(
-      backgroundColor: Theme.of(context).brightness == Brightness.dark
-          ? DunesPalette.night.page
-          : DunesColors.resolve(
-              context,
-              DunesColors.bgApp,
-              role: DunesColorRole.surface,
-            ),
+      backgroundColor: ImVisualTokens.groupedBackground(context),
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -350,8 +345,6 @@ class _NativeContactProfilePageState extends State<NativeContactProfilePage> {
     final phone = (c.phone ?? '').trim();
     final isSelf = c.userId == widget.session.userId;
 
-    final nightApp =
-        !isDesktopCommOnly && Theme.of(context).brightness == Brightness.dark;
     final content = <Widget>[
       _ProfileHero(
         name: name,
@@ -443,8 +436,7 @@ class _NativeContactProfilePageState extends State<NativeContactProfilePage> {
     ];
     final sections = <Widget>[];
     for (var index = 0; index < content.length;) {
-      if ((!nightApp && !isDesktopCommOnly) ||
-          content[index] is! GroupInfoRow) {
+      if (content[index] is! GroupInfoRow) {
         sections.add(content[index++]);
         continue;
       }
@@ -453,20 +445,14 @@ class _NativeContactProfilePageState extends State<NativeContactProfilePage> {
         rows.add(content[index++]);
       }
       sections.add(
-        Container(
-          clipBehavior: Clip.antiAlias,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(isDesktopCommOnly ? 12 : 16),
-            border: Border.all(color: Theme.of(context).dividerColor),
-          ),
-          child: Column(children: rows),
+        ImGroupedCard(
+          dividerIndent: 56,
+          children: rows,
         ),
       );
     }
     return ListView(
-      padding: nightApp
-          ? const EdgeInsets.fromLTRB(16, 12, 16, 32)
-          : const EdgeInsets.only(bottom: 32),
+      padding: const EdgeInsets.fromLTRB(0, 12, 0, 32),
       children: sections,
     );
   }
@@ -513,19 +499,13 @@ class _ProfileHero extends StatelessWidget {
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
-        color: DunesColors.resolve(
-          context,
-          Colors.white,
-          role: DunesColorRole.surface,
+        color: ImVisualTokens.cardSurface(context),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: ImVisualTokens.hairlineBorder(context),
+          width: 0.7,
         ),
-        borderRadius: nightApp
-            ? BorderRadius.circular(20)
-            : isDesktopCommOnly
-            ? BorderRadius.circular(12)
-            : null,
-        border: nightApp
-            ? Border.all(color: Theme.of(context).dividerColor)
-            : null,
+        boxShadow: ImVisualTokens.softCardShadow(context),
       ),
       padding: const EdgeInsets.fromLTRB(16, 20, 16, 20),
       child: Row(
@@ -696,7 +676,7 @@ class _ProfileAddCell extends StatelessWidget {
   }
 }
 
-/// 企微式底部主操作：白底居中「发消息」。
+/// 底部主操作：iOS 品牌紫渐变主按钮「发消息」。
 class _ProfileMessageAction extends StatelessWidget {
   const _ProfileMessageAction({required this.onTap});
 
@@ -704,54 +684,45 @@ class _ProfileMessageAction extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final nightApp =
-        !isDesktopCommOnly && Theme.of(context).brightness == Brightness.dark;
-    if (nightApp) {
-      return Padding(
-        padding: const EdgeInsets.only(top: 16),
-        child: FilledButton.icon(
-          onPressed: onTap,
-          style: FilledButton.styleFrom(
-            backgroundColor: DunesColors.brandPurple,
-            foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14),
-            ),
-          ),
-          icon: const Icon(Icons.chat_bubble_outline_rounded, size: 19),
-          label: const Text(
-            '发消息',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-          ),
-        ),
-      );
-    }
+    final accent = ImVisualTokens.accent(context);
     return Padding(
-      padding: const EdgeInsets.only(top: 10),
-      child: Material(
-        borderRadius: isDesktopCommOnly ? BorderRadius.circular(12) : null,
-        clipBehavior: Clip.antiAlias,
-        color: DunesColors.resolve(
-          context,
-          Colors.white,
-          role: DunesColorRole.surface,
-        ),
-        child: InkWell(
-          onTap: onTap,
-          child: Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
-            alignment: Alignment.center,
-            child: Text(
-              '发消息',
-              style: DunesTypography.sans(
-                fontSize: 16,
-                fontWeight: FontWeight.w500,
-                color: DunesColors.resolve(context, DunesColors.accent),
-                context: context,
+      padding: const EdgeInsets.only(top: 16),
+      child: ImTapScale(
+        borderRadius: BorderRadius.circular(16),
+        onTap: onTap,
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
+          decoration: BoxDecoration(
+            gradient: ImVisualTokens.primaryGradient(context),
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: accent.withValues(alpha: 0.28),
+                blurRadius: 14,
+                spreadRadius: -2,
+                offset: const Offset(0, 6),
               ),
-            ),
+            ],
+          ),
+          child: const Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.chat_bubble_outline_rounded,
+                size: 18,
+                color: Colors.white,
+              ),
+              SizedBox(width: 8),
+              Text(
+                '发消息',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
+                ),
+              ),
+            ],
           ),
         ),
       ),

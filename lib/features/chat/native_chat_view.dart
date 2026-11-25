@@ -4,6 +4,7 @@ import 'chat_file_upload_source.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
+import 'dart:ui';
 
 import 'package:http/http.dart' as http;
 
@@ -72,6 +73,7 @@ import '../xflow/approval_picker_sheet.dart';
 import '../xflow/xflow_detail_logic.dart';
 import 'chat_emoji_gif_panel.dart';
 import 'im_celebration.dart';
+import 'im_ui_kit.dart';
 import 'chat_foreground_sync.dart';
 import 'desktop_composer_focus.dart';
 import 'chat_image_batch_preview.dart';
@@ -6267,63 +6269,86 @@ class _NativeChatViewState extends State<NativeChatView>
               Positioned(
                 left: left,
                 top: top,
-                child: Material(
-                  color: DunesColors.resolve(
-                    ctx,
-                    const Color(0xF0303030),
-                    role: DunesColorRole.surface,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(18),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFF140E26).withValues(alpha: 0.36),
+                        blurRadius: 28,
+                        spreadRadius: -4,
+                        offset: const Offset(0, 10),
+                      ),
+                    ],
                   ),
-                  borderRadius: BorderRadius.circular(12),
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(maxWidth: menuWidth),
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
-                      child: Wrap(
-                        spacing: 6,
-                        runSpacing: 8,
-                        children: actions
-                            .map(
-                              (item) => SizedBox(
-                                width: 54,
-                                child: InkWell(
-                                  borderRadius: BorderRadius.circular(8),
-                                  onTap: () => Navigator.of(ctx).pop(item.id),
-                                  child: Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      vertical: 4,
-                                    ),
-                                    child: Column(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(
-                                          item.icon,
-                                          size: 19,
-                                          color: DunesColors.resolve(
-                                            ctx,
-                                            Colors.white,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(18),
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                      child: Material(
+                        color: const Color(0xDC1F1B2E),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(18),
+                          side: BorderSide(
+                            color: Colors.white.withValues(alpha: 0.14),
+                            width: 0.7,
+                          ),
+                        ),
+                        child: ConstrainedBox(
+                          constraints: BoxConstraints(maxWidth: menuWidth),
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
+                            child: Wrap(
+                              spacing: 6,
+                              runSpacing: 8,
+                              children: actions
+                                  .map(
+                                    (item) => SizedBox(
+                                      width: 54,
+                                      child: InkWell(
+                                        borderRadius: BorderRadius.circular(10),
+                                        onTap: () {
+                                          HapticFeedback.selectionClick();
+                                          Navigator.of(ctx).pop(item.id);
+                                        },
+                                        child: Padding(
+                                          padding: const EdgeInsets.symmetric(
+                                            vertical: 5,
+                                          ),
+                                          child: Column(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(
+                                                item.icon,
+                                                size: 20,
+                                                color: item.id == 'recall'
+                                                    ? const Color(0xFFFF8F82)
+                                                    : Colors.white,
+                                              ),
+                                              const SizedBox(height: 5),
+                                              Text(
+                                                item.label,
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: DunesTypography.sans(
+                                                  fontSize: 11,
+                                                  fontWeight: FontWeight.w500,
+                                                  color: item.id == 'recall'
+                                                      ? const Color(0xFFFF8F82)
+                                                      : Colors.white,
+                                                  context: ctx,
+                                                ),
+                                              ),
+                                            ],
                                           ),
                                         ),
-                                        const SizedBox(height: 5),
-                                        Text(
-                                          item.label,
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: DunesTypography.sans(
-                                            fontSize: 11,
-                                            color: DunesColors.resolve(
-                                              ctx,
-                                              Colors.white,
-                                            ),
-                                            context: ctx,
-                                          ),
-                                        ),
-                                      ],
+                                      ),
                                     ),
-                                  ),
-                                ),
-                              ),
-                            )
-                            .toList(growable: false),
+                                  )
+                                  .toList(growable: false),
+                            ),
+                          ),
+                        ),
                       ),
                     ),
                   ),
@@ -6605,41 +6630,45 @@ class _NativeChatViewState extends State<NativeChatView>
   }
 
   Widget _buildReplySlaJumpButton() {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: () => unawaited(_jumpToReplySlaTarget()),
-        borderRadius: BorderRadius.circular(999),
-        child: Ink(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(999),
-            color: DunesColors.resolve(
-              context,
-              const Color(0xFFD4380D),
-              role: DunesColorRole.surface,
+    return ImTapScale(
+      borderRadius: BorderRadius.circular(999),
+      onTap: () => unawaited(_jumpToReplySlaTarget()),
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(999),
+          gradient: const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFFE45832), Color(0xFFC93510)],
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFFD4380D).withValues(alpha: 0.30),
+              blurRadius: 14,
+              spreadRadius: -2,
+              offset: const Offset(0, 5),
             ),
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.keyboard_arrow_up_rounded,
-                size: 16,
-                color: DunesColors.resolve(context, Colors.white),
+          ],
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 8),
+        child: const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.keyboard_arrow_up_rounded,
+              size: 16,
+              color: Colors.white,
+            ),
+            SizedBox(width: 2),
+            Text(
+              '去回复',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: Colors.white,
               ),
-              const SizedBox(width: 2),
-              Text(
-                '去回复',
-                style: DunesTypography.sans(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: DunesColors.resolve(context, Colors.white),
-                  context: context,
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -6678,26 +6707,20 @@ class _NativeChatViewState extends State<NativeChatView>
           children: [
             if (canReply)
               InkWell(
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(999),
                 onTap: () => _startQuote(m),
                 child: Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 10,
-                    vertical: 3,
+                    vertical: 3.5,
                   ),
                   decoration: BoxDecoration(
-                    color: DunesColors.resolve(
-                      context,
-                      DunesColors.accentSoft,
-                      role: DunesColorRole.surface,
-                    ),
-                    borderRadius: BorderRadius.circular(12),
+                    color: ImVisualTokens.accentSoftSurface(context),
+                    borderRadius: BorderRadius.circular(999),
                     border: Border.all(
-                      color: DunesColors.resolve(
-                        context,
-                        DunesColors.accent,
-                        role: DunesColorRole.border,
-                      ).withValues(alpha: 0.35),
+                      color: ImVisualTokens.accent(context).withValues(
+                        alpha: 0.32,
+                      ),
                     ),
                   ),
                   child: Row(
@@ -6706,18 +6729,15 @@ class _NativeChatViewState extends State<NativeChatView>
                       Icon(
                         Icons.reply_rounded,
                         size: 13,
-                        color: DunesColors.resolve(context, DunesColors.accent),
+                        color: ImVisualTokens.accentText(context),
                       ),
                       const SizedBox(width: 3),
                       Text(
                         '回复此条',
-                        style: DunesTypography.mono(
+                        style: DunesTypography.sans(
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
-                          color: DunesColors.resolve(
-                            context,
-                            DunesColors.accent,
-                          ),
+                          color: ImVisualTokens.accentText(context),
                           context: context,
                         ),
                       ),
@@ -6816,22 +6836,16 @@ class _NativeChatViewState extends State<NativeChatView>
 
   Widget _buildMultiSelectHeader() {
     final selectedCount = _multiSelectedMessageIds.length;
+    final accent = ImVisualTokens.accent(context);
     return Container(
-      height: 52,
+      height: 54,
       padding: const EdgeInsets.symmetric(horizontal: 10),
       decoration: BoxDecoration(
-        color: DunesColors.resolve(
-          context,
-          DunesColors.bgApp,
-          role: DunesColorRole.surface,
-        ),
+        color: ImVisualTokens.cardSurface(context),
         border: Border(
           bottom: BorderSide(
-            color: DunesColors.resolve(
-              context,
-              DunesColors.borderSoft,
-              role: DunesColorRole.border,
-            ),
+            color: ImVisualTokens.hairlineBorder(context),
+            width: 0.7,
           ),
         ),
       ),
@@ -6839,6 +6853,9 @@ class _NativeChatViewState extends State<NativeChatView>
         children: [
           TextButton(
             onPressed: _exitMessageMultiSelect,
+            style: TextButton.styleFrom(
+              foregroundColor: DunesColors.resolve(context, DunesColors.text2),
+            ),
             child: const Text('取消'),
           ),
           Expanded(
@@ -6848,6 +6865,7 @@ class _NativeChatViewState extends State<NativeChatView>
                 style: DunesTypography.sans(
                   fontSize: 16,
                   fontWeight: FontWeight.w600,
+                  color: DunesColors.resolve(context, DunesColors.text),
                   context: context,
                 ),
               ),
@@ -6855,6 +6873,10 @@ class _NativeChatViewState extends State<NativeChatView>
           ),
           TextButton(
             onPressed: selectedCount > 0 ? _forwardSelectedMessages : null,
+            style: TextButton.styleFrom(
+              foregroundColor: accent,
+              textStyle: const TextStyle(fontWeight: FontWeight.w600),
+            ),
             child: const Text('转发'),
           ),
         ],
@@ -6864,29 +6886,23 @@ class _NativeChatViewState extends State<NativeChatView>
 
   Widget _buildMultiSelectBottomBar() {
     final selectedCount = _multiSelectedMessageIds.length;
+    final accent = ImVisualTokens.accent(context);
     return Container(
       padding: EdgeInsets.fromLTRB(
+        12,
         8,
-        6,
-        8,
+        12,
         (MediaQuery.paddingOf(context).bottom > 0
                 ? MediaQuery.paddingOf(context).bottom
-                : 8) +
+                : 10) +
             2,
       ),
       decoration: BoxDecoration(
-        color: DunesColors.resolve(
-          context,
-          DunesColors.bgApp,
-          role: DunesColorRole.surface,
-        ),
+        color: ImVisualTokens.cardSurface(context),
         border: Border(
           top: BorderSide(
-            color: DunesColors.resolve(
-              context,
-              DunesColors.borderSoft,
-              role: DunesColorRole.border,
-            ),
+            color: ImVisualTokens.hairlineBorder(context),
+            width: 0.7,
           ),
         ),
       ),
@@ -6894,15 +6910,17 @@ class _NativeChatViewState extends State<NativeChatView>
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
           _multiBarAction(
-            icon: Icons.reply_outlined,
+            icon: Icons.shortcut_rounded,
             label: '转发',
             enabled: selectedCount > 0,
+            accentColor: accent,
             onTap: _forwardSelectedMessages,
           ),
           _multiBarAction(
             icon: Icons.more_horiz_rounded,
             label: '更多',
             enabled: true,
+            accentColor: accent,
             onTap: _showMultiMoreActions,
           ),
         ],
@@ -6914,28 +6932,37 @@ class _NativeChatViewState extends State<NativeChatView>
     required IconData icon,
     required String label,
     required bool enabled,
+    required Color accentColor,
     required VoidCallback onTap,
   }) {
-    return InkWell(
-      borderRadius: BorderRadius.circular(8),
+    final fg = enabled
+        ? accentColor
+        : DunesColors.resolve(context, DunesColors.text3);
+    return ImTapScale(
+      borderRadius: BorderRadius.circular(14),
       onTap: enabled ? onTap : null,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              icon,
-              size: 22,
-              color: enabled
-                  ? DunesColors.resolve(context, DunesColors.text2)
-                  : DunesColors.resolve(context, DunesColors.text3),
+            Container(
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(
+                color: enabled
+                    ? ImVisualTokens.accentSoftSurface(context)
+                    : Colors.transparent,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, size: 20, color: fg),
             ),
-            const SizedBox(height: 2),
+            const SizedBox(height: 3),
             Text(
               label,
               style: DunesTypography.sans(
-                fontSize: 11,
+                fontSize: 11.5,
+                fontWeight: enabled ? FontWeight.w600 : FontWeight.w400,
                 color: enabled
                     ? DunesColors.resolve(context, DunesColors.text2)
                     : DunesColors.resolve(context, DunesColors.text3),
@@ -7200,34 +7227,54 @@ class _NativeChatViewState extends State<NativeChatView>
             },
           ),
           // APP：微信式工具宫格在输入栏下方展开。
-          if (!wide && _toolsOpen && !locked)
-            ChatQuickActions(
-              onCamera: locked || _mediaBusy
-                  ? () {}
-                  : () => _sendImageFrom(ImageSource.camera, '拍照'),
-              onCameraLongPress: locked || _mediaBusy
-                  ? null
-                  : _recordAndSendVideo,
-              onAlbum: locked || _mediaBusy
-                  ? () {}
-                  : _sendMultiImagesFromGallery,
-              onFile: locked || _mediaBusy ? () {} : _sendFile,
-              onApproval: locked || _mediaBusy
-                  ? () {}
-                  : () => unawaited(_forwardApprovalToChat()),
-              onAt: locked ? null : _pickAtMember,
-              onVideo: null,
-              onCreateTask: canCreateTask ? () => unawaited(_createChatTask(assign: false)) : null,
-              onAssignTask: canCreateTask ? () => unawaited(_createChatTask(assign: true)) : null,
-              showAt: !_isPrivate,
-              showVideo: false,
-            ),
-          if (_emojiOpen && !locked)
-            ChatEmojiGifPanel(
-              controller: _inputController,
-              service: _service,
-              onSendSticker: _sendSticker,
-            ),
+          AnimatedSize(
+            duration: MediaQuery.disableAnimationsOf(context)
+                ? Duration.zero
+                : ImVisualTokens.smoothAnim,
+            curve: ImVisualTokens.iosCurve,
+            alignment: Alignment.topCenter,
+            child: !wide && _toolsOpen && !locked
+                ? ChatQuickActions(
+                    onCamera: locked || _mediaBusy
+                        ? () {}
+                        : () => _sendImageFrom(ImageSource.camera, '拍照'),
+                    onCameraLongPress: locked || _mediaBusy
+                        ? null
+                        : _recordAndSendVideo,
+                    onAlbum: locked || _mediaBusy
+                        ? () {}
+                        : _sendMultiImagesFromGallery,
+                    onFile: locked || _mediaBusy ? () {} : _sendFile,
+                    onApproval: locked || _mediaBusy
+                        ? () {}
+                        : () => unawaited(_forwardApprovalToChat()),
+                    onAt: locked ? null : _pickAtMember,
+                    onVideo: null,
+                    onCreateTask: canCreateTask
+                        ? () => unawaited(_createChatTask(assign: false))
+                        : null,
+                    onAssignTask: canCreateTask
+                        ? () => unawaited(_createChatTask(assign: true))
+                        : null,
+                    showAt: !_isPrivate,
+                    showVideo: false,
+                  )
+                : const SizedBox.shrink(),
+          ),
+          AnimatedSize(
+            duration: MediaQuery.disableAnimationsOf(context)
+                ? Duration.zero
+                : ImVisualTokens.smoothAnim,
+            curve: ImVisualTokens.iosCurve,
+            alignment: Alignment.topCenter,
+            child: _emojiOpen && !locked
+                ? ChatEmojiGifPanel(
+                    controller: _inputController,
+                    service: _service,
+                    onSendSticker: _sendSticker,
+                  )
+                : const SizedBox.shrink(),
+          ),
         ],
       ),
     );
@@ -7820,57 +7867,51 @@ class _NativeChatViewState extends State<NativeChatView>
       context: context,
       backgroundColor: Colors.transparent,
       builder: (_) => SafeArea(
-        child: Container(
-          margin: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-          padding: const EdgeInsets.fromLTRB(10, 10, 10, 6),
-          decoration: BoxDecoration(
-            color: DunesColors.resolve(
-              context,
-              DunesColors.bgApp,
-              role: DunesColorRole.surface,
-            ),
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: const [
-              BoxShadow(
-                color: Color(0x24000000),
-                blurRadius: 20,
-                offset: Offset(0, 8),
-              ),
-            ],
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: _forwardModeCard(
-                      icon: Icons.splitscreen_outlined,
-                      title: '逐条转发',
-                      subtitle: '每条消息独立发送',
-                      onTap: () => Navigator.of(context).pop('separate'),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+          child: ImFrostedIsland(
+            borderRadius: 22,
+            padding: const EdgeInsets.fromLTRB(12, 14, 12, 8),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: _forwardModeCard(
+                        icon: Icons.splitscreen_outlined,
+                        title: '逐条转发',
+                        subtitle: '每条消息独立发送',
+                        onTap: () => Navigator.of(context).pop('separate'),
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: _forwardModeCard(
-                      icon: Icons.view_agenda_outlined,
-                      title: '合并转发',
-                      subtitle: '打包为聊天记录卡片',
-                      onTap: () => Navigator.of(context).pop('merged'),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _forwardModeCard(
+                        icon: Icons.view_agenda_outlined,
+                        title: '合并转发',
+                        subtitle: '打包为聊天记录卡片',
+                        onTap: () => Navigator.of(context).pop('merged'),
+                      ),
                     ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              SizedBox(
-                width: double.infinity,
-                child: TextButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('取消'),
+                  ],
                 ),
-              ),
-            ],
+                const SizedBox(height: 10),
+                SizedBox(
+                  width: double.infinity,
+                  child: TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    style: TextButton.styleFrom(
+                      foregroundColor: DunesColors.resolve(
+                        context,
+                        DunesColors.text2,
+                      ),
+                    ),
+                    child: const Text('取消'),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -7883,47 +7924,53 @@ class _NativeChatViewState extends State<NativeChatView>
     required String subtitle,
     required VoidCallback onTap,
   }) {
-    return Material(
-      color: DunesColors.resolve(
-        context,
-        DunesColors.bgSoft,
-        role: DunesColorRole.surface,
-      ),
-      borderRadius: BorderRadius.circular(12),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(10, 10, 10, 12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(
-                icon,
-                size: 20,
-                color: DunesColors.resolve(context, DunesColors.accentDeep),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                title,
-                style: DunesTypography.sans(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: DunesColors.resolve(context, DunesColors.text),
-                  context: context,
-                ),
-              ),
-              const SizedBox(height: 3),
-              Text(
-                subtitle,
-                style: DunesTypography.sans(
-                  fontSize: 11,
-                  color: DunesColors.resolve(context, DunesColors.text3),
-                  context: context,
-                ),
-              ),
-            ],
+    final accent = ImVisualTokens.accent(context);
+    return ImTapScale(
+      borderRadius: BorderRadius.circular(14),
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(12, 12, 12, 14),
+        decoration: BoxDecoration(
+          color: ImVisualTokens.cardSurface(context),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: ImVisualTokens.hairlineBorder(context),
+            width: 0.8,
           ),
+          boxShadow: ImVisualTokens.softCardShadow(context),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 34,
+              height: 34,
+              decoration: BoxDecoration(
+                color: ImVisualTokens.accentSoftSurface(context),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(icon, size: 18, color: accent),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              title,
+              style: DunesTypography.sans(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: DunesColors.resolve(context, DunesColors.text),
+                context: context,
+              ),
+            ),
+            const SizedBox(height: 3),
+            Text(
+              subtitle,
+              style: DunesTypography.sans(
+                fontSize: 11.5,
+                color: DunesColors.resolve(context, DunesColors.text3),
+                context: context,
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -10262,21 +10309,15 @@ class _NativeChatViewState extends State<NativeChatView>
               constraints: BoxConstraints(
                 maxWidth: chatBubbleMaxWidth(constraints.maxWidth),
               ),
-              padding: const EdgeInsets.fromLTRB(11, 9, 11, 8),
+              padding: const EdgeInsets.fromLTRB(13, 11, 13, 10),
               decoration: BoxDecoration(
-                color: DunesColors.resolve(
-                  context,
-                  Colors.white,
-                  role: DunesColorRole.surface,
-                ),
-                borderRadius: BorderRadius.circular(9),
+                color: ImVisualTokens.cardSurface(context),
+                borderRadius: BorderRadius.circular(14),
                 border: Border.all(
-                  color: DunesColors.resolve(
-                    context,
-                    const Color(0xFFE9E9E9),
-                    role: DunesColorRole.border,
-                  ),
+                  color: ImVisualTokens.hairlineBorder(context),
+                  width: 0.8,
                 ),
+                boxShadow: ImVisualTokens.softCardShadow(context),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -11860,28 +11901,30 @@ class _NativeChatViewState extends State<NativeChatView>
                                                   ? AnimatedContainer(
                                                       key: _messageRowKey(m.id),
                                                       duration: const Duration(
-                                                        milliseconds: 200,
+                                                        milliseconds: 220,
                                                       ),
                                                       decoration: BoxDecoration(
-                                                        color:
-                                                            DunesColors.resolve(
-                                                              context,
-                                                              DunesColors
-                                                                  .accentSoft,
-                                                              role:
-                                                                  DunesColorRole
-                                                                      .surface,
-                                                            ).withValues(
-                                                              alpha: 0.45,
+                                                        color: ImVisualTokens
+                                                            .accent(context)
+                                                            .withValues(
+                                                              alpha: 0.12,
                                                             ),
+                                                        border: Border.all(
+                                                          color: ImVisualTokens
+                                                              .accent(context)
+                                                              .withValues(
+                                                                alpha: 0.28,
+                                                              ),
+                                                        ),
                                                         borderRadius:
                                                             BorderRadius.circular(
-                                                              8,
+                                                              14,
                                                             ),
                                                       ),
                                                       padding:
                                                           const EdgeInsets.symmetric(
-                                                            vertical: 2,
+                                                            horizontal: 4,
+                                                            vertical: 3,
                                                           ),
                                                       child: row,
                                                     )
@@ -11896,59 +11939,61 @@ class _NativeChatViewState extends State<NativeChatView>
                                                 final selected =
                                                     _multiSelectedMessageIds
                                                         .contains(m.id);
-                                                rowWidget = Row(
-                                                  crossAxisAlignment:
-                                                      CrossAxisAlignment.start,
-                                                  children: [
-                                                    Padding(
-                                                      padding:
-                                                          const EdgeInsets.only(
-                                                            left: 2,
-                                                            right: 6,
-                                                            top: 8,
-                                                          ),
-                                                      child: GestureDetector(
-                                                        behavior:
-                                                            HitTestBehavior
-                                                                .opaque,
-                                                        onTap: () =>
-                                                            _toggleMessageMultiSelected(
-                                                              m.id,
+                                                rowWidget = AnimatedContainer(
+                                                  duration:
+                                                      ImVisualTokens.fastAnim,
+                                                  decoration: BoxDecoration(
+                                                    color: selected
+                                                        ? ImVisualTokens.accent(
+                                                            context,
+                                                          ).withValues(
+                                                            alpha: 0.06,
+                                                          )
+                                                        : Colors.transparent,
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                          12,
+                                                        ),
+                                                  ),
+                                                  child: Row(
+                                                    crossAxisAlignment:
+                                                        CrossAxisAlignment
+                                                            .start,
+                                                    children: [
+                                                      Padding(
+                                                        padding:
+                                                            const EdgeInsets.only(
+                                                              left: 4,
+                                                              right: 8,
+                                                              top: 8,
                                                             ),
-                                                        child: Icon(
-                                                          selected
-                                                              ? Icons
-                                                                    .check_circle
-                                                              : Icons
-                                                                    .radio_button_unchecked,
-                                                          size: 22,
-                                                          color: selected
-                                                              ? DunesColors.resolve(
-                                                                  context,
-                                                                  DunesColors
-                                                                      .accent,
-                                                                )
-                                                              : DunesColors.resolve(
-                                                                  context,
-                                                                  DunesColors
-                                                                      .text3,
-                                                                ),
+                                                        child: GestureDetector(
+                                                          behavior:
+                                                              HitTestBehavior
+                                                                  .opaque,
+                                                          onTap: () =>
+                                                              _toggleMessageMultiSelected(
+                                                                m.id,
+                                                              ),
+                                                          child: ImSelectCircle(
+                                                            selected: selected,
+                                                          ),
                                                         ),
                                                       ),
-                                                    ),
-                                                    Expanded(
-                                                      child: GestureDetector(
-                                                        behavior:
-                                                            HitTestBehavior
-                                                                .opaque,
-                                                        onTap: () =>
-                                                            _toggleMessageMultiSelected(
-                                                              m.id,
-                                                            ),
-                                                        child: rowWidget,
+                                                      Expanded(
+                                                        child: GestureDetector(
+                                                          behavior:
+                                                              HitTestBehavior
+                                                                  .opaque,
+                                                          onTap: () =>
+                                                              _toggleMessageMultiSelected(
+                                                                m.id,
+                                                              ),
+                                                          child: rowWidget,
+                                                        ),
                                                       ),
-                                                    ),
-                                                  ],
+                                                    ],
+                                                  ),
                                                 );
                                               }
                                               return rowWidget;
@@ -11972,48 +12017,43 @@ class _NativeChatViewState extends State<NativeChatView>
                                   ),
                                 if (_locating)
                                   Positioned(
-                                    top: 8,
+                                    top: 10,
                                     left: 0,
                                     right: 0,
                                     child: Center(
-                                      child: Material(
-                                        elevation: 1,
-                                        borderRadius: BorderRadius.circular(16),
-                                        color: DunesColors.resolve(
-                                          context,
-                                          DunesColors.bgApp,
-                                          role: DunesColorRole.surface,
+                                      child: ImFrostedIsland(
+                                        borderRadius: 999,
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 13,
+                                          vertical: 7,
                                         ),
-                                        child: Padding(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 12,
-                                            vertical: 6,
-                                          ),
-                                          child: Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              const SizedBox(
-                                                width: 12,
-                                                height: 12,
-                                                child:
-                                                    CircularProgressIndicator(
-                                                      strokeWidth: 1.5,
-                                                    ),
-                                              ),
-                                              const SizedBox(width: 8),
-                                              Text(
-                                                '定位中…',
-                                                style: DunesTypography.sans(
-                                                  fontSize: 11,
-                                                  color: DunesColors.resolve(
-                                                    context,
-                                                    DunesColors.text3,
-                                                  ),
-                                                  context: context,
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            SizedBox(
+                                              width: 12,
+                                              height: 12,
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 1.8,
+                                                color: ImVisualTokens.accent(
+                                                  context,
                                                 ),
                                               ),
-                                            ],
-                                          ),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Text(
+                                              '定位中…',
+                                              style: DunesTypography.sans(
+                                                fontSize: 11.5,
+                                                fontWeight: FontWeight.w500,
+                                                color: DunesColors.resolve(
+                                                  context,
+                                                  DunesColors.text2,
+                                                ),
+                                                context: context,
+                                              ),
+                                            ),
+                                          ],
                                         ),
                                       ),
                                     ),
@@ -12022,100 +12062,48 @@ class _NativeChatViewState extends State<NativeChatView>
                                   Positioned(
                                     right: 12,
                                     top: 12,
-                                    child: Material(
-                                      color: Colors.transparent,
-                                      elevation: 0,
-                                      borderRadius: BorderRadius.circular(
-                                        isDesktopCommOnly ? 999 : 14,
-                                      ),
-                                      child: InkWell(
-                                        onTap: () =>
-                                            unawaited(_jumpToFirstUnread()),
-                                        borderRadius: BorderRadius.circular(
-                                          isDesktopCommOnly ? 999 : 14,
+                                    child: ImTapScale(
+                                      borderRadius: BorderRadius.circular(999),
+                                      onTap: () =>
+                                          unawaited(_jumpToFirstUnread()),
+                                      child: ImFrostedIsland(
+                                        borderRadius: 999,
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 12,
+                                          vertical: 7,
                                         ),
-                                        child: Ink(
-                                          decoration: BoxDecoration(
-                                            borderRadius: BorderRadius.circular(
-                                              isDesktopCommOnly ? 999 : 14,
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(
+                                              Icons.mark_chat_unread_rounded,
+                                              size: 14,
+                                              color: ImVisualTokens.accentText(
+                                                context,
+                                              ),
                                             ),
-                                            color: isDesktopCommOnly
-                                                ? DunesColors.resolve(
-                                                    context,
-                                                    const Color(0xFF07C160),
-                                                    role:
-                                                        DunesColorRole.surface,
-                                                  )
-                                                : DunesColors.resolve(
-                                                    context,
-                                                    Colors.white,
-                                                    role:
-                                                        DunesColorRole.surface,
-                                                  ),
-                                            border: isDesktopCommOnly
-                                                ? null
-                                                : Border.all(
-                                                    color: DunesColors.resolve(
+                                            const SizedBox(width: 5),
+                                            Text(
+                                              '${_sessionUnreadCount > 99 ? '99+' : _sessionUnreadCount} 条未读',
+                                              style: DunesTypography.sans(
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w600,
+                                                color:
+                                                    ImVisualTokens.accentText(
                                                       context,
-                                                      DunesColors.accent,
-                                                      role:
-                                                          DunesColorRole.border,
-                                                    ).withValues(alpha: 0.32),
-                                                  ),
-                                          ),
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 11,
-                                            vertical: 7,
-                                          ),
-                                          child: Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              if (!isDesktopCommOnly) ...[
-                                                Icon(
-                                                  Icons
-                                                      .mark_chat_unread_outlined,
-                                                  size: 15,
-                                                  color: DunesColors.resolve(
-                                                    context,
-                                                    DunesColors.accentDeep,
-                                                  ),
-                                                ),
-                                                const SizedBox(width: 5),
-                                              ],
-                                              Text(
-                                                '${_sessionUnreadCount > 99 ? '99+' : _sessionUnreadCount} 条未读',
-                                                style: DunesTypography.sans(
-                                                  fontSize: 12,
-                                                  fontWeight: FontWeight.w600,
-                                                  color: isDesktopCommOnly
-                                                      ? DunesColors.resolve(
-                                                          context,
-                                                          Colors.white,
-                                                        )
-                                                      : DunesColors.resolve(
-                                                          context,
-                                                          DunesColors
-                                                              .accentDeep,
-                                                        ),
-                                                  context: context,
-                                                ),
+                                                    ),
+                                                context: context,
                                               ),
-                                              const SizedBox(width: 2),
-                                              Icon(
-                                                Icons.keyboard_arrow_up_rounded,
-                                                size: 16,
-                                                color: isDesktopCommOnly
-                                                    ? DunesColors.resolve(
-                                                        context,
-                                                        Colors.white,
-                                                      )
-                                                    : DunesColors.resolve(
-                                                        context,
-                                                        DunesColors.accentDeep,
-                                                      ),
+                                            ),
+                                            const SizedBox(width: 2),
+                                            Icon(
+                                              Icons.keyboard_arrow_up_rounded,
+                                              size: 16,
+                                              color: ImVisualTokens.accentText(
+                                                context,
                                               ),
-                                            ],
-                                          ),
+                                            ),
+                                          ],
                                         ),
                                       ),
                                     ),
@@ -12128,99 +12116,89 @@ class _NativeChatViewState extends State<NativeChatView>
                                     right: 0,
                                     bottom: 12,
                                     child: Center(
-                                      child: Material(
-                                        color: Colors.transparent,
-                                        elevation: 0,
+                                      child: ImTapScale(
                                         borderRadius: BorderRadius.circular(
                                           999,
                                         ),
-                                        child: InkWell(
-                                          onTap: _jumpToPendingMessages,
-                                          borderRadius: BorderRadius.circular(
-                                            999,
-                                          ),
-                                          child: Ink(
-                                            decoration: BoxDecoration(
-                                              borderRadius:
-                                                  BorderRadius.circular(999),
-                                              color: _pendingNewMessageCount > 0
-                                                  ? DunesColors.resolve(
-                                                      context,
-                                                      const Color(0xFF7E64BD),
-                                                      role: DunesColorRole
-                                                          .surface,
-                                                    )
-                                                  : DunesColors.resolve(
-                                                      context,
-                                                      Colors.white,
-                                                      role: DunesColorRole
-                                                          .surface,
-                                                    ),
-                                              border:
-                                                  _pendingNewMessageCount > 0
-                                                  ? null
-                                                  : Border.all(
-                                                      color:
-                                                          DunesColors.resolve(
-                                                            context,
-                                                            DunesColors
-                                                                .borderSoft,
-                                                            role: DunesColorRole
-                                                                .border,
-                                                          ),
-                                                    ),
-                                            ),
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 14,
-                                              vertical: 8,
-                                            ),
-                                            child: Row(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                Icon(
-                                                  Icons
-                                                      .keyboard_arrow_down_rounded,
-                                                  size: 16,
-                                                  color:
-                                                      _pendingNewMessageCount >
-                                                          0
-                                                      ? DunesColors.resolve(
-                                                          context,
-                                                          Colors.white,
-                                                        )
-                                                      : DunesColors.resolve(
-                                                          context,
-                                                          DunesColors
-                                                              .accentDeep,
-                                                        ),
+                                        onTap: _jumpToPendingMessages,
+                                        child: _pendingNewMessageCount > 0
+                                            ? Container(
+                                                decoration: BoxDecoration(
+                                                  borderRadius:
+                                                      BorderRadius.circular(
+                                                        999,
+                                                      ),
+                                                  gradient: ImVisualTokens
+                                                      .primaryGradient(context),
+                                                  boxShadow: ImVisualTokens
+                                                      .floatingIslandShadow(
+                                                        context,
+                                                      ),
                                                 ),
-                                                const SizedBox(width: 4),
-                                                Text(
-                                                  _pendingNewMessageCount > 0
-                                                      ? '${_pendingNewMessageCount > 99 ? '99+' : _pendingNewMessageCount} 条新消息'
-                                                      : '回到最新',
-                                                  style: DunesTypography.sans(
-                                                    fontSize: 12,
-                                                    fontWeight: FontWeight.w600,
-                                                    color:
-                                                        _pendingNewMessageCount >
-                                                            0
-                                                        ? DunesColors.resolve(
-                                                            context,
-                                                            Colors.white,
-                                                          )
-                                                        : DunesColors.resolve(
-                                                            context,
-                                                            DunesColors
-                                                                .accentDeep,
-                                                          ),
-                                                    context: context,
-                                                  ),
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                      horizontal: 15,
+                                                      vertical: 8,
+                                                    ),
+                                                child: Row(
+                                                  mainAxisSize:
+                                                      MainAxisSize.min,
+                                                  children: [
+                                                    const Icon(
+                                                      Icons
+                                                          .keyboard_arrow_down_rounded,
+                                                      size: 16,
+                                                      color: Colors.white,
+                                                    ),
+                                                    const SizedBox(width: 4),
+                                                    Text(
+                                                      '${_pendingNewMessageCount > 99 ? '99+' : _pendingNewMessageCount} 条新消息',
+                                                      style: DunesTypography.sans(
+                                                        fontSize: 12,
+                                                        fontWeight:
+                                                            FontWeight.w600,
+                                                        color: Colors.white,
+                                                        context: context,
+                                                      ),
+                                                    ),
+                                                  ],
                                                 ),
-                                              ],
-                                            ),
-                                          ),
-                                        ),
+                                              )
+                                            : ImFrostedIsland(
+                                                borderRadius: 999,
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                      horizontal: 14,
+                                                      vertical: 8,
+                                                    ),
+                                                child: Row(
+                                                  mainAxisSize:
+                                                      MainAxisSize.min,
+                                                  children: [
+                                                    Icon(
+                                                      Icons
+                                                          .keyboard_arrow_down_rounded,
+                                                      size: 16,
+                                                      color: ImVisualTokens
+                                                          .accentText(context),
+                                                    ),
+                                                    const SizedBox(width: 4),
+                                                    Text(
+                                                      '回到最新',
+                                                      style: DunesTypography.sans(
+                                                        fontSize: 12,
+                                                        fontWeight:
+                                                            FontWeight.w600,
+                                                        color: ImVisualTokens
+                                                            .accentText(
+                                                              context,
+                                                            ),
+                                                        context: context,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
                                       ),
                                     ),
                                   ),
@@ -12236,51 +12214,45 @@ class _NativeChatViewState extends State<NativeChatView>
                                   Positioned(
                                     left: 0,
                                     right: 0,
-                                    bottom: 8,
+                                    bottom: 12,
                                     child: Center(
-                                      child: Material(
-                                        elevation: 0,
-                                        borderRadius: BorderRadius.circular(20),
-                                        color: DunesColors.resolve(
-                                          context,
-                                          Colors.white,
-                                          role: DunesColorRole.surface,
+                                      child: ImTapScale(
+                                        borderRadius: BorderRadius.circular(
+                                          999,
                                         ),
-                                        child: InkWell(
-                                          onTap: _jumpToLatest,
-                                          borderRadius: BorderRadius.circular(
-                                            20,
+                                        onTap: _jumpToLatest,
+                                        child: ImFrostedIsland(
+                                          borderRadius: 999,
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 14,
+                                            vertical: 8,
                                           ),
-                                          child: Padding(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 14,
-                                              vertical: 8,
-                                            ),
-                                            child: Row(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                Icon(
-                                                  Icons.arrow_downward,
-                                                  size: 14,
-                                                  color: DunesColors.resolve(
-                                                    context,
-                                                    DunesColors.accentDeep,
-                                                  ),
-                                                ),
-                                                const SizedBox(width: 6),
-                                                Text(
-                                                  '回到最新消息',
-                                                  style: DunesTypography.sans(
-                                                    fontSize: 12,
-                                                    color: DunesColors.resolve(
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(
+                                                Icons
+                                                    .keyboard_arrow_down_rounded,
+                                                size: 16,
+                                                color:
+                                                    ImVisualTokens.accentText(
                                                       context,
-                                                      DunesColors.accentDeep,
                                                     ),
-                                                    context: context,
-                                                  ),
+                                              ),
+                                              const SizedBox(width: 4),
+                                              Text(
+                                                '回到最新消息',
+                                                style: DunesTypography.sans(
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.w600,
+                                                  color:
+                                                      ImVisualTokens.accentText(
+                                                        context,
+                                                      ),
+                                                  context: context,
                                                 ),
-                                              ],
-                                            ),
+                                              ),
+                                            ],
                                           ),
                                         ),
                                       ),
@@ -12562,33 +12534,24 @@ class _DesktopAtMentionPopover extends StatelessWidget {
         ),
       );
     }
-    return Material(
-      color: Colors.transparent,
-      child: Container(
-        width: 300,
-        padding: const EdgeInsets.symmetric(vertical: 6),
-        decoration: BoxDecoration(
-          color: DunesColors.resolve(
-            context,
-            DunesColors.bgApp,
-            role: DunesColorRole.surface,
-          ),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-            color: DunesColors.resolve(
-              context,
-              DunesColors.borderSoft,
-              role: DunesColorRole.border,
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(14),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+        child: Material(
+          color: Colors.transparent,
+          child: Container(
+            width: 306,
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            decoration: BoxDecoration(
+              color: ImVisualTokens.cardSurface(context).withValues(alpha: 0.90),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: ImVisualTokens.accent(context).withValues(alpha: 0.22),
+                width: 0.8,
+              ),
+              boxShadow: ImVisualTokens.floatingIslandShadow(context),
             ),
-          ),
-          boxShadow: const [
-            BoxShadow(
-              color: Color(0x24000000),
-              blurRadius: 24,
-              offset: Offset(0, 8),
-            ),
-          ],
-        ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -12606,6 +12569,8 @@ class _DesktopAtMentionPopover extends StatelessWidget {
             ),
             body,
           ],
+        ),
+      ),
         ),
       ),
     );
@@ -13262,53 +13227,11 @@ class _AtMentionCheck extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: 22,
-      height: 22,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        border: selected
-            ? null
-            : Border.all(
-                color: DunesColors.resolve(
-                  context,
-                  Colors.black,
-                  role: DunesColorRole.border,
-                ).withValues(alpha: 0.18),
-                width: 1.5,
-              ),
-        gradient: selected
-            ? LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  DunesColors.resolve(
-                    context,
-                    Color(0xFF553B96),
-                    role: DunesColorRole.surface,
-                  ),
-                  DunesColors.resolve(
-                    context,
-                    Color(0xFF7B5CB8),
-                    role: DunesColorRole.surface,
-                  ),
-                ],
-              )
-            : null,
-      ),
-      child: selected
-          ? Icon(
-              Icons.check,
-              size: 12,
-              color: DunesColors.resolve(context, Colors.white),
-            )
-          : null,
-    );
+    return ImSelectCircle(selected: selected, size: 22);
   }
 }
 
-class _GroupReadSheet extends StatelessWidget {
+class _GroupReadSheet extends StatefulWidget {
   const _GroupReadSheet({
     required this.readRows,
     required this.unreadRows,
@@ -13320,112 +13243,69 @@ class _GroupReadSheet extends StatelessWidget {
   final ConversationService avatarService;
 
   @override
+  State<_GroupReadSheet> createState() => _GroupReadSheetState();
+}
+
+class _GroupReadSheetState extends State<_GroupReadSheet> {
+  int _tab = 0;
+
+  @override
   Widget build(BuildContext context) {
     final maxHeight = MediaQuery.sizeOf(context).height * 0.68;
+    final rows = _tab == 0 ? widget.readRows : widget.unreadRows;
+    final emptyText = _tab == 0 ? '暂无已读成员' : '全部成员已读';
     return SafeArea(
       top: false,
       child: Container(
-        constraints: BoxConstraints(maxHeight: maxHeight.clamp(280.0, 480.0)),
+        constraints: BoxConstraints(maxHeight: maxHeight.clamp(300.0, 500.0)),
         decoration: BoxDecoration(
-          color: DunesColors.resolve(
-            context,
-            DunesColors.bgApp,
-            role: DunesColorRole.surface,
+          color: ImVisualTokens.cardSurface(context),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
+          border: Border(
+            top: BorderSide(
+              color: ImVisualTokens.hairlineBorder(context),
+              width: 0.7,
+            ),
           ),
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             const _SheetHandle(),
             Padding(
-              padding: const EdgeInsets.fromLTRB(18, 0, 18, 10),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  '${readRows.length}人已读 · ${unreadRows.length}人未读',
-                  style: DunesTypography.sans(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    context: context,
-                  ),
-                ),
+              padding: const EdgeInsets.fromLTRB(18, 0, 18, 12),
+              child: ImSegmentedPillBar<int>(
+                selected: _tab,
+                onSelected: (v) => setState(() => _tab = v),
+                items: [
+                  (value: 0, label: '已读', badgeCount: widget.readRows.length),
+                  (value: 1, label: '未读', badgeCount: widget.unreadRows.length),
+                ],
               ),
             ),
             Flexible(
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(10, 0, 10, 12),
-                children: [
-                  _GroupReadSheetSection(
-                    title: '已读（${readRows.length}）',
-                    rows: readRows,
-                    emptyText: '暂无',
-                    avatarService: avatarService,
-                  ),
-                  _GroupReadSheetSection(
-                    title: '未读（${unreadRows.length}）',
-                    rows: unreadRows,
-                    emptyText: '全部已读',
-                    avatarService: avatarService,
-                  ),
-                ],
-              ),
+              child: rows.isEmpty
+                  ? Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 28),
+                      child: ImEmptyState(
+                        icon: _tab == 0
+                            ? Icons.mark_chat_read_outlined
+                            : Icons.done_all_rounded,
+                        title: emptyText,
+                      ),
+                    )
+                  : ListView.builder(
+                      padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
+                      itemCount: rows.length,
+                      itemBuilder: (_, index) => _GroupReadSheetRow(
+                        person: rows[index],
+                        avatarService: widget.avatarService,
+                      ),
+                    ),
             ),
           ],
         ),
       ),
-    );
-  }
-}
-
-class _GroupReadSheetSection extends StatelessWidget {
-  const _GroupReadSheetSection({
-    required this.title,
-    required this.rows,
-    required this.emptyText,
-    required this.avatarService,
-  });
-
-  final String title;
-  final List<_GroupReadPerson> rows;
-  final String emptyText;
-  final ConversationService avatarService;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(8, 8, 8, 4),
-          child: Text(
-            title,
-            style: DunesTypography.sans(
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-              color: DunesColors.resolve(context, DunesColors.text2),
-              context: context,
-            ),
-          ),
-        ),
-        if (rows.isEmpty)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-            child: Text(
-              emptyText,
-              style: DunesTypography.sans(
-                fontSize: 11,
-                color: DunesColors.resolve(context, DunesColors.text3),
-                context: context,
-              ),
-            ),
-          )
-        else
-          ...rows.map(
-            (row) =>
-                _GroupReadSheetRow(person: row, avatarService: avatarService),
-          ),
-      ],
     );
   }
 }

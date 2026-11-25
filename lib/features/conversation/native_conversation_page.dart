@@ -37,6 +37,7 @@ import 'inbox_format.dart';
 import 'inbox_hidden_storage.dart';
 import 'inbox_widgets.dart';
 import 'notification_service.dart';
+import '../chat/im_ui_kit.dart';
 import '../desktop/windows_desktop_tray.dart';
 import '../desktop/windows_tray_unread_items.dart';
 import '../robots/robot_analyzing_coordinator.dart';
@@ -2642,18 +2643,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
           ),
         );
         if (_contactSearching && contactRows.isEmpty) {
-          children.add(
-            Padding(
-              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-              child: Text(
-                '正在搜索联系人…',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: DunesColors.resolve(context, DunesColors.text3),
-                ),
-              ),
-            ),
-          );
+          children.add(const ImShimmerRow(count: 3));
         } else {
           children.addAll(contactRows);
         }
@@ -2665,17 +2655,10 @@ class _NativeConversationPageState extends State<NativeConversationPage>
         _contactHits.isEmpty &&
         !_contactSearching) {
       children.add(
-        Padding(
-          padding: EdgeInsets.symmetric(horizontal: 16, vertical: 28),
-          child: Center(
-            child: Text(
-              '无匹配的会话或联系人',
-              style: TextStyle(
-                fontSize: 13,
-                color: DunesColors.resolve(context, DunesColors.text3),
-              ),
-            ),
-          ),
+        const ImEmptyState(
+          icon: Icons.search_off_rounded,
+          title: '无匹配的会话或联系人',
+          subtitle: '换个关键词试试',
         ),
       );
     } else if (_searchQuery.isEmpty &&

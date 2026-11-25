@@ -16,6 +16,7 @@ import 'chat_media_widgets.dart';
 import 'chat_video_widgets.dart';
 import 'cors_safe_image.dart';
 import 'file_download.dart' as file_dl;
+import 'im_ui_kit.dart';
 
 class NativeGroupMediaPage extends StatefulWidget {
   const NativeGroupMediaPage({
@@ -288,11 +289,7 @@ class _NativeGroupMediaPageState extends State<NativeGroupMediaPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: DunesColors.resolve(
-        context,
-        DunesColors.bgApp,
-        role: DunesColorRole.surface,
-      ),
+      backgroundColor: ImVisualTokens.groupedBackground(context),
       body: SafeArea(
         child: Column(
           children: [
@@ -318,24 +315,17 @@ class _NativeGroupMediaPageState extends State<NativeGroupMediaPage> {
       return const Center(child: CircularProgressIndicator(strokeWidth: 2));
     }
     if (_error != null) {
-      return Center(
-        child: Text(
-          _error!,
-          style: TextStyle(
-            color: DunesColors.resolve(context, DunesColors.text3),
-          ),
-        ),
+      return ImEmptyState(
+        icon: Icons.error_outline_rounded,
+        title: _error!,
+        action: OutlinedButton(onPressed: _load, child: const Text('重试')),
       );
     }
     if (_items.isEmpty) {
-      return Center(
-        child: Text(
-          '暂无图片、视频或文件',
-          style: TextStyle(
-            fontSize: 12,
-            color: DunesColors.resolve(context, DunesColors.text3),
-          ),
-        ),
+      return const ImEmptyState(
+        icon: Icons.perm_media_outlined,
+        title: '暂无图片、视频或文件',
+        subtitle: '群里发送的媒体与文件将汇总在这里',
       );
     }
 
@@ -395,66 +385,46 @@ class _MediaHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(12, 6, 12, 12),
+      padding: const EdgeInsets.fromLTRB(6, 8, 10, 10),
       decoration: BoxDecoration(
-        color: DunesColors.resolve(
-          context,
-          DunesColors.bgApp,
-          role: DunesColorRole.surface,
-        ),
+        color: ImVisualTokens.cardSurface(context),
         border: Border(
           bottom: BorderSide(
-            color: DunesColors.resolve(
-              context,
-              DunesColors.borderSoft,
-              role: DunesColorRole.border,
-            ),
+            color: ImVisualTokens.hairlineBorder(context),
+            width: 0.7,
           ),
         ),
       ),
       child: Row(
         children: [
-          _CircleHeaderButton(icon: Icons.chevron_left_rounded, onTap: onBack),
-          const SizedBox(width: 8),
+          IconButton(
+            onPressed: onBack,
+            icon: const Icon(Icons.chevron_left_rounded, size: 28),
+            color: DunesColors.resolve(context, DunesColors.text),
+          ),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '$title · 媒体',
-                  style: DunesTypography.mono(
-                    fontSize: 9.5,
-                    color: DunesColors.resolve(context, DunesColors.text3),
-                    letterSpacing: 0.04 * 9.5,
+                  '$title · 媒体与文件',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: DunesTypography.sans(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: DunesColors.resolve(context, DunesColors.text),
                     context: context,
                   ),
                 ),
                 const SizedBox(height: 1),
-                Row(
-                  children: [
-                    Flexible(
-                      child: Text(
-                        '图片 · 视频 · 文件',
-                        overflow: TextOverflow.ellipsis,
-                        style: DunesTypography.sans(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                          color: DunesColors.resolve(context, DunesColors.text),
-                          letterSpacing: -0.005 * 14,
-                          context: context,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 5),
-                    Text(
-                      '$count 项',
-                      style: DunesTypography.mono(
-                        fontSize: 10,
-                        color: DunesColors.resolve(context, DunesColors.text3),
-                        context: context,
-                      ),
-                    ),
-                  ],
+                Text(
+                  '图片 · 视频 · 文件 ($count 项)',
+                  style: DunesTypography.sans(
+                    fontSize: 11.5,
+                    color: DunesColors.resolve(context, DunesColors.text3),
+                    context: context,
+                  ),
                 ),
               ],
             ),
@@ -462,7 +432,7 @@ class _MediaHeader extends StatelessWidget {
           IconButton(
             onPressed: onRefresh,
             icon: const Icon(Icons.refresh_rounded, size: 20),
-            color: DunesColors.resolve(context, DunesColors.text2),
+            color: ImVisualTokens.accent(context),
             tooltip: '刷新',
           ),
         ],
@@ -479,66 +449,86 @@ class _MediaBottomBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final accent = ImVisualTokens.accent(context);
     return Container(
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
+      padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
       decoration: BoxDecoration(
-        color: DunesColors.resolve(
-          context,
-          DunesColors.bgApp,
-          role: DunesColorRole.surface,
-        ),
+        color: ImVisualTokens.cardSurface(context),
         border: Border(
           top: BorderSide(
-            color: DunesColors.resolve(
-              context,
-              DunesColors.borderSoft,
-              role: DunesColorRole.border,
-            ),
+            color: ImVisualTokens.hairlineBorder(context),
+            width: 0.7,
           ),
         ),
       ),
       child: Row(
         children: [
           Expanded(
-            child: OutlinedButton.icon(
-              onPressed: onBack,
-              icon: const Icon(Icons.arrow_back_rounded, size: 16),
-              label: const Text('返回群信息'),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: DunesColors.resolve(
-                  context,
-                  DunesColors.text2,
-                ),
-                side: BorderSide(
-                  color: DunesColors.resolve(
-                    context,
-                    DunesColors.border,
-                    role: DunesColorRole.border,
-                  ),
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
+            child: ImTapScale(
+              borderRadius: BorderRadius.circular(14),
+              onTap: onBack,
+              child: Container(
                 padding: const EdgeInsets.symmetric(vertical: 12),
+                decoration: BoxDecoration(
+                  color: ImVisualTokens.accentSoftSurface(context),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.arrow_back_rounded,
+                      size: 16,
+                      color: ImVisualTokens.accentText(context),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      '返回群信息',
+                      style: DunesTypography.sans(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w600,
+                        color: ImVisualTokens.accentText(context),
+                        context: context,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 10),
           Expanded(
-            child: FilledButton.icon(
-              onPressed: onBatchDownload,
-              icon: const Icon(Icons.download_rounded, size: 16),
-              label: const Text('批量下载'),
-              style: FilledButton.styleFrom(
-                backgroundColor: DunesColors.resolve(
-                  context,
-                  DunesColors.accent,
-                  role: DunesColorRole.surface,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
+            child: ImTapScale(
+              borderRadius: BorderRadius.circular(14),
+              onTap: onBatchDownload,
+              child: Container(
                 padding: const EdgeInsets.symmetric(vertical: 12),
+                decoration: BoxDecoration(
+                  gradient: ImVisualTokens.primaryGradient(context),
+                  borderRadius: BorderRadius.circular(14),
+                  boxShadow: [
+                    BoxShadow(
+                      color: accent.withValues(alpha: 0.25),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.download_rounded, size: 16, color: Colors.white),
+                    SizedBox(width: 6),
+                    Text(
+                      '批量下载',
+                      style: TextStyle(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -557,39 +547,41 @@ class _MediaSectionLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(2, 2, 2, 9),
+      padding: const EdgeInsets.fromLTRB(4, 6, 4, 10),
       child: Row(
         children: [
-          Text(
-            accent,
-            style: DunesTypography.mono(
-              fontSize: 10,
-              color: DunesColors.resolve(context, DunesColors.accent),
-              fontWeight: FontWeight.w500,
-              letterSpacing: 0.06 * 10,
-              context: context,
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            decoration: BoxDecoration(
+              color: ImVisualTokens.accentSoftSurface(context),
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: Text(
+              accent,
+              style: DunesTypography.sans(
+                fontSize: 11,
+                color: ImVisualTokens.accentText(context),
+                fontWeight: FontWeight.w600,
+                context: context,
+              ),
             ),
           ),
           const SizedBox(width: 8),
           Text(
             caption,
-            style: DunesTypography.mono(
-              fontSize: 10,
+            style: DunesTypography.sans(
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
               color: DunesColors.resolve(context, DunesColors.text3),
-              letterSpacing: 0.06 * 10,
               context: context,
             ),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 10),
           Expanded(
             child: Divider(
               height: 1,
-              thickness: 1,
-              color: DunesColors.resolve(
-                context,
-                DunesColors.border,
-                role: DunesColorRole.border,
-              ),
+              thickness: 0.7,
+              color: ImVisualTokens.hairlineBorder(context),
             ),
           ),
         ],
@@ -617,58 +609,56 @@ class _FilledMediaSlot extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        // 统一单击打开；桌面双击参数保留兼容，但不再拦截单击（Mac 触控板双击易丢）。
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(11),
-        child: Ink(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
-          decoration: BoxDecoration(
-            color: DunesColors.resolve(
-              context,
-              DunesColors.bgApp,
-              role: DunesColorRole.surface,
-            ),
-            borderRadius: BorderRadius.circular(11),
-            border: Border.all(
-              color: DunesColors.resolve(
-                context,
-                DunesColors.accentLine,
-                role: DunesColorRole.border,
-              ),
-            ),
+    return ImTapScale(
+      borderRadius: BorderRadius.circular(14),
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
+        decoration: BoxDecoration(
+          color: ImVisualTokens.cardSurface(context),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: ImVisualTokens.hairlineBorder(context),
+            width: 0.8,
           ),
-          child: Row(
-            children: [
-              leading,
-              const SizedBox(width: 9),
-              Expanded(
-                child: Text(
-                  title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: DunesTypography.mono(
-                    fontSize: 10.5,
-                    color: DunesColors.resolve(context, DunesColors.text),
-                    context: context,
+          boxShadow: ImVisualTokens.softCardShadow(context),
+        ),
+        child: Row(
+          children: [
+            leading,
+            const SizedBox(width: 11),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: DunesTypography.sans(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w500,
+                      color: DunesColors.resolve(context, DunesColors.text),
+                      context: context,
+                    ),
                   ),
-                ),
+                  const SizedBox(height: 2),
+                  Text(
+                    meta,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: DunesTypography.sans(
+                      fontSize: 11.5,
+                      color: DunesColors.resolve(context, DunesColors.text3),
+                      context: context,
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(width: 8),
-              Text(
-                meta,
-                style: DunesTypography.mono(
-                  fontSize: 9,
-                  color: DunesColors.resolve(context, DunesColors.text3),
-                  context: context,
-                ),
-              ),
-              const SizedBox(width: 5),
-              trailing,
-            ],
-          ),
+            ),
+            const SizedBox(width: 8),
+            trailing,
+          ],
         ),
       ),
     );
@@ -782,7 +772,7 @@ class _ImageMediaRow extends StatelessWidget {
                     : Icons.download_rounded,
                 size: 18,
                 color: downloaded
-                    ? DunesColors.resolve(context, DunesColors.accent)
+                    ? ImVisualTokens.accent(context)
                     : DunesColors.resolve(context, DunesColors.text3),
               ),
         splashRadius: 18,
@@ -896,41 +886,9 @@ class _FileMediaRow extends StatelessWidget {
                     : Icons.download_rounded,
                 size: 18,
                 color: downloaded
-                    ? DunesColors.resolve(context, DunesColors.accent)
+                    ? ImVisualTokens.accent(context)
                     : DunesColors.resolve(context, DunesColors.text3),
               ),
-      ),
-    );
-  }
-}
-
-class _CircleHeaderButton extends StatelessWidget {
-  const _CircleHeaderButton({required this.icon, required this.onTap});
-
-  final IconData icon;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: 32,
-      height: 32,
-      child: Material(
-        color: DunesColors.resolve(
-          context,
-          DunesColors.bgSoft,
-          role: DunesColorRole.surface,
-        ),
-        shape: const CircleBorder(),
-        child: InkWell(
-          customBorder: const CircleBorder(),
-          onTap: onTap,
-          child: Icon(
-            icon,
-            size: 18,
-            color: DunesColors.resolve(context, DunesColors.text),
-          ),
-        ),
       ),
     );
   }

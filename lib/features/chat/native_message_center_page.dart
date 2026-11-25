@@ -11,6 +11,7 @@ import '../conversation/inbox_format.dart';
 import '../conversation/notification_service.dart';
 import '../shell/dunes_toast.dart';
 import 'chat_widgets.dart';
+import 'im_ui_kit.dart';
 
 /// 通讯列表置顶的「沙丘公告」：系统通告和公司广播左右滑动切换。
 class NativeMessageCenterPage extends StatefulWidget {
@@ -230,34 +231,36 @@ class _NativeMessageCenterPageState extends State<NativeMessageCenterPage>
       body: Column(
         children: [
           Container(
-            margin: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+            margin: const EdgeInsets.fromLTRB(12, 12, 12, 6),
+            padding: const EdgeInsets.all(3),
             decoration: BoxDecoration(
-              color: DunesColors.resolve(
-                context,
-                DunesColors.bgSoft,
-                role: DunesColorRole.surface,
-              ),
-              borderRadius: BorderRadius.circular(10),
+              color: ImVisualTokens.isDark(context)
+                  ? Colors.white.withValues(alpha: 0.08)
+                  : const Color(0xFFEEEBF5),
+              borderRadius: BorderRadius.circular(12),
             ),
             child: TabBar(
               controller: _tabController,
               indicatorSize: TabBarIndicatorSize.tab,
               dividerColor: Colors.transparent,
               indicator: BoxDecoration(
-                color: DunesColors.resolve(
-                  context,
-                  DunesColors.accentSoft,
-                  role: DunesColorRole.surface,
-                ),
-                borderRadius: BorderRadius.circular(8),
+                color: ImVisualTokens.cardSurface(context),
+                borderRadius: BorderRadius.circular(9.5),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF4A3A7A).withValues(alpha: 0.10),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
               ),
-              labelColor: DunesColors.resolve(context, DunesColors.accentDeep),
+              labelColor: ImVisualTokens.accentText(context),
               unselectedLabelColor: DunesColors.resolve(
                 context,
-                DunesColors.text3,
+                DunesColors.text2,
               ),
               labelStyle: DunesTypography.sans(
-                fontSize: 13,
+                fontSize: 13.5,
                 fontWeight: FontWeight.w600,
                 context: context,
               ),
@@ -299,13 +302,10 @@ class _NativeMessageCenterPageState extends State<NativeMessageCenterPage>
       );
     }
     if (_notifications.isEmpty) {
-      return Center(
-        child: Text(
-          '暂无系统通告',
-          style: TextStyle(
-            color: DunesColors.resolve(context, DunesColors.text3),
-          ),
-        ),
+      return const ImEmptyState(
+        icon: Icons.notifications_none_rounded,
+        title: '暂无系统通告',
+        subtitle: '有新的系统通知或提醒时会展示在这里',
       );
     }
     return RefreshIndicator(
@@ -338,13 +338,10 @@ class _NativeMessageCenterPageState extends State<NativeMessageCenterPage>
       return _ErrorState(error: _broadcastError!, onRetry: _loadBroadcast);
     }
     if (_broadcastMessages.isEmpty) {
-      return Center(
-        child: Text(
-          '暂无公司广播',
-          style: TextStyle(
-            color: DunesColors.resolve(context, DunesColors.text3),
-          ),
-        ),
+      return const ImEmptyState(
+        icon: Icons.campaign_outlined,
+        title: '暂无公司广播',
+        subtitle: '全员公告或重要广播会第一时间同步于此',
       );
     }
     final title = _broadcast?.title.trim();

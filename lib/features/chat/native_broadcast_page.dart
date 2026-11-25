@@ -11,6 +11,7 @@ import '../conversation/conversation_models.dart';
 import '../conversation/conversation_service.dart';
 import '../conversation/inbox_format.dart';
 import 'chat_widgets.dart';
+import 'im_ui_kit.dart';
 
 class NativeBroadcastPage extends StatefulWidget {
   const NativeBroadcastPage({
@@ -168,13 +169,10 @@ class _NativeBroadcastPageState extends State<NativeBroadcastPage> {
       );
     }
     if (_messages.isEmpty) {
-      return Center(
-        child: Text(
-          '暂无广播消息',
-          style: TextStyle(
-            color: DunesColors.resolve(context, DunesColors.text3),
-          ),
-        ),
+      return const ImEmptyState(
+        icon: Icons.campaign_outlined,
+        title: '暂无广播消息',
+        subtitle: '全员公告或重要广播会第一时间同步于此',
       );
     }
     return RefreshIndicator(

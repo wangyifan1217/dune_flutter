@@ -12,7 +12,9 @@ import '../conversation/conversation_service.dart';
 import '../conversation/inbox_hidden_storage.dart';
 import '../shell/dunes_toast.dart';
 import 'chat_widgets.dart';
+import 'group_composite_avatar.dart';
 import 'group_info_widgets.dart';
+import 'im_ui_kit.dart';
 
 void _toast(BuildContext context, String message) {
   showDunesToast(
@@ -571,6 +573,7 @@ class _NativeGroupInfoPageState extends State<NativeGroupInfoPage> {
     final canLeave = info.canLeave || info.dissolved;
     final wide = isWideChatLayout(context);
 
+    final avatarMembers = widget.conversationHint.avatarMembers;
     return ListView(
       padding: const EdgeInsets.only(bottom: 32),
       children: [
@@ -578,8 +581,15 @@ class _NativeGroupInfoPageState extends State<NativeGroupInfoPage> {
           title: info.title,
           subtitle: groupInfoHeroSubtitle(info),
           icon: groupInfoHeroIcon(info.kind),
+          leading: avatarMembers.isNotEmpty
+              ? GroupCompositeAvatar(
+                  members: avatarMembers,
+                  size: 58,
+                  avatarService: _service,
+                )
+              : null,
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 12),
         GroupInfoMemberGrid(
           members: members,
           avatarService: _service,
@@ -593,100 +603,115 @@ class _NativeGroupInfoPageState extends State<NativeGroupInfoPage> {
         ),
         if (info.hasLinkedApproval) ...[
           const GroupInfoSectionLabel('关联审批'),
-          _buildLinkedApproval(info),
+          ImGroupedCard(
+            dividerIndent: 56,
+            children: [_buildLinkedApproval(info)],
+          ),
         ],
-        const SizedBox(height: 10),
-        GroupInfoRow(
-          icon: Icons.edit_outlined,
-          title: '群聊名称',
-          trailing: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ConstrainedBox(
-                constraints: BoxConstraints(maxWidth: wide ? 320 : 160),
-                child: Text(
-                  info.title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.right,
-                  style: DunesTypography.sans(
-                    fontSize: 15,
-                    color: DunesColors.resolve(
-                      context,
-                      const Color(0xFF888888),
+        const SizedBox(height: 12),
+        ImGroupedCard(
+          dividerIndent: 56,
+          children: [
+            GroupInfoRow(
+              icon: Icons.edit_outlined,
+              title: '群聊名称',
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ConstrainedBox(
+                    constraints: BoxConstraints(maxWidth: wide ? 320 : 160),
+                    child: Text(
+                      info.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.right,
+                      style: DunesTypography.sans(
+                        fontSize: 14.5,
+                        color: DunesColors.resolve(context, DunesColors.text3),
+                        context: context,
+                      ),
                     ),
+                  ),
+                  if (!wide) const GroupInfoChevron(),
+                ],
+              ),
+              onTap: _renameGroup,
+            ),
+            if (showOwnerActions && _canConvertGroupType(info))
+              GroupInfoRow(
+                icon: Icons.swap_horiz_outlined,
+                title: '群类型',
+                trailing: _groupTypeButton(info),
+                onTap: _confirmConvertGroupType,
+              ),
+            if (!wide)
+              GroupInfoRow(
+                icon: Icons.qr_code_2_outlined,
+                title: '群二维码',
+                trailing: const GroupInfoChevron(),
+                onTap: () => _toast(context, '群二维码功能即将上线'),
+              )
+            else
+              GroupInfoRow(
+                icon: Icons.qr_code_2_outlined,
+                title: '群二维码',
+                trailing: Text(
+                  '即将上线',
+                  style: DunesTypography.sans(
+                    fontSize: 14,
+                    color: DunesColors.resolve(context, DunesColors.text3),
                     context: context,
                   ),
                 ),
               ),
-              if (!wide) const GroupInfoChevron(),
-            ],
-          ),
-          onTap: _renameGroup,
+          ],
         ),
-        if (showOwnerActions && _canConvertGroupType(info))
-          GroupInfoRow(
-            icon: Icons.swap_horiz_outlined,
-            title: '群类型',
-            trailing: _groupTypeButton(info),
-            onTap: _confirmConvertGroupType,
-          ),
-        if (!wide)
-          GroupInfoRow(
-            icon: Icons.qr_code_2_outlined,
-            title: '群二维码',
-            trailing: const GroupInfoChevron(),
-            onTap: () => _toast(context, '群二维码功能即将上线'),
-          )
-        else
-          GroupInfoRow(
-            icon: Icons.qr_code_2_outlined,
-            title: '群二维码',
-            trailing: Text(
-              '即将上线',
-              style: DunesTypography.sans(
-                fontSize: 15,
-                color: DunesColors.resolve(context, const Color(0xFF888888)),
-                context: context,
+        const SizedBox(height: 12),
+        ImGroupedCard(
+          dividerIndent: 56,
+          children: [
+            if (info.canMute)
+              GroupInfoRow(
+                icon: Icons.notifications_off_outlined,
+                title: '消息免打扰',
+                trailing: GroupInfoToggle(value: info.muted),
+                onTap: _toggleMuted,
+              )
+            else
+              // 已读不回工作群：不可免打扰。
+              GroupInfoRow(
+                icon: Icons.notifications_off_outlined,
+                title: '消息免打扰',
+                trailing: Text(
+                  '工作群不可开启',
+                  style: DunesTypography.sans(
+                    fontSize: 13.5,
+                    color: DunesColors.resolve(context, DunesColors.text3),
+                    context: context,
+                  ),
+                ),
               ),
+            GroupInfoRow(
+              icon: Icons.push_pin_outlined,
+              title: '置顶聊天',
+              trailing: GroupInfoToggle(value: info.pinned),
+              onTap: _togglePinned,
             ),
-          ),
-        const SizedBox(height: 10),
-        if (info.canMute)
-          GroupInfoRow(
-            icon: Icons.notifications_off_outlined,
-            title: '消息免打扰',
-            trailing: GroupInfoToggle(value: info.muted),
-            onTap: _toggleMuted,
-          )
-        else
-          // 已读不回工作群：不可免打扰。
-          GroupInfoRow(
-            icon: Icons.notifications_off_outlined,
-            title: '消息免打扰',
-            trailing: Text(
-              '工作群不可开启',
-              style: DunesTypography.sans(
-                fontSize: 14,
-                color: DunesColors.resolve(context, const Color(0xFF888888)),
-                context: context,
-              ),
-            ),
-          ),
-        GroupInfoRow(
-          icon: Icons.push_pin_outlined,
-          title: '置顶聊天',
-          trailing: GroupInfoToggle(value: info.pinned),
-          onTap: _togglePinned,
+          ],
         ),
-        const SizedBox(height: 10),
-        GroupInfoRow(
-          icon: Icons.search,
-          title: '查找聊天内容',
-          trailing: const GroupInfoChevron(),
-          onTap: widget.onOpenSearch == null
-              ? null
-              : () => widget.onOpenSearch!(info.id),
+        const SizedBox(height: 12),
+        ImGroupedCard(
+          dividerIndent: 56,
+          children: [
+            GroupInfoRow(
+              icon: Icons.search_rounded,
+              title: '查找聊天内容',
+              trailing: const GroupInfoChevron(),
+              onTap: widget.onOpenSearch == null
+                  ? null
+                  : () => widget.onOpenSearch!(info.id),
+            ),
+          ],
         ),
         if (showOwnerActions)
           GroupInfoDangerRow(label: '解散群聊', onTap: _confirmDissolve),
@@ -703,7 +728,7 @@ class _NativeGroupInfoPageState extends State<NativeGroupInfoPage> {
               textAlign: TextAlign.center,
               style: DunesTypography.sans(
                 fontSize: 12,
-                color: DunesColors.resolve(context, const Color(0xFF888888)),
+                color: DunesColors.resolve(context, DunesColors.text3),
                 context: context,
               ),
             ),

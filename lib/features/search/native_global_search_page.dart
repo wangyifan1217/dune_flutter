@@ -9,6 +9,7 @@ import '../../core/widgets/desktop_feedback_surface.dart';
 import '../../core/widgets/desktop_status_surface.dart';
 import '../auth/auth_session.dart';
 import '../chat/group_composite_avatar.dart';
+import '../chat/im_ui_kit.dart';
 import '../chat/user_avatar_widget.dart';
 import '../contacts/contact_models.dart';
 import '../contacts/contact_service.dart';
@@ -81,7 +82,6 @@ class _NativeGlobalSearchPageState extends State<NativeGlobalSearchPage> {
       const <int, ({String? preset, String? objectKey})>{};
 
   static const _pageBg = Color(0xFFF6F3FA);
-  static const _panelColor = Colors.white;
   static const _line = Color(0xFFEDE7F4);
 
   static const _tabs = <GlobalSearchCategory>[
@@ -399,57 +399,57 @@ class _NativeGlobalSearchPageState extends State<NativeGlobalSearchPage> {
   }
 
   Widget _buildBar() {
+    final accent = ImVisualTokens.accent(context);
+    final dark = ImVisualTokens.isDark(context);
+    final disableAnim = MediaQuery.disableAnimationsOf(context);
     return Padding(
       padding: EdgeInsets.fromLTRB(
         _desktop ? 20 : 12,
-        14,
-        _desktop ? 12 : 8,
-        10,
+        12,
+        _desktop ? 14 : 10,
+        8,
       ),
       child: Row(
         children: [
           Expanded(
             child: AnimatedContainer(
-              duration: const Duration(milliseconds: 160),
-              height: _desktop ? 44 : 38,
+              duration: disableAnim ? Duration.zero : ImVisualTokens.fastAnim,
+              curve: ImVisualTokens.iosCurve,
+              height: _desktop ? 44 : 40,
               padding: const EdgeInsets.symmetric(horizontal: 14),
               decoration: BoxDecoration(
-                color: DunesColors.resolve(
-                  context,
-                  Colors.white,
-                  role: DunesColorRole.surface,
-                ),
-                borderRadius: BorderRadius.circular(_desktop ? 10 : 14),
+                color: ImVisualTokens.cardSurface(context),
+                borderRadius: BorderRadius.circular(_desktop ? 12 : 20),
                 border: Border.all(
                   color: _focus.hasFocus
-                      ? DunesColors.resolve(
-                          context,
-                          DunesColors.brandPurple,
-                          role: DunesColorRole.border,
-                        ).withValues(alpha: 0.45)
-                      : DunesColors.resolve(
-                          context,
-                          _line,
-                          role: DunesColorRole.border,
-                        ),
+                      ? accent.withValues(alpha: 0.55)
+                      : ImVisualTokens.hairlineBorder(context),
+                  width: _focus.hasFocus ? 1.1 : 0.8,
                 ),
-                boxShadow: [
-                  BoxShadow(
-                    color: DunesColors.brandPurple.withValues(alpha: 0.06),
-                    blurRadius: 18,
-                    offset: const Offset(0, 6),
-                  ),
-                ],
+                boxShadow: _focus.hasFocus
+                    ? [
+                        BoxShadow(
+                          color: accent.withValues(alpha: 0.12),
+                          blurRadius: 16,
+                          spreadRadius: -2,
+                          offset: const Offset(0, 4),
+                        ),
+                      ]
+                    : ImVisualTokens.softCardShadow(context),
               ),
               child: Row(
                 children: [
-                  Icon(
-                    Icons.search_rounded,
-                    size: 20,
-                    color: DunesColors.resolve(
-                      context,
-                      DunesColors.brandPurple,
-                    ).withValues(alpha: 0.7),
+                  AnimatedScale(
+                    scale: _focus.hasFocus ? 1.06 : 1.0,
+                    duration: disableAnim
+                        ? Duration.zero
+                        : ImVisualTokens.fastAnim,
+                    curve: ImVisualTokens.iosCurve,
+                    child: Icon(
+                      Icons.search_rounded,
+                      size: 19,
+                      color: accent.withValues(alpha: _focus.hasFocus ? 0.95 : 0.72),
+                    ),
                   ),
                   const SizedBox(width: 8),
                   Expanded(
@@ -457,10 +457,7 @@ class _NativeGlobalSearchPageState extends State<NativeGlobalSearchPage> {
                       controller: _controller,
                       focusNode: _focus,
                       autofocus: true,
-                      cursorColor: DunesColors.resolve(
-                        context,
-                        DunesColors.brandPurple,
-                      ),
+                      cursorColor: accent,
                       textAlignVertical: TextAlignVertical.center,
                       textInputAction: TextInputAction.search,
                       onChanged: (v) {
@@ -486,7 +483,9 @@ class _NativeGlobalSearchPageState extends State<NativeGlobalSearchPage> {
                           fontSize: 14,
                           color: DunesColors.resolve(
                             context,
-                            const Color(0xFFB8B0C4),
+                            dark
+                                ? const Color(0xFF8C849A)
+                                : const Color(0xFFA9A2B8),
                           ),
                           context: context,
                         ),
@@ -494,38 +493,48 @@ class _NativeGlobalSearchPageState extends State<NativeGlobalSearchPage> {
                       ),
                     ),
                   ),
-                  if (_controller.text.isNotEmpty)
-                    _HoverIcon(
-                      icon: Icons.close_rounded,
-                      onTap: () {
-                        _controller.clear();
-                        _runSearch('');
-                        _focus.requestFocus();
-                      },
+                  AnimatedSwitcher(
+                    duration: disableAnim
+                        ? Duration.zero
+                        : ImVisualTokens.fastAnim,
+                    transitionBuilder: (child, anim) => FadeTransition(
+                      opacity: anim,
+                      child: ScaleTransition(scale: anim, child: child),
                     ),
+                    child: _controller.text.isNotEmpty
+                        ? _HoverIcon(
+                            key: const ValueKey('gs-clear'),
+                            icon: Icons.close_rounded,
+                            onTap: () {
+                              HapticFeedback.selectionClick();
+                              _controller.clear();
+                              _runSearch('');
+                              _focus.requestFocus();
+                            },
+                          )
+                        : const SizedBox.shrink(key: ValueKey('gs-empty')),
+                  ),
                 ],
               ),
             ),
           ),
-          const SizedBox(width: 4),
-          TextButton(
-            onPressed: widget.onBack,
-            style: TextButton.styleFrom(
-              foregroundColor: DunesColors.resolve(
-                context,
-                DunesColors.brandPurple,
-              ),
+          const SizedBox(width: 6),
+          ImTapScale(
+            onTap: () {
+              HapticFeedback.selectionClick();
+              widget.onBack();
+            },
+            borderRadius: BorderRadius.circular(12),
+            child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-              minimumSize: const Size(48, 40),
-              tapTargetSize: MaterialTapTargetSize.padded,
-            ),
-            child: Text(
-              '取消',
-              style: DunesTypography.sans(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: DunesColors.resolve(context, DunesColors.brandPurple),
-                context: context,
+              child: Text(
+                '取消',
+                style: DunesTypography.sans(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: accent,
+                  context: context,
+                ),
               ),
             ),
           ),
@@ -535,57 +544,62 @@ class _NativeGlobalSearchPageState extends State<NativeGlobalSearchPage> {
   }
 
   Widget _buildTabs() {
+    final accent = ImVisualTokens.accent(context);
+    final softBg = ImVisualTokens.accentSoftSurface(context);
+    final disableAnim = MediaQuery.disableAnimationsOf(context);
     return Container(
-      height: 42,
+      height: 44,
       margin: const EdgeInsets.only(bottom: 4),
       decoration: BoxDecoration(
         border: Border(
           bottom: BorderSide(
-            color: DunesColors.resolve(
-              context,
-              _line,
-              role: DunesColorRole.border,
-            ),
+            color: ImVisualTokens.hairlineBorder(context),
+            width: 0.7,
           ),
         ),
       ),
       child: ListView.separated(
-        padding: EdgeInsets.symmetric(horizontal: _desktop ? 16 : 10),
+        padding: EdgeInsets.symmetric(horizontal: _desktop ? 18 : 12),
         scrollDirection: Axis.horizontal,
         itemCount: _tabs.length,
-        separatorBuilder: (_, _) => const SizedBox(width: 2),
+        separatorBuilder: (_, _) => const SizedBox(width: 6),
         itemBuilder: (context, i) {
           final tab = _tabs[i];
           final on = _tab == tab && _thread == null;
-          return _HoverSurface(
-            radius: BorderRadius.circular(8),
-            onTap: () => _selectTab(tab),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                border: Border(
-                  bottom: BorderSide(
+          return Center(
+            child: ImTapScale(
+              borderRadius: BorderRadius.circular(999),
+              onTap: () {
+                HapticFeedback.selectionClick();
+                _selectTab(tab);
+              },
+              child: AnimatedContainer(
+                duration: disableAnim ? Duration.zero : ImVisualTokens.fastAnim,
+                curve: ImVisualTokens.iosCurve,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 13,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: on ? softBg : Colors.transparent,
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(
                     color: on
-                        ? DunesColors.resolve(
-                            context,
-                            DunesColors.brandPurple,
-                            role: DunesColorRole.border,
-                          )
+                        ? accent.withValues(alpha: 0.24)
                         : Colors.transparent,
-                    width: 2.2,
+                    width: 0.8,
                   ),
                 ),
-              ),
-              child: Text(
-                tab.label,
-                style: DunesTypography.sans(
-                  fontSize: 13,
-                  fontWeight: on ? FontWeight.w700 : FontWeight.w500,
-                  color: on
-                      ? DunesColors.resolve(context, DunesColors.brandPurple)
-                      : DunesColors.resolve(context, DunesColors.text2),
-                  context: context,
+                child: Text(
+                  tab.label,
+                  style: DunesTypography.sans(
+                    fontSize: 13,
+                    fontWeight: on ? FontWeight.w600 : FontWeight.w500,
+                    color: on
+                        ? ImVisualTokens.accentText(context)
+                        : DunesColors.resolve(context, DunesColors.text2),
+                    context: context,
+                  ),
                 ),
               ),
             ),
@@ -645,55 +659,48 @@ class _NativeGlobalSearchPageState extends State<NativeGlobalSearchPage> {
           ),
         ),
         const SizedBox(height: 14),
-        _HoverSurface(
-          radius: BorderRadius.circular(14),
+        ImTapScale(
+          borderRadius: BorderRadius.circular(16),
           onTap: () => widget.onOpenNova(_controller.text.trim()),
-          child: Container(
-            height: 46,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(14),
-              gradient: LinearGradient(
-                colors: [
-                  DunesColors.resolve(
-                    context,
-                    Color(0xFFF3ECFB),
-                    role: DunesColorRole.surface,
-                  ),
-                  DunesColors.resolve(
-                    context,
-                    Color(0xFFFFFFFF),
-                    role: DunesColorRole.surface,
-                  ),
-                ],
-              ),
-              border: Border.all(
-                color: DunesColors.resolve(
-                  context,
-                  const Color(0xFFDCCFF0),
-                  role: DunesColorRole.border,
-                ),
-              ),
-            ),
+          child: ImFrostedIsland(
+            borderRadius: 16,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+            tintColor: ImVisualTokens.isDark(context)
+                ? const Color(0xFF2B2340)
+                : const Color(0xFFF6F2FD),
+            borderColor: ImVisualTokens.accent(context).withValues(alpha: 0.25),
+            shadows: ImVisualTokens.softCardShadow(context),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(
-                  Icons.auto_awesome,
-                  size: 16,
-                  color: DunesColors.resolve(context, DunesColors.brandPurple),
+                Container(
+                  width: 24,
+                  height: 24,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: ImVisualTokens.primaryGradient(context),
+                  ),
+                  child: const Icon(
+                    Icons.auto_awesome_rounded,
+                    size: 13,
+                    color: Colors.white,
+                  ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 9),
                 Text(
                   '智能搜索 · 用自然语言找人或事',
                   style: DunesTypography.sans(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: DunesColors.resolve(
-                      context,
-                      DunesColors.brandPurple,
-                    ),
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w600,
+                    color: ImVisualTokens.accentText(context),
                     context: context,
                   ),
+                ),
+                const SizedBox(width: 4),
+                Icon(
+                  Icons.chevron_right_rounded,
+                  size: 17,
+                  color: ImVisualTokens.accentText(context).withValues(alpha: 0.7),
                 ),
               ],
             ),
@@ -921,15 +928,17 @@ class _NativeGlobalSearchPageState extends State<NativeGlobalSearchPage> {
               g.status == GlobalSearchGroupStatus.error)
             _retryRow(g)
           else if (g.status == GlobalSearchGroupStatus.loading && !g.hasItems)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 14),
-              child: Center(
-                child: SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2),
+            Container(
+              decoration: BoxDecoration(
+                color: ImVisualTokens.cardSurface(context),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: ImVisualTokens.hairlineBorder(context),
+                  width: 0.7,
                 ),
               ),
+              padding: const EdgeInsets.symmetric(vertical: 6),
+              child: const ImShimmerRow(count: 2),
             )
           else if (g.hasItems) ...[
             _panel(
@@ -1035,36 +1044,26 @@ class _NativeGlobalSearchPageState extends State<NativeGlobalSearchPage> {
 
   Widget _emptyAll() {
     return DesktopStatusSurface(
-      child: Padding(
-        padding: const EdgeInsets.only(top: 28),
-        child: Column(
+      child: ImEmptyState(
+        icon: Icons.search_off_rounded,
+        title: '没有找到相关结果',
+        subtitle: '可以换个关键词，或试试智能搜索快速查找',
+        action: Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          alignment: WrapAlignment.center,
           children: [
-            Text(
-              '没有找到相关结果',
-              style: DunesTypography.sans(
-                fontSize: 15,
-                color: DunesColors.resolve(context, DunesColors.text2),
-                context: context,
-              ),
+            _chip('换个词', () {
+              _controller.clear();
+              _runSearch('');
+              _focus.requestFocus();
+            }),
+            _chip(
+              '去智能搜索',
+              () => widget.onOpenNova(_controller.text.trim()),
+              active: true,
             ),
-            const SizedBox(height: 14),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              alignment: WrapAlignment.center,
-              children: [
-                _chip('换个词', () {
-                  _controller.clear();
-                  _runSearch('');
-                  _focus.requestFocus();
-                }),
-                _chip(
-                  '去智能搜索',
-                  () => widget.onOpenNova(_controller.text.trim()),
-                ),
-                _chip('去通讯录', () => widget.onOpenContacts?.call()),
-              ],
-            ),
+            _chip('去通讯录', () => widget.onOpenContacts?.call()),
           ],
         ),
       ),
@@ -1073,17 +1072,10 @@ class _NativeGlobalSearchPageState extends State<NativeGlobalSearchPage> {
 
   Widget _emptyCategory(GlobalSearchCategory cat) {
     return DesktopStatusSurface(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 28),
-        child: Text(
-          '没有找到${cat.label}',
-          textAlign: TextAlign.center,
-          style: DunesTypography.sans(
-            fontSize: 14,
-            color: DunesColors.resolve(context, DunesColors.text3),
-            context: context,
-          ),
-        ),
+      child: ImEmptyState(
+        icon: Icons.manage_search_rounded,
+        title: '没有找到${cat.label}',
+        subtitle: '试试调整关键词或切换其他分类',
       ),
     );
   }
@@ -1179,48 +1171,10 @@ class _NativeGlobalSearchPageState extends State<NativeGlobalSearchPage> {
 
   Widget _panel(List<Widget> tiles) {
     if (tiles.isEmpty) return const SizedBox.shrink();
-    return Container(
-      decoration: BoxDecoration(
-        color: DunesColors.resolveNullable(
-          context,
-          _panelColor,
-          role: DunesColorRole.surface,
-        ),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: DunesColors.resolve(
-            context,
-            _line,
-            role: DunesColorRole.border,
-          ),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF6E49C8).withValues(alpha: 0.04),
-            blurRadius: 16,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Column(
-        children: [
-          for (var i = 0; i < tiles.length; i++) ...[
-            tiles[i],
-            if (i != tiles.length - 1)
-              Divider(
-                height: 1,
-                thickness: 1,
-                color: DunesColors.resolve(
-                  context,
-                  _line,
-                  role: DunesColorRole.border,
-                ),
-                indent: 58,
-              ),
-          ],
-        ],
-      ),
+    return ImGroupedCard(
+      radius: 16,
+      dividerIndent: 62,
+      children: tiles,
     );
   }
 
@@ -1235,7 +1189,9 @@ class _NativeGlobalSearchPageState extends State<NativeGlobalSearchPage> {
     Widget? leading,
     bool badge = false,
   }) {
-    return _HoverSurface(
+    return ImTapScale(
+      borderRadius: BorderRadius.zero,
+      pressedScale: 0.992,
       onTap: onTap,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
@@ -1264,11 +1220,7 @@ class _NativeGlobalSearchPageState extends State<NativeGlobalSearchPage> {
                     : EdgeInsets.zero,
                 decoration: badge
                     ? BoxDecoration(
-                        color: DunesColors.resolve(
-                          context,
-                          DunesColors.brandPurpleSoft,
-                          role: DunesColorRole.surface,
-                        ),
+                        color: ImVisualTokens.accentSoftSurface(context),
                         borderRadius: BorderRadius.circular(999),
                       )
                     : null,
@@ -1278,7 +1230,7 @@ class _NativeGlobalSearchPageState extends State<NativeGlobalSearchPage> {
                     fontSize: 11,
                     fontWeight: badge ? FontWeight.w700 : FontWeight.w400,
                     color: badge
-                        ? DunesColors.resolve(context, DunesColors.brandPurple)
+                        ? ImVisualTokens.accentText(context)
                         : DunesColors.resolve(context, DunesColors.text3),
                     context: context,
                   ),
@@ -1794,7 +1746,7 @@ class _HoverText extends StatelessWidget {
 }
 
 class _HoverIcon extends StatelessWidget {
-  const _HoverIcon({required this.icon, required this.onTap});
+  const _HoverIcon({super.key, required this.icon, required this.onTap});
 
   final IconData icon;
   final VoidCallback onTap;
@@ -1809,7 +1761,7 @@ class _HoverIcon extends StatelessWidget {
         child: Icon(
           icon,
           size: 16,
-          color: DunesColors.resolve(context, const Color(0xFFB2B2B2)),
+          color: DunesColors.resolve(context, const Color(0xFFA8A3B3)),
         ),
       ),
     );

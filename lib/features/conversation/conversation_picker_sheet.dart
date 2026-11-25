@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
 import '../chat/group_composite_avatar.dart';
+import '../chat/im_ui_kit.dart';
 import '../chat/user_avatar_widget.dart';
 import '../contacts/contact_models.dart';
 import '../contacts/contact_service.dart';
@@ -296,41 +297,55 @@ class _ConversationPickerBodyState extends State<_ConversationPickerBody> {
                   ),
                 ),
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+                  padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
                   child: TextField(
                     controller: _searchController,
                     onChanged: _onSearchChanged,
+                    cursorColor: ImVisualTokens.accent(context),
                     decoration: InputDecoration(
                       hintText: '搜索会话或联系人',
-                      prefixIcon: const Icon(Icons.search_rounded, size: 20),
-                      filled: true,
-                      fillColor: DunesColors.resolve(
-                        context,
-                        DunesColors.bgSoft,
-                        role: DunesColorRole.surface,
+                      isDense: true,
+                      prefixIcon: Icon(
+                        Icons.search_rounded,
+                        size: 19,
+                        color: ImVisualTokens.accent(context),
                       ),
-                      contentPadding: const EdgeInsets.symmetric(vertical: 0),
+                      filled: true,
+                      fillColor: ImVisualTokens.groupedBackground(context),
+                      contentPadding: const EdgeInsets.symmetric(vertical: 10),
                       border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide.none,
+                        borderRadius: BorderRadius.circular(14),
+                        borderSide: BorderSide(
+                          color: ImVisualTokens.hairlineBorder(context),
+                          width: 0.7,
+                        ),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        borderSide: BorderSide(
+                          color: ImVisualTokens.hairlineBorder(context),
+                          width: 0.7,
+                        ),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        borderSide: BorderSide(
+                          color: ImVisualTokens.accent(
+                            context,
+                          ).withValues(alpha: 0.52),
+                          width: 1.1,
+                        ),
                       ),
                     ),
                   ),
                 ),
                 Expanded(
                   child: empty
-                      ? Center(
-                          child: Text(
-                            showContacts ? '无匹配的会话或联系人' : '暂无可选会话',
-                            style: DunesTypography.sans(
-                              fontSize: 14,
-                              color: DunesColors.resolve(
-                                context,
-                                DunesColors.text3,
-                              ),
-                              context: context,
-                            ),
-                          ),
+                      ? ImEmptyState(
+                          icon: showContacts
+                              ? Icons.search_off_rounded
+                              : Icons.forum_outlined,
+                          title: showContacts ? '无匹配的会话或联系人' : '暂无可选会话',
                         )
                       : ListView(
                           children: [
@@ -345,11 +360,11 @@ class _ConversationPickerBodyState extends State<_ConversationPickerBody> {
                                     if (index != filtered.length - 1 ||
                                         hasContactBlock)
                                       Divider(
-                                        height: 1,
-                                        color: DunesColors.resolve(
+                                        height: 0.6,
+                                        thickness: 0.6,
+                                        indent: 68,
+                                        color: ImVisualTokens.hairlineBorder(
                                           context,
-                                          DunesColors.borderSoft,
-                                          role: DunesColorRole.border,
                                         ),
                                       ),
                                   ],
@@ -359,22 +374,7 @@ class _ConversationPickerBodyState extends State<_ConversationPickerBody> {
                             if (hasContactBlock) ...[
                               const _PickerSectionHeader(label: '联系人'),
                               if (_contactSearching && _contactHits.isEmpty)
-                                Padding(
-                                  padding: EdgeInsets.symmetric(
-                                    horizontal: 16,
-                                    vertical: 14,
-                                  ),
-                                  child: Text(
-                                    '正在搜索联系人…',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: DunesColors.resolve(
-                                        context,
-                                        DunesColors.text3,
-                                      ),
-                                    ),
-                                  ),
-                                )
+                                const ImShimmerRow(count: 2)
                               else
                                 ...List.generate(_contactHits.length, (index) {
                                   final contact = _contactHits[index];
@@ -383,11 +383,11 @@ class _ConversationPickerBodyState extends State<_ConversationPickerBody> {
                                       _contactTile(contact),
                                       if (index != _contactHits.length - 1)
                                         Divider(
-                                          height: 1,
-                                          color: DunesColors.resolve(
+                                          height: 0.6,
+                                          thickness: 0.6,
+                                          indent: 68,
+                                          color: ImVisualTokens.hairlineBorder(
                                             context,
-                                            DunesColors.borderSoft,
-                                            role: DunesColorRole.border,
                                           ),
                                         ),
                                     ],
@@ -441,13 +441,7 @@ class _ConversationPickerBodyState extends State<_ConversationPickerBody> {
           ? null
           : Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis),
       trailing: widget.multiSelect
-          ? Icon(
-              checked ? Icons.check_circle_rounded : Icons.circle_outlined,
-              size: 22,
-              color: checked
-                  ? DunesColors.resolve(context, DunesColors.brandPurple)
-                  : DunesColors.resolve(context, DunesColors.text3),
-            )
+          ? ImSelectCircle(selected: checked, size: 22)
           : (widget.highlightConversationId != null &&
                     c.id == widget.highlightConversationId
                 ? Text(

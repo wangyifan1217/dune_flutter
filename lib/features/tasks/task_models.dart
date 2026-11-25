@@ -49,6 +49,9 @@ class TaskItem {
     this.displayStatus = '',
     this.hasPendingChange = false,
     this.pendingChangeKind = '',
+    this.transferAssigneeId,
+    this.transferRequesterId,
+    this.transferStatus = '',
     this.canEvaluate = false,
   });
 
@@ -103,6 +106,16 @@ class TaskItem {
   final String displayStatus;
   final bool hasPendingChange;
   final String pendingChangeKind;
+  final int? transferAssigneeId;
+  final int? transferRequesterId;
+  final String transferStatus;
+
+  bool get hasPendingTransfer => transferStatus == 'pending';
+  String? get transferStatusLabel => switch (transferStatus) {
+    'pending' => '转派待接收',
+    'rejected' => '转派已拒绝',
+    _ => null,
+  };
 
   /// 当前查看人能否评价。上级看导入目标时创建人不是自己，靠这个字段显示评价。
   final bool canEvaluate;
@@ -183,6 +196,9 @@ class TaskItem {
       displayStatus: '${json['displayStatus'] ?? ''}',
       hasPendingChange: json['hasPendingChange'] == true,
       pendingChangeKind: '${json['pendingChangeKind'] ?? ''}',
+      transferAssigneeId: (json['transferAssigneeId'] as num?)?.toInt(),
+      transferRequesterId: (json['transferRequesterId'] as num?)?.toInt(),
+      transferStatus: '${json['transferStatus'] ?? ''}',
       canEvaluate: json['canEvaluate'] == true,
     );
   }

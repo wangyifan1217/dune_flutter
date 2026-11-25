@@ -64,6 +64,7 @@ class TaskInboxSnapshot {
   factory TaskInboxSnapshot.build({
     required List<TaskItem> pending,
     required List<TaskItem> actionable,
+    int? userId,
     DateTime? now,
   }) {
     final clock = now ?? DateTime.now();
@@ -81,7 +82,7 @@ class TaskInboxSnapshot {
 
     final ordered = byId.values.toList(growable: false)..sort(_byDue);
     for (final task in ordered) {
-      final bucket = taskDecisionBucket(task);
+      final bucket = taskDecisionBucket(task, userId: userId);
       if (bucket == null) continue;
       claimed.add(task.id);
       switch (bucket) {
@@ -187,8 +188,11 @@ class TaskInboxSnapshot {
 }
 
 /// 需要本人决策的事项。其余状态返回 null。
-TaskInboxBucket? taskDecisionBucket(TaskItem task) {
-  if (task.status == 'pending_assignment') return TaskInboxBucket.receive;
+TaskInboxBucket? taskDecisionBucket(TaskItem task, {int? userId}) {
+  if (task.status == 'pending_assignment' ||
+      (task.hasPendingTransfer && task.transferAssigneeId == userId)) {
+    return TaskInboxBucket.receive;
+  }
   if (task.hasPendingChange && task.pendingChangeKind == 'assignment') {
     return TaskInboxBucket.assignApproval;
   }
@@ -245,7 +249,8 @@ String? taskCompleteBlockReason(TaskItem task, {DateTime? now}) {
   if (task.status == 'completed' || task.status == 'cancelled') {
     return '任务已结束';
   }
-  if (task.status == 'pending_assignment' || task.status == 'pending_approval') {
+  if (task.status == 'pending_assignment' ||
+      task.status == 'pending_approval') {
     return '还在待确认，不能标记完成';
   }
   if (task.hasPendingChange) {
@@ -263,7 +268,7 @@ String? taskCompleteBlockReason(TaskItem task, {DateTime? now}) {
 String taskInboxCardHint(TaskInboxBucket bucket) {
   return switch (bucket) {
     TaskInboxBucket.receive => '下一步：接受或拒绝。接受后才会开始执行。',
-    TaskInboxBucket.assignApproval => '下一步：审批通过后，负责人变更为被指派人。',
+    TaskInboxBucket.assignApproval => '下一步：审批转派。跨部门还需被指派人接收。',
     TaskInboxBucket.changeApproval => '下一步：审批通过后，变更才会生效。',
     TaskInboxBucket.confirm => '下一步：通过后，任务进入执行。',
     TaskInboxBucket.overdue => '已过截止日，尚未办结。',

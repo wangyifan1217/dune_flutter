@@ -180,7 +180,12 @@ class _NativeTaskGoalReportPageState extends State<NativeTaskGoalReportPage> {
     final id = (row['goalId'] as num).toInt();
     final owner = _names['${row['ownerId']}'] ?? '—';
     final progress = row['progress'] ?? 0;
-    final date = row['reportDate'] ?? '—';
+    final submittedAt = DateTime.tryParse('${row['submittedAt'] ?? ''}')
+        ?.toUtc()
+        .add(const Duration(hours: 8));
+    final date = submittedAt == null
+        ? row['reportDate'] ?? '—'
+        : '${formatTaskYmd(submittedAt)} ${TimeOfDay.fromDateTime(submittedAt).format(context)}';
     final blockers = '${row['blockers'] ?? ''}';
     return Card(
       margin: const EdgeInsets.only(bottom: 8),

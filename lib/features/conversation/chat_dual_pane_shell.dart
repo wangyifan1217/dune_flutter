@@ -11,6 +11,7 @@ import '../../core/widgets/desktop_section_transition.dart';
 import '../shell/dunes_main_tab_bar.dart';
 
 import '../../core/theme/dunes_theme.dart';
+import '../chat/im_ui_kit.dart';
 
 /// Windows / macOS / 宽屏下的「侧栏导航 + 会话列表 + 聊天窗口」壳。
 ///
@@ -250,12 +251,37 @@ class _ChatDualPaneShellState extends State<ChatDualPaneShell> {
                               _saveWidth();
                             },
                             child: Center(
-                              child: AnimatedContainer(
-                                duration: const Duration(milliseconds: 120),
-                                width: active ? 3 : 1,
-                                color: active
-                                    ? DunesColors.brandPurple
-                                    : Colors.transparent,
+                              child: Stack(
+                                alignment: Alignment.center,
+                                children: [
+                                  AnimatedContainer(
+                                    duration: const Duration(milliseconds: 140),
+                                    width: active ? 2.5 : 1,
+                                    color: active
+                                        ? ImVisualTokens.accent(context)
+                                        : Colors.transparent,
+                                  ),
+                                  AnimatedOpacity(
+                                    opacity: active ? 1 : 0,
+                                    duration: const Duration(milliseconds: 140),
+                                    child: Container(
+                                      width: 6,
+                                      height: 36,
+                                      decoration: BoxDecoration(
+                                        color: ImVisualTokens.accent(context),
+                                        borderRadius: BorderRadius.circular(99),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: ImVisualTokens.accent(
+                                              context,
+                                            ).withValues(alpha: 0.3),
+                                            blurRadius: 6,
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           ),
@@ -324,47 +350,62 @@ class ChatDualPaneEmpty extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final accent = ImVisualTokens.accent(context);
     return ColoredBox(
-      color: DunesColors.resolve(
-        context,
-        DunesColors.imSurface,
-        role: DunesColorRole.surface,
-      ),
+      color: ImVisualTokens.isDark(context)
+          ? ImVisualTokens.chatCanvasDark
+          : ImVisualTokens.chatCanvasLight,
       child: Center(
         child: Padding(
           padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.forum_outlined,
-                size: 52,
-                color: DunesColors.resolve(
-                  context,
-                  DunesColors.text3,
-                ).withValues(alpha: 0.45),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                '选择会话开始聊天',
-                style: DunesTypography.sans(
-                  fontSize: 17,
-                  fontWeight: FontWeight.w600,
-                  color: DunesColors.resolve(context, DunesColors.text2),
-                  context: context,
+          child: ImFrostedIsland(
+            borderRadius: 24,
+            padding: const EdgeInsets.symmetric(horizontal: 36, vertical: 30),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 64,
+                  height: 64,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: ImVisualTokens.primaryGradient(context),
+                    boxShadow: [
+                      BoxShadow(
+                        color: accent.withValues(alpha: 0.28),
+                        blurRadius: 18,
+                        offset: const Offset(0, 6),
+                      ),
+                    ],
+                  ),
+                  child: const Icon(
+                    Icons.forum_rounded,
+                    size: 30,
+                    color: Colors.white,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                '从左侧列表打开私聊或群聊',
-                textAlign: TextAlign.center,
-                style: DunesTypography.sans(
-                  fontSize: 13,
-                  color: DunesColors.resolve(context, DunesColors.text3),
-                  context: context,
+                const SizedBox(height: 18),
+                Text(
+                  '选择会话开始沟通',
+                  style: DunesTypography.sans(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w600,
+                    color: DunesColors.resolve(context, DunesColors.text),
+                    context: context,
+                  ),
                 ),
-              ),
-            ],
+                const SizedBox(height: 6),
+                Text(
+                  '从左侧列表选择私聊或群聊，支持拖入文件快速发送',
+                  textAlign: TextAlign.center,
+                  style: DunesTypography.sans(
+                    fontSize: 13,
+                    color: DunesColors.resolve(context, DunesColors.text3),
+                    context: context,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),

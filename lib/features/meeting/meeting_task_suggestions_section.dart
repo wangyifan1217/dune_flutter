@@ -6,8 +6,10 @@ import '../../core/theme/dunes_theme.dart';
 import '../auth/auth_session.dart';
 import '../kb/kb_document_coordinator.dart';
 import '../shell/dunes_toast.dart';
+import '../tasks/task_api.dart';
 import '../tasks/task_link_api.dart';
 import '../tasks/task_link_models.dart';
+import '../tasks/task_models.dart';
 import 'meeting_task_create_dialog.dart';
 
 /// 会议详情的「任务建议」区块：AI 分析状态、已同步任务、创建任务建议卡。
@@ -17,10 +19,12 @@ class MeetingTaskSuggestionsSection extends StatefulWidget {
     super.key,
     required this.session,
     required this.meetingId,
+    this.canLinkTasks = false,
   });
 
   final AuthSession session;
   final int meetingId;
+  final bool canLinkTasks;
 
   @override
   State<MeetingTaskSuggestionsSection> createState() =>
@@ -75,16 +79,17 @@ class _MeetingTaskSuggestionsSectionState
   }
 
   Future<void> _load() async {
+    final meetingId = widget.meetingId;
     try {
-      final data = await _api.fetchMeetingSuggestions(widget.meetingId);
-      if (!mounted) return;
+      final data = await _api.fetchMeetingSuggestions(meetingId);
+      if (!mounted || widget.meetingId != meetingId) return;
       setState(() {
         _data = data;
         _loaded = true;
       });
       _managePolling();
     } catch (_) {
-      if (!mounted) return;
+      if (!mounted || widget.meetingId != meetingId) return;
       setState(() => _loaded = true);
     }
   }
@@ -96,6 +101,32 @@ class _MeetingTaskSuggestionsSectionState
     } else if (!running && _poll != null) {
       _poll?.cancel();
       _poll = null;
+    }
+  }
+
+  Future<void> _linkExistingTask() async {
+    if (_busy) return;
+    final meetingId = widget.meetingId;
+    final task = await showDialog<TaskItem>(
+      context: context,
+      builder: (_) => _MeetingTaskPicker(
+        api: TaskApi(widget.session),
+        linkedIds: _data.syncedTasks.map((task) => task.taskId).toSet(),
+      ),
+    );
+    if (task == null || !mounted || widget.meetingId != meetingId || _busy) {
+      return;
+    }
+    setState(() => _busy = true);
+    try {
+      await _api.addLink(task.id, {'kind': 'meeting', 'meetingId': meetingId});
+      if (!mounted || widget.meetingId != meetingId) return;
+      showDunesCenterToast(context, '已关联任务「${task.title}」');
+      await _load();
+    } catch (e) {
+      if (mounted) showDunesCenterToast(context, '$e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
   }
 
@@ -268,7 +299,10 @@ class _MeetingTaskSuggestionsSectionState
   Widget build(BuildContext context) {
     final running = _data.bindRun?.isRunningFresh == true;
     if (!_loaded ||
-        (_data.suggestions.isEmpty && _data.syncedTasks.isEmpty && !running)) {
+        (!widget.canLinkTasks &&
+            _data.suggestions.isEmpty &&
+            _data.syncedTasks.isEmpty &&
+            !running)) {
       return const SizedBox.shrink();
     }
     return Container(
@@ -303,7 +337,7 @@ class _MeetingTaskSuggestionsSectionState
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  '任务建议',
+                  '会议任务',
                   style: DunesTypography.sans(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
@@ -317,17 +351,23 @@ class _MeetingTaskSuggestionsSectionState
                   onPressed: _busy ? null : _acceptAll,
                   child: const Text('全部创建'),
                 ),
+              if (widget.canLinkTasks)
+                TextButton(
+                  onPressed: _busy ? null : _linkExistingTask,
+                  child: const Text('关联任务'),
+                ),
             ],
           ),
           const SizedBox(height: 6),
-          Text(
-            '处理也会出现在任务助手，不必回到这场会议。',
-            style: DunesTypography.sans(
-              fontSize: 12,
-              color: DunesColors.resolve(context, DunesColors.text3),
-              context: context,
+          if (_data.suggestions.isNotEmpty)
+            Text(
+              '处理也会出现在任务助手，不必回到这场会议。',
+              style: DunesTypography.sans(
+                fontSize: 12,
+                color: DunesColors.resolve(context, DunesColors.text3),
+                context: context,
+              ),
             ),
-          ),
           const SizedBox(height: 8),
           if (running)
             Padding(
@@ -362,7 +402,7 @@ class _MeetingTaskSuggestionsSectionState
             ),
           if (_data.syncedTasks.isNotEmpty) ...[
             Text(
-              '已同步到我的任务',
+              '已关联任务',
               style: DunesTypography.sans(
                 fontSize: 12,
                 fontWeight: FontWeight.w700,
@@ -503,6 +543,146 @@ class _MeetingTaskSuggestionsSectionState
           ),
         ],
       ),
+    );
+  }
+}
+
+class _MeetingTaskPicker extends StatefulWidget {
+  const _MeetingTaskPicker({required this.api, required this.linkedIds});
+
+  final TaskApi api;
+  final Set<int> linkedIds;
+
+  @override
+  State<_MeetingTaskPicker> createState() => _MeetingTaskPickerState();
+}
+
+class _MeetingTaskPickerState extends State<_MeetingTaskPicker> {
+  final _search = TextEditingController();
+  int _page = 0;
+  Timer? _debounce;
+  late Future<TaskListPage> _results = _fetch();
+
+  Future<TaskListPage> _fetch() => widget.api.listTasksPage(
+    scope: 'editable_main',
+    q: _search.text,
+    page: _page,
+  );
+
+  void _loadPage(int page) {
+    _debounce?.cancel();
+    setState(() {
+      _page = page;
+      _results = _fetch();
+    });
+  }
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    _search.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('关联已有任务'),
+      content: SizedBox(
+        width: 420,
+        height: 360,
+        child: Column(
+          children: [
+            TextField(
+              controller: _search,
+              decoration: const InputDecoration(
+                prefixIcon: Icon(Icons.search),
+                hintText: '搜索任务',
+              ),
+              onChanged: (_) {
+                _debounce?.cancel();
+                _debounce = Timer(
+                  const Duration(milliseconds: 300),
+                  () => _loadPage(0),
+                );
+              },
+              onSubmitted: (_) => _loadPage(0),
+            ),
+            const SizedBox(height: 8),
+            Expanded(
+              child: FutureBuilder<TaskListPage>(
+                future: _results,
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState != ConnectionState.done) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  if (snapshot.hasError) {
+                    return Center(
+                      child: TextButton(
+                        onPressed: () => _loadPage(_page),
+                        child: const Text('加载失败，点击重试'),
+                      ),
+                    );
+                  }
+                  final results = snapshot.requireData;
+                  return Column(
+                    children: [
+                      Expanded(
+                        child: results.items.isEmpty
+                            ? const Center(child: Text('暂无可关联任务'))
+                            : ListView.builder(
+                                key: ValueKey(_results),
+                                itemCount: results.items.length,
+                                itemBuilder: (context, index) {
+                                  final task = results.items[index];
+                                  final linked = widget.linkedIds.contains(
+                                    task.id,
+                                  );
+                                  return ListTile(
+                                    title: Text(task.title),
+                                    trailing: linked
+                                        ? const Text('已关联')
+                                        : const Icon(Icons.add_link),
+                                    enabled: !linked,
+                                    onTap: linked
+                                        ? null
+                                        : () => Navigator.pop(context, task),
+                                  );
+                                },
+                              ),
+                      ),
+                      if (_page > 0 || results.hasMore)
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            TextButton(
+                              onPressed: _page > 0
+                                  ? () => _loadPage(_page - 1)
+                                  : null,
+                              child: const Text('上一页'),
+                            ),
+                            TextButton(
+                              onPressed: results.hasMore
+                                  ? () => _loadPage(_page + 1)
+                                  : null,
+                              child: const Text('下一页'),
+                            ),
+                          ],
+                        ),
+                    ],
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('取消'),
+        ),
+      ],
     );
   }
 }

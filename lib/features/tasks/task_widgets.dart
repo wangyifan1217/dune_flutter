@@ -809,9 +809,9 @@ class TaskNameCard extends StatelessWidget {
                     text: task.overdue ? '已逾期' : taskStatusLabel(task.status),
                     color: _statusColor,
                   ),
-                  if (task.hasPendingChange)
+                  if (task.hasPendingChange || task.transferStatusLabel != null)
                     TaskMetaChip(
-                      text: taskPendingChangeLabel(task.pendingChangeKind),
+                      text: task.transferStatusLabel ?? taskPendingChangeLabel(task.pendingChangeKind),
                       color: DunesColors.resolve(
                         context,
                         const Color(0xFFB45309),
@@ -952,11 +952,11 @@ class TaskWorkbenchCard extends StatelessWidget {
                     ),
                 ],
               ),
-              if (task.hasPendingChange)
+              if (task.hasPendingChange || task.transferStatusLabel != null)
                 Padding(
                   padding: const EdgeInsets.only(top: 5),
                   child: TaskMetaChip(
-                    text: taskPendingChangeLabel(task.pendingChangeKind),
+                    text: task.transferStatusLabel ?? taskPendingChangeLabel(task.pendingChangeKind),
                     color: DunesColors.resolve(
                       context,
                       const Color(0xFFB45309),
@@ -1185,9 +1185,9 @@ class TaskWorkbenchCard extends StatelessWidget {
                                   : taskStatusLabel(task.status),
                               color: statusColor,
                             ),
-                            if (task.hasPendingChange)
+                            if (task.hasPendingChange || task.transferStatusLabel != null)
                               TaskMetaChip(
-                                text: taskPendingChangeLabel(
+                                text: task.transferStatusLabel ?? taskPendingChangeLabel(
                                   task.pendingChangeKind,
                                 ),
                                 color: DunesColors.resolve(

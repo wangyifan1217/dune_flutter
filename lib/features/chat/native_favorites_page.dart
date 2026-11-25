@@ -18,6 +18,7 @@ import 'chat_pdf_preview.dart';
 import 'chat_video_widgets.dart';
 import 'chat_widgets.dart';
 import 'file_download.dart' as file_dl;
+import 'im_ui_kit.dart';
 
 /// 企微式「我的收藏」：文本 / 图片预览 / 文件打开 + 来源人/群 + 收藏日期。
 class NativeFavoritesPage extends StatefulWidget {
@@ -309,11 +310,7 @@ class _NativeFavoritesPageState extends State<NativeFavoritesPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: DunesColors.resolve(
-        context,
-        DunesColors.bgApp,
-        role: DunesColorRole.surface,
-      ),
+      backgroundColor: ImVisualTokens.groupedBackground(context),
       body: SafeArea(
         child: Column(
           children: [
@@ -340,66 +337,25 @@ class _NativeFavoritesPageState extends State<NativeFavoritesPage> {
       return Center(
         child: CircularProgressIndicator(
           strokeWidth: 2,
-          color: DunesColors.resolve(context, DunesColors.accent),
+          color: ImVisualTokens.accent(context),
         ),
       );
     }
     if (_error != null && _items.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              _error!,
-              style: DunesTypography.sans(
-                fontSize: 13,
-                color: DunesColors.resolve(context, DunesColors.text3),
-                context: context,
-              ),
-            ),
-            const SizedBox(height: 12),
-            OutlinedButton(
-              onPressed: () => _load(reset: true),
-              child: const Text('重试'),
-            ),
-          ],
+      return ImEmptyState(
+        icon: Icons.error_outline_rounded,
+        title: _error!,
+        action: OutlinedButton(
+          onPressed: () => _load(reset: true),
+          child: const Text('重试'),
         ),
       );
     }
     if (_items.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.bookmark_border_rounded,
-              size: 48,
-              color: DunesColors.resolve(
-                context,
-                DunesColors.text3,
-              ).withValues(alpha: 0.55),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              _query.isEmpty ? '暂无收藏' : '未找到相关收藏',
-              style: DunesTypography.sans(
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-                color: DunesColors.resolve(context, DunesColors.text2),
-                context: context,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              _query.isEmpty ? '在聊天中长按消息即可收藏' : '试试其他关键词',
-              style: DunesTypography.sans(
-                fontSize: 13,
-                color: DunesColors.resolve(context, DunesColors.text3),
-                context: context,
-              ),
-            ),
-          ],
-        ),
+      return ImEmptyState(
+        icon: Icons.bookmark_border_rounded,
+        title: _query.isEmpty ? '暂无收藏' : '未找到相关收藏',
+        subtitle: _query.isEmpty ? '在聊天中长按消息即可收藏' : '试试其他关键词',
       );
     }
 
@@ -535,49 +491,57 @@ class _FavoriteCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final dateLabel = _favoriteDateLabel(item.favoritedAt);
-    return Material(
-      color: DunesColors.resolve(
-        context,
-        Colors.white,
-        role: DunesColorRole.surface,
+    final accent = ImVisualTokens.accent(context);
+    return Container(
+      decoration: BoxDecoration(
+        color: ImVisualTokens.cardSurface(context),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: ImVisualTokens.hairlineBorder(context),
+          width: 0.7,
+        ),
+        boxShadow: ImVisualTokens.softCardShadow(context),
       ),
-      borderRadius: BorderRadius.circular(12),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 12, 10, 8),
+        padding: const EdgeInsets.fromLTRB(14, 13, 10, 10),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                Icon(
-                  _kindIcon(kind),
-                  size: 16,
-                  color: DunesColors.resolve(context, const Color(0xFF9CA3AF)),
-                ),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    _kindLabel(kind),
-                    style: DunesTypography.sans(
-                      fontSize: 12,
-                      color: DunesColors.resolve(
-                        context,
-                        const Color(0xFF9CA3AF),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
+                  decoration: BoxDecoration(
+                    color: ImVisualTokens.accentSoftSurface(context),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(_kindIcon(kind), size: 13, color: accent),
+                      const SizedBox(width: 4),
+                      Text(
+                        _kindLabel(kind),
+                        style: DunesTypography.sans(
+                          fontSize: 11,
+                          color: ImVisualTokens.accentText(context),
+                          fontWeight: FontWeight.w600,
+                          context: context,
+                        ),
                       ),
-                      fontWeight: FontWeight.w500,
-                      context: context,
-                    ),
+                    ],
                   ),
                 ),
+                const Spacer(),
                 if (dateLabel.isNotEmpty)
                   Text(
                     dateLabel,
                     style: DunesTypography.sans(
-                      fontSize: 12,
-                      color: DunesColors.resolve(
-                        context,
-                        const Color(0xFF9CA3AF),
-                      ),
+                      fontSize: 11.5,
+                      color: DunesColors.resolve(context, DunesColors.text3),
                       context: context,
                     ),
                   ),

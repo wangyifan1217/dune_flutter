@@ -2,29 +2,23 @@ import 'package:flutter/material.dart';
 
 import '../../core/layout/chat_layout.dart';
 import '../../core/platform/desktop_features.dart';
-import '../../core/widgets/desktop_feedback_surface.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../conversation/conversation_models.dart';
 import '../conversation/conversation_service.dart';
+import 'im_ui_kit.dart';
 import 'user_avatar_widget.dart';
 
-/// 与其它板块同一套近白页面底。
-const _bgPage = DunesColors.bgApp;
-const _bgCard = Colors.white;
-const _rowDivider = Color(0xFFEFEFEF);
 const _textPrimary = Color(0xFF191919);
 const _textSecondary = Color(0xFF888888);
 
 /// PC 群信息内容左右内边距（全宽铺平，不再居中限宽）。
 const double kGroupInfoWidePadding = 24;
 
-/// 群信息页壳：宽屏全宽铺平，窄屏保持原样。
+/// 群信息页壳：宽屏居中限宽，窄屏自动适配 iOS 分组留白。
 Widget groupInfoPageShell({required Widget child}) {
   return Builder(
     builder: (context) => ColoredBox(
-      color: Theme.of(context).brightness == Brightness.dark
-          ? DunesPalette.night.page
-          : DunesColors.resolve(context, _bgPage, role: DunesColorRole.surface),
+      color: ImVisualTokens.groupedBackground(context),
       child: LayoutBuilder(
         builder: (context, constraints) {
           if (isDesktopCommOnly) {
@@ -40,7 +34,12 @@ Widget groupInfoPageShell({required Widget child}) {
             );
           }
           final wide = isWideChatLayout(context);
-          if (!wide) return child;
+          if (!wide) {
+            return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              child: child,
+            );
+          }
           return Padding(
             padding: const EdgeInsets.symmetric(
               horizontal: kGroupInfoWidePadding,
@@ -53,53 +52,76 @@ Widget groupInfoPageShell({required Widget child}) {
   );
 }
 
-/// 企微式群信息顶部：无渐变 hero，仅白底成员区上方的轻提示。
+/// iOS 风格群信息顶部卡片。
 class GroupInfoHero extends StatelessWidget {
   const GroupInfoHero({
     super.key,
     required this.title,
     required this.subtitle,
     this.icon = Icons.groups_outlined,
+    this.leading,
   });
 
   final String title;
   final String subtitle;
   final IconData icon;
+  final Widget? leading;
 
   @override
   Widget build(BuildContext context) {
+    final accent = ImVisualTokens.accent(context);
     return Container(
       width: double.infinity,
-      color: DunesColors.resolveNullable(
-        context,
-        _bgCard,
-        role: DunesColorRole.surface,
+      margin: const EdgeInsets.only(top: 12),
+      padding: const EdgeInsets.fromLTRB(18, 20, 18, 18),
+      decoration: BoxDecoration(
+        color: ImVisualTokens.cardSurface(context),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: ImVisualTokens.hairlineBorder(context),
+          width: 0.7,
+        ),
+        boxShadow: ImVisualTokens.softCardShadow(context),
       ),
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
       child: Column(
         children: [
+          leading ??
+              Container(
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(
+                  color: ImVisualTokens.accentSoftSurface(context),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Icon(icon, size: 26, color: accent),
+              ),
+          const SizedBox(height: 12),
           Text(
             title,
             textAlign: TextAlign.center,
             style: DunesTypography.sans(
-              fontSize: 17,
+              fontSize: 17.5,
               fontWeight: FontWeight.w600,
-              color: isDesktopCommOnly
-                  ? DunesColors.resolve(context, DunesColors.text)
-                  : _textPrimary,
+              color: DunesColors.resolve(context, DunesColors.text),
               context: context,
             ),
           ),
           const SizedBox(height: 6),
-          Text(
-            subtitle,
-            textAlign: TextAlign.center,
-            style: DunesTypography.sans(
-              fontSize: 12,
-              color: isDesktopCommOnly
-                  ? DunesColors.resolve(context, DunesColors.text3)
-                  : _textSecondary,
-              context: context,
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3.5),
+            decoration: BoxDecoration(
+              color: ImVisualTokens.accentSoftSurface(context),
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: Text(
+              subtitle,
+              textAlign: TextAlign.center,
+              style: DunesTypography.sans(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w500,
+                color: ImVisualTokens.accentText(context),
+                context: context,
+              ),
             ),
           ),
         ],
@@ -156,17 +178,28 @@ class GroupInfoRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final accent = ImVisualTokens.accent(context);
     final row = Container(
-      color: isDesktopCommOnly
-          ? Colors.transparent
-          : DunesColors.resolveNullable(
-              context,
-              _bgCard,
-              role: DunesColorRole.surface,
-            ),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      color: Colors.transparent,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
       child: Row(
         children: [
+          Container(
+            width: 30,
+            height: 30,
+            decoration: BoxDecoration(
+              color: accentIcon
+                  ? accent
+                  : ImVisualTokens.accentSoftSurface(context),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(
+              icon,
+              size: 16,
+              color: accentIcon ? Colors.white : accent,
+            ),
+          ),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -174,11 +207,9 @@ class GroupInfoRow extends StatelessWidget {
                 Text(
                   title,
                   style: DunesTypography.sans(
-                    fontSize: isDesktopCommOnly ? 14.5 : 16,
-                    fontWeight: FontWeight.w400,
-                    color: isDesktopCommOnly
-                        ? DunesColors.resolve(context, DunesColors.text)
-                        : _textPrimary,
+                    fontSize: isDesktopCommOnly ? 14.5 : 15,
+                    fontWeight: FontWeight.w500,
+                    color: DunesColors.resolve(context, DunesColors.text),
                     context: context,
                   ),
                 ),
@@ -188,9 +219,7 @@ class GroupInfoRow extends StatelessWidget {
                     subtitle!,
                     style: DunesTypography.sans(
                       fontSize: 12,
-                      color: isDesktopCommOnly
-                          ? DunesColors.resolve(context, DunesColors.text3)
-                          : _textSecondary,
+                      color: DunesColors.resolve(context, DunesColors.text3),
                       context: context,
                     ),
                   ),
@@ -213,45 +242,12 @@ class GroupInfoRow extends StatelessWidget {
         ],
       ),
     );
-    final bordered = DecoratedBox(
-      decoration: BoxDecoration(
-        color: DunesColors.resolveNullable(
-          context,
-          _bgCard,
-          role: DunesColorRole.surface,
-        ),
-        border: Border(
-          bottom: BorderSide(
-            color: DunesColors.resolve(
-              context,
-              _rowDivider,
-              role: DunesColorRole.border,
-            ),
-            width: 0.5,
-          ),
-        ),
-      ),
+    if (onTap == null) return row;
+    return ImTapScale(
+      borderRadius: BorderRadius.zero,
+      pressedScale: 0.992,
+      onTap: onTap,
       child: row,
-    );
-    if (isDesktopCommOnly && onTap != null) {
-      return DesktopFeedbackSurface(
-        onTap: onTap,
-        backgroundColor: DunesColors.resolve(
-          context,
-          _bgCard,
-          role: DunesColorRole.surface,
-        ),
-        child: row,
-      );
-    }
-    if (onTap == null) return bordered;
-    return Material(
-      color: DunesColors.resolveNullable(
-        context,
-        _bgCard,
-        role: DunesColorRole.surface,
-      ),
-      child: InkWell(onTap: onTap, child: bordered),
     );
   }
 }
@@ -263,38 +259,36 @@ class GroupInfoToggle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final dark = ImVisualTokens.isDark(context);
+    final accent = ImVisualTokens.accent(context);
     return AnimatedContainer(
-      duration: const Duration(milliseconds: 150),
-      width: 46,
+      duration: ImVisualTokens.fastAnim,
+      curve: ImVisualTokens.iosCurve,
+      width: 48,
       height: 28,
-      padding: const EdgeInsets.all(2),
+      padding: const EdgeInsets.all(2.5),
       decoration: BoxDecoration(
         color: value
-            ? DunesColors.resolve(
-                context,
-                const Color(0xFF07C160),
-                role: DunesColorRole.surface,
-              )
-            : DunesColors.resolve(
-                context,
-                const Color(0xFFE5E5E5),
-                role: DunesColorRole.surface,
-              ),
+            ? accent
+            : (dark
+                  ? Colors.white.withValues(alpha: 0.16)
+                  : const Color(0xFFE2DFEC)),
         borderRadius: BorderRadius.circular(14),
       ),
       child: AnimatedAlign(
-        duration: const Duration(milliseconds: 150),
+        duration: ImVisualTokens.fastAnim,
+        curve: Curves.easeOutBack,
         alignment: value ? Alignment.centerRight : Alignment.centerLeft,
         child: Container(
-          width: 24,
-          height: 24,
+          width: 23,
+          height: 23,
           decoration: BoxDecoration(
             color: Colors.white,
             shape: BoxShape.circle,
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.12),
-                blurRadius: 2,
+                color: Colors.black.withValues(alpha: 0.14),
+                blurRadius: 4,
                 offset: const Offset(0, 1),
               ),
             ],
@@ -352,10 +346,14 @@ class GroupInfoMemberGrid extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      color: DunesColors.resolveNullable(
-        context,
-        _bgCard,
-        role: DunesColorRole.surface,
+      decoration: BoxDecoration(
+        color: ImVisualTokens.cardSurface(context),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: ImVisualTokens.hairlineBorder(context),
+          width: 0.7,
+        ),
+        boxShadow: ImVisualTokens.softCardShadow(context),
       ),
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
       child: LayoutBuilder(
@@ -566,27 +564,30 @@ class GroupInfoDangerRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(top: 10),
-      child: Material(
-        color: DunesColors.resolveNullable(
-          context,
-          _bgCard,
-          role: DunesColorRole.surface,
-        ),
-        child: InkWell(
-          onTap: onTap,
-          child: Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
-            alignment: Alignment.center,
-            child: Text(
-              label,
-              style: DunesTypography.sans(
-                fontSize: 16,
-                fontWeight: FontWeight.w400,
-                color: DunesColors.resolve(context, const Color(0xFFFA5151)),
-                context: context,
-              ),
+      padding: const EdgeInsets.only(top: 12),
+      child: ImTapScale(
+        borderRadius: BorderRadius.circular(16),
+        onTap: onTap,
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
+          decoration: BoxDecoration(
+            color: ImVisualTokens.cardSurface(context),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: const Color(0xFFFA5151).withValues(alpha: 0.20),
+              width: 0.7,
+            ),
+            boxShadow: ImVisualTokens.softCardShadow(context),
+          ),
+          alignment: Alignment.center,
+          child: Text(
+            label,
+            style: DunesTypography.sans(
+              fontSize: 15.5,
+              fontWeight: FontWeight.w600,
+              color: DunesColors.resolve(context, const Color(0xFFFA5151)),
+              context: context,
             ),
           ),
         ),

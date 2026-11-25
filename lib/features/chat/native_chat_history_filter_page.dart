@@ -17,6 +17,7 @@ import 'chat_media_widgets.dart';
 import 'chat_video_widgets.dart';
 import 'cors_safe_image.dart';
 import 'file_download.dart' as file_dl;
+import 'im_ui_kit.dart';
 
 Future<void> openChatHistoryFilterPage({
   required BuildContext context,
@@ -339,11 +340,7 @@ class _NativeChatHistoryFilterPageState
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: DunesColors.resolve(
-        context,
-        DunesColors.bgApp,
-        role: DunesColorRole.surface,
-      ),
+      backgroundColor: ImVisualTokens.groupedBackground(context),
       body: SafeArea(
         child: Column(
           children: [
@@ -559,18 +556,11 @@ class _FilterHeader extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.fromLTRB(4, 6, 8, 10),
       decoration: BoxDecoration(
-        color: DunesColors.resolve(
-          context,
-          DunesColors.bgApp,
-          role: DunesColorRole.surface,
-        ),
+        color: ImVisualTokens.cardSurface(context),
         border: Border(
           bottom: BorderSide(
-            color: DunesColors.resolve(
-              context,
-              DunesColors.borderSoft,
-              role: DunesColorRole.border,
-            ),
+            color: ImVisualTokens.hairlineBorder(context),
+            width: 0.7,
           ),
         ),
       ),
@@ -587,7 +577,7 @@ class _FilterHeader extends StatelessWidget {
                 Text(
                   title,
                   style: DunesTypography.sans(
-                    fontSize: 16,
+                    fontSize: 16.5,
                     fontWeight: FontWeight.w600,
                     color: DunesColors.resolve(context, DunesColors.text),
                     context: context,
@@ -596,8 +586,8 @@ class _FilterHeader extends StatelessWidget {
                 if (count > 0)
                   Text(
                     '$count 项',
-                    style: DunesTypography.mono(
-                      fontSize: 10,
+                    style: DunesTypography.sans(
+                      fontSize: 11,
                       color: DunesColors.resolve(context, DunesColors.text3),
                       context: context,
                     ),
@@ -608,7 +598,7 @@ class _FilterHeader extends StatelessWidget {
           IconButton(
             onPressed: onRefresh,
             icon: const Icon(Icons.refresh_rounded, size: 20),
-            color: DunesColors.resolve(context, DunesColors.text2),
+            color: ImVisualTokens.accent(context),
             tooltip: '刷新',
           ),
         ],
@@ -634,75 +624,67 @@ class _FilterListTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final accent = ImVisualTokens.accent(context);
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
-      child: Material(
-        color: DunesColors.resolve(
-          context,
-          DunesColors.bgApp,
-          role: DunesColorRole.surface,
-        ),
-        borderRadius: BorderRadius.circular(12),
-        child: InkWell(
-          onTap: onTap,
-          onLongPress: onLocate,
-          borderRadius: BorderRadius.circular(12),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: DunesColors.resolve(
-                  context,
-                  DunesColors.borderSoft,
-                  role: DunesColorRole.border,
+      child: ImTapScale(
+        borderRadius: BorderRadius.circular(14),
+        onTap: onTap,
+        onLongPress: onLocate,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
+          decoration: BoxDecoration(
+            color: ImVisualTokens.cardSurface(context),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: ImVisualTokens.hairlineBorder(context),
+              width: 0.8,
+            ),
+            boxShadow: ImVisualTokens.softCardShadow(context),
+          ),
+          child: Row(
+            children: [
+              leading,
+              const SizedBox(width: 11),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: DunesTypography.sans(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w500,
+                        color: DunesColors.resolve(context, DunesColors.text),
+                        context: context,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      subtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: DunesTypography.sans(
+                        fontSize: 11.5,
+                        color: DunesColors.resolve(context, DunesColors.text3),
+                        context: context,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ),
-            child: Row(
-              children: [
-                leading,
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: DunesTypography.sans(
-                          fontSize: 13.5,
-                          fontWeight: FontWeight.w500,
-                          color: DunesColors.resolve(context, DunesColors.text),
-                          context: context,
-                        ),
-                      ),
-                      const SizedBox(height: 3),
-                      Text(
-                        subtitle,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: DunesTypography.sans(
-                          fontSize: 11.5,
-                          color: DunesColors.resolve(
-                            context,
-                            DunesColors.text3,
-                          ),
-                          context: context,
-                        ),
-                      ),
-                    ],
-                  ),
+              IconButton(
+                onPressed: onLocate,
+                tooltip: '定位到聊天',
+                icon: Icon(
+                  Icons.my_location_rounded,
+                  size: 18,
+                  color: accent,
                 ),
-                IconButton(
-                  onPressed: onLocate,
-                  tooltip: '定位到聊天',
-                  icon: const Icon(Icons.my_location_outlined, size: 18),
-                  color: DunesColors.resolve(context, DunesColors.accentDeep),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
@@ -795,19 +777,26 @@ class _MediaThumb extends StatelessWidget {
     }
 
     return ClipRRect(
-      borderRadius: BorderRadius.circular(4),
+      borderRadius: BorderRadius.circular(10),
       child: Stack(
         fit: StackFit.expand,
         children: [
           child,
           if (isVideo)
             Positioned(
-              right: 4,
-              bottom: 4,
-              child: Icon(
-                Icons.videocam,
-                size: 14,
-                color: DunesColors.resolve(context, Colors.white),
+              right: 5,
+              bottom: 5,
+              child: Container(
+                padding: const EdgeInsets.all(3),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.50),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: const Icon(
+                  Icons.videocam_rounded,
+                  size: 13,
+                  color: Colors.white,
+                ),
               ),
             ),
         ],

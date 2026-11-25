@@ -127,7 +127,7 @@ class _TaskAssignDialogState extends State<_TaskAssignDialog> {
                   SizedBox(height: 4),
                   Text(
                     '当前是运行中转派：只有沙丘职级为 M 序列的人可以把负责人交给团队成员。\n'
-                    '提交后待任务流上级审批，负责人暂时不变。通过后负责人变为被指派人，原负责人转为协助人。\n'
+                    '需要审批时，审批通过后才能转派。跨部门转派需对方接收，生效前仍由原负责人执行。\n'
                     '协助人不会成为负责人，谁都可以添加。',
                     style: TextStyle(
                       fontSize: 13,

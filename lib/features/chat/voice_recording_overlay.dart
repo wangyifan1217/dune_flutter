@@ -1,8 +1,10 @@
 import 'dart:math' as math;
+import 'dart:ui';
 
 import 'package:flutter/material.dart';
 
 import '../../core/theme/dunes_theme.dart';
+import 'im_ui_kit.dart';
 
 /// 微信式录音动作。
 ///
@@ -23,7 +25,6 @@ const _kCircleRowCenterY = 93.0;
 /// 圆圈行下方死区：手指滑回该区域视为回到按钮区（松手即发送）。
 const _kCircleRowDeadZone = 70.0;
 
-const _kWeChatGreen = Color(0xFF07C160);
 const _kWeChatRed = Color(0xFFFA5151);
 
 /// 圆圈动作的水平布局（圆心 X = 屏幕宽 * fraction）。
@@ -118,13 +119,12 @@ class _VoiceRecordingOverlayState extends State<VoiceRecordingOverlay>
       child: Stack(
         fit: StackFit.expand,
         children: [
-          // 压暗会话内容，但不能拦截输入栏的拖动手势。
+          // 轻磨砂压暗会话内容，但不能拦截输入栏的拖动手势。
           IgnorePointer(
-            child: ColoredBox(
-              color: DunesColors.resolve(
-                context,
-                Color(0x73000000),
-                role: DunesColorRole.surface,
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+              child: ColoredBox(
+                color: const Color(0x6E151221),
               ),
             ),
           ),
@@ -200,15 +200,23 @@ class _RecordingCenterPanel extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            width: 148,
-            height: 148,
+            width: 152,
+            height: 152,
             decoration: BoxDecoration(
-              color: DunesColors.resolve(
-                context,
-                const Color(0xD926262A),
-                role: DunesColorRole.surface,
+              color: const Color(0xEB231F33),
+              borderRadius: BorderRadius.circular(26),
+              border: Border.all(
+                color: ImVisualTokens.purpleLight.withValues(alpha: 0.28),
+                width: 0.9,
               ),
-              borderRadius: BorderRadius.circular(20),
+              boxShadow: [
+                BoxShadow(
+                  color: ImVisualTokens.purple.withValues(alpha: 0.28),
+                  blurRadius: 28,
+                  spreadRadius: -4,
+                  offset: const Offset(0, 10),
+                ),
+              ],
             ),
             child: Stack(
               alignment: Alignment.center,
@@ -325,16 +333,24 @@ class _VoiceActionPanel extends StatelessWidget {
           };
     return Align(
       alignment: Alignment.bottomCenter,
-      child: Container(
-        height: kVoiceRecordingOverlayHeight,
-        decoration: BoxDecoration(
-          color: DunesColors.resolveNullable(
-            context,
-            Color(0xF226262A),
-            role: DunesColorRole.surface,
-          ),
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-        ),
+      child: ClipRRect(
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+          child: Container(
+            height: kVoiceRecordingOverlayHeight,
+            decoration: BoxDecoration(
+              color: const Color(0xEB221E31),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(28),
+              ),
+              border: Border(
+                top: BorderSide(
+                  color: Colors.white.withValues(alpha: 0.14),
+                  width: 0.7,
+                ),
+              ),
+            ),
         child: Column(
           children: [
             const SizedBox(height: 20),
@@ -434,10 +450,12 @@ class _VoiceActionPanel extends StatelessWidget {
                 ),
               ),
             ),
-          ],
+            ],
+          ),
         ),
       ),
-    );
+    ),
+  );
   }
 }
 
@@ -482,26 +500,40 @@ class _VoiceActionCircle extends StatelessWidget {
     };
     final highlightColor = action == VoiceHoldAction.cancel
         ? DunesColors.resolve(context, _kWeChatRed)
-        : DunesColors.resolve(context, _kWeChatGreen);
+        : action == VoiceHoldAction.transcribe
+        ? const Color(0xFF4F6CE6)
+        : ImVisualTokens.purple;
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         AnimatedScale(
-          scale: highlighted ? 1.16 : 1.0,
-          duration: const Duration(milliseconds: 120),
+          scale: highlighted ? 1.18 : 1.0,
+          duration: const Duration(milliseconds: 140),
+          curve: Curves.easeOutBack,
           child: AnimatedContainer(
-            duration: const Duration(milliseconds: 120),
+            duration: const Duration(milliseconds: 140),
             width: 62,
             height: 62,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: highlighted
                   ? highlightColor
-                  : DunesColors.resolve(
-                      context,
-                      const Color(0xFF3A3A3C),
-                      role: DunesColorRole.surface,
-                    ),
+                  : Colors.white.withValues(alpha: 0.14),
+              border: Border.all(
+                color: highlighted
+                    ? Colors.white.withValues(alpha: 0.45)
+                    : Colors.white.withValues(alpha: 0.12),
+                width: highlighted ? 1.4 : 0.7,
+              ),
+              boxShadow: highlighted
+                  ? [
+                      BoxShadow(
+                        color: highlightColor.withValues(alpha: 0.45),
+                        blurRadius: 18,
+                        spreadRadius: -2,
+                      ),
+                    ]
+                  : const [],
             ),
             alignment: Alignment.center,
             child: icon,

@@ -9,6 +9,7 @@ import '../../core/widgets/desktop_feedback_surface.dart';
 import '../../core/widgets/desktop_entrance.dart';
 import '../ai_summary/ai_summary_sparkle_icon.dart';
 import '../chat/group_composite_avatar.dart';
+import '../chat/im_ui_kit.dart';
 import '../chat/user_avatar_widget.dart';
 import '../conversation/conversation_models.dart';
 import '../conversation/conversation_service.dart';
@@ -1140,7 +1141,7 @@ class _DropdownItem extends StatelessWidget {
   }
 }
 
-class ChatInboxSearchBar extends StatelessWidget {
+class ChatInboxSearchBar extends StatefulWidget {
   const ChatInboxSearchBar({
     super.key,
     this.controller,
@@ -1155,8 +1156,42 @@ class ChatInboxSearchBar extends StatelessWidget {
   final String? hintText;
 
   @override
+  State<ChatInboxSearchBar> createState() => _ChatInboxSearchBarState();
+}
+
+class _ChatInboxSearchBarState extends State<ChatInboxSearchBar> {
+  final FocusNode _focusNode = FocusNode(debugLabel: 'InboxSearchBar');
+  bool _focused = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _focusNode.addListener(_onFocusChange);
+  }
+
+  void _onFocusChange() {
+    if (!mounted) return;
+    if (_focused != _focusNode.hasFocus) {
+      setState(() => _focused = _focusNode.hasFocus);
+    }
+  }
+
+  @override
+  void dispose() {
+    _focusNode.removeListener(_onFocusChange);
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final hint = hintText ?? (onTap != null ? '搜索' : '搜索会话或联系人');
+    final hint =
+        widget.hintText ?? (widget.onTap != null ? '搜索' : '搜索会话或联系人');
+    final accent = ImVisualTokens.accent(context);
+    final mutedIconColor = DunesColors.resolve(
+      context,
+      isDesktopCommOnly ? const Color(0xFF8A8894) : const Color(0xFFA8A4B3),
+    );
     // 与顶栏动画隔离，避免 Web 合成层把搜索栏一起带动。
     return RepaintBoundary(
       child: Container(
@@ -1169,33 +1204,34 @@ class ChatInboxSearchBar extends StatelessWidget {
             ? const EdgeInsets.fromLTRB(12, 4, 12, 10)
             : const EdgeInsets.fromLTRB(12, 0, 12, 8),
         child: _InboxSearchChrome(
-          child: onTap != null
-              ? _InboxSearchTapTarget(hint: hint, onTap: onTap!)
+          focused: _focused,
+          child: widget.onTap != null
+              ? _InboxSearchTapTarget(hint: hint, onTap: widget.onTap!)
               : Row(
                   children: [
-                    Icon(
-                      Icons.search,
-                      size: 17,
-                      color: DunesColors.resolveNullable(
-                        context,
-                        Color(0xFFB2B2B2),
+                    AnimatedScale(
+                      scale: _focused ? 1.06 : 1.0,
+                      duration: ImVisualTokens.fastAnim,
+                      curve: ImVisualTokens.iosCurve,
+                      child: Icon(
+                        Icons.search_rounded,
+                        size: 17,
+                        color: _focused ? accent : mutedIconColor,
                       ),
                     ),
-                    const SizedBox(width: 6),
+                    const SizedBox(width: 7),
                     Expanded(
                       child: TextField(
-                        controller: controller,
-                        onChanged: onChanged,
+                        controller: widget.controller,
+                        focusNode: _focusNode,
+                        onChanged: widget.onChanged,
                         style: DunesTypography.sans(
-                          fontSize: 13,
+                          fontSize: 13.5,
                           color: DunesColors.resolve(context, DunesColors.text),
                           context: context,
                         ),
                         textInputAction: TextInputAction.search,
-                        cursorColor: DunesColors.resolve(
-                          context,
-                          DunesColors.brandPurple,
-                        ),
+                        cursorColor: accent,
                         textAlignVertical: TextAlignVertical.center,
                         decoration: InputDecoration(
                           isDense: true,
@@ -1208,43 +1244,63 @@ class ChatInboxSearchBar extends StatelessWidget {
                           hintText: hint,
                           hintStyle: DunesTypography.sans(
                             fontSize: 13,
-                            color: DunesColors.resolve(
-                              context,
-                              const Color(0xFFB2B2B2),
-                            ),
+                            color: mutedIconColor,
                             context: context,
                           ),
                           contentPadding: EdgeInsets.zero,
                         ),
                       ),
                     ),
-                    if (controller != null)
+                    if (widget.controller != null)
                       ListenableBuilder(
-                        listenable: controller!,
+                        listenable: widget.controller!,
                         builder: (context, _) {
-                          if (controller!.text.isEmpty) {
-                            return const SizedBox.shrink();
-                          }
-                          return IconButton(
-                            tooltip: '清除',
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(
-                              minWidth: 28,
-                              minHeight: 28,
+                          final empty = widget.controller!.text.isEmpty;
+                          return AnimatedSwitcher(
+                            duration: ImVisualTokens.fastAnim,
+                            transitionBuilder: (child, anim) => FadeTransition(
+                              opacity: anim,
+                              child: ScaleTransition(scale: anim, child: child),
                             ),
-                            visualDensity: VisualDensity.compact,
-                            iconSize: 16,
-                            onPressed: () {
-                              controller!.clear();
-                              onChanged?.call('');
-                            },
-                            icon: Icon(
-                              Icons.close,
-                              color: DunesColors.resolveNullable(
-                                context,
-                                Color(0xFFB2B2B2),
-                              ),
-                            ),
+                            child: empty
+                                ? const SizedBox.shrink(
+                                    key: ValueKey('clear-empty'),
+                                  )
+                                : IconButton(
+                                    key: const ValueKey('clear-btn'),
+                                    tooltip: '清除',
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints(
+                                      minWidth: 28,
+                                      minHeight: 28,
+                                    ),
+                                    visualDensity: VisualDensity.compact,
+                                    iconSize: 15,
+                                    onPressed: () {
+                                      HapticFeedback.selectionClick();
+                                      widget.controller!.clear();
+                                      widget.onChanged?.call('');
+                                    },
+                                    icon: Container(
+                                      width: 18,
+                                      height: 18,
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        color: ImVisualTokens.isDark(context)
+                                            ? Colors.white.withValues(
+                                                alpha: 0.14,
+                                              )
+                                            : const Color(0xFFDAD6E4),
+                                      ),
+                                      child: Icon(
+                                        Icons.close_rounded,
+                                        size: 12,
+                                        color: ImVisualTokens.isDark(context)
+                                            ? Colors.white70
+                                            : Colors.white,
+                                      ),
+                                    ),
+                                  ),
                           );
                         },
                       ),
@@ -1257,8 +1313,9 @@ class ChatInboxSearchBar extends StatelessWidget {
 }
 
 class _InboxSearchChrome extends StatefulWidget {
-  const _InboxSearchChrome({required this.child});
+  const _InboxSearchChrome({required this.child, this.focused = false});
   final Widget child;
+  final bool focused;
   @override
   State<_InboxSearchChrome> createState() => _InboxSearchChromeState();
 }
@@ -1269,18 +1326,43 @@ class _InboxSearchChromeState extends State<_InboxSearchChrome> {
 
   @override
   Widget build(BuildContext context) {
+    final dark = ImVisualTokens.isDark(context);
+    final activeFocus = widget.focused || _focused;
+    final accent = ImVisualTokens.accent(context);
+    final disableAnim = MediaQuery.disableAnimationsOf(context);
     if (!isDesktopCommOnly) {
-      final isDark = Theme.of(context).brightness == Brightness.dark;
-      return Container(
+      return AnimatedContainer(
+        duration: disableAnim ? Duration.zero : ImVisualTokens.fastAnim,
+        curve: ImVisualTokens.iosCurve,
         height:
-            36 +
+            38 +
             (MediaQuery.textScalerOf(context).scale(13) - 13).clamp(0.0, 18.0),
         padding: const EdgeInsets.symmetric(horizontal: 14),
         decoration: BoxDecoration(
-          color: isDark
-              ? Colors.white.withValues(alpha: 0.08)
-              : const Color(0xFFF3F2F7),
-          borderRadius: BorderRadius.circular(18),
+          color: activeFocus
+              ? (dark ? const Color(0xFF282538) : Colors.white)
+              : (dark
+                    ? Colors.white.withValues(alpha: 0.08)
+                    : const Color(0xFFF3F1F8)),
+          borderRadius: BorderRadius.circular(19),
+          border: Border.all(
+            color: activeFocus
+                ? accent.withValues(alpha: 0.52)
+                : (dark
+                      ? Colors.white.withValues(alpha: 0.06)
+                      : const Color(0xFFEAE6F3)),
+            width: activeFocus ? 1.1 : 0.7,
+          ),
+          boxShadow: activeFocus
+              ? [
+                  BoxShadow(
+                    color: accent.withValues(alpha: 0.12),
+                    blurRadius: 12,
+                    spreadRadius: -2,
+                    offset: const Offset(0, 3),
+                  ),
+                ]
+              : const [],
         ),
         child: widget.child,
       );
@@ -1293,35 +1375,39 @@ class _InboxSearchChromeState extends State<_InboxSearchChrome> {
         onEnter: (_) => setState(() => _hovered = true),
         onExit: (_) => setState(() => _hovered = false),
         child: AnimatedContainer(
-          duration: MediaQuery.disableAnimationsOf(context)
-              ? Duration.zero
-              : const Duration(milliseconds: 140),
-          curve: Curves.easeOutCubic,
+          duration: disableAnim ? Duration.zero : ImVisualTokens.fastAnim,
+          curve: ImVisualTokens.iosCurve,
           height:
-              34 +
+              36 +
               (MediaQuery.textScalerOf(context).scale(13) - 13).clamp(
                 0.0,
                 20.0,
               ),
-          padding: const EdgeInsets.symmetric(horizontal: 11),
+          padding: const EdgeInsets.symmetric(horizontal: 12),
           decoration: BoxDecoration(
-            color: _focused
-                ? Colors.white
+            color: activeFocus
+                ? (dark ? const Color(0xFF2A273B) : Colors.white)
                 : _hovered
-                ? const Color(0xFFEDEDED)
-                : const Color(0xFFF2F2F2),
-            borderRadius: BorderRadius.circular(8),
+                ? (dark
+                      ? Colors.white.withValues(alpha: 0.11)
+                      : const Color(0xFFECEAF4))
+                : (dark
+                      ? Colors.white.withValues(alpha: 0.08)
+                      : const Color(0xFFF3F2F7)),
+            borderRadius: BorderRadius.circular(10),
             border: Border.all(
-              color: _focused
-                  ? DunesColors.brandPurple.withValues(alpha: .55)
-                  : Colors.transparent,
+              color: activeFocus
+                  ? accent.withValues(alpha: .58)
+                  : (_hovered
+                        ? accent.withValues(alpha: .20)
+                        : Colors.transparent),
             ),
-            boxShadow: _focused
+            boxShadow: activeFocus
                 ? [
                     BoxShadow(
-                      color: DunesColors.brandPurple.withValues(alpha: .08),
-                      blurRadius: 0,
-                      spreadRadius: 2,
+                      color: accent.withValues(alpha: .12),
+                      blurRadius: 8,
+                      spreadRadius: 1,
                     ),
                   ]
                 : const [],
@@ -1341,41 +1427,37 @@ class _InboxSearchTapTarget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      child: DesktopTapTarget(
-        showFeedback: false,
-        onTap: onTap,
-        child: Row(
-          children: [
-            Icon(
-              Icons.search,
-              size: isDesktopCommOnly ? 16 : 17,
-              color: DunesColors.resolveNullable(
-                context,
-                isDesktopCommOnly
-                    ? const Color(0xFF808080)
-                    : const Color(0xFFB2B2B2),
+    final mutedColor = DunesColors.resolve(
+      context,
+      isDesktopCommOnly ? const Color(0xFF8A8894) : const Color(0xFFA8A4B3),
+    );
+    return ImTapScale(
+      onTap: () {
+        HapticFeedback.selectionClick();
+        onTap();
+      },
+      borderRadius: BorderRadius.circular(18),
+      pressedScale: 0.985,
+      enableHoverTint: false,
+      child: Row(
+        children: [
+          Icon(
+            Icons.search_rounded,
+            size: isDesktopCommOnly ? 16 : 17,
+            color: mutedColor,
+          ),
+          SizedBox(width: isDesktopCommOnly ? 8 : 7),
+          Expanded(
+            child: Text(
+              hint,
+              style: DunesTypography.sans(
+                fontSize: 13.5,
+                color: mutedColor,
+                context: context,
               ),
             ),
-            SizedBox(width: isDesktopCommOnly ? 8 : 6),
-            Expanded(
-              child: Text(
-                hint,
-                style: DunesTypography.sans(
-                  fontSize: 13,
-                  color: DunesColors.resolve(
-                    context,
-                    isDesktopCommOnly
-                        ? const Color(0xFF808080)
-                        : const Color(0xFFB2B2B2),
-                  ),
-                  context: context,
-                ),
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

@@ -68,6 +68,7 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
   late final TaskApi _api = TaskApi(widget.session);
   final _search = TextEditingController();
   final _scrollController = ScrollController();
+  final _listStorage = PageStorageBucket();
   Timer? _searchDebounce;
   _TaskPage _page = _TaskPage.list;
 
@@ -97,6 +98,7 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
   String? _inboxWarning;
   static const int _inboxPreview = 3;
   String? _goalRole;
+  String? _goalSource;
   TaskAssignee? _ownerFilter;
   DateTime? _completedMonth;
 
@@ -199,19 +201,15 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
     }
   }
 
-  String? get _goalRoleQuery =>
-      _scope == 'goals' && _goalRole != null &&
-          _goalRole != 'probation' && _goalRole != 'regular'
-      ? _goalRole
-      : null;
+  String? get _goalRoleQuery => _scope == 'goals' ? _goalRole : null;
 
   String? get _sourceQuery =>
-      _scope == 'goals' && _goalRole != 'regular'
-      ? (_goalRole == 'probation' ? 'probation' : 'all')
+      _scope == 'goals' && _goalSource != 'regular'
+      ? (_goalSource ?? 'all')
       : null;
 
   String? get _excludeSourceQuery =>
-      _scope == 'goals' && _goalRole == 'regular' ? 'probation' : null;
+      _scope == 'goals' && _goalSource == 'regular' ? 'probation' : null;
 
   void _publishChrome() {
     if (_page == _TaskPage.detail ||
@@ -432,21 +430,7 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
     return Padding(padding: const EdgeInsets.only(left: 4), child: button);
   }
 
-  Future<void> _reload() async {
-    final generation = ++_listGeneration;
-    setState(() {
-      _loading = true;
-      _error = null;
-      _inboxWarning = null;
-      _hasMore = true;
-      _listPage = 0;
-    });
-    if (_scope == 'inbox') {
-      await _reloadInbox(generation);
-      return;
-    }
-    try {
-      final list = await _api.listTasksPage(
+  Future<TaskListPage> _fetchListPage(int page) => _api.listTasksPage(
         scope: _apiScope,
         status: _statusQuery,
         priority: _priorityQuery,
@@ -461,17 +445,44 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
         completedMonth: _completedMonth,
         dateFrom: _dateFrom,
         dateTo: _dateTo,
-        page: 0,
+        page: page,
         size: _pageSize,
       );
+
+  Future<void> _reload({bool preserveList = false}) async {
+    final generation = ++_listGeneration;
+    final lastPage = preserveList ? _listPage : 0;
+    setState(() {
+      _loading = !preserveList;
+      _loadingMore = preserveList;
+      _error = null;
+      _inboxWarning = null;
+      if (!preserveList) {
+        _hasMore = true;
+        _listPage = 0;
+      }
+    });
+    if (_scope == 'inbox') {
+      await _reloadInbox(generation);
+      return;
+    }
+    try {
+      var page = 0;
+      var list = await _fetchListPage(page);
+      final items = [...list.items];
+      while (list.hasMore && page < lastPage) {
+        if (!mounted || generation != _listGeneration) return;
+        list = await _fetchListPage(++page);
+        items.addAll(list.items);
+      }
       TaskDailyReportBundle? daily;
       try {
         daily = await _api.getDailyReport();
       } catch (_) {}
       if (!mounted || generation != _listGeneration) return;
       setState(() {
-        _items = dedupeTasksById(list.items);
-        _listPage = 0;
+        _items = dedupeTasksById(items);
+        _listPage = page;
         _hasMore = list.hasMore;
         _loading = false;
         _loadingMore = false;
@@ -481,7 +492,7 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
     } catch (e) {
       if (!mounted || generation != _listGeneration) return;
       setState(() {
-        _error = '$e';
+        if (!preserveList) _error = '$e';
         _loading = false;
         _loadingMore = false;
       });
@@ -531,6 +542,7 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
       return;
     }
     final snapshot = TaskInboxSnapshot.build(
+      userId: widget.session.userId,
       pending: pending,
       actionable: today,
     );
@@ -555,24 +567,7 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
     final generation = _listGeneration;
     try {
       final next = _listPage + 1;
-      final result = await _api.listTasksPage(
-        scope: _apiScope,
-        status: _statusQuery,
-        priority: _priorityQuery,
-        q: _search.text,
-        goalRole: _goalRoleQuery,
-        source: _sourceQuery,
-        excludeSource: _excludeSourceQuery,
-        ownerId: _ownerFilter?.id,
-        overdueOnly: _listFocus == 'overdue',
-        dueToday: _listFocus == 'dueToday',
-        dueOrder: true,
-        completedMonth: _completedMonth,
-        dateFrom: _dateFrom,
-        dateTo: _dateTo,
-        page: next,
-        size: _pageSize,
-      );
+      final result = await _fetchListPage(next);
       if (!mounted || generation != _listGeneration) return;
       setState(() {
         _items = dedupeTasksById(<TaskItem>[..._items, ...result.items]);
@@ -596,7 +591,7 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
       _detailParentCache = null;
     });
     _publishChrome();
-    unawaited(_reload());
+    unawaited(_reload(preserveList: true));
   }
 
   void _backFromDetail() {
@@ -928,7 +923,7 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
           },
         );
       case _TaskPage.list:
-        return _buildList();
+        return PageStorage(bucket: _listStorage, child: _buildList());
     }
   }
 
@@ -984,6 +979,7 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
         onRefresh: _reload,
         color: kTaskPurple,
         child: CustomScrollView(
+          key: const PageStorageKey('task-list-scroll'),
           controller: _scrollController,
           physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
@@ -1022,7 +1018,6 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
                           'reports' => '任务流下级负责的主目标。进入详情后再看子目标。',
                           'owned' => '本人负责的主目标。进入详情后再看子目标。',
                           'assigned' => '本人分派的主目标。进入详情后再看子目标。',
-                          'probation' => '试用期主目标。进入详情后再看子目标。',
                           _ => '本人负责、分派、下级负责，以及子目标关联到自己的主目标。进入详情后再看子目标。',
                         },
                         'actionable' => '今天要执行的子目标、未拆解的主目标和待确认子目标。',
@@ -1051,10 +1046,6 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
                             _roleChip('participant', '我参与'),
                             const SizedBox(width: 8),
                             _roleChip('reports', '下级'),
-                            const SizedBox(width: 8),
-                            _roleChip('probation', '试用期'),
-                            const SizedBox(width: 8),
-                            _roleChip('regular', '常规'),
                           ],
                         ),
                       ),
@@ -1373,6 +1364,24 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
             spacing: 6,
             runSpacing: 6,
             children: [
+              if (_scope == 'goals')
+                TaskFilterChipDropdown<String?>(
+                  value: _goalSource,
+                  label: switch (_goalSource) {
+                    'regular' => '常规',
+                    'probation' => '试用期',
+                    _ => '全部来源',
+                  },
+                  items: const [
+                    (null, '全部来源'),
+                    ('regular', '常规'),
+                    ('probation', '试用期'),
+                  ],
+                  onChanged: (source) {
+                    setState(() => _goalSource = source);
+                    unawaited(_reload());
+                  },
+                ),
               _listFocusChip('overdue', '逾期'),
               _listFocusChip('dueToday', '今天截止'),
               _listFocusChip('high', '高优先级'),

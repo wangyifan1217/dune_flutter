@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:dunes_app/features/auth/auth_session.dart';
+import 'package:dunes_app/features/meeting/meeting_task_suggestions_section.dart';
 import 'package:dunes_app/features/tasks/native_task_form.dart';
 import 'package:dunes_app/features/tasks/task_models.dart';
 import 'package:dunes_app/features/tasks/task_widgets.dart';
@@ -27,6 +28,72 @@ void main() {
     expect(
       taskAcceptanceText('提交交付物\n报价明细', '提交交付物', '经负责人确认'),
       '经负责人确认\n报价明细',
+    );
+  });
+
+  testWidgets('会议主持人可搜索并关联现有任务', (tester) async {
+    var linked = false;
+    final queries = <String>[];
+    await http.runWithClient(
+      () async {
+        await tester.binding.setSurfaceSize(const Size(360, 700));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+        await tester.pumpWidget(
+          const MaterialApp(
+            home: Scaffold(
+              body: SingleChildScrollView(
+                child: MeetingTaskSuggestionsSection(
+                  session: _session,
+                  meetingId: 7,
+                  canLinkTasks: true,
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('关联任务'));
+        await tester.pumpAndSettle();
+        await tester.enterText(find.byType(TextField), '客户');
+        await tester.pump(const Duration(milliseconds: 350));
+        await tester.pumpAndSettle();
+        expect(queries.last, '客户');
+        await tester.tap(find.text('客户拜访'));
+        await tester.pumpAndSettle();
+        expect(linked, isTrue);
+        expect(find.text('已关联任务'), findsOneWidget);
+        expect(find.text('客户拜访'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+        await tester.pumpAndSettle(const Duration(seconds: 3));
+      },
+      () => MockClient((request) async {
+        final path = request.url.path;
+        Object data;
+        if (path.endsWith('/meetings/7/task-suggestions')) {
+          data = {
+            'syncedTasks': [
+              if (linked) {'taskId': 21, 'taskTitle': '客户拜访'},
+            ],
+          };
+        } else if (path.endsWith('/tasks/21/links')) {
+          expect(request.method, 'POST');
+          expect(jsonDecode(request.body), {'kind': 'meeting', 'meetingId': 7});
+          linked = true;
+          data = {'id': 1};
+        } else {
+          expect(request.url.queryParameters['scope'], 'editable_main');
+          queries.add(request.url.queryParameters['q'] ?? '');
+          data = {
+            'items': [
+              {'id': 21, 'title': '客户拜访'},
+            ],
+          };
+        }
+        return http.Response.bytes(
+          utf8.encode(jsonEncode({'success': true, 'data': data})),
+          200,
+        );
+      }),
     );
   });
 

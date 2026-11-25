@@ -1281,9 +1281,13 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
   Widget _buildActionPanel(TaskDetail d) {
     if (widget.forceReadOnly) return const SizedBox.shrink();
     final actions = <Widget>[];
-    if (d.task.status == 'pending_assignment' &&
-        d.task.creatorUserId == widget.session.userId &&
-        d.task.ownerUserId != widget.session.userId) {
+    final userId = widget.session.userId;
+    final canWithdrawAssignment = d.task.status == 'pending_assignment' &&
+        d.task.creatorUserId == userId &&
+        d.task.ownerUserId != userId;
+    final canWithdrawTransfer =
+        d.task.hasPendingTransfer && d.task.transferRequesterId == userId;
+    if (canWithdrawAssignment || canWithdrawTransfer) {
       actions.add(
         OutlinedButton.icon(
           onPressed: _busy ? null : _withdrawAssignment,
@@ -1304,8 +1308,11 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
         ),
       );
     }
-    if (d.task.status == 'pending_assignment' &&
-        d.task.ownerUserId == widget.session.userId) {
+    final canAcceptAssignment =
+        d.task.status == 'pending_assignment' && d.task.ownerUserId == userId;
+    final canAcceptTransfer =
+        d.task.hasPendingTransfer && d.task.transferAssigneeId == userId;
+    if (canAcceptAssignment || canAcceptTransfer) {
       actions.add(
         OutlinedButton.icon(
           onPressed: _busy ? null : () => _respondAssignment(accept: false),

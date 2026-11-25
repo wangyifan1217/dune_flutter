@@ -7,6 +7,7 @@ import '../conversation/inbox_format.dart';
 import '../conversation/notification_service.dart';
 import '../shell/dunes_toast.dart';
 import 'chat_widgets.dart';
+import 'im_ui_kit.dart';
 
 class NativeNotificationsPage extends StatefulWidget {
   const NativeNotificationsPage({
@@ -122,13 +123,10 @@ class _NativeNotificationsPageState extends State<NativeNotificationsPage> {
       );
     }
     if (_items.isEmpty) {
-      return Center(
-        child: Text(
-          '暂无通知',
-          style: TextStyle(
-            color: DunesColors.resolve(context, DunesColors.text3),
-          ),
-        ),
+      return const ImEmptyState(
+        icon: Icons.notifications_none_rounded,
+        title: '暂无通知',
+        subtitle: '有新的系统通知时会展示在这里',
       );
     }
     return RefreshIndicator(

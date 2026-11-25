@@ -1765,6 +1765,7 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
                 MeetingTaskSuggestionsSection(
                   session: widget.session,
                   meetingId: d.meetingId,
+                  canLinkTasks: d.organizerUserId == widget.session.userId,
                 ),
               if (!summaryOnly) ...[
                 const SizedBox(height: 16),

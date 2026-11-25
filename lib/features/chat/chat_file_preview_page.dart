@@ -12,8 +12,7 @@ import '../drive/chat_save_to_drive.dart';
 import '../kb/kb_document_coordinator.dart';
 import '../kb/native_kb_service.dart';
 import 'file_download.dart' as file_dl;
-
-const _wechatGreen = Color(0xFF07C160);
+import 'im_ui_kit.dart';
 
 /// IM / 微盘 / 知识库上传共用：可入库扩展名。
 const Set<String> kChatKbUploadExtensions = <String>{
@@ -124,7 +123,10 @@ Future<void> showChatFilePreview({
                 Colors.white,
                 role: DunesColorRole.surface,
               ),
-              borderRadius: BorderRadius.circular(14),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(18),
+                side: BorderSide(color: ImVisualTokens.hairlineBorder(ctx)),
+              ),
               clipBehavior: Clip.antiAlias,
               child: SelectionArea(child: page),
             ),
@@ -553,31 +555,21 @@ class _ChatFilePreviewPageState extends State<ChatFilePreviewPage> {
             children: [
               const Spacer(flex: 2),
               Container(
-                width: 72,
-                height: 88,
+                width: 80,
+                height: 92,
                 decoration: BoxDecoration(
-                  color: DunesColors.resolve(
-                    context,
-                    const Color(0xFFF2F2F2),
-                    role: DunesColorRole.surface,
-                  ),
-                  borderRadius: BorderRadius.circular(8),
+                  color: ImVisualTokens.accentSoftSurface(context),
+                  borderRadius: BorderRadius.circular(18),
                   border: Border.all(
-                    color: DunesColors.resolve(
-                      context,
-                      const Color(0xFFE5E5E5),
-                      role: DunesColorRole.border,
-                    ),
+                    color: ImVisualTokens.accent(context).withValues(alpha: 0.22),
                   ),
+                  boxShadow: ImVisualTokens.softCardShadow(context),
                 ),
                 alignment: Alignment.center,
                 child: Icon(
-                  Icons.question_mark_rounded,
-                  size: 36,
-                  color: DunesColors.resolveNullable(
-                    context,
-                    Color(0xFFB0B0B0),
-                  ),
+                  Icons.insert_drive_file_rounded,
+                  size: 38,
+                  color: ImVisualTokens.accent(context),
                 ),
               ),
               const SizedBox(height: 22),
@@ -621,29 +613,40 @@ class _ChatFilePreviewPageState extends State<ChatFilePreviewPage> {
                 ),
               ],
               const Spacer(flex: 3),
-              SizedBox(
-                width: double.infinity,
-                height: 48,
-                child: FilledButton(
-                  onPressed: _busy ? null : _openWithOtherApp,
-                  style: FilledButton.styleFrom(
-                    backgroundColor: _wechatGreen,
-                    disabledBackgroundColor: DunesColors.resolve(
-                      context,
-                      _wechatGreen,
-                      role: DunesColorRole.surface,
-                    ).withValues(alpha: 0.45),
-                    foregroundColor: DunesColors.resolve(context, Colors.white),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
+              ImTapScale(
+                onTap: _busy ? null : _openWithOtherApp,
+                borderRadius: BorderRadius.circular(14),
+                child: AnimatedContainer(
+                  duration: ImVisualTokens.fastAnim,
+                  width: double.infinity,
+                  height: 48,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    gradient: _busy
+                        ? null
+                        : ImVisualTokens.primaryGradient(context),
+                    color: _busy
+                        ? ImVisualTokens.accent(context).withValues(alpha: 0.45)
+                        : null,
+                    borderRadius: BorderRadius.circular(14),
+                    boxShadow: _busy
+                        ? null
+                        : [
+                            BoxShadow(
+                              color: ImVisualTokens.accent(
+                                context,
+                              ).withValues(alpha: 0.28),
+                              blurRadius: 14,
+                              offset: const Offset(0, 6),
+                            ),
+                          ],
                   ),
                   child: Text(
                     _busy ? '处理中…' : '用其他应用打开',
                     style: DunesTypography.sans(
                       fontSize: 16,
                       fontWeight: FontWeight.w600,
-                      color: DunesColors.resolve(context, Colors.white),
+                      color: Colors.white,
                       context: context,
                     ),
                   ),

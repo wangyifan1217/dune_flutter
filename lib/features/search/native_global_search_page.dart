@@ -7,6 +7,7 @@ import '../../core/platform/desktop_features.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../../core/widgets/desktop_feedback_surface.dart';
 import '../../core/widgets/desktop_status_surface.dart';
+import '../../core/widgets/dunes_motion_kit.dart';
 import '../auth/auth_session.dart';
 import '../chat/group_composite_avatar.dart';
 import '../chat/im_ui_kit.dart';
@@ -386,9 +387,27 @@ class _NativeGlobalSearchPageState extends State<NativeGlobalSearchPage> {
                 if (_snap?.slowHint == true) _buildSlowHint(),
                 if ((_snap?.queryHint ?? '').isNotEmpty) _buildQueryHint(),
                 Expanded(
-                  child: q.isEmpty
-                      ? (drilling ? _buildCategoryIdle() : _buildIdle())
-                      : (_thread != null ? _buildThread() : _buildResults()),
+                  child: AnimatedSwitcher(
+                    duration: MediaQuery.disableAnimationsOf(context)
+                        ? Duration.zero
+                        : const Duration(milliseconds: 180),
+                    switchInCurve: Curves.easeOutCubic,
+                    switchOutCurve: Curves.easeInCubic,
+                    child: KeyedSubtree(
+                      key: ValueKey(
+                        q.isEmpty
+                            ? (drilling ? 'cat-idle-${_tab.name}' : 'idle')
+                            : (_thread != null
+                                  ? 'thread-${_thread!.conversationId}'
+                                  : 'res-${_tab.name}'),
+                      ),
+                      child: q.isEmpty
+                          ? (drilling ? _buildCategoryIdle() : _buildIdle())
+                          : (_thread != null
+                                ? _buildThread()
+                                : _buildResults()),
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -612,8 +631,8 @@ class _NativeGlobalSearchPageState extends State<NativeGlobalSearchPage> {
   Widget _buildSlowHint() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 2, 20, 6),
-      child: Text(
-        '正在搜索更多结果',
+      child: DunesShimmerText(
+        '正在搜索更多结果…',
         style: DunesTypography.sans(
           fontSize: 12,
           color: DunesColors.resolve(context, DunesColors.text3),

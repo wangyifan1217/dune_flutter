@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
+import '../../core/widgets/dunes_motion_kit.dart';
 import '../auth/auth_session.dart';
 import '../proposal_intake/proposal_intake_select.dart';
 import '../shell/dunes_toast.dart';
@@ -569,9 +570,7 @@ class _NativeProposalListPageState extends State<_NativeProposalListPage> {
             _buildTopBar(),
             Expanded(
               child: _loading
-                  ? const Center(
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
+                  ? const DunesListSkeleton()
                   : _error != null
                   ? _buildError()
                   : RefreshIndicator(

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -7,6 +8,7 @@ import 'package:flutter/services.dart';
 import '../../core/analytics/usage_analytics.dart';
 import '../../core/navigation/navigation_controller.dart';
 import '../../core/platform/desktop_features.dart';
+import '../../core/theme/dunes_theme.dart';
 import '../auth/auth_session_guard.dart';
 import '../auth/auth_session.dart';
 import '../chat/im_celebration.dart';
@@ -40,6 +42,8 @@ class _DunesShellState extends State<DunesShell> with WidgetsBindingObserver {
 
   // 记录从左边缘开始的横向拖动累计位移，用于实现 iOS 左滑返回。
   double _edgeDragDx = 0;
+  double? _edgeDragY;
+  bool _edgeDragUnfocused = false;
   bool _startingMobileEggs = false;
 
   @override
@@ -136,11 +140,15 @@ class _DunesShellState extends State<DunesShell> with WidgetsBindingObserver {
             onPopInvokedWithResult: (didPop, _) async {
               if (didPop) return;
               if (_presence.closeIfOpen?.call() ?? false) return;
+              FocusManager.instance.primaryFocus?.unfocus();
               if (!_navigation.handleBack()) {
                 SystemNavigator.pop();
               }
             },
             child: Scaffold(
+              // 由各子页面自身 Scaffold 管理键盘避让；外层壳不随键盘缩放，
+              // 避免从 IM 会话收键盘返回列表时触发整页与毛玻璃底栏逐帧重排卡顿。
+              resizeToAvoidBottomInset: false,
               backgroundColor: Theme.of(context).scaffoldBackgroundColor,
               body: Column(
                 children: [
@@ -175,24 +183,65 @@ class _DunesShellState extends State<DunesShell> with WidgetsBindingObserver {
                               width: 24,
                               child: GestureDetector(
                                 behavior: HitTestBehavior.translucent,
-                                onHorizontalDragStart: (_) => _edgeDragDx = 0,
+                                onHorizontalDragStart: (d) {
+                                  setState(() {
+                                    _edgeDragDx = 0;
+                                    _edgeDragY = d.localPosition.dy;
+                                  });
+                                  _edgeDragUnfocused = false;
+                                },
                                 onHorizontalDragUpdate: (d) {
                                   final prev = _edgeDragDx;
-                                  _edgeDragDx += d.delta.dx;
-                                  if (prev <= 40 && _edgeDragDx > 40) {
+                                  final next = (_edgeDragDx + d.delta.dx).clamp(
+                                    0.0,
+                                    120.0,
+                                  );
+                                  // 边缘右滑起步即先收起键盘，让键盘与页面切换错峰，避免松手瞬间卡顿。
+                                  if (!_edgeDragUnfocused && next > 12) {
+                                    _edgeDragUnfocused = true;
+                                    FocusManager.instance.primaryFocus
+                                        ?.unfocus();
+                                  }
+                                  if (prev <= 40 && next > 40) {
                                     HapticFeedback.mediumImpact();
                                   }
+                                  setState(() {
+                                    _edgeDragDx = next;
+                                    _edgeDragY = d.localPosition.dy;
+                                  });
+                                },
+                                onHorizontalDragCancel: () {
+                                  setState(() {
+                                    _edgeDragDx = 0;
+                                    _edgeDragY = null;
+                                  });
+                                  _edgeDragUnfocused = false;
                                 },
                                 onHorizontalDragEnd: (d) {
                                   final v = d.primaryVelocity ?? 0;
-                                  if (_navigation.canHandleBack &&
-                                      (_edgeDragDx > 40 || v > 300)) {
+                                  final shouldBack =
+                                      _navigation.canHandleBack &&
+                                      (_edgeDragDx > 40 || v > 300);
+                                  setState(() {
+                                    _edgeDragDx = 0;
+                                    _edgeDragY = null;
+                                  });
+                                  _edgeDragUnfocused = false;
+                                  if (shouldBack) {
+                                    FocusManager.instance.primaryFocus
+                                        ?.unfocus();
                                     HapticFeedback.selectionClick();
                                     _navigation.handleBack();
                                   }
-                                  _edgeDragDx = 0;
                                 },
                               ),
+                            ),
+                          if (_enableEdgeBack &&
+                              _navigation.canHandleBack &&
+                              _edgeDragDx > 4)
+                            _EdgeBackIndicator(
+                              dragDx: _edgeDragDx,
+                              anchorY: _edgeDragY,
                             ),
                         ],
                       ),
@@ -204,6 +253,82 @@ class _DunesShellState extends State<DunesShell> with WidgetsBindingObserver {
           ),
         );
       },
+    );
+  }
+}
+
+/// iOS 边缘右滑跟手磨砂返回指示浮标（仅在拖动中挂载，平时零开销）。
+class _EdgeBackIndicator extends StatelessWidget {
+  const _EdgeBackIndicator({required this.dragDx, required this.anchorY});
+
+  final double dragDx;
+  final double? anchorY;
+
+  @override
+  Widget build(BuildContext context) {
+    final media = MediaQuery.of(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final progress = (dragDx / 48.0).clamp(0.0, 1.0);
+    final triggered = dragDx > 40;
+    final top = ((anchorY ?? media.size.height * 0.5) - 24).clamp(
+      media.padding.top + 56,
+      media.size.height - media.padding.bottom - 96,
+    );
+    final accent = isDark ? const Color(0xFFC5B0FF) : DunesColors.brandPurple;
+
+    return Positioned(
+      left: -14 + progress * 22,
+      top: top,
+      child: IgnorePointer(
+        child: AnimatedScale(
+          scale: triggered ? 1.08 : (0.86 + progress * 0.14),
+          duration: const Duration(milliseconds: 120),
+          curve: Curves.easeOutBack,
+          child: Opacity(
+            opacity: progress,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(22),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+                child: Container(
+                  width: 38,
+                  height: 48,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: triggered
+                        ? accent.withValues(alpha: isDark ? 0.90 : 0.92)
+                        : (isDark ? const Color(0xFF252436) : Colors.white)
+                              .withValues(alpha: 0.88),
+                    borderRadius: BorderRadius.circular(22),
+                    border: Border.all(
+                      color: triggered
+                          ? Colors.white.withValues(alpha: 0.35)
+                          : accent.withValues(alpha: 0.25),
+                      width: 0.8,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(
+                          alpha: isDark ? 0.35 : 0.12,
+                        ),
+                        blurRadius: 14,
+                        offset: const Offset(2, 4),
+                      ),
+                    ],
+                  ),
+                  child: Icon(
+                    Icons.chevron_left_rounded,
+                    size: 24,
+                    color: triggered
+                        ? Colors.white
+                        : DunesColors.resolve(context, DunesColors.text),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

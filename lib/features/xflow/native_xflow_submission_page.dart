@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/navigation/navigation_controller.dart';
 import '../../core/util/friendly_error.dart';
+import '../../core/widgets/dunes_motion_kit.dart';
 import '../auth/auth_session.dart';
 import '../shell/dunes_toast.dart';
 import 'approval_chat_forward.dart';
@@ -457,7 +458,7 @@ class _NativeXflowSubmissionPageState extends State<NativeXflowSubmissionPage> {
       comment: comment,
     );
     if (!mounted) return;
-    showDunesToast(context, '已通过审批');
+    showDunesResultOverlay(context, message: '已通过审批', isSuccess: true);
     widget.onApprovalCompleted?.call();
     await _goNextPending(afterDecision: true);
   }
@@ -475,7 +476,7 @@ class _NativeXflowSubmissionPageState extends State<NativeXflowSubmissionPage> {
       comment: comment,
     );
     if (!mounted) return;
-    showDunesToast(context, '已驳回');
+    showDunesResultOverlay(context, message: '已驳回', isSuccess: false);
     widget.onApprovalCompleted?.call();
     await _goNextPending(afterDecision: true);
   }

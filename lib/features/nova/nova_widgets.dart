@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import '../../core/platform/desktop_features.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../../core/widgets/desktop_feedback_surface.dart';
+import '../../core/widgets/dunes_motion_kit.dart';
 import '../../core/widgets/dunes_text_selection_toolbar.dart';
 import '../chat/user_avatar_widget.dart';
 import '../conversation/conversation_service.dart';
@@ -1215,7 +1216,7 @@ class _NovaC4ThinkingDotsState extends State<NovaC4ThinkingDots>
           );
         }),
         if (widget.label.trim().isNotEmpty)
-          Text(
+          DunesShimmerText(
             widget.label,
             style: DunesTypography.sans(
               fontSize: 12.5,

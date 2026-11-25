@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 import '../../core/http/session_http.dart';
 import '../../core/platform/desktop_features.dart';
 import '../../core/theme/dunes_theme.dart';
+import '../../core/widgets/dunes_motion_kit.dart';
 import '../auth/auth_session.dart';
 import '../lighthouse/lighthouse_hero_metric.dart'
     show lighthouseHeroShellMarginH, lighthouseMainPageBg;
@@ -2748,31 +2749,42 @@ class _MineHomeBodyState extends State<MineHomeBody> {
                     ),
                   ),
                   const SizedBox(height: 7),
-                  Text.rich(
-                    TextSpan(
-                      children: [
-                        TextSpan(text: '$label '),
+                  TweenAnimationBuilder<double>(
+                    tween: Tween<double>(end: count.toDouble()),
+                    duration: MediaQuery.disableAnimationsOf(context)
+                        ? Duration.zero
+                        : const Duration(milliseconds: 340),
+                    curve: Curves.easeOutCubic,
+                    builder: (context, animatedCount, _) {
+                      return Text.rich(
                         TextSpan(
-                          text: '$count',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w700,
-                            fontFeatures: _tnum,
-                            color: highlight
-                                ? _r(context, MinePalette.purpleDeep)
-                                : _r(context, MinePalette.ink),
-                          ),
+                          children: [
+                            TextSpan(text: '$label '),
+                            TextSpan(
+                              text: '${animatedCount.round()}',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontFeatures: _tnum,
+                                color: highlight
+                                    ? _r(context, MinePalette.purpleDeep)
+                                    : _r(context, MinePalette.ink),
+                              ),
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 11.5,
-                      fontWeight: highlight ? FontWeight.w600 : FontWeight.w500,
-                      color: highlight
-                          ? _r(context, MinePalette.purpleDeep)
-                          : _r(context, MinePalette.ink2),
-                    ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: highlight
+                              ? FontWeight.w600
+                              : FontWeight.w500,
+                          color: highlight
+                              ? _r(context, MinePalette.purpleDeep)
+                              : _r(context, MinePalette.ink2),
+                        ),
+                      );
+                    },
                   ),
                 ],
               ),
@@ -2838,13 +2850,18 @@ class _MineHomeBodyState extends State<MineHomeBody> {
     Widget body;
     if (_loading && _tab != _MineTab.todo) {
       body = const Padding(
-        padding: EdgeInsets.symmetric(vertical: 36),
-        child: Center(
-          child: SizedBox(
-            width: 22,
-            height: 22,
-            child: CircularProgressIndicator(strokeWidth: 2),
-          ),
+        padding: EdgeInsets.fromLTRB(14, 14, 14, 18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            DunesShimmerBox(width: double.infinity, height: 14, borderRadius: 6),
+            SizedBox(height: 10),
+            DunesShimmerBox(width: 210, height: 11, borderRadius: 5),
+            SizedBox(height: 16),
+            DunesShimmerBox(width: double.infinity, height: 14, borderRadius: 6),
+            SizedBox(height: 10),
+            DunesShimmerBox(width: 175, height: 11, borderRadius: 5),
+          ],
         ),
       );
     } else if (_error != null && _tab != _MineTab.todo) {

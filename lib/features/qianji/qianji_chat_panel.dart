@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:file_selector/file_selector.dart';
@@ -8,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/platform/desktop_features.dart';
 import '../../core/theme/dunes_theme.dart';
+import '../../core/widgets/dunes_motion_kit.dart';
 import '../auth/auth_session.dart';
 import '../chat/file_download.dart' as file_dl;
 import '../chat/im_ui_kit.dart';
@@ -1308,7 +1310,7 @@ class _QianjiChatPanelState extends State<QianjiChatPanel>
                       ),
                       child: Column(
                         children: [
-                          const QianjiTaoMark(size: 56, glow: true),
+                          const _HeroAmbientMark(size: 58),
                           const SizedBox(height: 14),
                           Text(
                             name.isEmpty ? '你好，想查点什么？' : '$name，你好',
@@ -1367,8 +1369,21 @@ class _QianjiChatPanelState extends State<QianjiChatPanel>
             ),
             const SizedBox(height: 20),
             AnimatedSwitcher(
-              duration: const Duration(milliseconds: 260),
+              duration: const Duration(milliseconds: 280),
               switchInCurve: Curves.easeOutCubic,
+              switchOutCurve: Curves.easeInCubic,
+              transitionBuilder: (child, anim) {
+                return FadeTransition(
+                  opacity: anim,
+                  child: SlideTransition(
+                    position: Tween<Offset>(
+                      begin: const Offset(0, 0.04),
+                      end: Offset.zero,
+                    ).animate(anim),
+                    child: child,
+                  ),
+                );
+              },
               layoutBuilder: (current, previous) => Stack(
                 alignment: Alignment.topCenter,
                 children: [...previous, ?current],
@@ -1394,14 +1409,26 @@ class _QianjiChatPanelState extends State<QianjiChatPanel>
 
   Widget _buildComposerArea() {
     final keyboard = MediaQuery.viewInsetsOf(context).bottom;
-    final navOverlay = keyboard > 0 ? 0.0 : dunesAppBottomNavOverlayExtent(context);
+    // 用底栏实际视觉高度（56 + 安全区）而非包含上方留白的 96px 堆叠高度，
+    // 让输入框自然贴合在 APP 底部毛玻璃金刚位上方 12px 处，不再高悬。
+    final navVisual = keyboard > 0
+        ? 0.0
+        : dunesAppBottomNavVisualExtent(context);
+    final recordingExtra = keyboard > 0
+        ? 0.0
+        : MeetingRecordingChromeInset.of(context);
     final bottom = keyboard > 0
         ? keyboard + 8
-        : navOverlay > 0
-        ? navOverlay + 8
+        : navVisual > 0
+        ? navVisual + recordingExtra + 12
         : MediaQuery.paddingOf(context).bottom + 12;
-    return Padding(
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    return AnimatedPadding(
       key: _composerKey,
+      duration: reduceMotion
+          ? Duration.zero
+          : const Duration(milliseconds: 180),
+      curve: Curves.easeOutCubic,
       padding: EdgeInsets.fromLTRB(14, 4, 14, bottom),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -1418,7 +1445,11 @@ class _QianjiChatPanelState extends State<QianjiChatPanel>
                     child: _ErrorBanner(message: _error!),
                   ),
           ),
-          _buildComposer(),
+          _ComposerGlowShell(
+            busy: _busy,
+            focused: _composerFocused,
+            child: _buildComposer(),
+          ),
         ],
       ),
     );
@@ -3365,7 +3396,7 @@ class _ThinkingCardState extends State<_ThinkingCard>
                   );
                 },
               ),
-            Text(
+            DunesShimmerText(
               '正在识别问题并查询…',
               style: TextStyle(
                 fontSize: 11.5,
@@ -4188,6 +4219,207 @@ class _DeleteChatDialog extends StatelessWidget {
 }
 
 /// 入场动画：淡入并轻微上移，`delay` 用于同组元素依次出现。
+/// 欢迎页顶部「饕」徽标：柔和呼吸氛围光晕（仅在欢迎页挂载，遵循减弱动画）。
+class _HeroAmbientMark extends StatefulWidget {
+  const _HeroAmbientMark({required this.size});
+
+  final double size;
+
+  @override
+  State<_HeroAmbientMark> createState() => _HeroAmbientMarkState();
+}
+
+class _HeroAmbientMarkState extends State<_HeroAmbientMark>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 3000),
+  )..repeat(reverse: true);
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    final isDark = ImVisualTokens.isDark(context);
+    final accent = ImVisualTokens.accent(context);
+    if (reduceMotion) return QianjiTaoMark(size: widget.size, glow: true);
+
+    return AnimatedBuilder(
+      animation: _ctrl,
+      builder: (context, child) {
+        final t = Curves.easeInOutSine.transform(_ctrl.value);
+        final haloSize = widget.size * (1.42 + t * 0.16);
+        return SizedBox(
+          width: widget.size * 1.62,
+          height: widget.size * 1.62,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              Container(
+                width: haloSize,
+                height: haloSize,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: RadialGradient(
+                    colors: [
+                      accent.withValues(
+                        alpha: (isDark ? 0.28 : 0.22) * (0.65 + t * 0.35),
+                      ),
+                      Colors.transparent,
+                    ],
+                    stops: const [0.15, 1.0],
+                  ),
+                ),
+              ),
+              Transform.scale(
+                scale: 1.0 + t * 0.025,
+                child: child,
+              ),
+            ],
+          ),
+        );
+      },
+      child: QianjiTaoMark(size: widget.size, glow: true),
+    );
+  }
+}
+
+/// 输入框外层流光外壳：查询中围绕 22px 圆角胶囊流动柔和品牌紫光带，空闲零帧开销。
+class _ComposerGlowShell extends StatefulWidget {
+  const _ComposerGlowShell({
+    required this.busy,
+    required this.focused,
+    required this.child,
+  });
+
+  final bool busy;
+  final bool focused;
+  final Widget child;
+
+  @override
+  State<_ComposerGlowShell> createState() => _ComposerGlowShellState();
+}
+
+class _ComposerGlowShellState extends State<_ComposerGlowShell>
+    with SingleTickerProviderStateMixin {
+  AnimationController? _ctrl;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.busy) _start();
+  }
+
+  @override
+  void didUpdateWidget(covariant _ComposerGlowShell oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.busy && !oldWidget.busy) {
+      _start();
+    } else if (!widget.busy && oldWidget.busy) {
+      _stop();
+    }
+  }
+
+  void _start() {
+    _ctrl ??= AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2200),
+    );
+    _ctrl!.repeat();
+  }
+
+  void _stop() {
+    _ctrl?.stop();
+    _ctrl?.dispose();
+    _ctrl = null;
+  }
+
+  @override
+  void dispose() {
+    _stop();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    final ctrl = _ctrl;
+    if (!widget.busy || ctrl == null || reduceMotion) return widget.child;
+    final isDark = ImVisualTokens.isDark(context);
+    return AnimatedBuilder(
+      animation: ctrl,
+      child: widget.child,
+      builder: (context, child) {
+        return CustomPaint(
+          foregroundPainter: _ComposerSweepBorderPainter(
+            angle: ctrl.value * math.pi * 2,
+            isDark: isDark,
+          ),
+          child: child,
+        );
+      },
+    );
+  }
+}
+
+class _ComposerSweepBorderPainter extends CustomPainter {
+  const _ComposerSweepBorderPainter({
+    required this.angle,
+    required this.isDark,
+  });
+
+  final double angle;
+  final bool isDark;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const strokeWidth = 1.6;
+    const inset = strokeWidth / 2;
+    final rrect = RRect.fromRectAndRadius(
+      Rect.fromLTWH(
+        inset,
+        inset,
+        size.width - strokeWidth,
+        size.height - strokeWidth,
+      ),
+      const Radius.circular(22 - inset),
+    );
+    final shader = SweepGradient(
+      startAngle: 0,
+      endAngle: math.pi * 2,
+      transform: GradientRotation(angle),
+      colors: isDark
+          ? const [
+              Color(0x00B69BFF),
+              Color(0xFF9E82FF),
+              Color(0xFFE6DCFF),
+              Color(0x00B69BFF),
+            ]
+          : const [
+              Color(0x007B5CD8),
+              Color(0xFF7B5CD8),
+              Color(0xFFCBB6FF),
+              Color(0x007B5CD8),
+            ],
+      stops: const [0.0, 0.35, 0.52, 1.0],
+    ).createShader(Offset.zero & size);
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth
+      ..shader = shader;
+    canvas.drawRRect(rrect, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _ComposerSweepBorderPainter oldDelegate) =>
+      oldDelegate.angle != angle || oldDelegate.isDark != isDark;
+}
+
 class _Appear extends StatefulWidget {
   const _Appear({
     super.key,

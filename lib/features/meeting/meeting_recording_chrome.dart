@@ -309,10 +309,11 @@ class MeetingRecordingBar extends StatelessWidget {
         final recovering = live.recovering.value;
         final paused = live.paused.value;
         final failed = live.saveFailed.value;
-        final color = DunesColors.resolve(
-          context,
-          paused && !recovering ? DunesColors.amber : DunesColors.brandPurple,
-        );
+        final accentColor = paused && !recovering
+            ? const Color(0xFFFFB340)
+            : failed
+            ? const Color(0xFFFF5B61)
+            : const Color(0xFFB69BFF);
         final label = failed
             ? '录音待恢复保存'
             : recovering
@@ -321,140 +322,155 @@ class MeetingRecordingBar extends StatelessWidget {
             ? '会议录音已暂停'
             : '会议录音中';
         final title = live.meetingTitle.value.trim();
-        final glass = DunesColors.resolve(
-          context,
-          const Color(0xFFF9F8FF),
-          role: DunesColorRole.surface,
-        ).withValues(alpha: 0.28);
         return Semantics(
           label:
               '$label，${meetingRecordingElapsed(live.elapsed.value)}，点击进入当前会议',
           button: true,
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(16),
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: glass,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: DunesColors.resolve(
-                      context,
-                      Colors.white,
-                      role: DunesColorRole.border,
-                    ).withValues(alpha: 0.55),
-                  ),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(24),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.38),
+                  blurRadius: 22,
+                  spreadRadius: -4,
+                  offset: const Offset(0, 8),
                 ),
-                child: Material(
-                  key: const Key('meeting-recording-bar'),
-                  type: MaterialType.transparency,
-                  child: InkWell(
-                    onTap: onOpen,
-                    splashColor: color.withValues(alpha: 0.08),
-                    highlightColor: Colors.transparent,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 9,
-                      ),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 38,
-                            height: 38,
-                            decoration: BoxDecoration(
-                              color: color.withValues(alpha: 0.10),
-                              borderRadius: BorderRadius.circular(11),
+                BoxShadow(
+                  color: accentColor.withValues(alpha: 0.24),
+                  blurRadius: 16,
+                  spreadRadius: -6,
+                  offset: const Offset(0, 3),
+                ),
+              ],
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(24),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 22, sigmaY: 22),
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: failed
+                        ? const Color(0xF5210D0E)
+                        : const Color(0xF50B0B10),
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(
+                      color: accentColor.withValues(alpha: 0.30),
+                      width: 0.8,
+                    ),
+                  ),
+                  child: Material(
+                    key: const Key('meeting-recording-bar'),
+                    type: MaterialType.transparency,
+                    child: InkWell(
+                      onTap: onOpen,
+                      splashColor: accentColor.withValues(alpha: 0.14),
+                      highlightColor: Colors.transparent,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 9,
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 36,
+                              height: 36,
+                              decoration: BoxDecoration(
+                                color: accentColor.withValues(alpha: 0.18),
+                                shape: BoxShape.circle,
+                              ),
+                              child: recovering
+                                  ? Padding(
+                                      padding: const EdgeInsets.all(9),
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: accentColor,
+                                      ),
+                                    )
+                                  : paused || failed
+                                  ? Icon(
+                                      failed
+                                          ? Icons.warning_amber_rounded
+                                          : Icons.pause_rounded,
+                                      color: accentColor,
+                                      size: 20,
+                                    )
+                                  : _MeetingIslandEqualizer(color: accentColor),
                             ),
-                            child: recovering
-                                ? Padding(
-                                    padding: const EdgeInsets.all(10),
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: color,
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    label,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: DunesTypography.sans(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.white,
+                                      context: context,
                                     ),
-                                  )
-                                : Icon(
-                                    paused
-                                        ? Icons.pause_rounded
-                                        : Icons.graphic_eq_rounded,
-                                    color: color,
-                                    size: 22,
                                   ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  label,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: DunesTypography.sans(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w600,
-                                    color: DunesColors.resolve(
-                                      context,
-                                      DunesColors.text,
-                                    ),
-                                    context: context,
-                                  ),
-                                ),
-                                const SizedBox(height: 3),
-                                Row(
-                                  children: [
-                                    Expanded(
-                                      child: Text(
-                                        title.isEmpty ? '现场会议' : title,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
+                                  const SizedBox(height: 2),
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: Text(
+                                          title.isEmpty ? '现场会议' : title,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: DunesTypography.sans(
+                                            fontSize: 11.5,
+                                            color: Colors.white.withValues(
+                                              alpha: 0.68,
+                                            ),
+                                            context: context,
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        meetingRecordingElapsed(
+                                          live.elapsed.value,
+                                        ),
                                         style: DunesTypography.sans(
                                           fontSize: 12,
-                                          color: DunesColors.resolve(
-                                            context,
-                                            DunesColors.text2,
-                                          ),
+                                          fontWeight: FontWeight.w600,
+                                          color: accentColor,
                                           context: context,
                                         ),
                                       ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      meetingRecordingElapsed(
-                                        live.elapsed.value,
-                                      ),
-                                      style: DunesTypography.sans(
-                                        fontSize: 12,
-                                        color: DunesColors.resolve(
-                                          context,
-                                          DunesColors.text2,
-                                        ),
-                                        context: context,
-                                      ),
-                                    ),
-                                  ],
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 5,
+                              ),
+                              decoration: BoxDecoration(
+                                color: accentColor.withValues(alpha: 0.22),
+                                borderRadius: BorderRadius.circular(999),
+                              ),
+                              child: Text(
+                                paused || failed ? '处理' : '返回',
+                                style: DunesTypography.sans(
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.white,
+                                  context: context,
                                 ),
-                              ],
+                              ),
                             ),
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            paused || failed ? '处理' : '查看',
-                            style: DunesTypography.sans(
-                              fontSize: 12,
-                              color: color,
-                              context: context,
-                            ),
-                          ),
-                          Icon(
-                            Icons.chevron_right_rounded,
-                            color: color,
-                            size: 18,
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -462,6 +478,63 @@ class MeetingRecordingBar extends StatelessWidget {
               ),
             ),
           ),
+        );
+      },
+    );
+  }
+}
+
+/// 灵动岛实时声纹律动条（仅在录音活跃态挂载，暂停/结束立即释放，遵循减弱动画）。
+class _MeetingIslandEqualizer extends StatefulWidget {
+  const _MeetingIslandEqualizer({required this.color});
+
+  final Color color;
+
+  @override
+  State<_MeetingIslandEqualizer> createState() =>
+      _MeetingIslandEqualizerState();
+}
+
+class _MeetingIslandEqualizerState extends State<_MeetingIslandEqualizer>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 850),
+  )..repeat(reverse: true);
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (MediaQuery.disableAnimationsOf(context)) {
+      return Icon(Icons.graphic_eq_rounded, color: widget.color, size: 20);
+    }
+    return AnimatedBuilder(
+      animation: _ctrl,
+      builder: (context, _) {
+        final t = _ctrl.value;
+        final h1 = 6.0 + 10.0 * ((t + 0.1) % 1.0);
+        final h2 = 8.0 + 11.0 * (1.0 - t);
+        final h3 = 6.0 + 9.0 * ((t + 0.55) % 1.0);
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            for (final h in [h1, h2, h3])
+              Container(
+                width: 3,
+                height: h,
+                margin: const EdgeInsets.symmetric(horizontal: 1.4),
+                decoration: BoxDecoration(
+                  color: widget.color,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+          ],
         );
       },
     );

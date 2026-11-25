@@ -342,11 +342,25 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
           offstage: !_newLayout,
           child: TickerMode(
             enabled: _newLayout,
-            child: QianjiChatPanel(
-              session: widget.session,
-              chatService: widget.chatService,
-              scopeGroups: _chatScopeGroups(),
-              onSwitchLegacy: () => setState(() => _newLayout = false),
+            child: AnimatedOpacity(
+              opacity: _newLayout ? 1.0 : 0.0,
+              duration: MediaQuery.disableAnimationsOf(context)
+                  ? Duration.zero
+                  : const Duration(milliseconds: 220),
+              curve: Curves.easeOutCubic,
+              child: AnimatedScale(
+                scale: _newLayout ? 1.0 : 0.985,
+                duration: MediaQuery.disableAnimationsOf(context)
+                    ? Duration.zero
+                    : const Duration(milliseconds: 240),
+                curve: Curves.easeOutCubic,
+                child: QianjiChatPanel(
+                  session: widget.session,
+                  chatService: widget.chatService,
+                  scopeGroups: _chatScopeGroups(),
+                  onSwitchLegacy: () => setState(() => _newLayout = false),
+                ),
+              ),
             ),
           ),
         ),

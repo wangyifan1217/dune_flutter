@@ -71,7 +71,7 @@ Finder _unreadDots() => find.descendant(
     final decoration = widget.decoration;
     return decoration is BoxDecoration &&
         decoration.shape == BoxShape.circle &&
-        decoration.color == DunesColors.coral;
+        decoration.color == kDunesTabUnreadDotColor;
   }),
 );
 
@@ -266,6 +266,29 @@ void main() {
     workbenchBadge.update(0);
     await tester.pump();
     expect(_unreadDots(), findsNothing);
+  });
+
+  testWidgets('incoming message on profile tab shows red dot on comm tab', (
+    tester,
+  ) async {
+    final navigation = DunesNavigationController(initialScreen: 'B2');
+    final commUnread = CommUnreadNotifier();
+    addTearDown(navigation.dispose);
+    addTearDown(commUnread.dispose);
+    await _pumpBar(
+      tester,
+      navigation: navigation,
+      commUnread: commUnread,
+    );
+
+    expect(_unreadDots(), findsNothing);
+    commUnread.bump(1);
+    await tester.pump();
+    expect(_unreadDots(), findsOneWidget);
+    expect(
+      tester.getCenter(_unreadDots()).dx,
+      lessThan(tester.getCenter(find.text('饕')).dx),
+    );
   });
 
   testWidgets('APP list bottom padding clears the floating nav overlay', (

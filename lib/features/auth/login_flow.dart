@@ -534,6 +534,7 @@ class _PhoneStep extends StatefulWidget {
 
 class _PhoneStepState extends State<_PhoneStep> {
   final _phone = TextEditingController();
+  bool _submitting = false;
   String? _error;
 
   @override
@@ -543,15 +544,21 @@ class _PhoneStepState extends State<_PhoneStep> {
   }
 
   void _next() {
+    if (_submitting) return;
     final phone = _phone.text.trim();
     if (!RegExp(r'^\d{11}$').hasMatch(phone)) {
       setState(() => _error = '请输入 11 位手机号');
       return;
     }
+    setState(() {
+      _submitting = true;
+      _error = null;
+    });
     widget.auth
         .requestSmsCode(phone: phone)
         .then((_) {
           if (!mounted) return;
+          setState(() => _submitting = false);
           Navigator.of(context).push(
             MaterialPageRoute<void>(
               builder: (_) => _CodeStep(
@@ -565,6 +572,7 @@ class _PhoneStepState extends State<_PhoneStep> {
         .catchError((e) {
           if (!mounted) return;
           setState(() {
+            _submitting = false;
             _error = e is AuthException
                 ? e.message
                 : '网络异常，请确认网关 ${widget.auth.apiBase} 可访问';
@@ -574,96 +582,195 @@ class _PhoneStepState extends State<_PhoneStep> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final accent = isDark ? const Color(0xFFC5B0FF) : DunesColors.brandPurple;
+
     return AuthScaffold(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const AuthAppLogo(size: 84),
-          const SizedBox(height: 18),
-          Text(
-            '沙丘',
-            textAlign: TextAlign.center,
-            style: DunesTypography.sans(
-              fontSize: 26,
-              fontWeight: FontWeight.w700,
-              color: DunesColors.resolve(context, const Color(0xFF1D1D1F)),
-              letterSpacing: -0.5,
-              context: context,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            '企业协作 · 审批 · 通讯',
-            textAlign: TextAlign.center,
-            style: DunesTypography.sans(
-              fontSize: 13.5,
-              color: DunesColors.resolve(context, const Color(0xFF6E6E73)),
-              height: 1.5,
-              context: context,
-            ),
-          ),
-          const SizedBox(height: 34),
-          AuthFormCard(
+          AuthEntranceSlide(
+            delayMs: 0,
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text(
-                  '手机号登录',
-                  style: DunesTypography.sans(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    color: DunesColors.resolve(
-                      context,
-                      const Color(0xFF1D1D1F),
-                    ),
-                    context: context,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _phone,
-                  keyboardType: TextInputType.phone,
-                  inputFormatters: [
-                    FilteringTextInputFormatter.digitsOnly,
-                    LengthLimitingTextInputFormatter(11),
-                  ],
-                  style: DunesTypography.sans(
-                    fontSize: 17,
-                    fontWeight: FontWeight.w500,
-                    color: DunesColors.resolve(
-                      context,
-                      const Color(0xFF1D1D1F),
-                    ),
-                    letterSpacing: 1.0,
-                    context: context,
-                  ),
-                  decoration:
-                      authInputDecoration(
-                        context: context,
-                        hintText: '请输入手机号',
-                        errorText: _error,
-                      ).copyWith(
-                        prefixIcon: const AuthPhonePrefix(),
-                        prefixIconConstraints: const BoxConstraints(
-                          minWidth: 0,
-                          minHeight: 0,
+                const AuthAppLogo(size: 92),
+                const SizedBox(height: 22),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Text(
+                      '沙丘',
+                      style: DunesTypography.sans(
+                        fontSize: 32,
+                        fontWeight: FontWeight.w800,
+                        color: DunesColors.resolve(
+                          context,
+                          const Color(0xFF1D1D1F),
                         ),
-                        contentPadding: const EdgeInsets.fromLTRB(
-                          0,
-                          15,
-                          16,
-                          15,
+                        letterSpacing: 1.0,
+                        context: context,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: accent.withValues(alpha: isDark ? 0.18 : 0.11),
+                        borderRadius: BorderRadius.circular(999),
+                        border: Border.all(
+                          color: accent.withValues(alpha: isDark ? 0.34 : 0.22),
+                          width: 0.7,
                         ),
                       ),
-                  onChanged: (_) {
-                    if (_error != null) setState(() => _error = null);
-                  },
-                  onTapOutside: (_) =>
-                      FocusManager.instance.primaryFocus?.unfocus(),
-                  onSubmitted: (_) => _next(),
+                      child: Text(
+                        'DUNES',
+                        style: DunesTypography.sans(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w700,
+                          color: accent,
+                          letterSpacing: 1.6,
+                          context: context,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 20),
-                AuthPrimaryButton(label: '获取验证码', onPressed: _next),
+                const SizedBox(height: 8),
+                Text(
+                  '企业协作 · 智能审批 · 即时通讯',
+                  textAlign: TextAlign.center,
+                  style: DunesTypography.sans(
+                    fontSize: 13.5,
+                    color: DunesColors.resolve(
+                      context,
+                      const Color(0xFF6E6E73),
+                    ),
+                    letterSpacing: 0.6,
+                    height: 1.5,
+                    context: context,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 36),
+          AuthEntranceSlide(
+            delayMs: 90,
+            child: AuthFormCard(
+              padding: const EdgeInsets.fromLTRB(24, 24, 24, 24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    '欢迎回来',
+                    style: DunesTypography.sans(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w700,
+                      color: DunesColors.resolve(
+                        context,
+                        const Color(0xFF1D1D1F),
+                      ),
+                      letterSpacing: -0.3,
+                      context: context,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '使用手机号验证码快速进入工作台',
+                    style: DunesTypography.sans(
+                      fontSize: 12.5,
+                      color: DunesColors.resolve(
+                        context,
+                        const Color(0xFF86868B),
+                      ),
+                      context: context,
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  TextField(
+                    controller: _phone,
+                    keyboardType: TextInputType.phone,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
+                      LengthLimitingTextInputFormatter(11),
+                    ],
+                    style: DunesTypography.sans(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w500,
+                      color: DunesColors.resolve(
+                        context,
+                        const Color(0xFF1D1D1F),
+                      ),
+                      letterSpacing: 1.0,
+                      context: context,
+                    ),
+                    decoration:
+                        authInputDecoration(
+                          context: context,
+                          hintText: '请输入手机号',
+                          errorText: _error,
+                        ).copyWith(
+                          prefixIcon: const AuthPhonePrefix(),
+                          prefixIconConstraints: const BoxConstraints(
+                            minWidth: 0,
+                            minHeight: 0,
+                          ),
+                          contentPadding: const EdgeInsets.fromLTRB(
+                            0,
+                            15,
+                            16,
+                            15,
+                          ),
+                        ),
+                    onChanged: (_) {
+                      if (_error != null) setState(() => _error = null);
+                    },
+                    onTapOutside: (_) =>
+                        FocusManager.instance.primaryFocus?.unfocus(),
+                    onSubmitted: (_) => _next(),
+                  ),
+                  const SizedBox(height: 22),
+                  AuthPrimaryButton(
+                    label: '获取验证码',
+                    loading: _submitting,
+                    onPressed: _next,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 26),
+          AuthEntranceSlide(
+            delayMs: 160,
+            offsetY: 10,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.verified_user_outlined,
+                  size: 13.5,
+                  color: DunesColors.resolve(
+                    context,
+                    const Color(0xFF8E8E93),
+                  ),
+                ),
+                const SizedBox(width: 5),
+                Text(
+                  '沙丘企业级加密通道保护',
+                  style: DunesTypography.sans(
+                    fontSize: 11.5,
+                    color: DunesColors.resolve(
+                      context,
+                      const Color(0xFF8E8E93),
+                    ),
+                    letterSpacing: 0.3,
+                    context: context,
+                  ),
+                ),
               ],
             ),
           ),

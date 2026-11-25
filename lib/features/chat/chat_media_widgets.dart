@@ -707,7 +707,7 @@ Future<void> _showInAppChatImagePreview(
     barrierDismissible: true,
     barrierLabel: '关闭图片预览',
     barrierColor: Colors.black87,
-    transitionDuration: const Duration(milliseconds: 160),
+    transitionDuration: const Duration(milliseconds: 200),
     pageBuilder: (ctx, animation, secondaryAnimation) {
       return ChatImagePreviewPage(
         service: service,
@@ -715,6 +715,19 @@ Future<void> _showInAppChatImagePreview(
         initialIndex: initialIndex,
         conversationId: conversationId,
         onClose: () => Navigator.of(ctx).maybePop(),
+      );
+    },
+    transitionBuilder: (ctx, animation, _, child) {
+      final curve = CurvedAnimation(
+        parent: animation,
+        curve: Curves.easeOutCubic,
+      );
+      return FadeTransition(
+        opacity: curve,
+        child: ScaleTransition(
+          scale: Tween<double>(begin: 0.92, end: 1.0).animate(curve),
+          child: child,
+        ),
       );
     },
   );
@@ -1441,9 +1454,9 @@ class _ChatImagePreviewPageState extends State<ChatImagePreviewPage> {
             );
           } else {
             _prepareMetadata(originalBytes ?? bytes);
-            content = InteractiveViewer(
-              maxScale: 5,
-              child: Center(child: Image.memory(bytes, fit: BoxFit.contain)),
+            content = _ZoomableDismissibleImage(
+              bytes: bytes,
+              onDismiss: _close,
             );
           }
 
@@ -1835,6 +1848,128 @@ class _PreviewActionButton extends StatelessWidget {
                 ),
               ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 聊天大图预览容器：支持双击以点击位置为中心平滑缩放 + 未放大时上下拖动跟手关闭。
+class _ZoomableDismissibleImage extends StatefulWidget {
+  const _ZoomableDismissibleImage({
+    required this.bytes,
+    required this.onDismiss,
+  });
+
+  final Uint8List bytes;
+  final VoidCallback onDismiss;
+
+  @override
+  State<_ZoomableDismissibleImage> createState() =>
+      _ZoomableDismissibleImageState();
+}
+
+class _ZoomableDismissibleImageState extends State<_ZoomableDismissibleImage>
+    with SingleTickerProviderStateMixin {
+  final TransformationController _transform = TransformationController();
+  late final AnimationController _zoomCtrl = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 220),
+  );
+  Animation<Matrix4>? _zoomAnim;
+  Offset? _doubleTapLocalPos;
+  double _dragOffsetY = 0;
+  bool _dragging = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _zoomCtrl.addListener(() {
+      final anim = _zoomAnim;
+      if (anim != null) _transform.value = anim.value;
+    });
+  }
+
+  @override
+  void dispose() {
+    _zoomCtrl.dispose();
+    _transform.dispose();
+    super.dispose();
+  }
+
+  bool get _isZoomed => _transform.value.getMaxScaleOnAxis() > 1.05;
+
+  void _handleDoubleTap() {
+    final Matrix4 begin = _transform.value;
+    final Matrix4 end;
+    if (_isZoomed) {
+      end = Matrix4.identity();
+    } else {
+      final tap = _doubleTapLocalPos ?? Offset.zero;
+      const targetScale = 2.4;
+      end = Matrix4.identity()
+        ..translate(-tap.dx * (targetScale - 1), -tap.dy * (targetScale - 1))
+        ..scale(targetScale);
+    }
+    _zoomAnim = Matrix4Tween(begin: begin, end: end).animate(
+      CurvedAnimation(parent: _zoomCtrl, curve: Curves.easeOutCubic),
+    );
+    _zoomCtrl.forward(from: 0);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final progress = (_dragOffsetY.abs() / 240.0).clamp(0.0, 1.0);
+    final dragScale = (1.0 - progress * 0.16).clamp(0.84, 1.0);
+    return GestureDetector(
+      onDoubleTapDown: (d) => _doubleTapLocalPos = d.localPosition,
+      onDoubleTap: _handleDoubleTap,
+      onVerticalDragStart: _isZoomed
+          ? null
+          : (_) => setState(() => _dragging = true),
+      onVerticalDragUpdate: _isZoomed
+          ? null
+          : (d) => setState(() => _dragOffsetY += d.delta.dy),
+      onVerticalDragCancel: () {
+        if (_dragging || _dragOffsetY != 0) {
+          setState(() {
+            _dragging = false;
+            _dragOffsetY = 0;
+          });
+        }
+      },
+      onVerticalDragEnd: _isZoomed
+          ? null
+          : (d) {
+              final v = (d.primaryVelocity ?? 0).abs();
+              if (_dragOffsetY.abs() > 110 || v > 650) {
+                widget.onDismiss();
+                return;
+              }
+              setState(() {
+                _dragging = false;
+                _dragOffsetY = 0;
+              });
+            },
+      child: TweenAnimationBuilder<double>(
+        tween: Tween<double>(end: _dragOffsetY),
+        duration: _dragging ? Duration.zero : const Duration(milliseconds: 220),
+        curve: Curves.easeOutBack,
+        builder: (context, dy, child) =>
+            Transform.translate(offset: Offset(0, dy), child: child),
+        child: AnimatedScale(
+          scale: dragScale,
+          duration:
+              _dragging ? Duration.zero : const Duration(milliseconds: 220),
+          curve: Curves.easeOutBack,
+          child: InteractiveViewer(
+            transformationController: _transform,
+            minScale: 1,
+            maxScale: 5,
+            child: Center(
+              child: Image.memory(widget.bytes, fit: BoxFit.contain),
+            ),
           ),
         ),
       ),

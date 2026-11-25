@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
+import '../../core/widgets/dunes_motion_kit.dart';
 import '../auth/auth_session.dart';
 import '../chat/im_celebration.dart';
 import '../shell/dunes_toast.dart';
@@ -1494,7 +1495,7 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
       return [
         const SliverFillRemaining(
           hasScrollBody: false,
-          child: Center(child: CircularProgressIndicator(color: kTaskPurple)),
+          child: DunesListSkeleton(),
         ),
       ];
     }

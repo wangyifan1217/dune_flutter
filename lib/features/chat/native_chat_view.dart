@@ -6232,18 +6232,38 @@ class _NativeChatViewState extends State<NativeChatView>
         anchor: anchor,
       );
     }
+    final dark = ImVisualTokens.isDark(context);
     return showGeneralDialog<String>(
       context: context,
       barrierLabel: 'message_actions',
       barrierDismissible: true,
-      barrierColor: Colors.transparent,
-      transitionDuration: const Duration(milliseconds: 140),
+      barrierColor: Colors.black.withValues(alpha: dark ? 0.24 : 0.08),
+      transitionDuration: const Duration(milliseconds: 160),
       pageBuilder: (ctx, _, _) {
         final media = MediaQuery.of(ctx);
         final size = media.size;
         final safeTop = media.padding.top + 8;
         final safeBottom = size.height - media.padding.bottom - 8;
-        final menuWidth = math.min(size.width - 24, 324.0).toDouble();
+        final isDark = ImVisualTokens.isDark(ctx);
+        final accent = ImVisualTokens.accent(ctx);
+        final accentSoft = ImVisualTokens.accentSoftSurface(ctx);
+        final dangerColor = DunesColors.resolve(ctx, DunesColors.coral);
+        final dangerSoft = dangerColor.withValues(alpha: isDark ? 0.20 : 0.12);
+        final textColor = DunesColors.resolve(ctx, DunesColors.text);
+
+        final colCount = actions.length <= 4 ? actions.length : 4;
+        const itemWidth = 64.0;
+        const itemSpacing = 8.0;
+        const horizontalPadding = 24.0;
+        final naturalWidth =
+            colCount * itemWidth +
+            (colCount - 1) * itemSpacing +
+            horizontalPadding;
+        final menuWidth = math
+            .min(size.width - 24, math.max(naturalWidth, 220.0))
+            .toDouble();
+        final rowCount = (actions.length / colCount).ceil();
+        final estimatedHeight = rowCount * 74.0 + 24.0;
         final left =
             (anchor == null
                     ? (size.width - menuWidth) / 2
@@ -6254,9 +6274,9 @@ class _NativeChatViewState extends State<NativeChatView>
                 .toDouble();
         final preferredTop = anchor == null
             ? size.height * 0.35
-            : anchor.dy - 136;
+            : anchor.dy - estimatedHeight - 16;
         final top = preferredTop
-            .clamp(safeTop, math.max(safeTop, safeBottom - 190))
+            .clamp(safeTop, math.max(safeTop, safeBottom - estimatedHeight))
             .toDouble();
         return SafeArea(
           child: Stack(
@@ -6270,86 +6290,88 @@ class _NativeChatViewState extends State<NativeChatView>
               Positioned(
                 left: left,
                 top: top,
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(18),
-                    boxShadow: [
-                      BoxShadow(
-                        color: const Color(0xFF140E26).withValues(alpha: 0.36),
-                        blurRadius: 28,
-                        spreadRadius: -4,
-                        offset: const Offset(0, 10),
-                      ),
-                    ],
-                  ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(18),
-                    child: BackdropFilter(
-                      filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-                      child: Material(
-                        color: const Color(0xDC1F1B2E),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(18),
-                          side: BorderSide(
-                            color: Colors.white.withValues(alpha: 0.14),
-                            width: 0.7,
-                          ),
-                        ),
-                        child: ConstrainedBox(
-                          constraints: BoxConstraints(maxWidth: menuWidth),
-                          child: Padding(
-                            padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
-                            child: Wrap(
-                              spacing: 6,
-                              runSpacing: 8,
-                              children: actions
-                                  .map(
-                                    (item) => SizedBox(
-                                      width: 54,
-                                      child: InkWell(
-                                        borderRadius: BorderRadius.circular(10),
-                                        onTap: () {
-                                          HapticFeedback.selectionClick();
-                                          Navigator.of(ctx).pop(item.id);
-                                        },
-                                        child: Padding(
-                                          padding: const EdgeInsets.symmetric(
-                                            vertical: 5,
-                                          ),
-                                          child: Column(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              Icon(
-                                                item.icon,
-                                                size: 20,
-                                                color: item.id == 'recall'
-                                                    ? const Color(0xFFFF8F82)
-                                                    : Colors.white,
-                                              ),
-                                              const SizedBox(height: 5),
-                                              Text(
-                                                item.label,
-                                                maxLines: 1,
-                                                overflow: TextOverflow.ellipsis,
-                                                style: DunesTypography.sans(
-                                                  fontSize: 11,
-                                                  fontWeight: FontWeight.w500,
-                                                  color: item.id == 'recall'
-                                                      ? const Color(0xFFFF8F82)
-                                                      : Colors.white,
-                                                  context: ctx,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
+                child: Material(
+                  color: Colors.transparent,
+                  child: ImFrostedIsland(
+                    borderRadius: 22,
+                    blurSigma: 22,
+                    padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(maxWidth: menuWidth - 24),
+                      child: Wrap(
+                        spacing: itemSpacing,
+                        runSpacing: 8,
+                        children: actions
+                            .map((item) {
+                              final isDanger = item.id == 'recall';
+                              final iconBg = isDanger ? dangerSoft : accentSoft;
+                              final iconFg = isDanger ? dangerColor : accent;
+                              final labelColor = isDanger
+                                  ? dangerColor
+                                  : textColor;
+                              return SizedBox(
+                                width: itemWidth,
+                                child: ImTapScale(
+                                  borderRadius: BorderRadius.circular(14),
+                                  pressedScale: 0.94,
+                                  onTap: () {
+                                    HapticFeedback.selectionClick();
+                                    Navigator.of(ctx).pop(item.id);
+                                  },
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 7,
+                                      horizontal: 4,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: ImVisualTokens.cardSurface(
+                                        ctx,
+                                      ).withValues(alpha: isDark ? 0.72 : 0.86),
+                                      borderRadius: BorderRadius.circular(14),
+                                      border: Border.all(
+                                        color: ImVisualTokens.hairlineBorder(
+                                          ctx,
                                         ),
+                                        width: 0.7,
                                       ),
                                     ),
-                                  )
-                                  .toList(growable: false),
-                            ),
-                          ),
-                        ),
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Container(
+                                          width: 32,
+                                          height: 32,
+                                          decoration: BoxDecoration(
+                                            color: iconBg,
+                                            borderRadius: BorderRadius.circular(
+                                              10,
+                                            ),
+                                          ),
+                                          child: Icon(
+                                            item.icon,
+                                            size: 17,
+                                            color: iconFg,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 5),
+                                        Text(
+                                          item.label,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: DunesTypography.sans(
+                                            fontSize: 11.5,
+                                            fontWeight: FontWeight.w500,
+                                            color: labelColor,
+                                            context: ctx,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              );
+                            })
+                            .toList(growable: false),
                       ),
                     ),
                   ),
@@ -11402,7 +11424,10 @@ class _NativeChatViewState extends State<NativeChatView>
                                   compactHeader && conv.isReplySlaWorkgroup
                                   ? const WorkgroupTag()
                                   : null,
-                              onBack: widget.onBack,
+                              onBack: () {
+                                FocusManager.instance.primaryFocus?.unfocus();
+                                widget.onBack();
+                              },
                               showBackButton: widget.showBackButton,
                               showBottomBorder: isDesktopCommOnly,
                               onTapTitle: _isPrivate

@@ -2,6 +2,7 @@ import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../core/theme/dunes_theme.dart';
 import 'im_ui_kit.dart';
@@ -107,6 +108,18 @@ class _VoiceRecordingOverlayState extends State<VoiceRecordingOverlay>
   }
 
   @override
+  void didUpdateWidget(covariant VoiceRecordingOverlay oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.action != widget.action) {
+      if (widget.action == VoiceHoldAction.cancel) {
+        HapticFeedback.mediumImpact();
+      } else if (widget.action != VoiceHoldAction.none) {
+        HapticFeedback.selectionClick();
+      }
+    }
+  }
+
+  @override
   void dispose() {
     _waveController.dispose();
     super.dispose();
@@ -114,15 +127,22 @@ class _VoiceRecordingOverlayState extends State<VoiceRecordingOverlay>
 
   @override
   Widget build(BuildContext context) {
+    final isCancel = widget.action == VoiceHoldAction.cancel;
     return SizedBox.expand(
       child: Stack(
         fit: StackFit.expand,
         children: [
-          // 全屏轻磨砂紫灰遮罩，保留输入栏底层拖动手势透传。
+          // 全屏轻磨砂紫灰遮罩，移入取消区平滑过渡微红警示光晕，保留底层拖动手势透传。
           IgnorePointer(
             child: BackdropFilter(
               filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
-              child: const ColoredBox(color: Color(0x78141122)),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 180),
+                curve: Curves.easeOutCubic,
+                color: isCancel
+                    ? const Color(0x882E1118)
+                    : const Color(0x78141122),
+              ),
             ),
           ),
           // 居中悬浮的毛玻璃紫色声纹卡片（始终于键盘区上方居中，不与底部操作弧遮挡）。

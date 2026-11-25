@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../core/navigation/navigation_controller.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
+import '../../core/widgets/dunes_motion_kit.dart';
 import '../auth/auth_session.dart';
 import '../funding_proposal/funding_proposal_overlay.dart';
 import '../proposal_intake/proposal_intake_overlay.dart';
@@ -294,7 +295,7 @@ class _NativeB10PageState extends State<NativeB10Page> {
       comment: comment,
     );
     if (!mounted) return;
-    showDunesToast(context, '已通过审批');
+    showDunesResultOverlay(context, message: '已通过审批', isSuccess: true);
     widget.onApprovalCompleted?.call();
     await _goNextPending(afterDecision: true);
   }
@@ -308,7 +309,7 @@ class _NativeB10PageState extends State<NativeB10Page> {
       comment: comment,
     );
     if (!mounted) return;
-    showDunesToast(context, '已驳回');
+    showDunesResultOverlay(context, message: '已驳回', isSuccess: false);
     widget.onApprovalCompleted?.call();
     await _goNextPending(afterDecision: true);
   }

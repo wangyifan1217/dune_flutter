@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -80,6 +81,7 @@ class NativeConversationPage extends StatefulWidget {
     this.notificationsReadSignal,
     this.memberSettingsSignal,
     this.conversationRemovedSignal,
+    this.scrollToUnreadSignal,
     this.listVisible = true,
   });
 
@@ -134,6 +136,7 @@ class NativeConversationPage extends StatefulWidget {
   final ConversationRemovedSignal? conversationRemovedSignal;
 
   /// 手机端 keep-alive 时：进会话隐藏列表为 false，返回后为 true，用于恢复滚动。
+  final ValueListenable<int>? scrollToUnreadSignal;
   final bool listVisible;
 
   @override
@@ -342,6 +345,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
     widget.notificationsReadSignal?.addListener(_onNotificationsReadSignal);
     widget.memberSettingsSignal?.addListener(_onMemberSettingsSignal);
     widget.conversationRemovedSignal?.addListener(_onConversationRemovedSignal);
+    widget.scrollToUnreadSignal?.addListener(_onCommTabRetap);
     final cached = ConversationInboxCache.instance.peek(widget.session.userId);
     if (cached != null) {
       _items = cached.conversations;
@@ -370,6 +374,40 @@ class _NativeConversationPageState extends State<NativeConversationPage>
     ConversationInboxCache.instance.saveScrollOffset(
       userId: widget.session.userId,
       offset: _listScrollController.offset,
+    );
+  }
+
+  void _onCommTabRetap() {
+    if (!mounted || !_listScrollController.hasClients) return;
+    final pos = _listScrollController.position;
+    final max = pos.maxScrollExtent;
+    if (max <= 0) return;
+
+    // 优先定位下一条未读会话，已过最后一条未读或无未读时平滑滚回顶部。
+    final unreadIndices = <int>[];
+    for (var i = 0; i < _items.length; i++) {
+      if (_isConvUnreadForFilter(_items[i])) unreadIndices.add(i);
+    }
+    const estimatedRowHeight = 72.0;
+    double target = 0.0;
+    if (unreadIndices.isNotEmpty) {
+      final currentRow = (pos.pixels / estimatedRowHeight).floor();
+      final nextIdx = unreadIndices.firstWhere(
+        (idx) => idx > currentRow,
+        orElse: () => -1,
+      );
+      if (nextIdx >= 0) {
+        target = (nextIdx * estimatedRowHeight).clamp(0.0, max);
+      }
+    }
+    if ((pos.pixels - target).abs() < 4) return;
+    HapticFeedback.selectionClick();
+    unawaited(
+      _listScrollController.animateTo(
+        target,
+        duration: const Duration(milliseconds: 280),
+        curve: Curves.easeOutCubic,
+      ),
     );
   }
 
@@ -454,6 +492,10 @@ class _NativeConversationPageState extends State<NativeConversationPage>
       widget.conversationRemovedSignal?.addListener(
         _onConversationRemovedSignal,
       );
+    }
+    if (oldWidget.scrollToUnreadSignal != widget.scrollToUnreadSignal) {
+      oldWidget.scrollToUnreadSignal?.removeListener(_onCommTabRetap);
+      widget.scrollToUnreadSignal?.addListener(_onCommTabRetap);
     }
     final selected = widget.selectedConversationId ?? 0;
     final prev = oldWidget.selectedConversationId ?? 0;
@@ -999,6 +1041,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
     _rtSub?.cancel();
     _onlineSub?.cancel();
     _listScrollController.removeListener(_onListScroll);
+    widget.scrollToUnreadSignal?.removeListener(_onCommTabRetap);
     _listScrollController.dispose();
     _searchController.dispose();
     _swipeGroup.dispose();

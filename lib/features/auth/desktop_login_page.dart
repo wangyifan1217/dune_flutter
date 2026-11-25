@@ -44,49 +44,268 @@ class _DesktopLoginPageState extends State<DesktopLoginPage> {
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final wide = screenWidth >= 820;
+
+    final loginCard = AuthEntranceSlide(
+      delayMs: wide ? 90 : 70,
+      child: AuthFormCard(
+        padding: const EdgeInsets.fromLTRB(26, 26, 26, 24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (!wide) ...[
+              const AuthAppLogo(size: 74),
+              const SizedBox(height: 14),
+              Text(
+                '沙丘 · 桌面端',
+                textAlign: TextAlign.center,
+                style: DunesTypography.sans(
+                  fontSize: 25,
+                  fontWeight: FontWeight.w800,
+                  color: DunesColors.resolve(context, DunesColors.text),
+                  letterSpacing: 0.2,
+                  context: context,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                '使用手机号或 App 扫码登录',
+                textAlign: TextAlign.center,
+                style: DunesTypography.sans(
+                  fontSize: 13,
+                  color: DunesColors.resolve(context, DunesColors.text3),
+                  height: 1.5,
+                  context: context,
+                ),
+              ),
+              const SizedBox(height: 22),
+            ] else ...[
+              Text(
+                '登录沙丘工作台',
+                style: DunesTypography.sans(
+                  fontSize: 21,
+                  fontWeight: FontWeight.w700,
+                  color: DunesColors.resolve(context, DunesColors.text),
+                  letterSpacing: -0.3,
+                  context: context,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '支持 App 扫码极速登录或短信验证码登录',
+                style: DunesTypography.sans(
+                  fontSize: 12.5,
+                  color: DunesColors.resolve(context, DunesColors.text3),
+                  context: context,
+                ),
+              ),
+              const SizedBox(height: 20),
+            ],
+            _ModeTabs(mode: _mode, onChanged: (m) => setState(() => _mode = m)),
+            const SizedBox(height: 22),
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 200),
+              switchInCurve: Curves.easeOutCubic,
+              switchOutCurve: Curves.easeInCubic,
+              child: _mode == 'qr'
+                  ? KeyedSubtree(
+                      key: const ValueKey('desktop-qr'),
+                      child: _DesktopQrLoginPane(
+                        auth: widget.auth,
+                        onSignedIn: widget.onSignedIn,
+                      ),
+                    )
+                  : KeyedSubtree(
+                      key: const ValueKey('desktop-sms'),
+                      child: _DesktopSmsLoginPane(
+                        auth: widget.auth,
+                        onSignedIn: widget.onSignedIn,
+                      ),
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (!wide) {
+      return AuthScaffold(maxWidth: 420, child: loginCard);
+    }
+
     return AuthScaffold(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+      maxWidth: 920,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          const AuthAppLogo(size: 72),
-          const SizedBox(height: 16),
-          Text(
-            '沙丘 · 桌面端',
-            textAlign: TextAlign.center,
-            style: DunesTypography.sans(
-              fontSize: 26,
-              fontWeight: FontWeight.w600,
-              color: DunesColors.resolve(context, DunesColors.text),
-              letterSpacing: -0.02 * 26,
-              context: context,
-            ),
+          const Expanded(
+            flex: 11,
+            child: AuthEntranceSlide(delayMs: 0, child: _DesktopBrandShowcase()),
           ),
-          const SizedBox(height: 8),
-          Text(
-            '使用手机号或 App 扫码登录',
-            textAlign: TextAlign.center,
-            style: DunesTypography.sans(
-              fontSize: 14,
-              color: DunesColors.resolve(context, DunesColors.text3),
-              height: 1.5,
-              context: context,
-            ),
-          ),
-          const SizedBox(height: 28),
-          _ModeTabs(mode: _mode, onChanged: (m) => setState(() => _mode = m)),
-          const SizedBox(height: 24),
-          if (_mode == 'qr')
-            _DesktopQrLoginPane(
-              auth: widget.auth,
-              onSignedIn: widget.onSignedIn,
-            )
-          else
-            _DesktopSmsLoginPane(
-              auth: widget.auth,
-              onSignedIn: widget.onSignedIn,
-            ),
+          const SizedBox(width: 48),
+          SizedBox(width: 400, child: loginCard),
         ],
       ),
+    );
+  }
+}
+
+class _DesktopBrandShowcase extends StatelessWidget {
+  const _DesktopBrandShowcase();
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final accent = isDark ? const Color(0xFFC5B0FF) : DunesColors.brandPurple;
+
+    Widget featureItem({
+      required IconData icon,
+      required String title,
+      required String desc,
+    }) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 16),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(
+                color: accent.withValues(alpha: isDark ? 0.18 : 0.10),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: accent.withValues(alpha: isDark ? 0.28 : 0.16),
+                  width: 0.7,
+                ),
+              ),
+              child: Icon(icon, size: 19, color: accent),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: DunesTypography.sans(
+                      fontSize: 14.5,
+                      fontWeight: FontWeight.w600,
+                      color: DunesColors.resolve(context, DunesColors.text),
+                      context: context,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    desc,
+                    style: DunesTypography.sans(
+                      fontSize: 12.5,
+                      color: DunesColors.resolve(context, DunesColors.text3),
+                      height: 1.45,
+                      context: context,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          children: [
+            const AuthAppLogo(size: 68),
+            const SizedBox(width: 18),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text(
+                      '沙丘',
+                      style: DunesTypography.sans(
+                        fontSize: 34,
+                        fontWeight: FontWeight.w800,
+                        color: DunesColors.resolve(context, DunesColors.text),
+                        letterSpacing: 0.8,
+                        context: context,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 9,
+                        vertical: 3.5,
+                      ),
+                      decoration: BoxDecoration(
+                        color: accent.withValues(alpha: isDark ? 0.18 : 0.11),
+                        borderRadius: BorderRadius.circular(999),
+                        border: Border.all(
+                          color: accent.withValues(alpha: isDark ? 0.34 : 0.22),
+                          width: 0.7,
+                        ),
+                      ),
+                      child: Text(
+                        'DESKTOP',
+                        style: DunesTypography.sans(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w700,
+                          color: accent,
+                          letterSpacing: 1.6,
+                          context: context,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'DUNES ENTERPRISE WORKSPACE',
+                  style: DunesTypography.sans(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: DunesColors.resolve(context, DunesColors.text3),
+                    letterSpacing: 1.8,
+                    context: context,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+        const SizedBox(height: 28),
+        Text(
+          '高效协作，从容掌控每一件事',
+          style: DunesTypography.sans(
+            fontSize: 22,
+            fontWeight: FontWeight.w700,
+            color: DunesColors.resolve(context, DunesColors.text),
+            height: 1.35,
+            context: context,
+          ),
+        ),
+        const SizedBox(height: 24),
+        featureItem(
+          icon: Icons.forum_outlined,
+          title: '即时通讯 · 多端同步',
+          desc: '私聊、工作群、消息引用与文件传输无缝衔接',
+        ),
+        featureItem(
+          icon: Icons.fact_check_outlined,
+          title: '智能审批 · 任务闭环',
+          desc: '待办实时推送，审批流转与经营数据一目了然',
+        ),
+        featureItem(
+          icon: Icons.auto_awesome_outlined,
+          title: '小饕 AI · 全能协作伙伴',
+          desc: '知识库检索、会议纪要提炼与业务数据随时问',
+        ),
+      ],
     );
   }
 }
@@ -99,32 +318,43 @@ class _ModeTabs extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final accent = isDark ? const Color(0xFF8C6CE6) : DunesColors.brandPurple;
+
     Widget tab(String id, String label) {
       final selected = mode == id;
       return Expanded(
         child: InkWell(
-          onTap: () => onChanged(id),
-          borderRadius: BorderRadius.circular(10),
-          child: Container(
+          onTap: () {
+            HapticFeedback.selectionClick();
+            onChanged(id);
+          },
+          borderRadius: BorderRadius.circular(11),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOutCubic,
             height: 40,
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              color: selected
-                  ? DunesColors.resolve(
-                      context,
-                      const Color(0xFF1A6FDB),
-                      role: DunesColorRole.surface,
-                    )
-                  : Colors.transparent,
-              borderRadius: BorderRadius.circular(10),
+              color: selected ? accent : Colors.transparent,
+              borderRadius: BorderRadius.circular(11),
+              boxShadow: selected
+                  ? [
+                      BoxShadow(
+                        color: accent.withValues(alpha: 0.28),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ]
+                  : null,
             ),
             child: Text(
               label,
               style: DunesTypography.sans(
-                fontSize: 14,
+                fontSize: 13.5,
                 fontWeight: FontWeight.w600,
                 color: selected
-                    ? DunesColors.resolve(context, Colors.white)
+                    ? Colors.white
                     : DunesColors.resolve(context, DunesColors.text2),
                 context: context,
               ),
@@ -137,12 +367,16 @@ class _ModeTabs extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
-        color: DunesColors.resolve(
-          context,
-          const Color(0xFFF0EEE8),
-          role: DunesColorRole.surface,
+        color: isDark
+            ? Colors.white.withValues(alpha: 0.06)
+            : const Color(0xFFF1EEF8),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.08)
+              : const Color(0xFFE5DFF4),
+          width: 0.7,
         ),
-        borderRadius: BorderRadius.circular(12),
       ),
       child: Row(children: [tab('qr', 'App 扫码登录'), tab('sms', '手机号登录')]),
     );
@@ -161,6 +395,7 @@ class _DesktopSmsLoginPane extends StatefulWidget {
 
 class _DesktopSmsLoginPaneState extends State<_DesktopSmsLoginPane> {
   final _phone = TextEditingController();
+  bool _submitting = false;
   String? _error;
 
   @override
@@ -170,15 +405,21 @@ class _DesktopSmsLoginPaneState extends State<_DesktopSmsLoginPane> {
   }
 
   void _next() {
+    if (_submitting) return;
     final phone = _phone.text.trim();
     if (!RegExp(r'^\d{11}$').hasMatch(phone)) {
       setState(() => _error = '请输入 11 位手机号');
       return;
     }
+    setState(() {
+      _submitting = true;
+      _error = null;
+    });
     widget.auth
         .requestSmsCode(phone: phone)
         .then((_) {
           if (!mounted) return;
+          setState(() => _submitting = false);
           Navigator.of(context).push(
             MaterialPageRoute<void>(
               builder: (_) => _DesktopCodeStep(
@@ -192,6 +433,7 @@ class _DesktopSmsLoginPaneState extends State<_DesktopSmsLoginPane> {
         .catchError((e) {
           if (!mounted) return;
           setState(() {
+            _submitting = false;
             _error = e is AuthException
                 ? e.message
                 : '网络异常，请确认网关 ${widget.auth.apiBase} 可访问';
@@ -212,34 +454,34 @@ class _DesktopSmsLoginPaneState extends State<_DesktopSmsLoginPane> {
             LengthLimitingTextInputFormatter(11),
           ],
           style: DunesTypography.sans(
-            fontSize: 18,
+            fontSize: 17,
             fontWeight: FontWeight.w500,
             color: DunesColors.resolve(context, DunesColors.text),
-            letterSpacing: 1.2,
+            letterSpacing: 1.0,
             context: context,
           ),
-          decoration: authInputDecoration(hintText: '请输入手机号', errorText: _error)
-              .copyWith(
-                prefixIcon: const AuthPhonePrefix(),
-                prefixIconConstraints: const BoxConstraints(
-                  minWidth: 0,
-                  minHeight: 0,
-                ),
-                contentPadding: const EdgeInsets.fromLTRB(0, 16, 16, 16),
-              ),
+          decoration: authInputDecoration(
+            context: context,
+            hintText: '请输入手机号',
+            errorText: _error,
+          ).copyWith(
+            prefixIcon: const AuthPhonePrefix(),
+            prefixIconConstraints: const BoxConstraints(
+              minWidth: 0,
+              minHeight: 0,
+            ),
+            contentPadding: const EdgeInsets.fromLTRB(0, 15, 16, 15),
+          ),
           onChanged: (_) {
             if (_error != null) setState(() => _error = null);
           },
           onSubmitted: (_) => _next(),
         ),
-        const SizedBox(height: 24),
-        SizedBox(
-          height: 50,
-          child: FilledButton(
-            onPressed: _next,
-            style: authPrimaryButtonStyle,
-            child: const Text('获取验证码'),
-          ),
+        const SizedBox(height: 22),
+        AuthPrimaryButton(
+          label: '获取验证码',
+          loading: _submitting,
+          onPressed: _next,
         ),
       ],
     );

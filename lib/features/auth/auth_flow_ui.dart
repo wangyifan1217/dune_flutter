@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -5,46 +7,266 @@ import '../../core/theme/dunes_theme.dart';
 
 const authBlue = DunesColors.brandPurple;
 const authBlueDeep = DunesColors.brandPurpleDeep;
-const authBg = Color(0xFFF5F5F7);
+const authBg = Color(0xFFF4F2FA);
 const authSurface = Colors.white;
 
 class AuthScaffold extends StatelessWidget {
-  const AuthScaffold({super.key, required this.child, this.showLogo = true});
+  const AuthScaffold({
+    super.key,
+    required this.child,
+    this.showLogo = true,
+    this.maxWidth = 420,
+  });
 
   final Widget child;
   final bool showLogo;
+  final double maxWidth;
 
   @override
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.viewPaddingOf(context).bottom;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
-      backgroundColor: DunesColors.resolve(
-        context,
-        authBg,
-        role: DunesColorRole.surface,
-      ),
-      body: SafeArea(
-        child: GestureDetector(
-          behavior: HitTestBehavior.translucent,
-          onTap: () => FocusScope.of(context).unfocus(),
-          child: Center(
-            child: SingleChildScrollView(
-              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-              padding: EdgeInsets.fromLTRB(
-                32,
-                showLogo ? 48 : 24,
-                32,
-                24 + bottomInset,
-              ),
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 400),
-                child: child,
+      backgroundColor: isDark ? const Color(0xFF11101A) : authBg,
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          _AuthAmbientBackdrop(isDark: isDark),
+          SafeArea(
+            child: GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onTap: () => FocusScope.of(context).unfocus(),
+              child: Center(
+                child: SingleChildScrollView(
+                  keyboardDismissBehavior:
+                      ScrollViewKeyboardDismissBehavior.onDrag,
+                  padding: EdgeInsets.fromLTRB(
+                    24,
+                    showLogo ? 36 : 20,
+                    24,
+                    28 + bottomInset,
+                  ),
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(maxWidth: maxWidth),
+                    child: child,
+                  ),
+                ),
               ),
             ),
           ),
-        ),
+        ],
       ),
+    );
+  }
+}
+
+/// 大气氛围背景：品牌紫柔和光晕 + 底部抽象沙丘层叠弧线（自动适配日/夜间）。
+class _AuthAmbientBackdrop extends StatelessWidget {
+  const _AuthAmbientBackdrop({required this.isDark});
+
+  final bool isDark;
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: isDark
+                    ? const [
+                        Color(0xFF151324),
+                        Color(0xFF11101A),
+                        Color(0xFF18152B),
+                      ]
+                    : const [
+                        Color(0xFFF6F3FC),
+                        Color(0xFFF8F7FB),
+                        Color(0xFFEEEAF9),
+                      ],
+              ),
+            ),
+          ),
+          // 右上角主品牌紫光晕
+          Positioned(
+            top: -120,
+            right: -90,
+            child: Container(
+              width: 360,
+              height: 360,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: RadialGradient(
+                  colors: [
+                    (isDark
+                            ? const Color(0xFF7B5CD8)
+                            : const Color(0xFF8C6CE6))
+                        .withValues(alpha: isDark ? 0.28 : 0.20),
+                    Colors.transparent,
+                  ],
+                  stops: const [0.0, 0.72],
+                ),
+              ),
+            ),
+          ),
+          // 左下角淡薰衣草冷光
+          Positioned(
+            bottom: -140,
+            left: -110,
+            child: Container(
+              width: 380,
+              height: 380,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: RadialGradient(
+                  colors: [
+                    (isDark
+                            ? const Color(0xFF4D3B9E)
+                            : const Color(0xFFB39BF5))
+                        .withValues(alpha: isDark ? 0.24 : 0.22),
+                    Colors.transparent,
+                  ],
+                  stops: const [0.0, 0.74],
+                ),
+              ),
+            ),
+          ),
+          // 底部抽象沙丘地平线双层柔弧
+          Positioned.fill(
+            child: CustomPaint(painter: _AuthDuneHorizonPainter(isDark: isDark)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AuthDuneHorizonPainter extends CustomPainter {
+  const _AuthDuneHorizonPainter({required this.isDark});
+
+  final bool isDark;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width;
+    final h = size.height;
+
+    final backPath = Path()
+      ..moveTo(0, h * 0.80)
+      ..cubicTo(w * 0.28, h * 0.72, w * 0.62, h * 0.86, w, h * 0.76)
+      ..lineTo(w, h)
+      ..lineTo(0, h)
+      ..close();
+    final backPaint = Paint()
+      ..shader = LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: isDark
+            ? [
+                const Color(0xFF7B5CD8).withValues(alpha: 0.08),
+                const Color(0xFF7B5CD8).withValues(alpha: 0.02),
+              ]
+            : [
+                const Color(0xFF7B5CD8).withValues(alpha: 0.07),
+                const Color(0xFF7B5CD8).withValues(alpha: 0.015),
+              ],
+      ).createShader(Rect.fromLTWH(0, h * 0.70, w, h * 0.30));
+    canvas.drawPath(backPath, backPaint);
+
+    final frontPath = Path()
+      ..moveTo(0, h * 0.88)
+      ..cubicTo(w * 0.34, h * 0.94, w * 0.68, h * 0.80, w, h * 0.87)
+      ..lineTo(w, h)
+      ..lineTo(0, h)
+      ..close();
+    final frontPaint = Paint()
+      ..shader = LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: isDark
+            ? [
+                const Color(0xFFA285FF).withValues(alpha: 0.09),
+                const Color(0xFF151324).withValues(alpha: 0.0),
+              ]
+            : [
+                const Color(0xFF9374EA).withValues(alpha: 0.08),
+                Colors.white.withValues(alpha: 0.0),
+              ],
+      ).createShader(Rect.fromLTWH(0, h * 0.80, w, h * 0.20));
+    canvas.drawPath(frontPath, frontPaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _AuthDuneHorizonPainter oldDelegate) =>
+      oldDelegate.isDark != isDark;
+}
+
+/// 一次性入场上浮淡入（用于登录页主视觉与卡片错峰入场，遵循系统减弱动画）。
+class AuthEntranceSlide extends StatefulWidget {
+  const AuthEntranceSlide({
+    super.key,
+    required this.child,
+    this.delayMs = 0,
+    this.offsetY = 18,
+  });
+
+  final Widget child;
+  final int delayMs;
+  final double offsetY;
+
+  @override
+  State<AuthEntranceSlide> createState() => _AuthEntranceSlideState();
+}
+
+class _AuthEntranceSlideState extends State<AuthEntranceSlide>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+  late final Animation<double> _anim;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: Duration(milliseconds: 420 + widget.delayMs),
+    );
+    final start = widget.delayMs <= 0
+        ? 0.0
+        : (widget.delayMs / (420 + widget.delayMs)).clamp(0.0, 0.7);
+    _anim = CurvedAnimation(
+      parent: _ctrl,
+      curve: Interval(start, 1.0, curve: Curves.easeOutCubic),
+    );
+    _ctrl.forward();
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (MediaQuery.disableAnimationsOf(context)) return widget.child;
+    return AnimatedBuilder(
+      animation: _anim,
+      child: widget.child,
+      builder: (context, child) {
+        final v = _anim.value;
+        return Opacity(
+          opacity: v.clamp(0.0, 1.0),
+          child: Transform.translate(
+            offset: Offset(0, (1.0 - v) * widget.offsetY),
+            child: child,
+          ),
+        );
+      },
     );
   }
 }
@@ -204,38 +426,71 @@ class AuthBackButton extends StatelessWidget {
 }
 
 class AuthFormCard extends StatelessWidget {
-  const AuthFormCard({super.key, required this.child});
+  const AuthFormCard({
+    super.key,
+    required this.child,
+    this.padding = const EdgeInsets.all(24),
+  });
 
   final Widget child;
+  final EdgeInsetsGeometry padding;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(20),
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return DecoratedBox(
       decoration: BoxDecoration(
-        color: DunesColors.resolve(
-          context,
-          authSurface,
-          role: DunesColorRole.surface,
-        ),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(
-          color: DunesColors.resolve(
-            context,
-            const Color(0xFFE5E5EA),
-            role: DunesColorRole.border,
-          ),
-          width: 0.8,
-        ),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x0A000000),
-            blurRadius: 24,
-            offset: Offset(0, 8),
-          ),
-        ],
+        borderRadius: BorderRadius.circular(28),
+        boxShadow: isDark
+            ? [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.44),
+                  blurRadius: 36,
+                  spreadRadius: -6,
+                  offset: const Offset(0, 18),
+                ),
+                BoxShadow(
+                  color: DunesColors.brandPurple.withValues(alpha: 0.14),
+                  blurRadius: 24,
+                  spreadRadius: -4,
+                  offset: const Offset(0, 4),
+                ),
+              ]
+            : [
+                BoxShadow(
+                  color: const Color(0xFF4A368A).withValues(alpha: 0.11),
+                  blurRadius: 34,
+                  spreadRadius: -6,
+                  offset: const Offset(0, 16),
+                ),
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.04),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
       ),
-      child: child,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(28),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+          child: Container(
+            padding: padding,
+            decoration: BoxDecoration(
+              color: (isDark ? const Color(0xFF201E30) : Colors.white)
+                  .withValues(alpha: isDark ? 0.80 : 0.86),
+              borderRadius: BorderRadius.circular(28),
+              border: Border.all(
+                color: isDark
+                    ? Colors.white.withValues(alpha: 0.12)
+                    : Colors.white.withValues(alpha: 0.92),
+                width: 1.0,
+              ),
+            ),
+            child: child,
+          ),
+        ),
+      ),
     );
   }
 }
@@ -245,10 +500,12 @@ class AuthPrimaryButton extends StatefulWidget {
     super.key,
     required this.label,
     required this.onPressed,
+    this.loading = false,
   });
 
   final String label;
   final VoidCallback? onPressed;
+  final bool loading;
 
   @override
   State<AuthPrimaryButton> createState() => _AuthPrimaryButtonState();
@@ -259,10 +516,10 @@ class _AuthPrimaryButtonState extends State<AuthPrimaryButton> {
 
   @override
   Widget build(BuildContext context) {
-    final enabled = widget.onPressed != null;
+    final enabled = widget.onPressed != null && !widget.loading;
     final purple = DunesColors.resolve(context, DunesColors.brandPurple);
     return Opacity(
-      opacity: enabled ? 1.0 : 0.48,
+      opacity: enabled || widget.loading ? 1.0 : 0.48,
       child: AnimatedScale(
         scale: _pressed && enabled ? 0.97 : 1.0,
         duration: const Duration(milliseconds: 110),
@@ -279,10 +536,11 @@ class _AuthPrimaryButtonState extends State<AuthPrimaryButton> {
                 : null,
             onTapDown: enabled ? (_) => setState(() => _pressed = true) : null,
             onTapUp: enabled ? (_) => setState(() => _pressed = false) : null,
-            onTapCancel:
-                enabled ? () => setState(() => _pressed = false) : null,
+            onTapCancel: enabled
+                ? () => setState(() => _pressed = false)
+                : null,
             child: Ink(
-              height: 50,
+              height: 52,
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topLeft,
@@ -299,27 +557,36 @@ class _AuthPrimaryButtonState extends State<AuthPrimaryButton> {
                   color: Colors.white.withValues(alpha: 0.30),
                   width: 0.7,
                 ),
-                boxShadow: enabled
+                boxShadow: enabled || widget.loading
                     ? [
                         BoxShadow(
-                          color: purple.withValues(alpha: 0.30),
-                          blurRadius: 16,
-                          offset: const Offset(0, 6),
+                          color: purple.withValues(alpha: 0.34),
+                          blurRadius: 18,
+                          offset: const Offset(0, 8),
                         ),
                       ]
                     : null,
               ),
               child: Center(
-                child: Text(
-                  widget.label,
-                  style: DunesTypography.sans(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white,
-                    letterSpacing: -0.2,
-                    context: context,
-                  ),
-                ),
+                child: widget.loading
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : Text(
+                        widget.label,
+                        style: DunesTypography.sans(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
+                          letterSpacing: 0.2,
+                          context: context,
+                        ),
+                      ),
               ),
             ),
           ),

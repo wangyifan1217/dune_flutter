@@ -14,11 +14,14 @@ OverlayEntry? _activeDunesToast;
 /// 常驻可点击通知条（顶部横幅）。用独立槽位，与底部短暂 Toast 互不抢占。
 OverlayEntry? _activeDunesActionToast;
 
+/// 后台上传/同步实时进度灵动岛（独立槽位）。
+OverlayEntry? _activeDunesProgressIsland;
+
 bool dunesToastLooksLikeError(String message) {
   return RegExp(r'失败|无法|错误|无效|不能|为空|缺少|未就绪|不支持|未允许').hasMatch(message);
 }
 
-/// 对齐 WebView `.dunes-app-toast`：默认底部居中；可传 [alignment] 改到屏幕中央。
+/// APP 端统一以顶部「灵动岛」形态展示；PC 端保留原有位置与样式。
 void showDunesToast(
   BuildContext context,
   String message, {
@@ -33,20 +36,25 @@ void showDunesToast(
   _activeDunesToast = null;
 
   late OverlayEntry entry;
-  entry = OverlayEntry(
-    builder: (ctx) =>
-        _DunesToastOverlay(message: message, kind: kind, alignment: alignment),
-  );
-
-  _activeDunesToast = entry;
-  overlay.insert(entry);
-
-  Future<void>.delayed(duration, () {
+  void removeEntry() {
     if (_activeDunesToast == entry) {
       entry.remove();
       _activeDunesToast = null;
     }
-  });
+  }
+
+  entry = OverlayEntry(
+    builder: (ctx) => _DunesToastOverlay(
+      message: message,
+      kind: kind,
+      alignment: alignment,
+      duration: duration,
+      onRemove: removeEntry,
+    ),
+  );
+
+  _activeDunesToast = entry;
+  overlay.insert(entry);
 }
 
 void showDunesSoonToast(BuildContext context, [String message = '敬请期待']) {
@@ -123,15 +131,55 @@ void dismissDunesActionToast() {
   _activeDunesActionToast = null;
 }
 
+/// 展示后台任务（文件/录音/知识库上传等）实时进度灵动岛（仅 APP 端生效）。
+void showDunesProgressIsland(
+  BuildContext context, {
+  required String title,
+  double? progress,
+}) {
+  if (isDesktopCommOnly) return;
+  final overlay = Overlay.maybeOf(context, rootOverlay: true);
+  if (overlay == null) return;
+
+  _activeDunesProgressIsland?.remove();
+  _activeDunesProgressIsland = null;
+
+  late OverlayEntry entry;
+  entry = OverlayEntry(
+    builder: (ctx) => _DunesProgressIslandOverlay(
+      title: title,
+      progress: progress,
+      onDismiss: () {
+        if (_activeDunesProgressIsland == entry) {
+          entry.remove();
+          _activeDunesProgressIsland = null;
+        }
+      },
+    ),
+  );
+  _activeDunesProgressIsland = entry;
+  overlay.insert(entry);
+}
+
+/// 关闭后台进度灵动岛。
+void dismissDunesProgressIsland() {
+  _activeDunesProgressIsland?.remove();
+  _activeDunesProgressIsland = null;
+}
+
 class _DunesToastOverlay extends StatefulWidget {
   const _DunesToastOverlay({
     required this.message,
     required this.kind,
+    required this.duration,
+    required this.onRemove,
     this.alignment = Alignment.bottomCenter,
   });
 
   final String message;
   final DunesToastKind kind;
+  final Duration duration;
+  final VoidCallback onRemove;
   final Alignment alignment;
 
   @override
@@ -142,38 +190,53 @@ class _DunesToastOverlayState extends State<_DunesToastOverlay>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 260),
-  )..forward();
+    duration: const Duration(milliseconds: 340),
+    reverseDuration: const Duration(milliseconds: 210),
+  );
 
   late final Animation<double> _fade = CurvedAnimation(
     parent: _controller,
-    curve: Curves.easeOut,
+    curve: const Interval(0.0, 0.65, curve: Curves.easeOut),
+    reverseCurve: Curves.easeIn,
   );
 
-  late final Animation<double> _scale = CurvedAnimation(
+  late final Animation<double> _expand = CurvedAnimation(
     parent: _controller,
     curve: Curves.easeOutBack,
+    reverseCurve: Curves.easeInCubic,
   );
 
-  bool get _isCenter => widget.alignment == Alignment.center;
+  Timer? _dismissTimer;
+  bool _closing = false;
 
-  late final Animation<Offset> _slide = Tween<Offset>(
-    begin: _isCenter ? const Offset(0, 0.06) : const Offset(0, -0.35),
-    end: Offset.zero,
-  ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic));
+  bool get _useDynamicIsland => !isDesktopCommOnly;
+  bool get _isCenter => isDesktopCommOnly && widget.alignment == Alignment.center;
 
   @override
   void initState() {
     super.initState();
+    _controller.forward();
     if (widget.kind == DunesToastKind.error) {
       HapticFeedback.heavyImpact();
     } else {
       HapticFeedback.lightImpact();
     }
+    _dismissTimer = Timer(widget.duration, _dismiss);
+  }
+
+  Future<void> _dismiss() async {
+    if (_closing) return;
+    _closing = true;
+    _dismissTimer?.cancel();
+    try {
+      if (mounted) await _controller.reverse();
+    } catch (_) {}
+    if (mounted) widget.onRemove();
   }
 
   @override
   void dispose() {
+    _dismissTimer?.cancel();
     _controller.dispose();
     super.dispose();
   }
@@ -188,17 +251,104 @@ class _DunesToastOverlayState extends State<_DunesToastOverlay>
   }
 
   Color _iconColor() {
-    if (widget.kind == DunesToastKind.error) return const Color(0xFFFF6961);
+    if (widget.kind == DunesToastKind.error) return const Color(0xFFFF5B61);
     final msg = widget.message;
     if (RegExp(r'已|成功|完成|通过|同步|刷新|复制|保存').hasMatch(msg)) {
       return const Color(0xFF34C759);
     }
-    return const Color(0xFFB9A8EC);
+    return const Color(0xFFB69BFF);
   }
 
   @override
   Widget build(BuildContext context) {
     final topInset = MediaQuery.paddingOf(context).top;
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    final iconColor = _iconColor();
+    final isError = widget.kind == DunesToastKind.error;
+
+    if (_useDynamicIsland) {
+      final islandTop = topInset > 14 ? topInset - 2.0 : 10.0;
+      return Positioned(
+        top: islandTop,
+        left: 16,
+        right: 16,
+        child: Align(
+          alignment: Alignment.topCenter,
+          child: GestureDetector(
+            onVerticalDragEnd: (details) {
+              if ((details.primaryVelocity ?? 0) < -120) {
+                unawaited(_dismiss());
+              }
+            },
+            child: AnimatedBuilder(
+              animation: _controller,
+              builder: (context, child) {
+                if (reduceMotion) return child!;
+                final t = _expand.value;
+                final sx = (0.48 + t * 0.52).clamp(0.45, 1.06);
+                final sy = (0.76 + t * 0.24).clamp(0.72, 1.04);
+                final dy = (1.0 - t.clamp(0.0, 1.0)) * -18.0;
+                return Opacity(
+                  opacity: _fade.value.clamp(0.0, 1.0),
+                  child: Transform.translate(
+                    offset: Offset(0, dy),
+                    child: Transform(
+                      alignment: Alignment.topCenter,
+                      transform: Matrix4.diagonal3Values(sx, sy, 1.0),
+                      child: child,
+                    ),
+                  ),
+                );
+              },
+              child: _DynamicIslandShell(
+                borderRadius: 999,
+                accentColor: iconColor,
+                isError: isError,
+                padding: const EdgeInsets.fromLTRB(10, 8, 15, 8),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(
+                    minHeight: 24,
+                    maxWidth: 320,
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 24,
+                        height: 24,
+                        decoration: BoxDecoration(
+                          color: iconColor.withValues(alpha: 0.18),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(_toastIcon(), size: 15, color: iconColor),
+                      ),
+                      const SizedBox(width: 9),
+                      Flexible(
+                        child: Text(
+                          widget.message,
+                          textAlign: TextAlign.left,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 13,
+                            height: 1.32,
+                            fontWeight: FontWeight.w500,
+                            letterSpacing: -0.1,
+                            decoration: TextDecoration.none,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
     final effectiveAlignment = _isCenter
         ? Alignment.center
         : Alignment.topCenter;
@@ -213,70 +363,199 @@ class _DunesToastOverlayState extends State<_DunesToastOverlay>
                 : EdgeInsets.fromLTRB(20, topInset + 10, 20, 0),
             child: FadeTransition(
               opacity: _fade,
-              child: SlideTransition(
-                position: _slide,
-                child: ScaleTransition(
-                  scale: _scale,
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(999),
-                    child: BackdropFilter(
-                      filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-                      child: Material(
-                        color: Colors.transparent,
-                        child: Container(
-                          constraints: const BoxConstraints(maxWidth: 320),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 9,
+              child: ScaleTransition(
+                scale: Tween<double>(begin: 0.92, end: 1.0).animate(_expand),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(999),
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                    child: Material(
+                      color: Colors.transparent,
+                      child: Container(
+                        constraints: const BoxConstraints(maxWidth: 320),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 9,
+                        ),
+                        decoration: BoxDecoration(
+                          color: isError
+                              ? const Color(0xEB9E2A22)
+                              : const Color(0xEB1C1C1E),
+                          borderRadius: BorderRadius.circular(999),
+                          border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.14),
+                            width: 0.7,
                           ),
-                          decoration: BoxDecoration(
-                            color: widget.kind == DunesToastKind.error
-                                ? const Color(0xEB9E2A22)
-                                : const Color(0xEB1C1C1E),
-                            borderRadius: BorderRadius.circular(999),
-                            border: Border.all(
-                              color: Colors.white.withValues(alpha: 0.14),
-                              width: 0.7,
+                          boxShadow: const [
+                            BoxShadow(
+                              color: Color(0x38000000),
+                              blurRadius: 22,
+                              offset: Offset(0, 8),
                             ),
-                            boxShadow: const [
-                              BoxShadow(
-                                color: Color(0x38000000),
-                                blurRadius: 22,
-                                offset: Offset(0, 8),
-                              ),
-                            ],
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                _toastIcon(),
-                                size: 16,
-                                color: _iconColor(),
-                              ),
-                              const SizedBox(width: 7),
-                              Flexible(
-                                child: Text(
-                                  widget.message,
-                                  textAlign: TextAlign.center,
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 12.5,
-                                    height: 1.35,
-                                    fontWeight: FontWeight.w500,
-                                    letterSpacing: -0.1,
-                                  ),
+                          ],
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(_toastIcon(), size: 16, color: iconColor),
+                            const SizedBox(width: 7),
+                            Flexible(
+                              child: Text(
+                                widget.message,
+                                textAlign: TextAlign.center,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 12.5,
+                                  height: 1.35,
+                                  fontWeight: FontWeight.w500,
+                                  letterSpacing: -0.1,
                                 ),
                               ),
-                            ],
-                          ),
+                            ),
+                          ],
                         ),
                       ),
                     ),
                   ),
                 ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 灵动岛曜石黑高光胶囊外壳（供普通提示、操作通知岛与结果反馈岛共用）。
+class _DynamicIslandShell extends StatelessWidget {
+  const _DynamicIslandShell({
+    required this.child,
+    required this.borderRadius,
+    required this.accentColor,
+    required this.isError,
+    required this.padding,
+  });
+
+  final Widget child;
+  final double borderRadius;
+  final Color accentColor;
+  final bool isError;
+  final EdgeInsetsGeometry padding;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(borderRadius),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.42),
+            blurRadius: 24,
+            spreadRadius: -4,
+            offset: const Offset(0, 10),
+          ),
+          BoxShadow(
+            color: accentColor.withValues(alpha: isError ? 0.28 : 0.18),
+            blurRadius: 18,
+            spreadRadius: -6,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(borderRadius),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 22, sigmaY: 22),
+          child: Material(
+            color: Colors.transparent,
+            child: Container(
+              padding: padding,
+              decoration: BoxDecoration(
+                color: isError
+                    ? const Color(0xF5210D0E)
+                    : const Color(0xF50B0B10),
+                borderRadius: BorderRadius.circular(borderRadius),
+                border: Border.all(
+                  color: isError
+                      ? accentColor.withValues(alpha: 0.36)
+                      : Colors.white.withValues(alpha: 0.13),
+                  width: 0.75,
+                ),
+              ),
+              child: child,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DunesProgressIslandOverlay extends StatelessWidget {
+  const _DunesProgressIslandOverlay({
+    required this.title,
+    required this.progress,
+    required this.onDismiss,
+  });
+
+  final String title;
+  final double? progress;
+  final VoidCallback onDismiss;
+
+  @override
+  Widget build(BuildContext context) {
+    final topInset = MediaQuery.paddingOf(context).top;
+    final islandTop = topInset > 14 ? topInset - 2.0 : 10.0;
+    const accent = Color(0xFFB69BFF);
+
+    return Positioned(
+      top: islandTop,
+      left: 20,
+      right: 20,
+      child: Align(
+        alignment: Alignment.topCenter,
+        child: GestureDetector(
+          onVerticalDragEnd: (details) {
+            if ((details.primaryVelocity ?? 0) < -120) onDismiss();
+          },
+          child: _DynamicIslandShell(
+            borderRadius: 999,
+            accentColor: accent,
+            isError: false,
+            padding: const EdgeInsets.fromLTRB(10, 8, 16, 8),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 300),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      value: progress,
+                      strokeWidth: 2.2,
+                      color: accent,
+                      backgroundColor: Colors.white.withValues(alpha: 0.14),
+                    ),
+                  ),
+                  const SizedBox(width: 9),
+                  Flexible(
+                    child: Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w500,
+                        decoration: TextDecoration.none,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -411,105 +690,118 @@ class _DunesActionToastOverlayState extends State<_DunesActionToastOverlay>
     }
     final topInset = MediaQuery.paddingOf(context).top;
     final isError = widget.kind == DunesToastKind.error;
-    final bg = isError
-        ? DunesColors.resolve(
-            context,
-            const Color(0xF0B43228),
-            role: DunesColorRole.surface,
-          )
-        : DunesColors.resolve(
-            context,
-            const Color(0xF21D2024),
-            role: DunesColorRole.surface,
-          );
+    final accentColor = isError
+        ? const Color(0xFFFF5B61)
+        : const Color(0xFFB69BFF);
+    final islandTop = topInset > 14 ? topInset - 2.0 : 10.0;
+
     return Positioned(
-      top: topInset + 10,
-      left: 16,
-      right: 16,
-      child: FadeTransition(
-        opacity: _fade,
-        child: SlideTransition(
-          position: _slide,
-          child: Material(
-            color: Colors.transparent,
-            child: InkWell(
-              borderRadius: BorderRadius.circular(12),
-              onTap: () => _close(act: true),
-              child: Container(
-                padding: const EdgeInsets.fromLTRB(14, 11, 8, 11),
-                decoration: BoxDecoration(
-                  color: DunesColors.resolveNullable(
-                    context,
-                    bg,
-                    role: DunesColorRole.surface,
+      top: islandTop,
+      left: 14,
+      right: 14,
+      child: Align(
+        alignment: Alignment.topCenter,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 400),
+          child: GestureDetector(
+            onVerticalDragEnd: (details) {
+              if ((details.primaryVelocity ?? 0) < -120) {
+                unawaited(_close(act: false));
+              }
+            },
+            child: FadeTransition(
+              opacity: _fade,
+              child: SlideTransition(
+                position: _slide,
+                child: ScaleTransition(
+                  scale: Tween<double>(begin: 0.88, end: 1.0).animate(
+                    CurvedAnimation(
+                      parent: _controller,
+                      curve: Curves.easeOutBack,
+                    ),
                   ),
-                  borderRadius: BorderRadius.circular(12),
-                  boxShadow: const [
-                    BoxShadow(
-                      color: Color(0x40000000),
-                      blurRadius: 18,
-                      offset: Offset(0, 8),
-                    ),
-                  ],
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      widget.icon,
-                      color: DunesColors.resolve(context, Colors.white),
-                      size: 18,
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        widget.message,
-                        style: TextStyle(
-                          color: DunesColors.resolve(context, Colors.white),
-                          fontSize: 13,
-                          height: 1.4,
-                          fontWeight: FontWeight.w500,
-                        ),
+                  child: _DynamicIslandShell(
+                    borderRadius: 26,
+                    accentColor: accentColor,
+                    isError: isError,
+                    padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(22),
+                      onTap: () {
+                        HapticFeedback.selectionClick();
+                        unawaited(_close(act: true));
+                      },
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 30,
+                            height: 30,
+                            decoration: BoxDecoration(
+                              color: accentColor.withValues(alpha: 0.18),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              widget.icon,
+                              color: accentColor,
+                              size: 17,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              widget.message,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 13,
+                                height: 1.35,
+                                fontWeight: FontWeight.w500,
+                                decoration: TextDecoration.none,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 11,
+                              vertical: 5.5,
+                            ),
+                            decoration: BoxDecoration(
+                              color: isError
+                                  ? accentColor.withValues(alpha: 0.24)
+                                  : DunesColors.brandPurple.withValues(
+                                      alpha: 0.88,
+                                    ),
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            child: Text(
+                              widget.actionLabel,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                decoration: TextDecoration.none,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 2),
+                          IconButton(
+                            onPressed: () => unawaited(_close(act: false)),
+                            visualDensity: VisualDensity.compact,
+                            padding: const EdgeInsets.all(4),
+                            constraints: const BoxConstraints(),
+                            iconSize: 17,
+                            splashRadius: 16,
+                            icon: Icon(
+                              Icons.close_rounded,
+                              color: Colors.white.withValues(alpha: 0.68),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 5,
-                      ),
-                      decoration: BoxDecoration(
-                        color: DunesColors.resolve(
-                          context,
-                          Colors.white,
-                          role: DunesColorRole.surface,
-                        ).withOpacity(0.16),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        widget.actionLabel,
-                        style: TextStyle(
-                          color: DunesColors.resolve(context, Colors.white),
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                    IconButton(
-                      onPressed: () => _close(act: false),
-                      visualDensity: VisualDensity.compact,
-                      padding: const EdgeInsets.all(4),
-                      constraints: const BoxConstraints(),
-                      iconSize: 18,
-                      splashRadius: 18,
-                      icon: Icon(
-                        Icons.close_rounded,
-                        color: DunesColors.resolveNullable(
-                          context,
-                          Color(0xCCFFFFFF),
-                        ),
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
               ),
             ),

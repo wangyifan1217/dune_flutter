@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../core/theme/dunes_theme.dart';
 import '../chat/user_avatar_widget.dart';
@@ -484,7 +485,10 @@ class _DeptBlockTileState extends State<DeptBlockTile> {
         Material(
           color: Colors.transparent,
           child: InkWell(
-            onTap: () => setState(() => _expanded = !_expanded),
+            onTap: () {
+              HapticFeedback.selectionClick();
+              setState(() => _expanded = !_expanded);
+            },
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
               child: Row(
@@ -544,69 +548,77 @@ class _DeptBlockTileState extends State<DeptBlockTile> {
             ),
           ),
         ),
-        if (_expanded) ...[
-          Container(
-            margin: const EdgeInsets.fromLTRB(14, 0, 14, 8),
-            decoration: BoxDecoration(
-              color: DunesColors.resolve(
-                context,
-                const Color(0xFFF8F7FB),
-                role: DunesColorRole.surface,
-              ),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Column(
-              children: [
-                for (var i = 0; i < dep.users.length; i++) ...[
-                  if (i > 0)
-                    Divider(
-                      height: 1,
-                      thickness: 1,
-                      indent: 66,
-                      color: DunesColors.resolve(
-                        context,
-                        Color(0xFFEDECF2),
-                        role: DunesColorRole.border,
-                      ),
+        AnimatedSize(
+          duration: MediaQuery.disableAnimationsOf(context)
+              ? Duration.zero
+              : const Duration(milliseconds: 220),
+          curve: Curves.easeOutCubic,
+          alignment: Alignment.topCenter,
+          child: !_expanded
+              ? const SizedBox(width: double.infinity)
+              : Container(
+                  margin: const EdgeInsets.fromLTRB(14, 0, 14, 8),
+                  decoration: BoxDecoration(
+                    color: DunesColors.resolve(
+                      context,
+                      const Color(0xFFF8F7FB),
+                      role: DunesColorRole.surface,
                     ),
-                  ContactRowTile(
-                    contact: dep.users[i],
-                    currentUserId: widget.currentUserId,
-                    showOnline: widget.onlineUsers.contains(
-                      dep.users[i].userId,
-                    ),
-                    imStatus: widget.imStatuses[dep.users[i].userId],
-                    onOpenProfile: () => widget.onOpenContact(dep.users[i]),
-                    onMessage: () => widget.onMessageContact(dep.users[i]),
-                    avatarService: widget.avatarService,
-                    pickMode: widget.pickMode,
-                    selected: widget.selectedUserIds.contains(
-                      dep.users[i].userId,
-                    ),
-                    onToggleSelect: widget.onToggleContact == null
-                        ? null
-                        : () => widget.onToggleContact!(dep.users[i]),
-                    allowSelfInPickMode: widget.allowSelfInPickMode,
+                    borderRadius: BorderRadius.circular(12),
                   ),
-                ],
-                for (final child in dep.children)
-                  DeptBlockTile(
-                    department: child,
-                    currentUserId: widget.currentUserId,
-                    onOpenContact: widget.onOpenContact,
-                    onMessageContact: widget.onMessageContact,
-                    onlineUsers: widget.onlineUsers,
-                    imStatuses: widget.imStatuses,
-                    avatarService: widget.avatarService,
-                    pickMode: widget.pickMode,
-                    selectedUserIds: widget.selectedUserIds,
-                    onToggleContact: widget.onToggleContact,
-                    allowSelfInPickMode: widget.allowSelfInPickMode,
+                  child: Column(
+                    children: [
+                      for (var i = 0; i < dep.users.length; i++) ...[
+                        if (i > 0)
+                          Divider(
+                            height: 1,
+                            thickness: 1,
+                            indent: 66,
+                            color: DunesColors.resolve(
+                              context,
+                              Color(0xFFEDECF2),
+                              role: DunesColorRole.border,
+                            ),
+                          ),
+                        ContactRowTile(
+                          contact: dep.users[i],
+                          currentUserId: widget.currentUserId,
+                          showOnline: widget.onlineUsers.contains(
+                            dep.users[i].userId,
+                          ),
+                          imStatus: widget.imStatuses[dep.users[i].userId],
+                          onOpenProfile: () =>
+                              widget.onOpenContact(dep.users[i]),
+                          onMessage: () => widget.onMessageContact(dep.users[i]),
+                          avatarService: widget.avatarService,
+                          pickMode: widget.pickMode,
+                          selected: widget.selectedUserIds.contains(
+                            dep.users[i].userId,
+                          ),
+                          onToggleSelect: widget.onToggleContact == null
+                              ? null
+                              : () => widget.onToggleContact!(dep.users[i]),
+                          allowSelfInPickMode: widget.allowSelfInPickMode,
+                        ),
+                      ],
+                      for (final child in dep.children)
+                        DeptBlockTile(
+                          department: child,
+                          currentUserId: widget.currentUserId,
+                          onOpenContact: widget.onOpenContact,
+                          onMessageContact: widget.onMessageContact,
+                          onlineUsers: widget.onlineUsers,
+                          imStatuses: widget.imStatuses,
+                          avatarService: widget.avatarService,
+                          pickMode: widget.pickMode,
+                          selectedUserIds: widget.selectedUserIds,
+                          onToggleContact: widget.onToggleContact,
+                          allowSelfInPickMode: widget.allowSelfInPickMode,
+                        ),
+                    ],
                   ),
-              ],
-            ),
-          ),
-        ],
+                ),
+        ),
       ],
     );
   }

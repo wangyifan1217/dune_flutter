@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -8,6 +9,7 @@ import '../nova/nova_background_coordinator.dart';
 import '../../core/navigation/navigation_controller.dart';
 import '../../core/platform/desktop_features.dart';
 import '../../core/theme/dunes_theme.dart';
+import '../../core/widgets/dunes_motion_kit.dart';
 import '../conversation/comm_unread_notifier.dart';
 import '../workbench/workbench_badge_notifier.dart';
 
@@ -27,6 +29,9 @@ const double kDunesAppBottomNavContentGap = 12;
 
 /// APP 金刚位胶囊镜面高光描边宽度。
 const double _kAppTabCapsuleBorderWidth = 1.0;
+
+/// 底部金刚位 / 侧栏未读小红点颜色（与小饕未读红点一致，保证液态玻璃底栏上清晰可见）。
+const Color kDunesTabUnreadDotColor = Color(0xFFFF5B61);
 
 /// PC 端左侧导航栏宽度（Win / macOS）。
 const double kDunesMainSideRailWidth = 64;
@@ -411,55 +416,72 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
             ),
           ];
 
-    return Semantics(
-      button: true,
-      label: 'AI 助手',
-      child: Tooltip(
-        message: 'AI 助手',
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            boxShadow: orbShadows,
-          ),
-          child: CustomPaint(
-            foregroundPainter: _AppAiOrbBorderPainter(isDark: isDark),
-            child: ClipOval(
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 26, sigmaY: 26),
-                child: DecoratedBox(
+    return ListenableBuilder(
+      listenable: NovaBackgroundCoordinator.instance,
+      builder: (context, _) {
+        final unread = NovaBackgroundCoordinator.instance.hasUnreadReply;
+        final thinking = NovaBackgroundCoordinator.instance.isThinking;
+        final reduceMotion = MediaQuery.disableAnimationsOf(context);
+        return Semantics(
+          button: true,
+          label: unread
+              ? 'AI 助手，有未读回复'
+              : thinking
+              ? 'AI 助手，正在生成'
+              : 'AI 助手',
+          child: Tooltip(
+            message: 'AI 助手',
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                DecoratedBox(
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: orbGlassTint,
+                    boxShadow: orbShadows,
                   ),
-                  child: Material(
-                    color: Colors.transparent,
-                    shape: const CircleBorder(),
-                    clipBehavior: Clip.antiAlias,
-                    child: InkWell(
-                      customBorder: const CircleBorder(),
-                      onTap: () {
-                        FocusManager.instance.primaryFocus?.unfocus();
-                        final openAi =
-                            widget.onOpenAi ??
-                            NovaPresenceScope.maybeOf(context)?.open;
-                        if (openAi != null) {
-                          openAi();
-                        } else {
-                          widget.navigation.go('C4');
-                        }
-                      },
-                      child: SizedBox.square(
-                        dimension: kDunesMainTabBarHeight,
-                        child: ExcludeSemantics(
-                          child: Center(
-                            child: ClipOval(
-                              child: Image.asset(
-                                'assets/images/ai_tab_avatar.png',
-                                width: 46,
-                                height: 46,
-                                fit: BoxFit.contain,
-                                filterQuality: FilterQuality.high,
-                                isAntiAlias: true,
+                  child: CustomPaint(
+                    foregroundPainter: _AppAiOrbBorderPainter(isDark: isDark),
+                    child: ClipOval(
+                      child: BackdropFilter(
+                        filter: ImageFilter.blur(sigmaX: 26, sigmaY: 26),
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: orbGlassTint,
+                          ),
+                          child: Material(
+                            color: Colors.transparent,
+                            shape: const CircleBorder(),
+                            clipBehavior: Clip.antiAlias,
+                            child: InkWell(
+                              customBorder: const CircleBorder(),
+                              onTap: () {
+                                FocusManager.instance.primaryFocus?.unfocus();
+                                final openAi =
+                                    widget.onOpenAi ??
+                                    NovaPresenceScope.maybeOf(context)?.open;
+                                if (openAi != null) {
+                                  openAi();
+                                } else {
+                                  widget.navigation.go('C4');
+                                }
+                              },
+                              child: SizedBox.square(
+                                dimension: kDunesMainTabBarHeight,
+                                child: ExcludeSemantics(
+                                  child: Center(
+                                    child: ClipOval(
+                                      child: Image.asset(
+                                        'assets/images/ai_tab_avatar.png',
+                                        width: 46,
+                                        height: 46,
+                                        fit: BoxFit.contain,
+                                        filterQuality: FilterQuality.high,
+                                        isAntiAlias: true,
+                                      ),
+                                    ),
+                                  ),
+                                ),
                               ),
                             ),
                           ),
@@ -468,11 +490,24 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
                     ),
                   ),
                 ),
-              ),
+                if (thinking && !reduceMotion)
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: _AiOrbGeneratingRing(isDark: isDark),
+                    ),
+                  ),
+                if (unread && !thinking)
+                  const Positioned(
+                    key: ValueKey('nova-app-unread-dot'),
+                    top: 1,
+                    right: 1,
+                    child: _UnreadDot(),
+                  ),
+              ],
             ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
@@ -908,7 +943,7 @@ class _AppTabButtonState extends State<_AppTabButton> {
                       ),
                     ),
                     if (widget.showRedDot)
-                      const Positioned(top: -2, right: -4, child: _UnreadDot()),
+                      const Positioned(top: -1, right: 3, child: _UnreadDot()),
                   ],
                 ),
                 const SizedBox(height: 2.5),
@@ -1120,25 +1155,69 @@ class _AppAiOrbBorderPainter extends CustomPainter {
       oldDelegate.isDark != isDark;
 }
 
+/// AI 后台生成中流光旋转环（仅在 isThinking 为 true 时挂载，空闲零帧开销）。
+class _AiOrbGeneratingRing extends StatefulWidget {
+  const _AiOrbGeneratingRing({required this.isDark});
+
+  final bool isDark;
+
+  @override
+  State<_AiOrbGeneratingRing> createState() => _AiOrbGeneratingRingState();
+}
+
+class _AiOrbGeneratingRingState extends State<_AiOrbGeneratingRing>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1800),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, _) {
+        return CustomPaint(
+          painter: DunesGlowRingPainter(
+            angle: _controller.value * math.pi * 2,
+            isDark: widget.isDark,
+            strokeWidth: 2.2,
+          ),
+        );
+      },
+    );
+  }
+}
+
 /// 底部 / 侧栏未读小红点。不用呼吸脉冲：循环动画会拖着整窗按刷新率重画。
 class _UnreadDot extends StatelessWidget {
   const _UnreadDot();
 
   @override
   Widget build(BuildContext context) {
-    final palette =
-        Theme.of(context).extension<DunesPalette>() ?? DunesPalette.day;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
-      width: 9,
-      height: 9,
+      width: 10,
+      height: 10,
       decoration: BoxDecoration(
-        color: DunesColors.resolve(
-          context,
-          DunesColors.coral,
-          role: DunesColorRole.surface,
-        ),
+        color: kDunesTabUnreadDotColor,
         shape: BoxShape.circle,
-        border: Border.all(color: palette.app, width: 2),
+        border: Border.all(
+          color: isDark ? const Color(0xFF232234) : Colors.white,
+          width: 1.5,
+        ),
       ),
     );
   }

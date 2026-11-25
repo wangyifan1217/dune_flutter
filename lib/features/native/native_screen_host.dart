@@ -199,6 +199,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   final WorkbenchBadgeNotifier _workbenchBadge = WorkbenchBadgeNotifier();
   final WorkbenchDataRefreshNotifier _workbenchRefresh =
       WorkbenchDataRefreshNotifier();
+  final ValueNotifier<int> _commTabRetapSignal = ValueNotifier<int>(0);
   int _lastPendingInitiateForMe = 0;
   bool _hasPendingInitiateBaseline = false;
   NativeConversation? _selectedPrivate;
@@ -901,12 +902,14 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     _workbenchBadgeRefreshDebounce?.cancel();
     _commBadgeRtSub?.cancel();
     dismissDunesActionToast();
+    dismissDunesProgressIsland();
     NovaBackgroundCoordinator.instance.removeListener(_onNovaCoordinatorUpdate);
     MeetingUploadCoordinator.instance.removeListener(_onMeetingUploadUpdate);
     KbUploadCoordinator.instance.removeListener(_onKbUploadUpdate);
     _commUnread.dispose();
     _workbenchBadge.dispose();
     _workbenchRefresh.dispose();
+    _commTabRetapSignal.dispose();
     _conversationReadSignal.dispose();
     _notificationsReadSignal.dispose();
     _conversationMemberSettingsSignal.dispose();
@@ -1027,14 +1030,45 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         _commUnread.recordMutedMention(convId);
       }
       if (!isMuted) {
+        // 立刻点亮通讯 Tab 红点，避免在「我的」等板块等 REST 防抖/弱网时漏显；
+        // 后续 _scheduleCommBadgeRefresh 会再与服务端精确校准。
+        _commUnread.bump(1);
         _notifyAndroidPushForEvent(event);
         windowsTrayNotifyIncomingMessage();
+      }
+      if (!isDesktopCommOnly && mentionHit && convId > 0 && mounted) {
+        final conv = _commBadgeConversations[convId];
+        final label = (conv?.title ?? '').trim().isNotEmpty
+            ? '「${conv!.title}」中有人 @了你'
+            : '有新消息 @了你';
+        showDunesActionToast(
+          context,
+          label,
+          actionLabel: '查看',
+          icon: Icons.alternate_email_rounded,
+          duration: const Duration(seconds: 5),
+          onTap: () {
+            if (!mounted) return;
+            if (conv != null) {
+              if (conv.isPrivate) {
+                _openPrivateConversation(conv);
+              } else {
+                _openGroupConversation(conv);
+              }
+            } else {
+              _switchMainTab('C1');
+            }
+          },
+        );
       }
       _scheduleCommBadgeRefresh();
       return;
     }
 
     if (event.type == 'notification') {
+      if (!widget.session.isExternalUser) {
+        _commUnread.bump(1);
+      }
       final kind = (event.raw['kind'] ?? '').toString().toUpperCase();
       if (kind != 'TRAVEL_ISSUE') {
         _notifyAndroidPushForEvent(event);
@@ -1516,8 +1550,20 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     unawaited(_handleNovaCoordinatorBadge(shouldBump: shouldBump && notOnC4));
   }
 
+  void _syncUploadProgressIsland() {
+    if (!mounted || isDesktopCommOnly) return;
+    if (MeetingUploadCoordinator.instance.hasActiveUploads) {
+      showDunesProgressIsland(context, title: '正在后台上传会议录音…');
+    } else if (KbUploadCoordinator.instance.isUploading) {
+      showDunesProgressIsland(context, title: '正在后台上传知识库文档…');
+    } else {
+      dismissDunesProgressIsland();
+    }
+  }
+
   void _onMeetingUploadUpdate() {
     if (!mounted) return;
+    _syncUploadProgressIsland();
     if (widget.navigation.currentScreen == 'B2') {
       setState(() {});
     }
@@ -1525,6 +1571,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
 
   void _onKbUploadUpdate() {
     if (!mounted) return;
+    _syncUploadProgressIsland();
     if (widget.navigation.currentScreen == 'K1') return;
     final toast = KbUploadCoordinator.instance.takeToast();
     if (toast == null) return;
@@ -2680,6 +2727,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       notificationsReadSignal: _notificationsReadSignal,
       memberSettingsSignal: _conversationMemberSettingsSignal,
       conversationRemovedSignal: _conversationRemovedSignal,
+      scrollToUnreadSignal: _commTabRetapSignal,
       listVisible: listVisible,
       onOpenPrivate: _openPrivateConversation,
       onOpenGroup: _openGroupConversation,
@@ -6384,6 +6432,11 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       } else {
         widget.navigation.switchMainTab('QJ');
       }
+      return;
+    }
+
+    if (screen == 'C1' && current == 'C1') {
+      _commTabRetapSignal.value++;
       return;
     }
 

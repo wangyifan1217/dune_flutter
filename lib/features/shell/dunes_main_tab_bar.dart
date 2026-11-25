@@ -25,8 +25,8 @@ const double kDunesAppBottomNavMinGap = 14;
 /// 列表滚到末尾时，在金刚位上方再留出的空隙。
 const double kDunesAppBottomNavContentGap = 12;
 
-/// APP 金刚位胶囊描边宽度。
-const double _kAppTabCapsuleBorderWidth = 1.5;
+/// APP 金刚位胶囊镜面高光描边宽度。
+const double _kAppTabCapsuleBorderWidth = 1.0;
 
 /// PC 端左侧导航栏宽度（Win / macOS）。
 const double kDunesMainSideRailWidth = 64;
@@ -184,6 +184,13 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
     showRedDot: widget.chatOnlyMode ? false : _showMyDot,
   );
 
+  /// 移动端胶囊内可见的主区域 Tab 路由顺序（与 [_tabs] 保持一致）。
+  List<String> get _mobileTabScreens => [
+    'C1',
+    if (!_hideWorkbenchTabs) ...['QJ', 'LH'],
+    'B2',
+  ];
+
   /// 主区域 Tab。
   /// APP 底栏：通讯 · 饕 · 灯塔 · 我的
   /// PC 竖栏：通讯 / 饕 / 灯塔 / 工作台；「我的」单独沉底。
@@ -216,58 +223,194 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
     return _buildBottomBar();
   }
 
-  /// 移动端悬浮底栏：仅导航胶囊使用毛玻璃。
+  /// 移动端悬浮底栏（方案 A · Apple Liquid Glass）：
+  /// 底部柔雾渐隐衬底 + 镜面高光玻璃胶囊 + 弹性滑动玻璃药丸 + 同质感 AI 玻璃球。
   Widget _buildBottomBar() {
-    return SafeArea(
-      top: false,
-      minimum: const EdgeInsets.fromLTRB(16, 0, 16, 14),
-      child: SizedBox(
-        height: 96,
-        child: Align(
-          alignment: Alignment.bottomCenter,
-          child: Row(
-            children: [
-              if (!widget.chatOnlyMode) ...[
-                _buildAiButton(),
-                const SizedBox(width: 12),
-              ],
-              Expanded(
-                child: CustomPaint(
-                  key: const ValueKey('app_tab_capsule_gradient_border'),
-                  foregroundPainter: const _AppTabCapsuleBorderPainter(),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(28),
-                    child: BackdropFilter(
-                      filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          color: DunesColors.resolve(
-                            context,
-                            const Color(0xFFF9F8FF),
-                            role: DunesColorRole.surface,
-                          ).withValues(alpha: 0.40),
-                          borderRadius: BorderRadius.circular(28),
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final palette =
+        Theme.of(context).extension<DunesPalette>() ?? DunesPalette.day;
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    final tabs = _tabs;
+    final activeIndex = _mobileTabScreens.indexOf(widget.activeScreen);
+    final capsuleGlassTint = isDark
+        ? const Color(0xFF232234).withValues(alpha: 0.66)
+        : const Color(0xFFFAF9FE).withValues(alpha: 0.66);
+    final capsuleShadows = isDark
+        ? const [
+            BoxShadow(
+              color: Color(0x80000000),
+              blurRadius: 26,
+              offset: Offset(0, 10),
+              spreadRadius: -4,
+            ),
+            BoxShadow(
+              color: Color(0x40000000),
+              blurRadius: 8,
+              offset: Offset(0, 2),
+            ),
+          ]
+        : const [
+            BoxShadow(
+              color: Color(0x242D2355),
+              blurRadius: 24,
+              offset: Offset(0, 10),
+              spreadRadius: -4,
+            ),
+            BoxShadow(
+              color: Color(0x122D2355),
+              blurRadius: 8,
+              offset: Offset(0, 2),
+            ),
+          ];
+
+    return Stack(
+      alignment: Alignment.bottomCenter,
+      children: [
+        Positioned.fill(
+          child: IgnorePointer(
+            child: CustomPaint(
+              painter: _BottomGlassScrimPainter(baseColor: palette.app),
+            ),
+          ),
+        ),
+        SafeArea(
+          top: false,
+          minimum: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+          child: SizedBox(
+            height: kDunesAppBottomNavStackHeight,
+            child: Align(
+              alignment: Alignment.bottomCenter,
+              child: Row(
+                children: [
+                  if (!widget.chatOnlyMode) ...[
+                    _buildAiButton(isDark: isDark),
+                    const SizedBox(width: 12),
+                  ],
+                  Expanded(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(28),
+                        boxShadow: capsuleShadows,
+                      ),
+                      child: CustomPaint(
+                        key: const ValueKey('app_tab_capsule_gradient_border'),
+                        foregroundPainter: _AppTabCapsuleBorderPainter(
+                          isDark: isDark,
                         ),
-                        child: Material(
-                          color: Colors.transparent,
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 4),
-                            child: Row(children: _tabs),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(28),
+                          child: BackdropFilter(
+                            filter: ImageFilter.blur(sigmaX: 26, sigmaY: 26),
+                            child: CustomPaint(
+                              painter: _AppGlassSheenPainter(isDark: isDark),
+                              child: DecoratedBox(
+                                decoration: BoxDecoration(
+                                  color: capsuleGlassTint,
+                                  borderRadius: BorderRadius.circular(28),
+                                ),
+                                child: Material(
+                                  color: Colors.transparent,
+                                  child: SizedBox(
+                                    height: kDunesMainTabBarHeight,
+                                    child: Stack(
+                                      children: [
+                                        if (activeIndex >= 0 && tabs.isNotEmpty)
+                                          Positioned.fill(
+                                            child: Padding(
+                                              padding: const EdgeInsets.all(4.5),
+                                              child: LayoutBuilder(
+                                                builder: (context, constraints) {
+                                                  final tabWidth =
+                                                      constraints.maxWidth /
+                                                          tabs.length;
+                                                  return Stack(
+                                                    children: [
+                                                      AnimatedPositioned(
+                                                        duration: reduceMotion
+                                                            ? Duration.zero
+                                                            : const Duration(
+                                                                milliseconds:
+                                                                    320,
+                                                              ),
+                                                        curve:
+                                                            Curves.easeOutBack,
+                                                        left:
+                                                            tabWidth *
+                                                            activeIndex,
+                                                        top: 0,
+                                                        bottom: 0,
+                                                        width: tabWidth,
+                                                        child: IgnorePointer(
+                                                          child:
+                                                              _AppActiveGlassPill(
+                                                                isDark: isDark,
+                                                              ),
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  );
+                                                },
+                                              ),
+                                            ),
+                                          ),
+                                        Padding(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 4.5,
+                                          ),
+                                          child: Row(children: tabs),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
                           ),
                         ),
                       ),
                     ),
                   ),
-                ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
-      ),
+      ],
     );
   }
 
-  Widget _buildAiButton() {
+  Widget _buildAiButton({required bool isDark}) {
+    final orbGlassTint = isDark
+        ? const Color(0xFF232234).withValues(alpha: 0.68)
+        : const Color(0xFFFAF9FE).withValues(alpha: 0.70);
+    final orbShadows = isDark
+        ? const [
+            BoxShadow(
+              color: Color(0x36B69BFF),
+              blurRadius: 16,
+              spreadRadius: -2,
+            ),
+            BoxShadow(
+              color: Color(0x80000000),
+              blurRadius: 24,
+              offset: Offset(0, 10),
+              spreadRadius: -4,
+            ),
+          ]
+        : const [
+            BoxShadow(
+              color: Color(0x287B5CD8),
+              blurRadius: 16,
+              spreadRadius: -2,
+            ),
+            BoxShadow(
+              color: Color(0x222D2355),
+              blurRadius: 22,
+              offset: Offset(0, 10),
+              spreadRadius: -4,
+            ),
+          ];
+
     return Semantics(
       button: true,
       label: 'AI 助手',
@@ -276,44 +419,50 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
         child: DecoratedBox(
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: DunesColors.resolve(
-              context,
-              const Color(0xFFF9F8FF),
-              role: DunesColorRole.surface,
-            ).withValues(alpha: 0.46),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.66)),
+            boxShadow: orbShadows,
           ),
-          child: ClipOval(
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-              child: Material(
-                color: Colors.transparent,
-                shape: const CircleBorder(),
-                clipBehavior: Clip.antiAlias,
-                child: InkWell(
-                  customBorder: const CircleBorder(),
-                  onTap: () {
-                    FocusManager.instance.primaryFocus?.unfocus();
-                    final openAi =
-                        widget.onOpenAi ??
-                        NovaPresenceScope.maybeOf(context)?.open;
-                    if (openAi != null) {
-                      openAi();
-                    } else {
-                      widget.navigation.go('C4');
-                    }
-                  },
-                  child: SizedBox.square(
-                    dimension: kDunesMainTabBarHeight,
-                    child: ExcludeSemantics(
-                      child: Center(
-                        child: Image.asset(
-                          'assets/images/ai_tab_avatar.png',
-                          width: 48,
-                          height: 48,
-                          fit: BoxFit.contain,
-                          filterQuality: FilterQuality.high,
-                          isAntiAlias: true,
+          child: CustomPaint(
+            foregroundPainter: _AppAiOrbBorderPainter(isDark: isDark),
+            child: ClipOval(
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 26, sigmaY: 26),
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: orbGlassTint,
+                  ),
+                  child: Material(
+                    color: Colors.transparent,
+                    shape: const CircleBorder(),
+                    clipBehavior: Clip.antiAlias,
+                    child: InkWell(
+                      customBorder: const CircleBorder(),
+                      onTap: () {
+                        FocusManager.instance.primaryFocus?.unfocus();
+                        final openAi =
+                            widget.onOpenAi ??
+                            NovaPresenceScope.maybeOf(context)?.open;
+                        if (openAi != null) {
+                          openAi();
+                        } else {
+                          widget.navigation.go('C4');
+                        }
+                      },
+                      child: SizedBox.square(
+                        dimension: kDunesMainTabBarHeight,
+                        child: ExcludeSemantics(
+                          child: Center(
+                            child: ClipOval(
+                              child: Image.asset(
+                                'assets/images/ai_tab_avatar.png',
+                                width: 46,
+                                height: 46,
+                                fit: BoxFit.contain,
+                                filterQuality: FilterQuality.high,
+                                isAntiAlias: true,
+                              ),
+                            ),
+                          ),
                         ),
                       ),
                     ),
@@ -567,6 +716,7 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
     final palette =
         Theme.of(context).extension<DunesPalette>() ?? DunesPalette.day;
     final active = screen != null && widget.activeScreen == screen;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     if (!_isVertical) {
       return Expanded(
         child: _AppTabButton(
@@ -575,8 +725,12 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
           iconBuilder: iconBuilder,
           label: label,
           active: active,
-          activeColor: DunesColors.resolve(context, DunesColors.brandPurple),
-          inactiveColor: DunesColors.resolve(context, palette.textSecondary),
+          activeColor: isDark
+              ? const Color(0xFFC5B0FF)
+              : DunesColors.brandPurple,
+          inactiveColor: isDark
+              ? const Color(0xFFF1EFF8).withValues(alpha: 0.68)
+              : DunesColors.text.withValues(alpha: 0.62),
           showRedDot: showRedDot,
           onTap: () {
             if (onTap != null) {
@@ -721,7 +875,7 @@ class _AppTabButtonState extends State<_AppTabButton> {
                   children: [
                     SizedBox(
                       width: 38,
-                      height: 30,
+                      height: 26,
                       child: Center(
                         child: AnimatedSwitcher(
                           duration: reduceMotion
@@ -754,10 +908,10 @@ class _AppTabButtonState extends State<_AppTabButton> {
                       ),
                     ),
                     if (widget.showRedDot)
-                      const Positioned(top: -3, right: -5, child: _UnreadDot()),
+                      const Positioned(top: -2, right: -4, child: _UnreadDot()),
                   ],
                 ),
-                const SizedBox(height: 3),
+                const SizedBox(height: 2.5),
                 AnimatedDefaultTextStyle(
                   duration: reduceMotion
                       ? Duration.zero
@@ -780,21 +934,108 @@ class _AppTabButtonState extends State<_AppTabButton> {
   }
 }
 
-/// 只描胶囊轮廓，不填充内部，避免半透明毛玻璃把渐变铺满整块。
-class _AppTabCapsuleBorderPainter extends CustomPainter {
-  const _AppTabCapsuleBorderPainter();
+/// 底部渐隐柔雾衬底：列表内容滑到底部时自然淡出，避免文字直接穿过玻璃干扰图标。
+class _BottomGlassScrimPainter extends CustomPainter {
+  const _BottomGlassScrimPainter({required this.baseColor});
 
-  static const _gradient = LinearGradient(
-    begin: Alignment.topLeft,
-    end: Alignment.bottomRight,
-    colors: [
-      Color(0xFFD4C4F5),
-      DunesColors.brandPurple,
-      DunesColors.brandPurpleDeep,
-      DunesColors.brandPurpleLine,
-    ],
-    stops: [0.0, 0.38, 0.72, 1.0],
-  );
+  final Color baseColor;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Offset.zero & size;
+    final gradient = LinearGradient(
+      begin: Alignment.topCenter,
+      end: Alignment.bottomCenter,
+      colors: [
+        baseColor.withValues(alpha: 0.0),
+        baseColor.withValues(alpha: 0.44),
+        baseColor.withValues(alpha: 0.86),
+      ],
+      stops: const [0.0, 0.56, 1.0],
+    );
+    canvas.drawRect(rect, Paint()..shader = gradient.createShader(rect));
+  }
+
+  @override
+  bool shouldRepaint(covariant _BottomGlassScrimPainter oldDelegate) =>
+      oldDelegate.baseColor != baseColor;
+}
+
+/// 胶囊内部极轻的表面高光渐变（上亮下透），增强液态玻璃立体感。
+class _AppGlassSheenPainter extends CustomPainter {
+  const _AppGlassSheenPainter({required this.isDark});
+
+  final bool isDark;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Offset.zero & size;
+    final gradient = LinearGradient(
+      begin: Alignment.topCenter,
+      end: Alignment.bottomCenter,
+      colors: isDark
+          ? [
+              Colors.white.withValues(alpha: 0.10),
+              Colors.white.withValues(alpha: 0.0),
+            ]
+          : [
+              Colors.white.withValues(alpha: 0.42),
+              Colors.white.withValues(alpha: 0.0),
+            ],
+    );
+    canvas.drawRect(rect, Paint()..shader = gradient.createShader(rect));
+  }
+
+  @override
+  bool shouldRepaint(covariant _AppGlassSheenPainter oldDelegate) =>
+      oldDelegate.isDark != isDark;
+}
+
+/// 选中 Tab 背部的滑动亮玻璃药丸（方案 A · Liquid Glass）。
+class _AppActiveGlassPill extends StatelessWidget {
+  const _AppActiveGlassPill({required this.isDark});
+
+  final bool isDark;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: isDark
+            ? const Color(0xFFB69BFF).withValues(alpha: 0.22)
+            : const Color(0xFFFBF9FF).withValues(alpha: 0.88),
+        borderRadius: BorderRadius.circular(23.5),
+        border: Border.all(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.24)
+              : Colors.white.withValues(alpha: 0.96),
+          width: 0.8,
+        ),
+        boxShadow: isDark
+            ? const [
+                BoxShadow(
+                  color: Color(0x45000000),
+                  blurRadius: 8,
+                  offset: Offset(0, 2),
+                ),
+              ]
+            : const [
+                BoxShadow(
+                  color: Color(0x227B5CD8),
+                  blurRadius: 10,
+                  offset: Offset(0, 3),
+                ),
+              ],
+      ),
+    );
+  }
+}
+
+/// 只描胶囊轮廓的镜面高光细边，左上受光亮、右下柔和收敛。
+class _AppTabCapsuleBorderPainter extends CustomPainter {
+  const _AppTabCapsuleBorderPainter({required this.isDark});
+
+  final bool isDark;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -808,15 +1049,75 @@ class _AppTabCapsuleBorderPainter extends CustomPainter {
       ),
       Radius.circular(28 - inset),
     );
+    final gradient = LinearGradient(
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+      colors: isDark
+          ? [
+              Colors.white.withValues(alpha: 0.36),
+              const Color(0xFFB69BFF).withValues(alpha: 0.18),
+              Colors.white.withValues(alpha: 0.06),
+            ]
+          : [
+              Colors.white.withValues(alpha: 0.96),
+              Colors.white.withValues(alpha: 0.50),
+              DunesColors.brandPurple.withValues(alpha: 0.16),
+            ],
+      stops: const [0.0, 0.48, 1.0],
+    );
     final paint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = _kAppTabCapsuleBorderWidth
-      ..shader = _gradient.createShader(Offset.zero & size);
+      ..shader = gradient.createShader(Offset.zero & size);
     canvas.drawRRect(rrect, paint);
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  bool shouldRepaint(covariant _AppTabCapsuleBorderPainter oldDelegate) =>
+      oldDelegate.isDark != isDark;
+}
+
+/// AI 圆形入口的镜面高光描边，与主胶囊保持统一的苹果玻璃折光感。
+class _AppAiOrbBorderPainter extends CustomPainter {
+  const _AppAiOrbBorderPainter({required this.isDark});
+
+  final bool isDark;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final inset = _kAppTabCapsuleBorderWidth / 2;
+    final rect = Rect.fromLTWH(
+      inset,
+      inset,
+      size.width - _kAppTabCapsuleBorderWidth,
+      size.height - _kAppTabCapsuleBorderWidth,
+    );
+    final gradient = LinearGradient(
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+      colors: isDark
+          ? [
+              Colors.white.withValues(alpha: 0.36),
+              const Color(0xFFB69BFF).withValues(alpha: 0.22),
+              Colors.white.withValues(alpha: 0.08),
+            ]
+          : [
+              Colors.white.withValues(alpha: 0.96),
+              Colors.white.withValues(alpha: 0.52),
+              DunesColors.brandPurple.withValues(alpha: 0.18),
+            ],
+      stops: const [0.0, 0.48, 1.0],
+    );
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = _kAppTabCapsuleBorderWidth
+      ..shader = gradient.createShader(Offset.zero & size);
+    canvas.drawOval(rect, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _AppAiOrbBorderPainter oldDelegate) =>
+      oldDelegate.isDark != isDark;
 }
 
 /// 底部 / 侧栏未读小红点。不用呼吸脉冲：循环动画会拖着整窗按刷新率重画。

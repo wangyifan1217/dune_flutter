@@ -376,4 +376,57 @@ void main() {
       isFalse,
     );
   });
+
+  testWidgets(
+    'APP liquid glass bar switches active pill smoothly without overflow or idle frames',
+    (tester) async {
+      final navigation = DunesNavigationController();
+      addTearDown(navigation.dispose);
+      const size = Size(320, 720);
+      const bottomInset = 34.0;
+      await tester.binding.setSurfaceSize(size);
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: DunesTheme.dark(),
+          home: MediaQuery(
+            data: const MediaQueryData(
+              size: size,
+              padding: EdgeInsets.only(bottom: bottomInset),
+              viewPadding: EdgeInsets.only(bottom: bottomInset),
+              textScaler: TextScaler.linear(1.5),
+            ),
+            child: ListenableBuilder(
+              listenable: navigation,
+              builder: (context, _) => Scaffold(
+                body: const SizedBox.expand(),
+                bottomNavigationBar: DunesMainTabBar(
+                  navigation: navigation,
+                  activeScreen: navigation.currentScreen,
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.bySemanticsLabel('AI 助手'), findsOneWidget);
+      final initialLeft = tester
+          .widget<AnimatedPositioned>(find.byType(AnimatedPositioned))
+          .left;
+      expect(initialLeft, 0);
+
+      await tester.tap(find.text('灯塔'));
+      await tester.pumpAndSettle();
+      expect(navigation.currentScreen, 'LH');
+      final movedLeft = tester
+          .widget<AnimatedPositioned>(find.byType(AnimatedPositioned))
+          .left;
+      expect(movedLeft, greaterThan(initialLeft!));
+      expect(tester.binding.hasScheduledFrame, isFalse);
+      expect(tester.takeException(), isNull);
+    },
+  );
 }

@@ -37,7 +37,7 @@ String? meetingTaskRangeError(DateTime? startAt, DateTime? dueAt) {
   return taskCreateRangeError(startAt, dueAt, required: true);
 }
 
-/// 纪要创建任务：填写负责人、优先级、验收和周期后再提交。
+/// 纪要创建任务：填写负责人、验收和周期后再提交。
 Future<MeetingTaskCreateDraft?> showMeetingTaskCreateDialog(
   BuildContext context, {
   required AuthSession session,
@@ -86,7 +86,7 @@ class _MeetingTaskCreateDialogState extends State<_MeetingTaskCreateDialog> {
   DateTime? _startAt;
   DateTime? _dueAt;
   String? _error;
-  String _priority = 'medium';
+  String _acceptPreset = 'custom';
   late int _ownerId;
   late String _ownerName;
   List<TaskAssignee> _assignees = const [];
@@ -104,6 +104,8 @@ class _MeetingTaskCreateDialogState extends State<_MeetingTaskCreateDialog> {
     _titleCtrl = TextEditingController(text: widget.title);
     _descCtrl = TextEditingController(text: widget.description);
     _acceptCtrl = TextEditingController(text: widget.acceptanceCriteria);
+    final now = DateTime.now();
+    _startAt = DateTime(now.year, now.month, now.day);
     _ownerId = widget.session.userId;
     _ownerName = (widget.session.displayName ?? '').trim().isEmpty
         ? '我'
@@ -329,7 +331,6 @@ class _MeetingTaskCreateDialogState extends State<_MeetingTaskCreateDialog> {
         description: _showCopy ? _descCtrl.text.trim() : null,
         acceptanceCriteria: _showCopy ? _acceptCtrl.text.trim() : null,
         ownerUserId: _ownerId,
-        priority: _priority,
         startAt: _startAt!,
         dueAt: _dueAt!,
         parentTaskId: _linkExisting ? _parentTaskId : null,
@@ -861,6 +862,23 @@ class _MeetingTaskCreateDialogState extends State<_MeetingTaskCreateDialog> {
                         ),
                         const SizedBox(height: 16),
                         _sectionLabel('验收标准', required: !_linkExisting),
+                        DropdownButtonFormField<String>(
+                          initialValue: _acceptPreset,
+                          isExpanded: true,
+                          decoration: _fieldDecoration('选择验收方式'),
+                          items: [
+                            for (final (value, label) in taskAcceptancePresets)
+                              DropdownMenuItem(value: value, child: Text(label)),
+                          ],
+                          onChanged: (value) {
+                            if (value == null) return;
+                            setState(() {
+                              _acceptCtrl.text = taskAcceptanceText(_acceptCtrl.text, _acceptPreset, value);
+                              _acceptPreset = value;
+                            });
+                          },
+                        ),
+                        const SizedBox(height: 8),
                         TextField(
                           controller: _acceptCtrl,
                           minLines: 2,
@@ -871,49 +889,6 @@ class _MeetingTaskCreateDialogState extends State<_MeetingTaskCreateDialog> {
                       const SizedBox(height: 18),
                       _sectionLabel('负责人', required: true),
                       _ownerTile(),
-                      const SizedBox(height: 16),
-                      _sectionLabel('优先级'),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 14),
-                        decoration: BoxDecoration(
-                          color: DunesColors.resolve(
-                            context,
-                            Colors.white,
-                            role: DunesColorRole.surface,
-                          ),
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(
-                            color: DunesColors.resolve(
-                              context,
-                              const Color(0xFFE8E5EF),
-                              role: DunesColorRole.border,
-                            ),
-                          ),
-                        ),
-                        child: DropdownButtonHideUnderline(
-                          child: DropdownButton<String>(
-                            value: _priority,
-                            isExpanded: true,
-                            icon: const Icon(Icons.expand_more_rounded),
-                            items: const [
-                              DropdownMenuItem(value: 'low', child: Text('低')),
-                              DropdownMenuItem(
-                                value: 'medium',
-                                child: Text('中'),
-                              ),
-                              DropdownMenuItem(value: 'high', child: Text('高')),
-                              DropdownMenuItem(
-                                value: 'urgent',
-                                child: Text('紧急'),
-                              ),
-                            ],
-                            onChanged: (value) {
-                              if (value != null)
-                                setState(() => _priority = value);
-                            },
-                          ),
-                        ),
-                      ),
                       const SizedBox(height: 16),
                       _sectionLabel('任务周期', required: true),
                       Row(

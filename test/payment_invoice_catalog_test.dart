@@ -74,6 +74,38 @@ void main() {
     expect(row.paymentCompleted, isTrue);
   });
 
+  test('searches the payee even when the promoter or another payee is displayed', () {
+    final row = paymentInvoiceRowFromListJson({
+      'id': 1,
+      'tagLabel': '付款审批',
+      'formData': {
+        'promoterName': '推广商',
+        'payeeName': '北京收款单位',
+        'paymentItems': [
+          {'payeeName': '上海收款单位'},
+          {'payeeName': {'label': '白名单账户', 'value': '武汉收款单位'}},
+        ],
+      },
+    });
+    expect(row.counterparty, '推广商');
+    for (final keyword in ['北京', '上海', ' 武汉 ']) {
+      expect(
+        matchesPaymentInvoiceQuery(
+          row,
+          PaymentInvoiceQuery(kind: PaymentInvoiceKind.payment, q: keyword),
+        ),
+        isTrue,
+      );
+    }
+    expect(
+      matchesPaymentInvoiceQuery(
+        row,
+        const PaymentInvoiceQuery(kind: PaymentInvoiceKind.payment, q: '广州'),
+      ),
+      isFalse,
+    );
+  });
+
   test('approved payment counts as completed', () {
     final approved = paymentInvoiceRowFromListJson({
       'id': 2,

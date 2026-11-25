@@ -56,6 +56,25 @@ class TaskManagementApi {
         .toList(growable: false);
   }
 
+  Future<Map<String, dynamic>> listProbationGoals({
+    required String query,
+    required String department,
+    required int page,
+  }) async {
+    final response = await http.get(
+      _uri('probation-goals', {'q': query, 'department': department, 'page': '$page', 'size': '20'}),
+      headers: _headers,
+    );
+    return Map<String, dynamic>.from(_unwrap(response) as Map);
+  }
+
+  Future<void> assignProbationGoal(int userId, String title, String criteria) async {
+    _unwrap(await http.post(
+      _uri('probation-goals'), headers: _headers,
+      body: jsonEncode({'userId': userId, 'title': title, 'acceptanceCriteria': criteria}),
+    ));
+  }
+
   Future<TaskRecurringRule> createRecurringRule(
     Map<String, dynamic> body,
   ) async {

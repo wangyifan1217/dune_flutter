@@ -21,10 +21,12 @@ Map<String, dynamic> buildTaskQuickCreateBody({
   required int ownerUserId,
   required bool asMain,
   int? groupId,
+  String position = '',
 }) {
   final name = title.trim();
   final desc = description.trim();
   final standard = desc.isNotEmpty ? desc : name;
+  final (category, subCategory) = taskCategoryForPosition(position);
   return <String, dynamic>{
     'title': name,
     if (desc.isNotEmpty)
@@ -32,8 +34,8 @@ Map<String, dynamic> buildTaskQuickCreateBody({
     else if (asMain || groupId == null)
       'description': name,
     'acceptanceCriteria': standard,
-    'priority': 'medium',
-    'category': '业务 · 销售',
+    'category': category,
+    'subCategory': subCategory,
     'ownerUserId': ownerUserId,
     'startAt': startAt.toUtc().toIso8601String(),
     'dueAt': dueAt.toUtc().toIso8601String(),
@@ -89,6 +91,8 @@ class _QuickCreateSheetState extends State<_QuickCreateSheet> {
   @override
   void initState() {
     super.initState();
+    final now = DateTime.now();
+    _startAt = DateTime(now.year, now.month, now.day);
     if (!widget.asGroup) {
       unawaited(_loadGroups());
     }
@@ -180,6 +184,7 @@ class _QuickCreateSheetState extends State<_QuickCreateSheet> {
         ownerUserId: widget.session.userId,
         asMain: widget.asGroup,
         groupId: _groupId,
+        position: widget.session.jobTitle,
       );
       final TaskItem created;
       if (widget.asGroup || _groupId == null) {

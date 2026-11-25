@@ -17,6 +17,7 @@ import 'task_api.dart';
 import 'task_approval_confirm.dart';
 import 'task_chat_forward.dart';
 import 'task_first_use_guide.dart';
+import 'task_helper_picker.dart';
 import 'task_inbox.dart';
 import 'task_models.dart';
 import 'task_widgets.dart';
@@ -84,6 +85,7 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
   bool _loadingMore = false;
   bool _hasMore = true;
   int _listPage = 0;
+  int _listGeneration = 0;
   String? _error;
   static const int _pageSize = 20;
 
@@ -95,6 +97,8 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
   String? _inboxWarning;
   static const int _inboxPreview = 3;
   String? _goalRole;
+  TaskAssignee? _ownerFilter;
+  DateTime? _completedMonth;
 
   /// 主目标列表的状态。除「我负责」外默认进行中。
   String? _goalStatus = 'active';
@@ -183,8 +187,11 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
   String get _apiScope => _scope;
 
   String? get _status => _scope == 'goals' ? _goalStatus : _otherStatus;
+  String? get _statusQuery => _status == 'active' ? 'active_or_in_progress' : _status;
+  String? get _priorityQuery => _listFocus == 'high' ? 'high_or_urgent' : _priority;
 
   void _setStatus(String? value) {
+    if (value != 'completed') _completedMonth = null;
     if (_scope == 'goals') {
       _goalStatus = value;
     } else {
@@ -193,15 +200,18 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
   }
 
   String? get _goalRoleQuery =>
-      _scope == 'goals' && _goalRole != null && _goalRole != 'probation'
+      _scope == 'goals' && _goalRole != null &&
+          _goalRole != 'probation' && _goalRole != 'regular'
       ? _goalRole
       : null;
 
   String? get _sourceQuery =>
-      _scope == 'goals' && _goalRole == 'probation' ? 'probation' : null;
+      _scope == 'goals' && _goalRole != 'regular'
+      ? (_goalRole == 'probation' ? 'probation' : 'all')
+      : null;
 
   String? get _excludeSourceQuery =>
-      _scope == 'goals' && _goalRole != 'probation' ? 'probation' : null;
+      _scope == 'goals' && _goalRole == 'regular' ? 'probation' : null;
 
   void _publishChrome() {
     if (_page == _TaskPage.detail ||
@@ -423,6 +433,7 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
   }
 
   Future<void> _reload() async {
+    final generation = ++_listGeneration;
     setState(() {
       _loading = true;
       _error = null;
@@ -431,18 +442,23 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
       _listPage = 0;
     });
     if (_scope == 'inbox') {
-      await _reloadInbox();
+      await _reloadInbox(generation);
       return;
     }
     try {
       final list = await _api.listTasksPage(
         scope: _apiScope,
-        status: _status,
-        priority: _priority,
+        status: _statusQuery,
+        priority: _priorityQuery,
         q: _search.text,
         goalRole: _goalRoleQuery,
         source: _sourceQuery,
         excludeSource: _excludeSourceQuery,
+        ownerId: _ownerFilter?.id,
+        overdueOnly: _listFocus == 'overdue',
+        dueToday: _listFocus == 'dueToday',
+        dueOrder: true,
+        completedMonth: _completedMonth,
         dateFrom: _dateFrom,
         dateTo: _dateTo,
         page: 0,
@@ -452,7 +468,7 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
       try {
         daily = await _api.getDailyReport();
       } catch (_) {}
-      if (!mounted) return;
+      if (!mounted || generation != _listGeneration) return;
       setState(() {
         _items = dedupeTasksById(list.items);
         _listPage = 0;
@@ -463,7 +479,7 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
             daily != null && daily.canSubmit && daily.report?.submitted != true;
       });
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted || generation != _listGeneration) return;
       setState(() {
         _error = '$e';
         _loading = false;
@@ -472,7 +488,7 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
     }
   }
 
-  Future<void> _reloadInbox() async {
+  Future<void> _reloadInbox(int generation) async {
     List<TaskItem> pending = const [];
     List<TaskItem> today = const [];
     String? warning;
@@ -503,7 +519,7 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
     try {
       daily = await _api.getDailyReport();
     } catch (_) {}
-    if (!mounted) return;
+    if (!mounted || generation != _listGeneration) return;
     final bothFailed = failure != null && warning == '待办暂时加载失败';
     if (bothFailed) {
       setState(() {
@@ -536,22 +552,28 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
   Future<void> _loadMore() async {
     if (_scope == 'inbox' || _loading || _loadingMore || !_hasMore) return;
     setState(() => _loadingMore = true);
+    final generation = _listGeneration;
     try {
       final next = _listPage + 1;
       final result = await _api.listTasksPage(
         scope: _apiScope,
-        status: _status,
-        priority: _priority,
+        status: _statusQuery,
+        priority: _priorityQuery,
         q: _search.text,
         goalRole: _goalRoleQuery,
         source: _sourceQuery,
         excludeSource: _excludeSourceQuery,
+        ownerId: _ownerFilter?.id,
+        overdueOnly: _listFocus == 'overdue',
+        dueToday: _listFocus == 'dueToday',
+        dueOrder: true,
+        completedMonth: _completedMonth,
         dateFrom: _dateFrom,
         dateTo: _dateTo,
         page: next,
         size: _pageSize,
       );
-      if (!mounted) return;
+      if (!mounted || generation != _listGeneration) return;
       setState(() {
         _items = dedupeTasksById(<TaskItem>[..._items, ...result.items]);
         _listPage = next;
@@ -559,7 +581,7 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
         _loadingMore = false;
       });
     } catch (_) {
-      if (mounted) setState(() => _loadingMore = false);
+      if (mounted && generation == _listGeneration) setState(() => _loadingMore = false);
     }
   }
 
@@ -1031,6 +1053,8 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
                             _roleChip('reports', '下级'),
                             const SizedBox(width: 8),
                             _roleChip('probation', '试用期'),
+                            const SizedBox(width: 8),
+                            _roleChip('regular', '常规'),
                           ],
                         ),
                       ),
@@ -1087,12 +1111,12 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
         onTap: () {
           if (_goalRole == value) return;
           setState(() {
-            final wasOwned = _goalRole == 'owned';
+            final wasUnfiltered = _goalRole == 'owned' || _goalRole == 'assigned';
             _goalRole = value;
-            if (value == 'owned') {
-              _goalStatus = null;
-            } else if (wasOwned) {
-              _goalStatus = 'active';
+            if (value == 'owned' || value == 'assigned') {
+              if (_completedMonth == null) _goalStatus = null;
+            } else if (wasUnfiltered) {
+              if (_completedMonth == null) _goalStatus = 'active';
             }
           });
           unawaited(_reload());
@@ -1352,11 +1376,64 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
               _listFocusChip('overdue', '逾期'),
               _listFocusChip('dueToday', '今天截止'),
               _listFocusChip('high', '高优先级'),
+              ActionChip(
+                label: Text(_ownerFilter?.displayName ?? '负责人'),
+                onPressed: _filterByOwner,
+              ),
+              ActionChip(
+                label: Text(_completedMonth == null
+                    ? '完成月份'
+                    : '${_completedMonth!.year}年${_completedMonth!.month}月'),
+                onPressed: _filterByCompletedMonth,
+              ),
+              if (_ownerFilter != null || _completedMonth != null)
+                ActionChip(
+                  label: const Text('清除人员和月份'),
+                  onPressed: () {
+                    setState(() {
+                      _ownerFilter = null;
+                      _completedMonth = null;
+                    });
+                    unawaited(_reload());
+                  },
+                ),
             ],
           ),
         ],
       ),
     );
+  }
+
+  Future<void> _filterByOwner() async {
+    final picked = await showTaskHelperPicker(
+      context,
+      api: _api,
+      selectedIds: const {},
+      excludeUserId: 0,
+      title: '按负责人筛选',
+      single: true,
+    );
+    if (!mounted || picked == null || picked.isEmpty) return;
+    setState(() => _ownerFilter = picked.first);
+    await _reload();
+  }
+
+  Future<void> _filterByCompletedMonth() async {
+    final now = DateTime.now();
+    final picked = await showTaskDatePicker(
+      context,
+      initialDate: _completedMonth ?? now,
+      firstDate: DateTime(2020),
+      lastDate: now,
+      helpText: '选择完成月份中的任意一天',
+    );
+    if (!mounted || picked == null) return;
+    setState(() {
+      _completedMonth = DateTime(picked.year, picked.month);
+      _setStatus('completed');
+      _listFocus = null;
+    });
+    await _reload();
   }
 
   Widget _listFocusChip(String value, String label) {
@@ -1376,7 +1453,15 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
       borderRadius: BorderRadius.circular(8),
       child: InkWell(
         borderRadius: BorderRadius.circular(8),
-        onTap: () => setState(() => _listFocus = on ? null : value),
+        onTap: () {
+          setState(() {
+            _listFocus = on ? null : value;
+            if (!on && value != 'high' && _status != null && _status != 'active' && _status != 'in_progress') {
+              _setStatus(null);
+            }
+          });
+          unawaited(_reload());
+        },
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           child: Text(
@@ -1404,14 +1489,6 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
     }
     list = switch (_listFocus) {
       'overdue' => list.where((task) => task.overdue).toList(growable: false),
-      'dueToday' =>
-        list.where((task) => taskDueOnDay(task, now)).toList(growable: false),
-      'high' =>
-        list
-            .where(
-              (task) => task.priority == 'high' || task.priority == 'urgent',
-            )
-            .toList(growable: false),
       _ => list,
     };
     return list;
@@ -1616,7 +1693,14 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
         active.add(task);
         continue;
       }
-      final label = taskStatusLabel(task.status);
+      final completed = task.completedAtInferred
+          ? null
+          : task.completedAt?.toUtc().add(const Duration(hours: 8));
+      final label = task.status != 'completed'
+          ? taskStatusLabel(task.status)
+          : completed == null
+          ? '完成时间未记录'
+          : '${completed.year}年${completed.month}月完成';
       rest
           .putIfAbsent(label, () {
             restOrder.add(label);

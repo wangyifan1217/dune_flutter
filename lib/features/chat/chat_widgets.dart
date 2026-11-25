@@ -261,10 +261,14 @@ class ChatQuickActions extends StatelessWidget {
     this.showAt = false,
     this.showVideo = false,
     this.onHeightDrag,
+    this.onCreateTask,
+    this.onAssignTask,
   });
 
   /// PC：拖动工具栏上沿调整输入区高度（deltaDy>0 为向下拖）。
   final ValueChanged<double>? onHeightDrag;
+  final VoidCallback? onCreateTask;
+  final VoidCallback? onAssignTask;
 
   final VoidCallback onCamera;
   final VoidCallback onAlbum;
@@ -317,6 +321,10 @@ class ChatQuickActions extends StatelessWidget {
         label: '转发审批',
         onTap: onApproval,
       ),
+      if (onCreateTask != null)
+        _QaCell(icon: Icons.group_add_outlined, label: '协同任务', onTap: onCreateTask!),
+      if (onAssignTask != null)
+        _QaCell(icon: Icons.assignment_ind_outlined, label: '指派任务', onTap: onAssignTask!),
       if (showAt && onAt != null)
         _QaCell(
           icon: Icons.alternate_email,

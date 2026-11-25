@@ -2092,6 +2092,28 @@ class TaskFilterChipDropdown<T> extends StatelessWidget {
   }
 }
 
+const taskAcceptancePresets = [
+  ('custom', '自定义'),
+  ('提交交付物', '提交交付物'),
+  ('完成核对并记录结果', '完成核对并记录结果'),
+  ('经负责人确认', '经负责人确认'),
+];
+
+(String, String) taskCategoryForPosition(String position) => switch (position) {
+  _ when position.contains('财务') => ('职能', '财务'),
+  _ when position.contains('行政') => ('职能', '行政'),
+  _ when position.contains('运营') => ('业务', '运营'),
+  _ => ('业务', '销售'),
+};
+
+String taskAcceptanceText(String input, String previous, String next) {
+  if (next == 'custom' || next == previous) return input;
+  var details = input.trim();
+  if (details == previous) details = '';
+  if (details.startsWith('$previous\n')) details = details.substring(previous.length).trim();
+  return details.isEmpty ? next : '$next\n$details';
+}
+
 Future<DateTime?> showTaskDatePicker(
   BuildContext context, {
   required DateTime initialDate,

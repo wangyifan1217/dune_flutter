@@ -64,6 +64,8 @@ import '../tasks/task_chat_share.dart';
 import '../tasks/task_chat_share_card.dart';
 import '../tasks/task_chat_share_bundle_card.dart';
 import '../tasks/task_api.dart';
+import '../tasks/native_task_form.dart';
+import '../tasks/native_task_detail_page.dart';
 import '../qianji/qianji_group_reply_person_card.dart';
 import '../qianji/native_qianji_daily_report_supervise_page.dart';
 import '../xflow/approval_picker_sheet.dart';
@@ -6995,8 +6997,67 @@ class _NativeChatViewState extends State<NativeChatView>
     });
   }
 
+  Future<void> _createChatTask({required bool assign}) async {
+    _dismissChatKeyboard();
+    setState(() {
+      _toolsOpen = false;
+      _emojiOpen = false;
+    });
+    final conversation = _conversation;
+    Set<int>? members;
+    if (!_isPrivate) {
+      final id = conversation?.id ?? 0;
+      if (id <= 0) return;
+      try {
+        final people = await _service.fetchConversationMembers(id);
+        members = {
+          for (final person in people)
+            if (person['userId'] is num) (person['userId'] as num).toInt(),
+        };
+      } catch (_) {
+        if (mounted) _showToast('加载群成员失败，请重试', error: true);
+        return;
+      }
+    }
+    if (!mounted || _conversation?.id != conversation?.id) return;
+    final task = await openTaskEditor(
+      context,
+      session: widget.session,
+      chat: (
+        assign: assign,
+        peerId: _isPrivate ? conversation?.peerUserId ?? widget.peerUserIdHint : null,
+        peerName: _isPrivate ? conversation?.title ?? '' : '',
+        memberIds: members,
+      ),
+    );
+    if (mounted && task != null) {
+      showDunesActionToast(
+        context,
+        assign ? (task.status == 'pending_assignment' ? '任务已发出，待对方接收' : '任务已指派') : '协同任务已创建',
+        duration: const Duration(seconds: 5),
+        actionLabel: '查看任务',
+        onTap: () {
+          if (mounted) _openCreatedChatTask(task.id);
+        },
+      );
+    }
+  }
+
+  void _openCreatedChatTask(int taskId) {
+    Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (page) => Scaffold(body: SafeArea(child: NativeTaskDetailView(
+        session: widget.session,
+        taskId: taskId,
+        onBack: () => Navigator.of(page).pop(),
+        onOpenTask: _openCreatedChatTask,
+        backLabel: '聊天',
+      ))),
+    ));
+  }
+
   Widget _buildComposerDock({required bool locked, required String inputHint}) {
     final wide = isWideChatLayout(context);
+    final canCreateTask = !locked && !_mediaBusy && widget.session.userType == 'ORG';
     return TextFieldTapRegion(
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -7033,6 +7094,8 @@ class _NativeChatViewState extends State<NativeChatView>
                   ? () {}
                   : () => unawaited(_forwardApprovalToChat()),
               onAt: locked ? null : _pickAtMember,
+              onCreateTask: canCreateTask ? () => unawaited(_createChatTask(assign: false)) : null,
+              onAssignTask: canCreateTask ? () => unawaited(_createChatTask(assign: true)) : null,
               onEmoji: locked ? null : _toggleEmojiPicker,
               onVideo: locked || _mediaBusy ? () {} : _pickAndSendVideo,
               showAt: !_isPrivate,
@@ -7154,6 +7217,8 @@ class _NativeChatViewState extends State<NativeChatView>
                   : () => unawaited(_forwardApprovalToChat()),
               onAt: locked ? null : _pickAtMember,
               onVideo: null,
+              onCreateTask: canCreateTask ? () => unawaited(_createChatTask(assign: false)) : null,
+              onAssignTask: canCreateTask ? () => unawaited(_createChatTask(assign: true)) : null,
               showAt: !_isPrivate,
               showVideo: false,
             ),

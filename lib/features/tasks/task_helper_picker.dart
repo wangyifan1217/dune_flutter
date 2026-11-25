@@ -17,6 +17,7 @@ Future<List<TaskAssignee>?> showTaskHelperPicker(
   String title = '选择协助人',
   bool single = false,
   String? scope,
+  Set<int>? allowedUserIds,
 }) {
   return showModalBottomSheet<List<TaskAssignee>>(
     context: context,
@@ -37,6 +38,7 @@ Future<List<TaskAssignee>?> showTaskHelperPicker(
       title: title,
       single: single,
       scope: scope,
+      allowedUserIds: allowedUserIds,
     ),
   );
 }
@@ -70,6 +72,7 @@ class _TaskHelperPicker extends StatefulWidget {
     required this.title,
     required this.single,
     this.scope,
+    this.allowedUserIds,
   });
 
   final TaskApi api;
@@ -79,6 +82,7 @@ class _TaskHelperPicker extends StatefulWidget {
   final String title;
   final bool single;
   final String? scope;
+  final Set<int>? allowedUserIds;
 
   @override
   State<_TaskHelperPicker> createState() => _TaskHelperPickerState();
@@ -126,7 +130,8 @@ class _TaskHelperPickerState extends State<_TaskHelperPicker> {
         for (final person in list) {
           _byId[person.id] = person;
         }
-        _people = list.where((e) => e.id != widget.excludeUserId).toList();
+        _people = list.where((e) => e.id != widget.excludeUserId &&
+            (widget.allowedUserIds?.contains(e.id) ?? true)).toList();
         _loading = false;
       });
     } catch (e) {

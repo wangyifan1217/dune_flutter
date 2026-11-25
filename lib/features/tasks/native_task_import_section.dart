@@ -45,6 +45,11 @@ class TaskImportKindTabs extends StatelessWidget {
           selected: kind == 'probation',
           onTap: () => onChanged('probation'),
         ),
+        _KindChip(
+          label: '多人试用期目标',
+          selected: kind == 'probation-batch',
+          onTap: () => onChanged('probation-batch'),
+        ),
       ],
     );
   }

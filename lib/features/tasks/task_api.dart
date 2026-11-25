@@ -55,6 +55,11 @@ class TaskApi {
     String? goalRole,
     String? source,
     String? excludeSource,
+    int? ownerId,
+    bool overdueOnly = false,
+    bool dueToday = false,
+    bool dueOrder = false,
+    DateTime? completedMonth,
     DateTime? dateFrom,
     DateTime? dateTo,
     int page = 0,
@@ -69,6 +74,13 @@ class TaskApi {
     if (priority != null && priority.isNotEmpty) query['priority'] = priority;
     if (q != null && q.trim().isNotEmpty) query['q'] = q.trim();
     if (goalRole != null && goalRole.isNotEmpty) query['goalRole'] = goalRole;
+    if (ownerId != null) query['ownerId'] = '$ownerId';
+    if (overdueOnly) query['overdue'] = '1';
+    if (dueToday) query['dueToday'] = '1';
+    if (dueOrder) query['sort'] = 'due';
+    if (completedMonth != null) {
+      query['completedMonth'] = _dateQuery(completedMonth)!.substring(0, 7);
+    }
     if (source != null && source.isNotEmpty) query['source'] = source;
     if (excludeSource != null && excludeSource.isNotEmpty) {
       query['excludeSource'] = excludeSource;
@@ -227,6 +239,7 @@ class TaskApi {
         .map((e) => TaskChangeRequest.fromJson(Map<String, dynamic>.from(e)))
         .toList(growable: false);
     return TaskDetail(
+      canStopMonthlyRepeat: data['canStopMonthlyRepeat'] == true,
       task: task,
       subtasks: subs,
       logs: logs,
@@ -421,6 +434,10 @@ class TaskApi {
     _unwrap(resp);
   }
 
+  Future<void> stopMonthlyRepeat(int id) async {
+    _unwrap(await http.delete(_uri('$id/repeat-monthly'), headers: _headers));
+  }
+
   Future<TaskItem> evaluate(
     int id, {
     required String level,
@@ -547,6 +564,7 @@ class TaskApi {
             id: id,
             displayName: name,
             departmentName: '${json['departmentName'] ?? ''}',
+            positionName: '${json['jobTitle'] ?? json['positionName'] ?? json['title'] ?? ''}',
             avatarPreset: '${json['avatarPreset'] ?? ''}',
             avatarObjectKey: '${json['avatarObjectKey'] ?? ''}',
             avatarUrl: '${json['avatarUrl'] ?? ''}',
@@ -662,6 +680,26 @@ class TaskApi {
     return TaskDailyReportBundle.fromJson(
       Map<String, dynamic>.from(data as Map),
     );
+  }
+
+  Future<Map<String, dynamic>> goalReportProgress({
+    required DateTime from,
+    required DateTime to,
+    int page = 0,
+    int? ownerId,
+    int? goalId,
+    String? status,
+  }) async {
+    final response = await http.get(_dailyUri('goal-progress', {
+      'from': _dateQuery(from)!,
+      'to': _dateQuery(to)!,
+      'page': '$page',
+      'size': '20',
+      if (ownerId != null) 'ownerId': '$ownerId',
+      if (goalId != null) 'goalId': '$goalId',
+      if (status != null) 'status': status,
+    }), headers: _headers);
+    return Map<String, dynamic>.from(_unwrap(response) as Map);
   }
 
   Future<TaskDailyReport> submitDailyReport(Map<String, dynamic> body) async {

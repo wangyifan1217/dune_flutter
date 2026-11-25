@@ -51,8 +51,9 @@ void main() {
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
     expect(find.text('负责人'), findsOneWidget);
-    expect(find.text('开始时间'), findsOneWidget);
-    expect(find.text('结束时间'), findsOneWidget);
+    expect(find.text('开始日期'), findsOneWidget);
+    expect(find.text('截止日期'), findsOneWidget);
+    expect(find.text('优先级'), findsNothing);
     expect(find.text('客户书面确认'), findsOneWidget);
     await tester.tap(find.text('确认创建'));
     await tester.pump();

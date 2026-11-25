@@ -1257,6 +1257,27 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
     );
   }
 
+  Future<void> _stopMonthlyRepeat(int taskId) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialog) => AlertDialog(
+        title: const Text('停止每月重复'),
+        content: const Text('停止后将保留已生成的任务。'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialog), child: const Text('取消')),
+          FilledButton(onPressed: () => Navigator.pop(dialog, true), child: const Text('确认停止')),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    try {
+      await _api.stopMonthlyRepeat(taskId);
+      if (mounted) await _reload();
+    } catch (_) {
+      if (mounted) showDunesCenterToast(context, '停止重复失败，请重试');
+    }
+  }
+
   Widget _buildActionPanel(TaskDetail d) {
     if (widget.forceReadOnly) return const SizedBox.shrink();
     final actions = <Widget>[];
@@ -1970,6 +1991,15 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
                   },
                 ),
                 _buildActionPanel(d),
+                if (d.canStopMonthlyRepeat)
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      onPressed: () => _stopMonthlyRepeat(d.task.id),
+                      icon: const Icon(Icons.repeat_on_outlined),
+                      label: const Text('停止每月重复'),
+                    ),
+                  ),
                 if (d.task.isMain && d.subtasks.isNotEmpty) ...[
                   const SizedBox(height: 18),
                   const Text(

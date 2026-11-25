@@ -158,8 +158,9 @@ void main() {
     expect(body['title'], '所有预警加白');
     expect(body['description'], '15116444875');
     expect(body['acceptanceCriteria'], '15116444875');
-    expect(body['category'], '业务 · 销售');
-    expect(body['priority'], 'medium');
+    expect(body['category'], '业务');
+    expect(body['subCategory'], '销售');
+    expect(body.containsKey('priority'), isFalse);
     expect(body['ownerUserId'], 8);
     expect(body['startAt'], start.toUtc().toIso8601String());
     expect(body['dueAt'], due.toUtc().toIso8601String());

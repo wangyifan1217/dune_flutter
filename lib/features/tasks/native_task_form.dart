@@ -64,8 +64,9 @@ Future<TaskItem?> openTaskEditor(
   required AuthSession session,
   int? parentTaskId,
   TaskItem? parentTask,
+  ({bool assign, int? peerId, String peerName, Set<int>? memberIds})? chat,
 }) {
-  final useFullScreen = !isDesktopCommOnly;
+  final useFullScreen = !isDesktopCommOnly || MediaQuery.sizeOf(context).width < 640;
   if (useFullScreen) {
     return Navigator.of(context).push<TaskItem>(
       MaterialPageRoute(
@@ -74,6 +75,7 @@ Future<TaskItem?> openTaskEditor(
           session: session,
           parentTaskId: parentTaskId,
           parentTask: parentTask,
+          chat: chat,
         ),
       ),
     );
@@ -84,6 +86,7 @@ Future<TaskItem?> openTaskEditor(
       session: session,
       parentTaskId: parentTaskId,
       parentTask: parentTask,
+      chat: chat,
     ),
   );
 }
@@ -95,11 +98,13 @@ class TaskEditorPage extends StatelessWidget {
     required this.session,
     this.parentTaskId,
     this.parentTask,
+    this.chat,
   });
 
   final AuthSession session;
   final int? parentTaskId;
   final TaskItem? parentTask;
+  final ({bool assign, int? peerId, String peerName, Set<int>? memberIds})? chat;
 
   @override
   Widget build(BuildContext context) {
@@ -116,6 +121,7 @@ class TaskEditorPage extends StatelessWidget {
               session: session,
               parentTaskId: parentTaskId,
               parentTask: parentTask,
+              chat: chat,
               fullscreen: true,
               onCancel: () => Navigator.pop(context),
               onCreated: (item) => Navigator.pop(context, item),
@@ -134,11 +140,13 @@ class TaskEditorDialog extends StatelessWidget {
     required this.session,
     this.parentTaskId,
     this.parentTask,
+    this.chat,
   });
 
   final AuthSession session;
   final int? parentTaskId;
   final TaskItem? parentTask;
+  final ({bool assign, int? peerId, String peerName, Set<int>? memberIds})? chat;
 
   @override
   Widget build(BuildContext context) {
@@ -159,6 +167,7 @@ class TaskEditorDialog extends StatelessWidget {
                 session: session,
                 parentTaskId: parentTaskId,
                 parentTask: parentTask,
+                chat: chat,
                 fullscreen: false,
                 onCancel: () => Navigator.pop(context),
                 onCreated: (item) => Navigator.pop(context, item),
@@ -176,6 +185,7 @@ class _TaskEditorBody extends StatefulWidget {
     required this.session,
     this.parentTaskId,
     this.parentTask,
+    this.chat,
     required this.fullscreen,
     required this.onCancel,
     required this.onCreated,
@@ -184,6 +194,7 @@ class _TaskEditorBody extends StatefulWidget {
   final AuthSession session;
   final int? parentTaskId;
   final TaskItem? parentTask;
+  final ({bool assign, int? peerId, String peerName, Set<int>? memberIds})? chat;
   final bool fullscreen;
   final VoidCallback onCancel;
   final ValueChanged<TaskItem> onCreated;
@@ -197,9 +208,11 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
   final _titleCtrl = TextEditingController();
   final _descCtrl = TextEditingController();
   final _acceptCtrl = TextEditingController();
-  String _priority = 'medium';
   String _category = '业务';
   String _subCategory = '销售';
+  String _acceptPreset = 'custom';
+  bool _categoryEdited = false;
+  bool _repeatMonthly = false;
   int? _ownerId;
   String _ownerName = '';
   DateTime? _startAt;
@@ -220,6 +233,13 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
   String? _dateError;
 
   bool get _isSub => widget.parentTaskId != null;
+  String get _editorTitle => _isSub
+      ? '添加子目标'
+      : switch (widget.chat?.assign) {
+          true => '指派任务',
+          false => '创建协同任务',
+          null => '新建主目标',
+        };
   List<(String, String)> get _subCategoryOptions =>
       _taskCategoryOptions[_category] ?? const [];
 
@@ -262,6 +282,15 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
     _ownerName = widget.session.displayName?.trim().isNotEmpty == true
         ? widget.session.displayName!.trim()
         : '我';
+    if (!_isSub) {
+      final now = DateTime.now();
+      _startAt = DateTime(now.year, now.month, now.day);
+      _applyPositionCategory(widget.session.jobTitle);
+    }
+    final chat = widget.chat;
+    if (chat != null && !chat.assign && (chat.peerId ?? 0) > 0 && chat.peerId != widget.session.userId) {
+      _participants.add(TaskAssignee(id: chat.peerId!, displayName: chat.peerName));
+    }
     unawaited(_loadRules());
     unawaited(_loadRdIntake());
     if (_isSub) {
@@ -287,9 +316,6 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
   void _applyParentDefaults(TaskItem? parent) {
     if (parent == null) return;
     _parentTask = parent;
-    if (parent.priority.trim().isNotEmpty) {
-      _priority = parent.priority;
-    }
     final parentCategory = parent.category.trim();
     if (_taskCategoryOptions.containsKey(parentCategory)) {
       _category = parentCategory;
@@ -344,6 +370,13 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
       setState(() {
         _canAssignTeam = intake.canAssignTeam;
         _rdOwners = intake.owners;
+        final chat = widget.chat;
+        if (chat != null && chat.assign && intake.canAssignTeam &&
+            _ownerId == widget.session.userId && (chat.peerId ?? 0) > 0 &&
+            chat.peerId != widget.session.userId) {
+          _ownerId = chat.peerId;
+          _ownerName = chat.peerName;
+        }
       });
     } catch (_) {}
   }
@@ -370,7 +403,15 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
     setState(() {
       _ownerId = picked.id;
       _ownerName = picked.displayName;
+      _applyPositionCategory(picked.positionName);
     });
+  }
+
+  void _applyPositionCategory(String position) {
+    if (_categoryEdited || _isSub) return;
+    final (primary, secondary) = taskCategoryForPosition(position);
+    _category = primary;
+    _subCategory = secondary;
   }
 
   bool _rejectTeamAssign(int userId) {
@@ -402,8 +443,9 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
       selectedIds: _participants.map((e) => e.id).toSet(),
       known: _participants,
       excludeUserId: 0,
-      title: '选择主任务参与人',
-      scope: 'participants',
+      title: widget.chat?.assign == false ? '选择协作人' : '选择主任务参与人',
+      scope: widget.chat?.assign == false ? null : 'participants',
+      allowedUserIds: widget.chat?.memberIds,
     );
     if (picked == null || !mounted) return;
     setState(() {
@@ -443,10 +485,10 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
                 color: DunesColors.resolveNullable(context, _themePurple),
               ),
               const SizedBox(width: 7),
-              const Expanded(
+              Expanded(
                 child: Text(
-                  '主任务参与人',
-                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+                  widget.chat?.assign == false ? '协作人' : '主任务参与人',
+                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
                 ),
               ),
               TextButton.icon(
@@ -461,7 +503,9 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
             ],
           ),
           Text(
-            '选择自己或自己的下属。参与人可以查看主任务并提交子任务，子任务需主任务负责人审核。',
+            widget.chat?.assign == false
+                ? '协作人可在任务列表和日报中跟进。'
+                : '选择自己或自己的下属。参与人可以查看主任务并提交子任务，子任务需主任务负责人审核。',
             style: TextStyle(
               fontSize: 11,
               height: 1.4,
@@ -576,6 +620,31 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
   }
 
   Future<void> _pickRequirementOwner() async {
+    if (widget.chat != null) {
+      if (!_canAssignTeam) {
+        showDunesCenterToast(context, '当前账号无法为他人指派任务');
+        return;
+      }
+      final selected = await showTaskHelperPicker(
+        context,
+        api: _api,
+        selectedIds: const {},
+        excludeUserId: widget.chat?.assign == true ? widget.session.userId : 0,
+        title: '选择执行人',
+        allowedUserIds: widget.chat?.memberIds,
+        single: true,
+      );
+      if (!mounted || selected == null || selected.isEmpty) return;
+      final picked = selected.first;
+      setState(() {
+        _ownerId = picked.id;
+        _ownerName = picked.displayName;
+        _applyPositionCategory(picked.id == widget.session.userId
+            ? widget.session.jobTitle
+            : picked.positionName);
+      });
+      return;
+    }
     final selfName = _requesterName;
     final options = <TaskAssignee>[
       TaskAssignee(id: widget.session.userId, displayName: selfName),
@@ -636,6 +705,9 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
     setState(() {
       _ownerId = picked.id;
       _ownerName = picked.displayName;
+      _applyPositionCategory(picked.id == widget.session.userId
+          ? widget.session.jobTitle
+          : picked.positionName);
       if (_handsOff) {
         for (final draft in _subDrafts) {
           draft.dispose();
@@ -647,6 +719,14 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
 
   Future<void> _submit() async {
     final selfId = widget.session.userId;
+    if (widget.chat?.assign == false && !_participants.any((person) => person.id != selfId)) {
+      showDunesCenterToast(context, '请添加协作人员');
+      return;
+    }
+    if (widget.chat?.assign == true && (_ownerId == null || _ownerId == selfId)) {
+      showDunesCenterToast(context, '请选择要指派的执行人');
+      return;
+    }
     final ownerId = _isSub && _dispatchKind != 'team'
         ? selfId
         : (_ownerId ?? selfId);
@@ -719,12 +799,15 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
         'description': _descCtrl.text.trim().isEmpty
             ? title
             : _descCtrl.text.trim(),
-        'priority': _priority,
         'category': _category,
         'subCategory': _subCategory,
+        if (!_isSub && _repeatMonthly) 'repeatMonthly': true,
         'acceptanceCriteria': _acceptCtrl.text.trim(),
         'ownerUserId': ownerId,
-        if (!_isSub && _participants.isNotEmpty)
+        if (widget.chat != null) 'notifyOnCreate': true,
+        if (widget.chat?.assign == false && _participants.isNotEmpty)
+          'coOwnerUserIds': _participants.map((person) => person.id).toList(),
+        if (!_isSub && widget.chat?.assign != false && _participants.isNotEmpty)
           'participantUserIds': _participants.map((e) => e.id).toList(),
         if (_isSub && _dispatchKind == 'assist' && _helpers.isNotEmpty)
           'coOwnerUserIds': _helpers.map((e) => e.id).toList(),
@@ -759,8 +842,8 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
               'title': draft.title.text.trim(),
               'description': draft.title.text.trim(),
               'acceptanceCriteria': draft.accept.text.trim(),
-              'priority': _priority,
               'category': _category,
+              'subCategory': _subCategory,
               'ownerUserId': teamOwner,
               if (draft.kind == 'assist')
                 'coOwnerUserIds': draft.helpers.map((e) => e.id).toList(),
@@ -1078,85 +1161,42 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
             onTap: _pickAssignee,
           ),
         const SizedBox(height: 14),
-        if (narrow) ...[
-          _dropdownField(
-            label: '优先级',
-            value: _priority,
-            items: const [
-              ('low', '低'),
-              ('medium', '中'),
-              ('high', '高'),
-              ('urgent', '紧急'),
-            ],
-            onChanged: (v) => setState(() => _priority = v),
-          ),
-          const SizedBox(height: 14),
-          _dropdownField(
-            label: '一级分类',
-            value: _category,
-            items: const [
-              ('业务', '业务'),
-              ('研发', '研发'),
-              ('管理', '管理'),
-              ('职能', '职能'),
-            ],
-            onChanged: (v) => setState(() {
-              _category = v;
-              _subCategory = _subCategoryOptions.first.$1;
-            }),
-          ),
-          const SizedBox(height: 14),
-          _dropdownField(
-            label: '二级分类',
-            value: _subCategory,
-            items: _subCategoryOptions,
-            onChanged: (v) => setState(() => _subCategory = v),
-          ),
-        ] else
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: _dropdownField(
-                  label: '优先级',
-                  value: _priority,
-                  items: const [
-                    ('low', '低'),
-                    ('medium', '中'),
-                    ('high', '高'),
-                    ('urgent', '紧急'),
-                  ],
-                  onChanged: (v) => setState(() => _priority = v),
-                ),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: _dropdownField(
-                  label: '一级分类',
-                  value: _category,
-                  items: const [
-                    ('业务', '业务'),
-                    ('研发', '研发'),
-                    ('管理', '管理'),
-                    ('职能', '职能'),
-                  ],
-                  onChanged: (v) => setState(() {
-                    _category = v;
-                    _subCategory = _subCategoryOptions.first.$1;
-                  }),
-                ),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: _dropdownField(
-                  label: '二级分类',
-                  value: _subCategory,
-                  items: _subCategoryOptions,
-                  onChanged: (v) => setState(() => _subCategory = v),
-                ),
-              ),
-            ],
-          ),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final primary = _dropdownField(
+              label: '一级分类',
+              value: _category,
+              items: const [('业务', '业务'), ('研发', '研发'), ('管理', '管理'), ('职能', '职能')],
+              onChanged: (value) => setState(() {
+                _categoryEdited = true;
+                _category = value;
+                _subCategory = _subCategoryOptions.first.$1;
+              }),
+            );
+            final secondary = _dropdownField(
+              label: '二级分类',
+              value: _subCategory,
+              items: _subCategoryOptions,
+              onChanged: (value) => setState(() {
+                _categoryEdited = true;
+                _subCategory = value;
+              }),
+            );
+            if (constraints.maxWidth < 380) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [primary, const SizedBox(height: 14), secondary],
+              );
+            }
+            return Row(
+              children: [
+                Expanded(child: primary),
+                const SizedBox(width: 14),
+                Expanded(child: secondary),
+              ],
+            );
+          },
+        ),
         if (!_isSub) ...[
           Padding(
             padding: const EdgeInsets.only(top: 8),
@@ -1234,11 +1274,35 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
           ),
         ],
         const SizedBox(height: 14),
+        if (!_isSub)
+          Material(
+            type: MaterialType.transparency,
+            child: CheckboxListTile(
+            contentPadding: EdgeInsets.zero,
+            dense: true,
+            controlAffinity: ListTileControlAffinity.leading,
+            activeColor: _themePurple,
+            title: const Text('每月重复'),
+            subtitle: const Text('每月初生成，沿用月内开始和截止日期'),
+            value: _repeatMonthly,
+              onChanged: (value) => setState(() => _repeatMonthly = value == true),
+            ),
+          ),
         _field(_descCtrl, '描述', hint: '背景 / 目标（可选）', maxLines: 2),
         const SizedBox(height: 14),
+        _dropdownField(
+          label: '验收标准',
+          value: _acceptPreset,
+          items: taskAcceptancePresets,
+          onChanged: (value) => setState(() {
+            _acceptCtrl.text = taskAcceptanceText(_acceptCtrl.text, _acceptPreset, value);
+            _acceptPreset = value;
+          }),
+        ),
+        const SizedBox(height: 8),
         _field(
           _acceptCtrl,
-          '验收标准',
+          '验收说明',
           hint: _isSub ? '填写子目标完成的判断标准' : '填写目标完成的判断标准',
           maxLines: 2,
           required: true,
@@ -1319,7 +1383,7 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
                 ),
                 Expanded(
                   child: Text(
-                    _isSub ? '添加子目标' : '新建主目标',
+                    _editorTitle,
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.w700,
@@ -1401,7 +1465,7 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
             children: [
               Expanded(
                 child: Text(
-                  _isSub ? '添加子目标' : '新建主目标',
+                  _editorTitle,
                   style: const TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.w700,

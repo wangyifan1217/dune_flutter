@@ -1232,12 +1232,22 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage>
         ],
         if (_lines.isEmpty)
           Padding(
-            padding: EdgeInsets.symmetric(vertical: 12),
-            child: Text(
-              '当天没有进行中的主目标或子目标，可填写其他工作。',
-              style: TextStyle(
-                color: DunesColors.resolve(context, DunesColors.text3),
-              ),
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Wrap(
+              spacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                const Text('当天没有待填任务，可填写其他工作。'),
+                if (!readOnly)
+                  TextButton(
+                    onPressed: () {
+                      if (_otherWork.text.trim().isEmpty) {
+                        _otherWork.text = '今日无工作记录';
+                      }
+                    },
+                    child: const Text('今日无工作记录'),
+                  ),
+              ],
             ),
           ),
         if (!readOnly && _lines.isNotEmpty)

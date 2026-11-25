@@ -15,12 +15,14 @@ import 'task_api.dart';
 import 'task_management_api.dart';
 import 'task_models.dart';
 import 'task_recurring_create_dialog.dart';
+import 'native_task_probation_pane.dart';
 import 'task_widgets.dart';
 
 enum TaskManagementSection {
   home,
   pending,
   recurring,
+  probation,
   team,
   config,
   calendar,
@@ -109,6 +111,7 @@ class _NativeTaskManagementPaneState extends State<NativeTaskManagementPane> {
     TaskManagementSection.home => '任务功能',
     TaskManagementSection.pending => '待我处理',
     TaskManagementSection.recurring => '周期任务',
+    TaskManagementSection.probation => '试用期目标',
     TaskManagementSection.team => '团队任务汇总',
     TaskManagementSection.config => '任务配置',
     TaskManagementSection.calendar => '节假日日历',
@@ -123,6 +126,7 @@ class _NativeTaskManagementPaneState extends State<NativeTaskManagementPane> {
     if (section == TaskManagementSection.config && !_canConfig) return;
     if (section == TaskManagementSection.calendar && !_canCalendar) return;
     if (section == TaskManagementSection.import && !_canImport) return;
+    if (section == TaskManagementSection.probation && !_canImport) return;
     if (section == TaskManagementSection.history && !_canHistory) return;
     setState(() {
       _section = section;
@@ -144,6 +148,7 @@ class _NativeTaskManagementPaneState extends State<NativeTaskManagementPane> {
       case TaskManagementSection.home:
       case TaskManagementSection.team:
       case TaskManagementSection.import:
+      case TaskManagementSection.probation:
         break;
     }
   }
@@ -387,7 +392,11 @@ class _NativeTaskManagementPaneState extends State<NativeTaskManagementPane> {
     setState(() => _downloadingTemplate = true);
     try {
       final bytes = await _managementApi.downloadImportTemplate(_importKind);
-      final name = _importKind == 'probation' ? '试用期目标模板.xlsx' : '任务导入模板.xlsx';
+      final name = switch (_importKind) {
+        'probation' => '试用期目标模板.xlsx',
+        'probation-batch' => '多人试用期目标模板.xlsx',
+        _ => '任务导入模板.xlsx',
+      };
       final location = await getSaveLocation(
         suggestedName: name,
         acceptedTypeGroups: const [
@@ -623,6 +632,21 @@ class _NativeTaskManagementPaneState extends State<NativeTaskManagementPane> {
     if (_section == TaskManagementSection.team) {
       return NativeTaskHrbpPane(session: widget.session);
     }
+    if (_section == TaskManagementSection.probation) {
+      return NativeTaskProbationPane(
+        api: _managementApi,
+        onImport: () {
+          setState(() {
+            _importKind = 'probation-batch';
+            _preview = null;
+            _commitResult = null;
+            _selectedFileBytes = null;
+            _selectedFileName = null;
+          });
+          _select(TaskManagementSection.import);
+        },
+      );
+    }
     if (_loading) {
       return const Center(child: CircularProgressIndicator(color: kTaskPurple));
     }
@@ -638,6 +662,7 @@ class _NativeTaskManagementPaneState extends State<NativeTaskManagementPane> {
       TaskManagementSection.history => _buildHistory(),
       TaskManagementSection.home => _buildHome(),
       TaskManagementSection.team => const SizedBox.shrink(),
+      TaskManagementSection.probation => const SizedBox.shrink(),
     };
   }
 
@@ -656,6 +681,7 @@ class _NativeTaskManagementPaneState extends State<NativeTaskManagementPane> {
       case TaskManagementSection.home:
       case TaskManagementSection.team:
       case TaskManagementSection.import:
+      case TaskManagementSection.probation:
         break;
     }
   }
@@ -703,6 +729,14 @@ class _NativeTaskManagementPaneState extends State<NativeTaskManagementPane> {
       );
     }
     if (_canImport) {
+      cards.add(
+        _sectionCard(
+          icon: Icons.track_changes_outlined,
+          title: '试用期目标',
+          subtitle: '查看全员进度、手动指派或批量导入',
+          onTap: () => _select(TaskManagementSection.probation),
+        ),
+      );
       cards.add(
         _sectionCard(
           icon: Icons.file_upload_outlined,
@@ -1454,9 +1488,11 @@ class _NativeTaskManagementPaneState extends State<NativeTaskManagementPane> {
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 30),
         children: [
           Text(
-            _importKind == 'probation'
-                ? '先选择试用期员工并下载目标模板，校验通过后再创建主任务和验收子任务。'
-                : '选择任务模板后先预览校验，再确认写入任务数据。',
+            switch (_importKind) {
+              'probation' => '先选择试用期员工并下载目标模板，校验通过后再创建主任务和验收子任务。',
+              'probation-batch' => '每行填写一个试用期目标，员工编号按组织档案填写。校验通过后统一提交。',
+              _ => '选择任务模板后先预览校验，再确认写入任务数据。',
+            },
             style: TextStyle(
               fontSize: 13,
               color: DunesColors.resolve(context, DunesColors.text3),

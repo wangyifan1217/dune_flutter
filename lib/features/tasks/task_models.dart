@@ -274,6 +274,7 @@ class TaskDetail {
     this.attachments = const [],
     this.pendingChangeRequest,
     this.changeHistory = const [],
+    this.canStopMonthlyRepeat = false,
   });
 
   final TaskItem task;
@@ -283,6 +284,7 @@ class TaskDetail {
   final List<TaskAttachment> attachments;
   final TaskChangeRequest? pendingChangeRequest;
   final List<TaskChangeRequest> changeHistory;
+  final bool canStopMonthlyRepeat;
 }
 
 class TaskChangeField {
@@ -537,6 +539,7 @@ class TaskAssignee {
     required this.id,
     required this.displayName,
     this.departmentName = '',
+    this.positionName = '',
     this.avatarPreset = '',
     this.avatarObjectKey = '',
     this.avatarUrl = '',
@@ -545,6 +548,7 @@ class TaskAssignee {
   final int id;
   final String displayName;
   final String departmentName;
+  final String positionName;
   final String avatarPreset;
   final String avatarObjectKey;
   final String avatarUrl;
@@ -554,6 +558,7 @@ class TaskAssignee {
       id: (json['id'] as num?)?.toInt() ?? 0,
       displayName: '${json['displayName'] ?? ''}',
       departmentName: '${json['departmentName'] ?? ''}',
+      positionName: '${json['positionName'] ?? json['jobTitle'] ?? json['title'] ?? ''}',
       avatarPreset: '${json['avatarPreset'] ?? ''}',
       avatarObjectKey: '${json['avatarObjectKey'] ?? ''}',
       avatarUrl: '${json['avatarUrl'] ?? ''}',

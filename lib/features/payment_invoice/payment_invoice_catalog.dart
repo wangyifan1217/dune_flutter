@@ -529,6 +529,29 @@ bool isPaymentCompleted(
   return false;
 }
 
+Iterable<String> _paymentPayeeSearchTexts(Map<String, dynamic> form) sync* {
+  final items = form['paymentItems'];
+  final rows = [
+    form,
+    if (items is List) ...items.whereType<Map>(),
+    if (items is Map) items,
+  ];
+  for (final row in rows) {
+    for (final key in const ['payeeName', 'payee', '收款户名']) {
+      final value = row[key];
+      if (value is Map) {
+        for (final field in const [
+          'label', 'name', 'value', 'text', 'payee', 'companyName', 'payeeName',
+        ]) {
+          yield stringifyPaymentInvoiceValue(value[field]);
+        }
+      } else {
+        yield stringifyPaymentInvoiceValue(value);
+      }
+    }
+  }
+}
+
 bool matchesPaymentInvoiceQuery(PaymentInvoiceRow row, PaymentInvoiceQuery query) {
   if (row.kind != query.kind) return false;
   if (query.id.trim().isNotEmpty &&
@@ -550,6 +573,8 @@ bool matchesPaymentInvoiceQuery(PaymentInvoiceRow row, PaymentInvoiceQuery query
       row.purpose,
       row.payeeAccount,
       row.counterparty,
+      if (row.kind == PaymentInvoiceKind.payment)
+        ..._paymentPayeeSearchTexts(row.formValues),
     ].any((value) => _contains(value, needle));
     if (!hit) return false;
   }

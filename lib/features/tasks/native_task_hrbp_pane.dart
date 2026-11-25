@@ -9,6 +9,7 @@ import '../shell/dunes_toast.dart';
 import 'native_task_action_page.dart';
 import 'native_task_detail_page.dart';
 import 'native_task_home_pane.dart';
+import 'native_task_goal_report_page.dart';
 import 'task_api.dart';
 import 'task_chat_forward.dart';
 import 'task_first_use_guide.dart';
@@ -697,6 +698,13 @@ class _NativeTaskHrbpPaneState extends State<NativeTaskHrbpPane> {
               Icons.refresh_rounded,
               color: DunesColors.resolve(context, DunesColors.text2),
             ),
+          ),
+          OutlinedButton.icon(
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(
+              builder: (_) => NativeTaskGoalReportPage(api: _api),
+            )),
+            icon: const Icon(Icons.timeline_outlined, size: 18),
+            label: const Text('目标进展（日报）'),
           ),
         ],
       ),

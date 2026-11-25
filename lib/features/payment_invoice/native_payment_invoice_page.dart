@@ -403,7 +403,7 @@ class _NativePaymentInvoicePageState extends State<NativePaymentInvoicePage> {
             onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
             decoration: InputDecoration(
               hintText: _kind == PaymentInvoiceKind.payment
-                  ? '搜索审批名称、发起人、收款账户'
+                  ? '搜索审批名称、发起人、收款户名或账号'
                   : '搜索审批名称、发起人、客户',
               isDense: true,
               prefixIcon: const Icon(Icons.search, size: 20),

@@ -1370,7 +1370,12 @@ class _NativeChatViewState extends State<NativeChatView>
         _inputFocusNode.hasFocus && inset > _lastKeyboardInset + 1;
     _lastKeyboardInset = inset;
     if (keyboardOpening && !_shouldAnchorMessagesAtTop) {
-      _scrollBottom(force: true, gentle: true);
+      // 列表已在最新端（offset≈0）时不要每帧重复触发 jumpTo(0)，避免键盘弹出动画掉帧。
+      final needScroll =
+          _scrollController.hasClients && _scrollController.offset > 0.5;
+      if (needScroll) {
+        _scrollBottom(force: true, gentle: true);
+      }
     } else if (_emojiOpen && !_shouldAnchorMessagesAtTop) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted && _emojiOpen && !_isBrowsingHistory) {
@@ -4130,16 +4135,26 @@ class _NativeChatViewState extends State<NativeChatView>
       return;
     }
     if (_shouldAnchorMessagesAtTop) return;
-    setState(_clearPendingNewMessages);
+    final needsClearRebuild = _pendingNewMessageCount > 0 || _awayFromLatest;
+    if (needsClearRebuild) {
+      setState(_clearPendingNewMessages);
+    } else {
+      _clearPendingNewMessages();
+    }
     _wasNearBottom = true;
+    final alreadyAtBottom =
+        _scrollController.hasClients && _scrollController.offset <= 0.5;
+    if (alreadyAtBottom) return;
     void snap({bool animated = false}) {
       if (!mounted) return;
+      if (_scrollController.hasClients && _scrollController.offset <= 0.5) {
+        return;
+      }
       _clearStableHistoryViewport();
       _scrollBottom(force: true, animated: animated, gentle: true);
     }
 
     snap(animated: true);
-    WidgetsBinding.instance.addPostFrameCallback((_) => snap());
     Future<void>.delayed(const Duration(milliseconds: 280), () {
       if (mounted && _inputFocusNode.hasFocus) snap();
     });
@@ -11591,30 +11606,33 @@ class _NativeChatViewState extends State<NativeChatView>
                                     ),
                                   )
                                 else
-                                  NotificationListener<Notification>(
-                                    onNotification: (notification) {
-                                      if (notification
-                                          is ScrollMetricsNotification) {
-                                        if (notification.depth == 0) {
-                                          _syncHeaderDivider(
-                                            notification.metrics,
-                                          );
+                                  RepaintBoundary(
+                                    child: NotificationListener<Notification>(
+                                      onNotification: (notification) {
+                                        if (notification
+                                            is ScrollMetricsNotification) {
+                                          if (notification.depth == 0) {
+                                            _syncHeaderDivider(
+                                              notification.metrics,
+                                            );
+                                          }
+                                          return false;
                                         }
-                                        return false;
-                                      }
-                                      return notification
-                                              is ScrollNotification &&
-                                          _onMessageListScroll(notification);
-                                    },
-                                    child: LayoutBuilder(
-                                      builder: (context, constraints) {
-                                        final wide = isWideChatLayout(context);
-                                        // PC 桌面禁用 shrinkWrap：否则短会话 maxScrollExtent≈0，
-                                        // 鼠标滚轮无法驱动 ScrollPosition，「上滑加载」失效。
-                                        final useShrinkWrap =
-                                            wide && !isDesktopCommOnly;
-                                        const sidePadding = 12.0;
-                                        final list = Listener(
+                                        return notification
+                                                is ScrollNotification &&
+                                            _onMessageListScroll(notification);
+                                      },
+                                      child: Builder(
+                                        builder: (context) {
+                                          final wide = isWideChatLayout(
+                                            context,
+                                          );
+                                          // PC 桌面禁用 shrinkWrap：否则短会话 maxScrollExtent≈0，
+                                          // 鼠标滚轮无法驱动 ScrollPosition，「上滑加载」失效。
+                                          final useShrinkWrap =
+                                              wide && !isDesktopCommOnly;
+                                          const sidePadding = 12.0;
+                                          final list = Listener(
                                           onPointerSignal:
                                               _onMessageListPointerSignal,
                                           child: ListView.builder(
@@ -12030,19 +12048,16 @@ class _NativeChatViewState extends State<NativeChatView>
                                             },
                                           ),
                                         );
-                                        // 桌面端列表已铺满视口，无需 shrinkWrap+Align。
-                                        if (!wide || isDesktopCommOnly)
-                                          return list;
-                                        return Align(
-                                          alignment: Alignment.topCenter,
-                                          child: ConstrainedBox(
-                                            constraints: BoxConstraints(
-                                              maxHeight: constraints.maxHeight,
-                                            ),
+                                          // 桌面端列表已铺满视口，无需 shrinkWrap+Align。
+                                          if (!wide || isDesktopCommOnly) {
+                                            return list;
+                                          }
+                                          return Align(
+                                            alignment: Alignment.topCenter,
                                             child: list,
-                                          ),
-                                        );
-                                      },
+                                          );
+                                        },
+                                      ),
                                     ),
                                   ),
                                 if (_locating)

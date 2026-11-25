@@ -278,6 +278,8 @@ class LighthouseIntradayHero extends StatefulWidget {
     this.toggle,
     this.footer,
     this.forecastPanel,
+    this.summaryTrailing,
+    this.summaryBelow,
     this.asOfMinute,
     this.monthly = false,
     this.monthAsOf,
@@ -337,6 +339,12 @@ class LighthouseIntradayHero extends StatefulWidget {
 
   /// 本月预测，放在实际汇总旁，与走势共用 Hero 外框。
   final Widget? forecastPanel;
+
+  /// 2026-11-25 · 大数那一行最右边（「今日异动」小卡）；窄屏落到对比下面。
+  final Widget? summaryTrailing;
+
+  /// 大数下面就地展开的一块（「今日异动」面板）；由外面管开关和动效。
+  final Widget? summaryBelow;
 
   /// 今天的大数对应的时刻（当天第几分钟，上海时间）；今天没有快照时用它推曲线、写「截至」。
   final int? asOfMinute;
@@ -657,21 +665,45 @@ class _LighthouseIntradayHeroState extends State<LighthouseIntradayHero> {
         if (compact) ...[
           amount,
           if (comparison != null) ...[const SizedBox(height: 5), comparison],
+          if (widget.summaryTrailing != null) ...[
+            const SizedBox(height: 8),
+            Align(alignment: Alignment.centerRight, child: widget.summaryTrailing),
+          ],
         ] else
-          Row(
-            children: [
-              Flexible(flex: 5, child: amount),
-              if (comparison != null) ...[
-                const SizedBox(width: 12),
-                Container(
-                  width: 1,
-                  height: 34,
-                  color: _c(const Color(0xFFECE8F4), role: DunesColorRole.border),
-                ),
-                const SizedBox(width: 12),
-                Expanded(flex: 7, child: comparison),
-              ],
-            ],
+          LayoutBuilder(
+            builder: (context, box) {
+              final trailing = widget.summaryTrailing;
+              // 右边要放小卡：一行至少 330 才排得下「大数 | 对比 | 小卡」，
+              // 再窄小卡落到下一行右侧，不去挤大数。
+              final inline = trailing != null &&
+                  box.maxWidth >= 330 * MediaQuery.textScalerOf(context).scale(1);
+              final row = Row(
+                children: [
+                  if (inline) amount else Flexible(flex: 5, child: amount),
+                  if (comparison != null) ...[
+                    const SizedBox(width: 12),
+                    Container(
+                      width: 1,
+                      height: 34,
+                      color: _c(const Color(0xFFECE8F4), role: DunesColorRole.border),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(flex: 7, child: comparison),
+                  ] else if (inline)
+                    const Spacer(),
+                  if (inline) ...[const SizedBox(width: 8), trailing!],
+                ],
+              );
+              if (trailing == null || inline) return row;
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  row,
+                  const SizedBox(height: 8),
+                  Align(alignment: Alignment.centerRight, child: trailing),
+                ],
+              );
+            },
           ),
       ],
     );
@@ -718,6 +750,7 @@ class _LighthouseIntradayHeroState extends State<LighthouseIntradayHero> {
                 );
               },
             ),
+          ?widget.summaryBelow,
           const SizedBox(height: 14),
           if (!widget.monthly) ...[
             _viewTabs(week),

@@ -773,7 +773,7 @@ class _LighthouseOpsPageState extends State<LighthouseOpsPage> {
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Text(nationwide ? '全国汇总 · 单位：万元' : '单位：万元', style: _t(11, color: _kMute)),
+                  Text(nationwide ? '全国汇总 · 单位：元' : '单位：元', style: _t(11, color: _kMute)),
                   const SizedBox(height: 8),
                   _drillTableLine(
                     province ? ['省份', '周期', '销售额', '销售规模'] : ['统计日', '产品', '应收'],
@@ -784,12 +784,12 @@ class _LighthouseOpsPageState extends State<LighthouseOpsPage> {
                       province ? [
                         item.provinceName.isEmpty ? '—' : item.provinceName,
                         item.periodLabel.isEmpty ? item.statDate : item.periodLabel,
-                        _formatProvinceAmount(item.salesAmount),
-                        _formatProvinceAmount(item.salesScale),
+                        _formatTableAmount(item.salesAmount),
+                        _formatTableAmount(item.salesScale),
                       ] : [
                         item.statDate.isEmpty ? (item.periodLabel.isEmpty ? '—' : item.periodLabel) : item.statDate,
                         item.productName.isEmpty ? '—' : item.productName,
-                        _formatProvinceAmount(item.receivableAmount),
+                        _formatTableAmount(item.receivableAmount),
                       ],
                       total: item.periodLabel.contains('累计'),
                       selected: province && row.statDateDay.isNotEmpty &&
@@ -809,11 +809,16 @@ class _LighthouseOpsPageState extends State<LighthouseOpsPage> {
     );
   }
 
-  static String _formatProvinceAmount(double yuan) {
-    final parts = (yuan / 10000).toStringAsFixed(2).split('.');
+  static String _formatTableAmount(double yuan, {bool inWan = false}) {
+    if (!yuan.isFinite) return '—';
+    final cents = (yuan.abs() * 100).round();
+    final amount = inWan ? cents / 1000000 : cents / 100;
+    final formatted = amount.toStringAsFixed(2);
+    final parts = formatted.split('.');
     if (parts.length != 2) return '—';
     final whole = parts[0].replaceAll(RegExp(r'\B(?=(\d{3})+(?!\d))'), ',');
-    return '$whole.${parts[1]}';
+    final sign = yuan < 0 && formatted != '0.00' ? '-' : '';
+    return '$sign$whole.${parts[1]}${inWan ? '万' : ''}';
   }
 
   Widget _drillTableLine(List<String> cells, {
@@ -1970,12 +1975,14 @@ class _LighthouseOpsPageState extends State<LighthouseOpsPage> {
     ),
   );
 
-  Widget _okWait(int ok, int wait, int readOnly) => Wrap(
+  Widget _okWait(int ok, int wait, {int readOnly = 0}) => Wrap(
     spacing: 6,
     runSpacing: 6,
     children: [
-      _pillTag('已确认 $ok', _kOkText, _kOkBg, icon: Icons.done_rounded),
-      _pillTag('待确认 $wait', _kWaitText, _kWaitBg),
+      if (readOnly == 0 || ok + wait > 0) ...[
+        _pillTag('已确认 $ok', _kOkText, _kOkBg, icon: Icons.done_rounded),
+        _pillTag('待确认 $wait', _kWaitText, _kWaitBg),
+      ],
       if (readOnly > 0) _pillTag('只读 $readOnly', _kMute, _kGreyBg),
     ],
   );
@@ -1994,7 +2001,9 @@ class _LighthouseOpsPageState extends State<LighthouseOpsPage> {
     final unassigned = rows
         .where((r) => r.assignees.any((p) => p.unassigned && !p.done))
         .length;
-    final projects = {for (final r in rows) '${r.channel}|${r.project}'}.length;
+    final projects = tag == 2
+        ? all.length
+        : {for (final r in rows) (r.channel, r.project)}.length;
     final groupLabel = tag == 2 ? '省份' : '渠道';
     final asOf = DateTime.tryParse(_asOfDate);
     final title = _mode == 'month'
@@ -2054,6 +2063,7 @@ class _LighthouseOpsPageState extends State<LighthouseOpsPage> {
               _pillTag('${tag == 2 ? '主体' : '项目'} $projects', _kInk2, _kGreyBg),
               _pillTag('已确认 $done', _kOkText, _kOkBg, icon: Icons.done_rounded),
               _pillTag('待确认 ${total - done}', _kWaitText, _kWaitBg),
+              if (readOnly > 0) _pillTag('只读 $readOnly', _kMute, _kGreyBg),
               if (unassigned > 0) _pillTag('无人负责 $unassigned', _kRed, _kRedBg),
             ],
           ),
@@ -2156,6 +2166,7 @@ class _LighthouseOpsPageState extends State<LighthouseOpsPage> {
                 title: c.$1,
                 items: [for (final r in c.$2) (r, r.group == _OpsGroup.done)],
                 channelAmounts: tag == 3 ? _sumChannelAmounts(c.$2) : null,
+                provinceAssets: tag == 2 ? _tag2ProvinceAssets(c.$2) : null,
               ),
             if (tag == 3) _channelSummaryLine(amounts: _sumChannelAmounts(rows)),
           ]
@@ -2174,7 +2185,7 @@ class _LighthouseOpsPageState extends State<LighthouseOpsPage> {
             Padding(
               padding: const EdgeInsets.only(top: 10),
               child: Text(
-                '另有 $readOnly 条只读行（不是你名下的主体），不计入进度',
+                '$readOnly 条只读明细可在省份页查看，不计入确认进度',
                 textAlign: TextAlign.center,
                 style: _t(11, color: _kMute2),
               ),
@@ -2498,7 +2509,9 @@ class _LighthouseOpsPageState extends State<LighthouseOpsPage> {
                   fit: BoxFit.scaleDown,
                   alignment: Alignment.centerRight,
                   child: Text(
-                    heading ? columns[index] : _formatProvinceAmount(values[index]),
+                    heading
+                        ? columns[index]
+                        : _formatTableAmount(values[index], inWan: true),
                     maxLines: 1,
                     style: _t(
                       heading ? 11.5 : 13,
@@ -2506,7 +2519,7 @@ class _LighthouseOpsPageState extends State<LighthouseOpsPage> {
                       tabular: true,
                       color: heading
                           ? _kInk2
-                          : (index == 2 ? _formatProvinceAmount(values[index]) != '0.00' : values[index] < 0)
+                          : (index == 2 ? _nonZero(values[index]) : values[index] < 0)
                           ? _kRed
                           : index == 2 ? _kMute2 : _kInk,
                     ),
@@ -2519,6 +2532,19 @@ class _LighthouseOpsPageState extends State<LighthouseOpsPage> {
     );
   }
 
+  double? _tag2ProvinceAssets(List<_OpsRow> rows) {
+    var total = 0.0;
+    for (final item in rows) {
+      final row = item.tag2;
+      if (row == null) return null;
+      final display = _amount(row, 'asset_total')?.display ?? '';
+      final value = double.tryParse(display.replaceAll(',', ''));
+      if (value == null || !value.isFinite) return null;
+      total += value;
+    }
+    return total;
+  }
+
   Widget _reportGroup({
     required String key,
     required String title,
@@ -2528,10 +2554,12 @@ class _LighthouseOpsPageState extends State<LighthouseOpsPage> {
     Widget? action,
     Widget? trailing,
     (double, double, double)? channelAmounts,
+    double? provinceAssets,
   }) {
     final open = _openReport.contains(key);
-    final ok = items.where((e) => e.$2).length;
-    final readOnly = items.where((e) => e.$1.group == _OpsGroup.readOnly).length;
+    final counted = items.where((e) => e.$1.group != _OpsGroup.readOnly);
+    final readOnly = items.length - counted.length;
+    final ok = counted.where((e) => e.$2).length;
     final projects = {for (final e in items) (e.$1.channel, e.$1.project)}.length;
     final itemLabel = (_mode == 'month' ? 3 : _tag) == 2 ? '主体' : '项目';
     int rank((_OpsRow, bool) e) => e.$1.group == _OpsGroup.mine
@@ -2636,7 +2664,9 @@ class _LighthouseOpsPageState extends State<LighthouseOpsPage> {
                         ),
                       ),
                       Text(
-                        '$projects $itemLabel · ${items.length} 条',
+                        itemLabel == '主体'
+                            ? '${items.length} 个主体'
+                            : '$projects $itemLabel · ${items.length} 条',
                         style: _t(11.5, color: _kMute2, tabular: true),
                       ),
                     ],
@@ -2645,7 +2675,16 @@ class _LighthouseOpsPageState extends State<LighthouseOpsPage> {
                     padding: const EdgeInsets.only(left: 24, top: 6),
                     child: Row(
                       children: [
-                        Expanded(child: _okWait(ok, items.length - ok - readOnly, readOnly)),
+                        Expanded(
+                          child: _okWait(ok, counted.length - ok, readOnly: readOnly),
+                        ),
+                        if (provinceAssets != null) ...[
+                          const SizedBox(width: 8),
+                          Text(
+                            '资产合计 ${_formatTableAmount(provinceAssets, inWan: true)}',
+                            style: _t(11.5, weight: FontWeight.w700, tabular: true),
+                          ),
+                        ],
                         if (trailing != null) trailing,
                       ],
                     ),
@@ -2654,6 +2693,14 @@ class _LighthouseOpsPageState extends State<LighthouseOpsPage> {
               ),
             ),
           ),
+          if (open && channelAmounts != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 0, 4, 8),
+              child: Text(
+                '${items.length} 条明细 · 合计利润 ${_formatTableAmount(channelAmounts.$2)} 元',
+                style: _t(11.5, color: _kMute, tabular: true),
+              ),
+            ),
           if (open && action != null)
             Padding(padding: const EdgeInsets.fromLTRB(24, 0, 2, 10), child: action),
           if (open)
@@ -3142,6 +3189,7 @@ class _LighthouseOpsPageState extends State<LighthouseOpsPage> {
         .where((person) => person.role == '业务')
         .toList();
     final activeDrill = _openTag3Details[(_asOfDate, project.id)];
+    String moneyInWan(double value) => _formatTableAmount(value, inWan: true);
     Color? diffColor(double v) => _nonZero(v) ? _kRed : _kMute2;
     return _sheetFrame(
       positionLabel: positionLabel,
@@ -3159,24 +3207,24 @@ class _LighthouseOpsPageState extends State<LighthouseOpsPage> {
       status: row.confirmationStatusLabel,
       children: [
         _numGrid([
-          ('销售额', _money(row.salesAmount), null, () => _toggleTag3Detail(project, row, 'provinceSplit')),
-          ('销售规模', _money(row.salesScale), null, null),
-          ('核销额', _money(row.writeOffAmount), null, null),
-          ('利润', _money(row.profitAmount), const Color(0xFFB3372A), null),
-          ('经营性现金流', _money(row.cashFlowAmount), null, null),
-          ('现金应收', _money(row.cashReceivableAmount), null, () => _toggleTag3Detail(project, row, 'receivableAmount')),
-          ('现金实收', _money(row.cashPaidAmount), null, null),
-          ('现金应收差额', _money(row.cashReceivableDiff), diffColor(row.cashReceivableDiff), null),
-          ('补贴应收', _money(row.subsidyReceivableAmount), null, null),
+          ('销售额', moneyInWan(row.salesAmount), null, () => _toggleTag3Detail(project, row, 'provinceSplit')),
+          ('销售规模', moneyInWan(row.salesScale), null, null),
+          ('核销额', moneyInWan(row.writeOffAmount), null, null),
+          ('利润', moneyInWan(row.profitAmount), const Color(0xFFB3372A), null),
+          ('经营性现金流', moneyInWan(row.cashFlowAmount), null, null),
+          ('现金应收', moneyInWan(row.cashReceivableAmount), null, () => _toggleTag3Detail(project, row, 'receivableAmount')),
+          ('现金实收', moneyInWan(row.cashPaidAmount), null, null),
+          ('现金应收差额', moneyInWan(row.cashReceivableDiff), diffColor(row.cashReceivableDiff), null),
+          ('补贴应收', moneyInWan(row.subsidyReceivableAmount), null, null),
         ], compact: true, activeDrill: activeDrill),
         if (activeDrill != null) _tag3DetailPanel(project, row, activeDrill),
         if (month != null) ...[
           Divider(height: 16, color: _c(_kLine, role: DunesColorRole.border)),
           _sectionTitle('本月累计', trailing: _pillTag('只看', _kMute, _kGreyBg, detail: true), compact: true),
           _numGrid([
-            ('销售额', _money(month.salesAmount), null, null),
-            ('核销额', _money(month.writeOffAmount), null, null),
-            ('现金应收差额', _money(month.cashReceivableDiff), diffColor(month.cashReceivableDiff), null),
+            ('销售额', moneyInWan(month.salesAmount), null, null),
+            ('核销额', moneyInWan(month.writeOffAmount), null, null),
+            ('现金应收差额', moneyInWan(month.cashReceivableDiff), diffColor(month.cashReceivableDiff), null),
           ], compact: true),
         ],
         Divider(height: 16, color: _c(_kLine, role: DunesColorRole.border)),

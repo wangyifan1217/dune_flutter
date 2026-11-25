@@ -46,10 +46,13 @@ import 'lighthouse_hero_metric.dart';
 import 'lighthouse_hero_chart.dart';
 import 'lighthouse_hero_swipe.dart';
 import 'lighthouse_intraday_hero.dart';
+import 'lighthouse_movers.dart';
+import 'lighthouse_oil_price.dart';
 import 'lighthouse_ledger_card_v2.dart';
 import 'lighthouse_press.dart';
 import 'lighthouse_period_bar.dart';
 import 'lighthouse_product_l3.dart';
+import 'lighthouse_profit_split.dart';
 import 'lighthouse_rank_badge.dart';
 import 'lighthouse_service.dart';
 import 'lighthouse_theme.dart';
@@ -15473,7 +15476,30 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
 
   /// 分时缓存：日期（YYYY-MM-DD）→ 那天 + 前一天的快照。往前的日子快照不会再变，拉过就不再拉。
   final Map<String, LhIntradayData> _intradayByDate = {};
+
+  // ── 今日异动（2026-11-25）：「今日盈利」大数右边的小卡 + 就地展开的面板 ──
+  LhMovers? _movers;
+  bool _moversOpen = false;
+
+  /// 这一帧大数旁边实际放出来的那份异动（[_profitSplitHost] 拿它画盖满 Hero 的面板）。
+  LhMovers? _moversShown;
+
+  /// 正式数据出来之前的示例（按今天利润 + 时刻缓存，避免每帧重建）。
+  LhMovers? _moversDemo;
+  String _moversDemoKey = '';
+  bool _moversLoading = false;
   final Set<String> _intradayLoading = {};
+
+  // ── 今日油价（2026-11-25）：卡头药丸 + 从药丸画圆盖满主 Hero 的面板（lighthouse_oil_price.dart）──
+  LhOilReport? _oil;
+  bool _oilOpen = false;
+  bool _oilLoading = false;
+  DateTime? _oilLoadedAt;
+
+  /// 圆心离 Hero 区右上角多远（点药丸时按药丸实际位置量）。
+  Offset _oilOrigin = const Offset(120, 0);
+  final GlobalKey _oilPillKey = GlobalKey(debugLabel: 'lh-oil-pill');
+  final GlobalKey _oilRevealKey = GlobalKey(debugLabel: 'lh-oil-reveal');
 
   /// 日期条单击预览的那天（0 = 今天，-1 = 昨天…）；只在整页还停在 [_intradayPreviewBase] 那天时算数。
   int? _intradayPreviewOffset;
@@ -15514,8 +15540,160 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
         '${d.day.toString().padLeft(2, '0')}';
   }
 
+  /// 今日异动：后端算好（lighthouse-go intraday_movers.go）。取不到就不出小卡，不影响大数。
+  Future<void> _loadMovers() async {
+    if (widget.sharedCard != null || _moversLoading) return;
+    _moversLoading = true;
+    try {
+      LhMovers? next;
+      try {
+        next = LhMovers.fromJson(await _service.fetchIntradayMovers());
+      } catch (_) {
+        next = null; // 后端还没上这个接口 / 暂时不可用：页面上放示例（见 _buildIntradayHero）
+      }
+      if (!mounted) return;
+      final result = next;
+      setState(() {
+        _movers = result;
+        // 只有正式结果说「没有异动」时才收起；示例照样能开着看。
+        if (result != null && result.isFormal && !result.hasMovers) _moversOpen = false;
+      });
+    } finally {
+      _moversLoading = false;
+    }
+  }
+
+  /// 大数旁边放哪份异动：正式（后端基准够天数）用真的；还没有时放一份示例看效果
+  /// （标「示例 · 明日起真实」）；受数据规则限制的什么都不放。
+  LhMovers? _moversForHero(double todayValue, DateTime asOf) {
+    final real = _movers;
+    if (real != null && real.restricted) return null;
+    if (real != null && real.isFormal) return real;
+    final minute = asOf.hour * 60 + asOf.minute;
+    final key = '${todayValue.round()}|$minute|${_intradayDateKey(0)}';
+    if (_moversDemoKey != key || _moversDemo == null) {
+      _moversDemoKey = key;
+      _moversDemo = lhDemoMovers(today: todayValue, minute: minute, now: _nowCST());
+    }
+    return _moversDemo;
+  }
+
+  /// 今日异动和利润分布一样：点开从小卡那一点画圆盖满主 Hero；两个只开一个。
+  void _toggleMovers() {
+    LighthouseFeedback.instance.play(
+      _moversOpen ? LighthouseFeedbackKind.collapse : LighthouseFeedbackKind.expand,
+    );
+    setState(() {
+      _moversOpen = !_moversOpen;
+      if (_moversOpen) {
+        _profitSplitOpen = false;
+        _oilOpen = false;
+      }
+    });
+  }
+
+  /// 今日油价：取不到（后端还没上 / 暂时不可用）就不出药丸。10 分钟内不重复拉。
+  Future<void> _loadOil({bool force = false}) async {
+    if (widget.sharedCard != null || widget.financeOnly || _oilLoading) return;
+    final at = _oilLoadedAt;
+    if (!force && at != null && DateTime.now().difference(at) < const Duration(minutes: 10)) return;
+    _oilLoading = true;
+    try {
+      final data = await _service.fetchOilPrice();
+      if (!mounted) return;
+      setState(() {
+        _oil = LhOilReport.fromJson(data);
+        _oilLoadedAt = DateTime.now();
+      });
+    } catch (_) {
+      // 不影响主数。
+    } finally {
+      _oilLoading = false;
+    }
+  }
+
+  /// 和利润分布 / 今日异动一样：从药丸那一点画圆盖满主 Hero；三个只开一个。
+  void _toggleOil() {
+    final pill = _oilPillKey.currentContext?.findRenderObject();
+    final host = _oilRevealKey.currentContext?.findRenderObject();
+    if (pill is RenderBox && host is RenderBox && pill.hasSize && host.hasSize) {
+      final c = pill.localToGlobal(pill.size.center(Offset.zero));
+      final tr = host.localToGlobal(Offset(host.size.width, 0));
+      _oilOrigin = Offset(tr.dx - c.dx, c.dy - tr.dy);
+    }
+    LighthouseFeedback.instance.play(
+      _oilOpen ? LighthouseFeedbackKind.collapse : LighthouseFeedbackKind.expand,
+    );
+    setState(() {
+      _oilOpen = !_oilOpen;
+      if (_oilOpen) {
+        _profitSplitOpen = false;
+        _moversOpen = false;
+      }
+    });
+    if (_oilOpen) unawaited(_loadOil());
+  }
+
+  /// 「加油类产品今天」：今天的产品维（不跟页面选的周期走），名字里带中石化 / 中石油 / 加油的；
+  /// 今日异动是正式数据时把那条的标签带上。
+  Future<List<LhOilProduct>> _loadOilProducts() async {
+    final data = await _service.fetchDimension(tab: 'product', period: 'day', offset: 0);
+    final sums = <String, double>{};
+    for (final r in (data['rows'] as List? ?? const []).whereType<Map>()) {
+      final name = (r['name']?.toString() ?? '').trim();
+      if (name.isEmpty || !lhIsOilProduct(name)) continue;
+      final v = r['profit'];
+      sums[name] = (sums[name] ?? 0) + (v is num ? v.toDouble() : double.tryParse('${v ?? ''}') ?? 0);
+    }
+    final movers = _movers;
+    final byName = <String, LhProductMover>{
+      if (movers != null && movers.isFormal)
+        for (final m in movers.products) m.name: m,
+    };
+    final out = [
+      for (final e in sums.entries)
+        LhOilProduct(name: e.key, profit: e.value, badge: byName[e.key]?.badge, up: byName[e.key]?.up),
+    ]..sort((a, b) => b.profit.abs().compareTo(a.profit.abs()));
+    return out;
+  }
+
+  /// 异动里点一个产品：产品列表里能唯一对上就进它的二级详情，对不上就落到产品列表。
+  void _openMoverProduct(String name) {
+    LighthouseFeedback.instance.play(LighthouseFeedbackKind.navigate);
+    if (_moversOpen) setState(() => _moversOpen = false);
+    final rows = _bundle?.rowsOf('product') ?? const <Map<String, dynamic>>[];
+    final hit = rows
+        .where((r) => (r['name']?.toString().trim() ?? '') == name)
+        .toList();
+    if (hit.length != 1) {
+      if (_tab != 'product') _enterLedgerTab('product');
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _scrollToLedger();
+      });
+      return;
+    }
+    final group = hit.first['group']?.toString() ?? '';
+    final detKey = group.isEmpty ? name : '$name::$group';
+    _captureMainListScroll();
+    unawaited(_loadDetail('product', detKey));
+    setState(() {
+      _closeMetricPage();
+      _detailReturnStack.clear();
+      _detailKey = detKey;
+      _detailType = 'product';
+      _detailSubTab = '';
+      _detailPage = 1;
+      _heroPointIndex = null;
+      _resetDetailSkuSearch();
+      _resetDetailDrill();
+      _detailDrillReloadAttempted = false;
+    });
+  }
+
   Future<void> _loadIntraday() async {
     if (!_intradayPeriod || widget.sharedCard != null) return;
+    // 今日异动跟着今天的分时一起刷（后端按同一批快照算）。
+    unawaited(_loadMovers());
     // 今天的每次刷新都重拉；整页停在往前某天时，那天的也备好。
     await Future.wait([
       _ensureIntraday(0, force: true),
@@ -15796,7 +15974,10 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
       },
       fallbackDelta: selected.offset == _periodOffset ? delta : null,
       fallbackVs: _heroCompareLabel,
-      toggle: isRoot && _heroAssetsEligible ? _stackedHeroToggle(0) : null,
+      // 快捷按钮在时，这一行由外面的 [_profitSplitHost] 画（展开利润构成时它还得在）。
+      toggle: isRoot && _heroAssetsEligible && !_heroQuickActionsVisible
+          ? _stackedHeroToggle(0)
+          : null,
       forecastPanel: showForecast
           ? LighthouseForecastCard(
               forecast: forecast,
@@ -15820,7 +16001,7 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
           (_periodOffset == 0 && _stackedHeroBase(totalsOverride)));
 
   /// 上下排两页共用的「利润 | 资金」切换条。
-  Widget _stackedHeroToggle(int active) {
+  Widget _stackedHeroToggle(int active, {bool compact = false}) {
     final deep = DunesColors.resolve(context, _LhPlum.deep);
     final mute = DunesColors.resolve(context, LhColors.mute);
     Widget tab(String text, int page) {
@@ -15832,7 +16013,10 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
           _setHeroKpiPage(page);
         },
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+          padding: EdgeInsets.symmetric(
+            horizontal: compact ? 10 : 16,
+            vertical: 6,
+          ),
           decoration: BoxDecoration(
             color: on
                 ? DunesColors.resolve(
@@ -15923,8 +16107,10 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _stackedHeroToggle(1),
-          const SizedBox(height: 10),
+          if (!_heroQuickActionsVisible) ...[
+            _stackedHeroToggle(1),
+            const SizedBox(height: 10),
+          ],
           SizedBox(
             height: 96,
             child: _buildHeroFundsPage(
@@ -15961,6 +16147,16 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
     );
     final shown = selected == committed ? value : (selDay.value ?? 0);
     final asOf = _lastSyncedAt ?? _nowCST();
+    final movers = _moversForHero(value, asOf);
+    // 交给外面的 [_profitSplitHost]：它在画这张卡之后执行（卡是它的参数）。
+    final showMovers = _detailKey == null &&
+        widget.sharedCard == null &&
+        committed == 0 &&
+        selected == committed &&
+        mastheadKey == 'profit' &&
+        movers != null &&
+        !movers.restricted;
+    _moversShown = showMovers && movers.hasMovers ? movers : null;
     return LighthouseIntradayHero(
       metricKey: mastheadKey,
       metricLabel: lighthouseHeroMetricLabel(mastheadKey),
@@ -15990,7 +16186,12 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
       onDayCommit: _commitIntradayDay,
       fallbackDelta: selected == committed ? fallbackDelta : null,
       fallbackVs: _heroCompareLabel,
-      toggle: paged ? _stackedHeroToggle(0) : null,
+      toggle: paged && !_heroQuickActionsVisible ? _stackedHeroToggle(0) : null,
+      // 今日异动：只在一级、看的就是今天、大数是利润时出（异动按全公司利润算）。
+      summaryTrailing: showMovers
+          ? LhMoversChip(movers: movers, open: _moversOpen, onTap: _toggleMovers)
+          : null,
+      // 点开不再在大数下面就地展开：由 [_profitSplitHost] 画圆盖满主 Hero（同利润分布）。
       // 「数据分析」是一级的入口，详情页不放。
       footer: _detailKey != null ? null : _stackedHeroBiButton(),
       asOfMinute: asOf.hour * 60 + asOf.minute,
@@ -19713,6 +19914,8 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
     unawaited(_loadPnl());
     // 今日分时同理（只有「今日」才拉）。
     unawaited(_loadIntraday());
+    // 今日油价（卡头药丸），10 分钟内不重复拉。
+    unawaited(_loadOil());
     final cacheKey =
         '$requestedPeriod|$requestedOffset|${requestedStart?.toIso8601String() ?? ""}|${requestedEnd?.toIso8601String() ?? ""}';
     bool stillCurrent() =>
@@ -23181,7 +23384,15 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
                       _buildTopIslands(),
                     ]
                   : [
-                      brand(showEn: c.maxWidth >= 640),
+                      ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxWidth: math.max(
+                            0.0,
+                            c.maxWidth - lighthouseAppBarPaddingH - 8 - 10 - 108,
+                          ),
+                        ),
+                        child: brand(showEn: c.maxWidth >= 640),
+                      ),
                       const SizedBox(width: 10),
                       Expanded(child: _buildTopIslands()),
                     ],
@@ -23729,6 +23940,376 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
             if (_hasAccess) const SizedBox(width: 8),
             _buildMoreIsland(),
           ],
+        );
+      },
+    );
+  }
+
+  // ───── 产品汇总卡：今日 / 本月快切 · 利润分布（2026-11-25）───────────────
+  //
+  //   [利润 | 资金]                       [今日 | 本月] [▮ 利润分布]
+  //
+  // · 放在汇总卡「利润 | 资金」那一行右边的空位（原来空着），不占顶栏。
+  // · 今日 / 本月：选中块紫渐变；当前是别的周期（周、季、往期、区间）时两格都不亮，
+  //   点哪格就跳回那一期的当期。
+  // · 利润分布：紫渐变实心。点开不弹窗：从按钮那一点圆形展开，盖满整块主 Hero
+  //   （[_profitSplitHost]），再点一次原路收回。
+  //   行太窄时只留图标。
+
+  bool _profitSplitOpen = false;
+
+  bool get _heroQuickActionsVisible =>
+      _hasAccess &&
+      widget.sharedCard == null &&
+      !widget.financeOnly &&
+      _detailKey == null &&
+      _tab != 'netTa';
+
+  /// 汇总卡顶上那一行：左「利润 | 资金」（[segment] 为 false 时不画），右「今日 | 本月」
+  /// 和「利润分布」，三样同一条中线、右边和下面内容的右缘对齐。
+  /// 不用 OverflowBar：「利润 | 资金」外面包着 Align，在 OverflowBar 里会占满整行，
+  /// 右边一组就被挤到第二行。放不下时先把「利润分布」收成图标（[narrow]），
+  /// 再不够（大字号）整组等比缩一点，不换行、不溢出。
+  Widget _heroToggleRow(
+    int active, {
+    required bool segment,
+    required bool narrow,
+    required bool compact,
+  }) {
+    return Row(
+      children: [
+        if (segment) _stackedHeroToggle(active, compact: compact),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Align(
+            alignment: Alignment.centerRight,
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerRight,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _buildHeroPeriodQuick(),
+                  const SizedBox(width: 6),
+                  _buildProfitSplitButton(iconOnly: narrow),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// 紧凑行约需 94（利润/资金）+ 8 + 90（今日/本月）+ 6 + 102 像素。
+  static double _heroToggleRowMinWidth({required bool segment}) =>
+      (segment ? 94 : 0) + 8 + 90 + 6 + _kProfitBtnW;
+
+  static const double _kHeroQuickH = 32;
+
+  Widget _buildHeroPeriodQuick() {
+    const h = _kHeroQuickH;
+    const segH = h - 6;
+    Widget seg(String label, String period) {
+      final on = !_isCustomRange && _period == period && _periodOffset == 0;
+      return Semantics(
+        button: true,
+        selected: on,
+        label: period == 'day' ? '切到今日' : '切到本月',
+        excludeSemantics: true,
+        child: _LhScrollSafeTap(
+          onTap: () {
+            if (on) return;
+            LighthouseFeedback.instance.play(LighthouseFeedbackKind.select);
+            _clearCustomRange();
+            _applyPeriod(period: period, offset: 0);
+          },
+          child: AnimatedContainer(
+            duration: _islandDur(220),
+            curve: Curves.easeOutCubic,
+            height: segH,
+            constraints: const BoxConstraints(minWidth: 42),
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              gradient: on ? kDunesIslandPillGradient : null,
+              borderRadius: BorderRadius.circular(7),
+              boxShadow: on ? kDunesIslandPillShadow : const <BoxShadow>[],
+            ),
+            child: Text(
+              label,
+              maxLines: 1,
+              softWrap: false,
+              style: LhTypography.sans(
+                size: 12,
+                weight: FontWeight.w700,
+                color: on
+                    ? Colors.white
+                    : DunesColors.resolve(context, LhColors.mute),
+                height: 1.0,
+                context: context,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      height: h,
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        color: DunesColors.resolve(
+          context,
+          const Color(0xFFF2EFF7),
+          role: DunesColorRole.surface,
+        ),
+        borderRadius: BorderRadius.circular(9),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [seg('今日', 'day'), seg('本月', 'month')],
+      ),
+    );
+  }
+
+  static const double _kProfitBtnW = 102;
+
+  /// 「利润分布」：收起时紫渐变实心 + ⌄；展开时变白底紫描边 + ⌃（再点收起）。
+  /// 两态之间颜色、描边、箭头一起过渡。
+  Widget _buildProfitSplitButton({required bool iconOnly}) {
+    const h = _kHeroQuickH;
+    final open = _profitSplitOpen;
+    final surface = DunesColors.resolve(
+      context,
+      Colors.white,
+      role: DunesColorRole.surface,
+    );
+    final deep = DunesColors.resolve(context, const Color(0xFF4B36A8));
+    final ring = DunesColors.resolve(context, const Color(0xFF8B6CE6));
+    return Semantics(
+      button: true,
+      expanded: open,
+      label: open ? '收起利润分布' : '展开利润分布',
+      excludeSemantics: true,
+      child: _LhScrollSafeTap(
+        onTap: _toggleProfitSplit,
+        child: TweenAnimationBuilder<double>(
+          tween: Tween<double>(end: open ? 1.0 : 0.0),
+          duration: _islandDur(260),
+          curve: Curves.easeOutCubic,
+          builder: (context, t, _) {
+            final fg = Color.lerp(Colors.white, deep, t)!;
+            return Container(
+              height: h,
+              width: iconOnly ? h : _kProfitBtnW,
+              padding: EdgeInsets.fromLTRB(iconOnly ? 0 : 9, 0, iconOnly ? 0 : 5, 0),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  stops: const [0.0, 0.55, 1.0],
+                  colors: [
+                    for (final c in kDunesIslandGradientColors)
+                      Color.lerp(c, surface, t)!,
+                  ],
+                ),
+                borderRadius: BorderRadius.circular(9),
+                border: Border.all(
+                  color: ring.withValues(alpha: t),
+                  width: 1.5,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF5A458F).withValues(alpha: 0.30 * (1 - t)),
+                    blurRadius: 10,
+                    spreadRadius: -3,
+                    offset: const Offset(0, 3),
+                  ),
+                  BoxShadow(
+                    color: ring.withValues(alpha: 0.14 * t),
+                    spreadRadius: 2.5,
+                  ),
+                ],
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.bar_chart_rounded, size: 15, color: fg),
+                  if (!iconOnly) ...[
+                    const SizedBox(width: 5),
+                    Expanded(
+                      child: Text(
+                        '利润分布',
+                        maxLines: 1,
+                        softWrap: false,
+                        overflow: TextOverflow.clip,
+                        style: LhTypography.sans(
+                          size: 12,
+                          weight: FontWeight.w700,
+                          color: fg,
+                          letterSpacing: 0.3,
+                          height: 1.0,
+                          context: context,
+                        ),
+                      ),
+                    ),
+                    Transform.rotate(
+                      angle: math.pi * t,
+                      child: Icon(Icons.keyboard_arrow_down_rounded, size: 15, color: fg),
+                    ),
+                  ],
+                ],
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  /// 当前周期的产品行：列表已经按这个周期拉过产品维就直接用，否则单独拉一次
+  /// （人在供给 / 渠道维时，产品维还没加载）。
+  Future<List<Map<String, dynamic>>> _loadProfitSplitRows() async {
+    final key =
+        '$_period|$_periodOffset|${_customStart?.toIso8601String() ?? ""}|${_customEnd?.toIso8601String() ?? ""}';
+    final bundle = _bundle;
+    if (bundle != null &&
+        _splitCacheKey == key &&
+        _loadedTabs.contains('product') &&
+        _staleRowsTab != 'product') {
+      return bundle.rowsOf('product');
+    }
+    final data = await _service.fetchDimension(
+      tab: 'product',
+      period: _period,
+      offset: _periodOffset,
+      startDate: _customStart,
+      endDate: _customEnd,
+    );
+    return (data['rows'] as List? ?? const [])
+        .whereType<Map>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList();
+  }
+
+  bool get _profitSplitCanViewDetail =>
+      _detailKey == null &&
+      const {'product', 'supply', 'channel', 'people'}.contains(_tab);
+
+  void _toggleProfitSplit() {
+    LighthouseFeedback.instance.play(
+      _profitSplitOpen
+          ? LighthouseFeedbackKind.collapse
+          : LighthouseFeedbackKind.expand,
+    );
+    setState(() {
+      _profitSplitOpen = !_profitSplitOpen;
+      if (_profitSplitOpen) {
+        _moversOpen = false;
+        _oilOpen = false;
+      }
+    });
+  }
+
+  void _closeProfitSplit() {
+    if (!_profitSplitOpen) return;
+    setState(() => _profitSplitOpen = false);
+  }
+
+  void _profitSplitViewDetail() {
+    _closeProfitSplit();
+    LighthouseFeedback.instance.play(LighthouseFeedbackKind.navigate);
+    if (_tab != 'product') _enterLedgerTab('product');
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _scrollToLedger();
+    });
+  }
+
+  /// 主 Hero 外面套一层：顶上「利润 | 资金 · 今日 | 本月 · 利润分布」一行常驻；
+  /// 点「利润分布」时，利润构成从按钮正下方画圆长出来，换掉下面的主 Hero
+  /// （[LhProfitSplitReveal]）。换周期时按新周期重新取数。
+  Widget _profitSplitHost({
+    required Widget hero,
+    required bool segment,
+    required int active,
+    bool withMovers = false,
+  }) {
+    if (!_heroQuickActionsVisible) return hero;
+    // 今日异动：只有「今日」分时卡带（见 _buildIntradayHero 里的 _moversShown）。
+    final movers = withMovers ? _moversShown : null;
+    // 不跟 Hero 走势上点中的那一天走：这块说的是选中的整期。
+    final name = _isCustomRange ? '区间' : _periodPillLabel(_period, _periodOffset);
+    final live = !_isCustomRange && _periodOffset == 0;
+    final at = _lastSyncedAt ?? _nowCST();
+    final chip = live
+        ? '截至 ${_two(at.hour)}:${_two(at.minute)} · 进行中'
+        : (_period == 'day' && !_isCustomRange
+              ? '全天'
+              : (_isCustomRange ? _customRangePillLabel() : _selectedRangeLabel));
+    final title = RegExp(r'\d').hasMatch(name) ? '$name 利润构成' : '$name利润构成';
+    final periodKey =
+        '$_period|$_periodOffset|${_customStart?.toIso8601String() ?? ""}|${_customEnd?.toIso8601String() ?? ""}';
+    return LayoutBuilder(
+      builder: (context, box) {
+        final narrow = box.maxWidth.isFinite &&
+            box.maxWidth < _heroToggleRowMinWidth(segment: segment);
+        final btnW = narrow ? _kHeroQuickH : _kProfitBtnW;
+        return Padding(
+          padding: const EdgeInsets.only(top: 3),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _heroToggleRow(
+                active,
+                segment: segment,
+                narrow: narrow,
+                compact: box.maxWidth < 340,
+              ),
+              const SizedBox(height: 7),
+              // 最外层：今日油价从卡头药丸那一点画圆长出来（圆心在这块上方，按药丸位置量）。
+              KeyedSubtree(
+                key: _oilRevealKey,
+                child: LhProfitSplitReveal(
+                  open: _oilOpen && _oil != null,
+                  originFromTopRight: _oilOrigin,
+                  overlayBuilder: (context) => LhOilPricePanel(
+                    report: _oil ?? const LhOilReport(),
+                    onClose: _toggleOil,
+                    loadProducts: _loadOilProducts,
+                  ),
+                  child: LhProfitSplitReveal(
+                    open: _profitSplitOpen,
+                    originFromTopRight: Offset(btnW / 2, 0),
+                    // 里面再套一层：今日异动从大数右边那张小卡的位置画圆长出来。
+                    child: movers == null
+                        ? hero
+                        : LhProfitSplitReveal(
+                            open: _moversOpen,
+                            originFromTopRight: const Offset(kLhMoversChipWidth / 2, 56),
+                            child: hero,
+                            overlayBuilder: (context) => LhMoversPanel(
+                              movers: movers,
+                              onClose: _toggleMovers,
+                              // 示例不能点进产品详情（数字不是真的）。
+                              onProductTap: movers.isDemo ? null : _openMoverProduct,
+                            ),
+                          ),
+                    overlayBuilder: (context) => LhProfitSplitPanel(
+                      key: ValueKey('profit-split-$periodKey'),
+                      loadRows: _loadProfitSplitRows,
+                      title: title,
+                      chip: chip,
+                      live: live,
+                      caretFromRight: btnW / 2,
+                      onViewDetail:
+                          _profitSplitCanViewDetail ? _profitSplitViewDetail : null,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
         );
       },
     );
@@ -32763,6 +33344,19 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
               ),
               // 「已同步 · 09:41」上提到标题行右端：它是这张卡的出处说明，
               // 留在卡底时正好卡在 Hero 与账本之间，把那道衔接撑成一条空带。
+              // 2026-11-25 · 今日油价药丸：点开从这里画圆盖满主 Hero（同利润分布）。
+              if (totalsOverride == null && _heroQuickActionsVisible && _oil != null) ...[
+                const SizedBox(width: 8),
+                KeyedSubtree(
+                  key: _oilPillKey,
+                  child: LhOilPill(
+                    report: _oil!,
+                    open: _oilOpen,
+                    onTap: _toggleOil,
+                    compact: MediaQuery.sizeOf(context).width < 400,
+                  ),
+                ),
+              ],
               if (totalsOverride == null) ...[
                 const SizedBox(width: 8),
                 _buildHeroSyncStamp(inline: true),
@@ -32814,32 +33408,43 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
                   totalsOverride: totalsOverride,
                   mastheadKey: mastheadKey,
                 )) {
-                  return _buildIntradayHero(
+                  final paged =
+                      totalsOverride == null &&
+                      _tab != 'netTa' &&
+                      _heroAssetsEligible;
+                  return _profitSplitHost(
+                    segment: paged,
+                    active: 0,
+                    withMovers: true,
+                    hero: _buildIntradayHero(
                     value: heroMastheadValue,
                     mastheadKey: mastheadKey,
                     mastheadIsRate: mastheadIsRate,
                     fallbackDelta: profitDelta,
-                    paged:
-                        totalsOverride == null &&
-                        _tab != 'netTa' &&
-                        _heroAssetsEligible,
-                  );
+                    paged: paged,
+                  ));
                 }
                 if (_monthlyHeroEligible(mastheadKey)) {
-                  return _buildMonthlyHero(
+                  return _profitSplitHost(
+                    segment: _heroAssetsEligible,
+                    active: 0,
+                    hero: _buildMonthlyHero(
                     metric: mastheadKey,
                     value: heroMastheadValue,
                     isRate: mastheadIsRate,
                     totals: heroTotals,
                     delta: profitDelta,
                     pnlAfter: heroPointActive ? null : heroPnlAfter,
-                  );
+                  ));
                 }
                 if (_stackedFundsEligible(totalsOverride)) {
-                  return _buildStackedFundsHero(
+                  return _profitSplitHost(
+                    segment: true,
+                    active: 1,
+                    hero: _buildStackedFundsHero(
                     heroTotals,
                     heroTrendLabels.isNotEmpty ? heroTrendLabels : profitLabels,
-                  );
+                  ));
                 }
                 // 2026-10-26 · 手机（窄于 480）大数卡 3:7 只剩 ~107px：资金页「8367万」32 号放不下、
                 //   截至日期挤出界。手机改 4:6（~142px），平板 / 桌面照旧 3:7。
@@ -36547,13 +37152,19 @@ class _NativeLighthousePageState extends State<_LighthouseTopicBody> {
                     ),
                   ),
                   const SizedBox(width: 5),
-                  Text(
-                    title,
-                    style: LhTypography.sans(
-                      size: 13,
-                      weight: FontWeight.w700,
-                      color: ink,
-                      context: context,
+                  Flexible(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        title,
+                        style: LhTypography.sans(
+                          size: 13,
+                          weight: FontWeight.w700,
+                          color: ink,
+                          context: context,
+                        ),
+                      ),
                     ),
                   ),
                 ],

@@ -348,6 +348,16 @@ class LighthouseService {
     );
   }
 
+  /// 今日异动（今天此刻 vs 前 7 天同一时刻；整体 + 产品）。后端算好，见 lighthouse-go intraday_movers.go。
+  Future<Map<String, dynamic>> fetchIntradayMovers() {
+    return _getData('/lighthouse/intraday/movers', const {}, '今日异动加载失败');
+  }
+
+  /// 今日油价（各省 92/95/98/0、较上次、近几次调价、调价窗口、预计涨跌）。见 lighthouse-go oil_price.go。
+  Future<Map<String, dynamic>> fetchOilPrice() {
+    return _getData('/lighthouse/oil-price', const {}, '油价加载失败');
+  }
+
   /// 许正阳在「谁能看到」里开 / 关某人对这一行（坐标全空 = 整个板块）的权限。
   /// [validTo] 为空 = 永久；[reset] 去掉单独设置，回到板块授权 ∩ 数据规则。
   Future<void> putVisibilityOverride({

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../core/navigation/navigation_controller.dart';
 import '../../core/platform/desktop_features.dart';
@@ -254,6 +255,8 @@ class _NativeConversationPageState extends State<NativeConversationPage>
   Map<String, String> _novaStorage = const {};
   Map<String, InboxHiddenEntry> _hiddenConversations = const {};
   ImUserStatusValue _selfImStatus = ImUserStatusValue.online;
+  ChatInboxFilter _activeFilter = ChatInboxFilter.all;
+  final InboxSwipeGroupController _swipeGroup = InboxSwipeGroupController();
 
   // IM 通讯主页整体右滑进入小饕。
   double? _swipeStartX;
@@ -664,6 +667,209 @@ class _NativeConversationPageState extends State<NativeConversationPage>
     }
   }
 
+  Future<void> _toggleConversationPinned(NativeConversation conversation) async {
+    if (conversation.id <= 0) return;
+    final nextPinned = !conversation.pinned;
+    final idx = _items.indexWhere((c) => c.id == conversation.id);
+    if (idx < 0) return;
+    final previous = _items[idx];
+    setState(() {
+      final copy = _items.toList(growable: true);
+      copy[idx] = ConversationInboxRealtime.copyConversation(
+        previous,
+        pinned: nextPinned,
+      );
+      _items = _sorted(copy);
+    });
+    ConversationInboxCache.instance.put(
+      userId: widget.session.userId,
+      conversations: _items,
+      notif: _notif,
+      novaStorage: _novaStorage,
+      aiSummaryPreview: _aiSummaryPreview,
+      aiSummaryUnread: _aiSummaryUnread,
+    );
+    try {
+      await _service.patchMySettings(conversation.id, pinned: nextPinned);
+    } catch (_) {
+      if (!mounted) return;
+      final revertIdx = _items.indexWhere((c) => c.id == conversation.id);
+      if (revertIdx >= 0) {
+        setState(() {
+          final copy = _items.toList(growable: true);
+          copy[revertIdx] = previous;
+          _items = _sorted(copy);
+        });
+      }
+      showDunesToast(context, '置顶设置失败，请稍后重试');
+    }
+  }
+
+  Future<void> _toggleConversationMuted(NativeConversation conversation) async {
+    if (conversation.id <= 0) return;
+    final nextMuted = !conversation.muted;
+    final idx = _items.indexWhere((c) => c.id == conversation.id);
+    if (idx < 0) return;
+    final previous = _items[idx];
+    setState(() {
+      final copy = _items.toList(growable: true);
+      copy[idx] = ConversationInboxRealtime.copyConversation(
+        previous,
+        muted: nextMuted,
+      );
+      _items = copy;
+    });
+    ConversationInboxCache.instance.put(
+      userId: widget.session.userId,
+      conversations: _items,
+      notif: _notif,
+      novaStorage: _novaStorage,
+      aiSummaryPreview: _aiSummaryPreview,
+      aiSummaryUnread: _aiSummaryUnread,
+    );
+    _updateCommBadge(_items, _notif.unreadCount);
+    try {
+      await _service.patchMySettings(conversation.id, muted: nextMuted);
+    } catch (_) {
+      if (!mounted) return;
+      final revertIdx = _items.indexWhere((c) => c.id == conversation.id);
+      if (revertIdx >= 0) {
+        setState(() {
+          final copy = _items.toList(growable: true);
+          copy[revertIdx] = previous;
+          _items = copy;
+        });
+        _updateCommBadge(_items, _notif.unreadCount);
+      }
+      showDunesToast(context, '免打扰设置失败，请稍后重试');
+    }
+  }
+
+  Future<void> _showMobileInboxActionSheet(
+    NativeConversation conversation, {
+    required String title,
+    required bool allowDelete,
+  }) async {
+    _swipeGroup.closeAll();
+    HapticFeedback.mediumImpact();
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final surface = isDark ? const Color(0xFF232234) : Colors.white;
+    final divider = isDark
+        ? Colors.white.withValues(alpha: 0.08)
+        : Colors.black.withValues(alpha: 0.06);
+    final canPin = conversation.id > 0 && !conversation.isWorkgroupApproval;
+    final canEdit = conversation.id > 0;
+    final isUnread =
+        conversation.unreadCount > 0 || _showsMarkedUnreadDot(conversation);
+
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (sheetCtx) => SafeArea(
+        top: false,
+        child: Container(
+          margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+          decoration: BoxDecoration(
+            color: surface,
+            borderRadius: BorderRadius.circular(18),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
+                child: Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: DunesTypography.sans(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w500,
+                    color: DunesColors.resolve(sheetCtx, DunesColors.text3),
+                    context: sheetCtx,
+                  ),
+                ),
+              ),
+              Divider(height: 1, thickness: 0.8, color: divider),
+              if (canPin) ...[
+                ListTile(
+                  leading: Icon(
+                    conversation.pinned
+                        ? Icons.push_pin_outlined
+                        : Icons.push_pin_rounded,
+                    size: 20,
+                    color: DunesColors.resolve(
+                      sheetCtx,
+                      DunesColors.brandPurple,
+                    ),
+                  ),
+                  title: Text(conversation.pinned ? '取消置顶' : '置顶会话'),
+                  onTap: () {
+                    Navigator.of(sheetCtx).pop();
+                    unawaited(_toggleConversationPinned(conversation));
+                  },
+                ),
+                Divider(height: 1, thickness: 0.8, color: divider),
+              ],
+              if (canEdit) ...[
+                ListTile(
+                  leading: Icon(
+                    isUnread
+                        ? Icons.mark_chat_read_outlined
+                        : Icons.mark_chat_unread_outlined,
+                    size: 20,
+                    color: DunesColors.resolve(sheetCtx, const Color(0xFF3478F6)),
+                  ),
+                  title: Text(isUnread ? '标为已读' : '标为未读'),
+                  onTap: () {
+                    Navigator.of(sheetCtx).pop();
+                    unawaited(_onInboxUnreadAction(conversation));
+                  },
+                ),
+                Divider(height: 1, thickness: 0.8, color: divider),
+                ListTile(
+                  leading: Icon(
+                    conversation.muted
+                        ? Icons.notifications_active_outlined
+                        : Icons.notifications_off_outlined,
+                    size: 20,
+                    color: DunesColors.resolve(sheetCtx, DunesColors.text2),
+                  ),
+                  title: Text(conversation.muted ? '开启消息提醒' : '消息免打扰'),
+                  onTap: () {
+                    Navigator.of(sheetCtx).pop();
+                    unawaited(_toggleConversationMuted(conversation));
+                  },
+                ),
+              ],
+              if (allowDelete) ...[
+                Divider(height: 1, thickness: 0.8, color: divider),
+                ListTile(
+                  leading: Icon(
+                    Icons.delete_outline_rounded,
+                    size: 20,
+                    color: DunesColors.resolve(sheetCtx, DunesColors.coral),
+                  ),
+                  title: Text(
+                    '隐藏会话',
+                    style: TextStyle(
+                      color: DunesColors.resolve(sheetCtx, DunesColors.coral),
+                    ),
+                  ),
+                  onTap: () {
+                    Navigator.of(sheetCtx).pop();
+                    unawaited(_hideConversation(conversation));
+                  },
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _showInboxUnreadMenu(
     Offset position,
     NativeConversation conversation,
@@ -794,6 +1000,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
     _listScrollController.removeListener(_onListScroll);
     _listScrollController.dispose();
     _searchController.dispose();
+    _swipeGroup.dispose();
     super.dispose();
   }
 
@@ -1628,6 +1835,58 @@ class _NativeConversationPageState extends State<NativeConversationPage>
     return peerId != null && _onlineUsers.contains(peerId);
   }
 
+  ChatInboxFilter get _effectiveFilter =>
+      isDesktopCommOnly || _searchQuery.isNotEmpty
+      ? ChatInboxFilter.all
+      : _activeFilter;
+
+  bool _isConvUnreadForFilter(NativeConversation c) {
+    final selected = widget.selectedConversationId == c.id;
+    if (selected && !c.isAdministrativeNotice) return false;
+    final unread =
+        c.isAiAssistant &&
+            NovaBackgroundCoordinator.instance.hasUnreadReplyFor(c.id)
+        ? (c.unreadCount > 0 ? c.unreadCount : 1)
+        : widget.commUnread.effectiveUnreadCount(c);
+    return unread > 0 || _showsMarkedUnreadDot(c);
+  }
+
+  ({int unread, int mention}) _filterCounts() {
+    var unread = 0;
+    var mention = 0;
+    for (final c in _items) {
+      if (widget.session.isExternalUser &&
+          (c.isAiAssistant || c.isBroadcast)) {
+        continue;
+      }
+      if (_isConvUnreadForFilter(c)) unread++;
+      if ((c.unreadMentionLabel ?? '').trim().isNotEmpty) mention++;
+    }
+    if (!widget.session.isExternalUser) {
+      final preview = _aiSummaryPreview;
+      if (preview != null && preview.isSuccess && _aiSummaryUnread > 0) {
+        unread++;
+      }
+      if (_messageCenterUnread > 0) {
+        unread++;
+      }
+    }
+    return (unread: unread, mention: mention);
+  }
+
+  bool _matchesActiveFilter(NativeConversation c) {
+    switch (_effectiveFilter) {
+      case ChatInboxFilter.all:
+        return true;
+      case ChatInboxFilter.unread:
+        return _isConvUnreadForFilter(c);
+      case ChatInboxFilter.mention:
+        return (c.unreadMentionLabel ?? '').trim().isNotEmpty;
+      case ChatInboxFilter.group:
+        return c.isGroup || c.isWorkgroupApproval;
+    }
+  }
+
   Widget? _buildConvRow(NativeConversation c) {
     final kind = c.kind.toUpperCase();
     final title = c.isPrivate ? _privateTitle(c) : c.title;
@@ -1638,6 +1897,9 @@ class _NativeConversationPageState extends State<NativeConversationPage>
       return null;
     }
     if (widget.session.isExternalUser && c.isBroadcast) {
+      return null;
+    }
+    if (!_matchesActiveFilter(c)) {
       return null;
     }
 
@@ -1875,6 +2137,54 @@ class _NativeConversationPageState extends State<NativeConversationPage>
         : c.isWeeklySummary
         ? '一周小结'
         : (title.isEmpty ? '该会话' : title);
+    final canMarkUnread = c.id > 0;
+    final canPin = c.id > 0 && !c.isWorkgroupApproval;
+    final markLabel = c.unreadCount <= 0 && !_showsMarkedUnreadDot(c)
+        ? '标为未读'
+        : '标为已读';
+
+    final rowWithLongPress = !isDesktopCommOnly && (canMarkUnread || allowSwipeDelete)
+        ? ChatInboxRow(
+            kind: row.kind,
+            title: row.title,
+            subtitle: row.subtitle,
+            preview: row.preview,
+            timeLabel: row.timeLabel,
+            unreadCount: row.unreadCount,
+            markedUnread: row.markedUnread,
+            muted: row.muted,
+            pinned: row.pinned,
+            showAiMark: row.showAiMark,
+            selected: row.selected,
+            previewGenerating: row.previewGenerating,
+            showOnlineDot: row.showOnlineDot,
+            avatarInitial: row.avatarInitial,
+            avatarSeed: row.avatarSeed,
+            avatarPreset: row.avatarPreset,
+            avatarObjectKey: row.avatarObjectKey,
+            avatarUrl: row.avatarUrl,
+            avatarService: row.avatarService,
+            groupAvatarMembers: row.groupAvatarMembers,
+            robotAvatar: row.robotAvatar,
+            sysTag: row.sysTag,
+            workgroupTag: row.workgroupTag,
+            mentionLabel: row.mentionLabel,
+            imStatus: row.imStatus,
+            imStatusText: row.imStatusText,
+            imStatusIcon: row.imStatusIcon,
+            imStatusColor: row.imStatusColor,
+            showDivider: row.showDivider,
+            onTap: row.onTap,
+            onLongPress: () => unawaited(
+              _showMobileInboxActionSheet(
+                c,
+                title: inboxTitle,
+                allowDelete: allowSwipeDelete,
+              ),
+            ),
+          )
+        : row;
+
     final dropChild = _wrapInboxFileDrop(
       targetTitle: dropTitle,
       acceptsFiles: _inboxAcceptsFileDrop(c),
@@ -1889,13 +2199,9 @@ class _NativeConversationPageState extends State<NativeConversationPage>
               }
             }
           : null,
-      child: row,
+      child: rowWithLongPress,
     );
 
-    final canMarkUnread = c.id > 0;
-    final markLabel = c.unreadCount <= 0 && !_showsMarkedUnreadDot(c)
-        ? '标为未读'
-        : '标为已读';
     Widget inboxChild = dropChild;
     if (canMarkUnread && isDesktopCommOnly) {
       inboxChild = GestureDetector(
@@ -1905,11 +2211,21 @@ class _NativeConversationPageState extends State<NativeConversationPage>
       );
     } else if (canMarkUnread || allowSwipeDelete) {
       inboxChild = SwipeableChatInboxRow(
-        onDelete: allowSwipeDelete ? () => _hideConversation(c) : null,
+        rowKey: c.id,
+        swipeGroup: _swipeGroup,
+        onTogglePin: canPin
+            ? () => unawaited(_toggleConversationPinned(c))
+            : null,
+        pinLabel: c.pinned ? '取消置顶' : '置顶',
         onMarkUnread: canMarkUnread
             ? () => unawaited(_onInboxUnreadAction(c))
             : null,
         markUnreadLabel: markLabel,
+        onToggleMute: canMarkUnread
+            ? () => unawaited(_toggleConversationMuted(c))
+            : null,
+        muteLabel: c.muted ? '取消免打扰' : '免打扰',
+        onDelete: allowSwipeDelete ? () => _hideConversation(c) : null,
         child: dropChild,
       );
     }
@@ -1980,12 +2296,13 @@ class _NativeConversationPageState extends State<NativeConversationPage>
         : aiTs;
     final sectionTs = chatTs > announcementTs ? chatTs : announcementTs;
 
+    final approvalRows = approvals.isEmpty ? const <Widget>[] : convRows(approvals);
     final sections = <_InboxSection>[
-      if (approvals.isNotEmpty)
+      if (approvalRows.isNotEmpty)
         _InboxSection(
           key: 'approval',
           label: '审批工作群 · 系统自动建群',
-          count: approvals.length,
+          count: approvalRows.length,
           timestamp: approvals.first.sortTimestamp,
           pinned: true,
           leading: Icon(
@@ -1993,7 +2310,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
             size: 11,
             color: DunesColors.resolve(context, DunesColors.accent),
           ),
-          rows: convRows(approvals),
+          rows: approvalRows,
         ),
       if (chatRows.isNotEmpty)
         _InboxSection(
@@ -2093,6 +2410,14 @@ class _NativeConversationPageState extends State<NativeConversationPage>
                   return '系统通告';
                 }());
     final time = useBroadcast ? broadcastTime : notifTime;
+    if (_effectiveFilter == ChatInboxFilter.mention ||
+        _effectiveFilter == ChatInboxFilter.group) {
+      return null;
+    }
+    if (_effectiveFilter == ChatInboxFilter.unread &&
+        _messageCenterUnread <= 0) {
+      return null;
+    }
     if (!_matchesSearch('沙丘公告', preview) &&
         !_matchesSearch('系统通告', preview) &&
         !_matchesSearch('公司广播', preview)) {
@@ -2119,6 +2444,13 @@ class _NativeConversationPageState extends State<NativeConversationPage>
     // 默认不展示；仅分析产出结果（SUCCESS）后出现在通讯页。
     if (preview == null || !preview.isSuccess) return null;
     final previewText = preview.inboxPreview;
+    if (_effectiveFilter == ChatInboxFilter.mention ||
+        _effectiveFilter == ChatInboxFilter.group) {
+      return null;
+    }
+    if (_effectiveFilter == ChatInboxFilter.unread && _aiSummaryUnread <= 0) {
+      return null;
+    }
     if (!_matchesSearch('智能总结', previewText)) return null;
     return KeyedSubtree(
       key: const ValueKey<String>('ai-summary-inbox'),
@@ -2241,6 +2573,21 @@ class _NativeConversationPageState extends State<NativeConversationPage>
                       : null,
                   onTap: widget.onOpenGlobalSearch,
                 ),
+                if (!isDesktopCommOnly && _searchQuery.isEmpty)
+                  Builder(
+                    builder: (context) {
+                      final counts = _filterCounts();
+                      return ChatInboxSegmentedFilter(
+                        selected: _activeFilter,
+                        unreadCount: counts.unread,
+                        mentionCount: counts.mention,
+                        onSelected: (filter) {
+                          _swipeGroup.closeAll();
+                          setState(() => _activeFilter = filter);
+                        },
+                      );
+                    },
+                  ),
                 Expanded(child: _buildBody()),
               ],
             ),
@@ -2331,21 +2678,51 @@ class _NativeConversationPageState extends State<NativeConversationPage>
           ),
         ),
       );
+    } else if (_searchQuery.isEmpty &&
+        sections.isEmpty &&
+        _effectiveFilter != ChatInboxFilter.all) {
+      final emptyText = switch (_effectiveFilter) {
+        ChatInboxFilter.unread => '暂无未读消息',
+        ChatInboxFilter.mention => '暂无 @我的会话',
+        ChatInboxFilter.group => '暂无群聊会话',
+        ChatInboxFilter.all => '',
+      };
+      children.add(
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 44),
+          child: Center(
+            child: Text(
+              emptyText,
+              style: DunesTypography.sans(
+                fontSize: 13,
+                color: DunesColors.resolve(context, DunesColors.text3),
+                context: context,
+              ),
+            ),
+          ),
+        ),
+      );
     }
 
-    return RefreshIndicator(
-      onRefresh: () => _load(silent: true),
-      child: ListView(
-        // 不用 PageStorageKey：曾被 Offstage 钳成 0 的偏移会写回并盖掉恢复。
-        controller: _listScrollController,
-        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-        physics: const AlwaysScrollableScrollPhysics(),
-        // 必须裁剪：头像 OverflowBox / 未读角标会画出行外，否则上滑会盖住「消息」标题与搜索栏。
-        clipBehavior: Clip.hardEdge,
-        padding: EdgeInsets.only(
-          bottom: dunesAppBottomNavContentPadding(context, fallback: 6),
+    return NotificationListener<ScrollStartNotification>(
+      onNotification: (_) {
+        _swipeGroup.closeAll();
+        return false;
+      },
+      child: RefreshIndicator(
+        onRefresh: () => _load(silent: true),
+        child: ListView.builder(
+          // 不用 PageStorageKey：曾被 Offstage 钳成 0 的偏移会写回并盖掉恢复。
+          controller: _listScrollController,
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+          physics: const AlwaysScrollableScrollPhysics(),
+          clipBehavior: Clip.hardEdge,
+          padding: EdgeInsets.only(
+            bottom: dunesAppBottomNavContentPadding(context, fallback: 6),
+          ),
+          itemCount: children.length,
+          itemBuilder: (context, index) => children[index],
         ),
-        children: children,
       ),
     );
   }

@@ -1270,23 +1270,17 @@ class _InboxSearchChromeState extends State<_InboxSearchChrome> {
   @override
   Widget build(BuildContext context) {
     if (!isDesktopCommOnly) {
+      final isDark = Theme.of(context).brightness == Brightness.dark;
       return Container(
-        height: 34,
-        padding: const EdgeInsets.symmetric(horizontal: 12),
+        height:
+            36 +
+            (MediaQuery.textScalerOf(context).scale(13) - 13).clamp(0.0, 18.0),
+        padding: const EdgeInsets.symmetric(horizontal: 14),
         decoration: BoxDecoration(
-          color: DunesColors.resolve(
-            context,
-            Colors.white,
-            role: DunesColorRole.surface,
-          ),
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(
-            color: DunesColors.resolve(
-              context,
-              DunesColors.borderSoft,
-              role: DunesColorRole.border,
-            ),
-          ),
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.08)
+              : const Color(0xFFF3F2F7),
+          borderRadius: BorderRadius.circular(18),
         ),
         child: widget.child,
       );
@@ -1381,6 +1375,204 @@ class _InboxSearchTapTarget extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+enum ChatInboxFilter { all, unread, mention, group }
+
+/// 移动端 IM 列表顶部分段筛选条（样式 1 · iOS 分段滑块）。
+class ChatInboxSegmentedFilter extends StatelessWidget {
+  const ChatInboxSegmentedFilter({
+    super.key,
+    required this.selected,
+    required this.onSelected,
+    this.unreadCount = 0,
+    this.mentionCount = 0,
+  });
+
+  final ChatInboxFilter selected;
+  final ValueChanged<ChatInboxFilter> onSelected;
+  final int unreadCount;
+  final int mentionCount;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    final extraHeight = (MediaQuery.textScalerOf(context).scale(12) - 12)
+        .clamp(0.0, 14.0);
+    final selectedIndex = ChatInboxFilter.values.indexOf(selected);
+    final trackColor = isDark
+        ? Colors.white.withValues(alpha: 0.07)
+        : const Color(0xFFF2F1F6);
+    final dividerColor = isDark
+        ? Colors.white.withValues(alpha: 0.07)
+        : Colors.black.withValues(alpha: 0.055);
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
+        border: Border(bottom: BorderSide(color: dividerColor, width: 0.8)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+        child: Container(
+          height: 32 + extraHeight,
+          padding: const EdgeInsets.all(2.5),
+          decoration: BoxDecoration(
+            color: trackColor,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final segmentWidth =
+                  constraints.maxWidth / ChatInboxFilter.values.length;
+              return Stack(
+                children: [
+                  AnimatedPositioned(
+                    duration: reduceMotion
+                        ? Duration.zero
+                        : const Duration(milliseconds: 260),
+                    curve: Curves.easeOutCubic,
+                    left: segmentWidth * selectedIndex,
+                    top: 0,
+                    bottom: 0,
+                    width: segmentWidth,
+                    child: IgnorePointer(
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: isDark
+                              ? const Color(0xFFB69BFF).withValues(alpha: 0.22)
+                              : Colors.white,
+                          borderRadius: BorderRadius.circular(7.5),
+                          border: isDark
+                              ? Border.all(
+                                  color: Colors.white.withValues(alpha: 0.16),
+                                  width: 0.6,
+                                )
+                              : null,
+                          boxShadow: isDark
+                              ? const []
+                              : const [
+                                  BoxShadow(
+                                    color: Color(0x14000000),
+                                    blurRadius: 4,
+                                    offset: Offset(0, 1),
+                                  ),
+                                ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  Row(
+                    children: [
+                      _segmentButton(
+                        context,
+                        filter: ChatInboxFilter.all,
+                        label: '全部',
+                        isDark: isDark,
+                      ),
+                      _segmentButton(
+                        context,
+                        filter: ChatInboxFilter.unread,
+                        label: '未读',
+                        count: unreadCount,
+                        isDark: isDark,
+                      ),
+                      _segmentButton(
+                        context,
+                        filter: ChatInboxFilter.mention,
+                        label: '@我',
+                        count: mentionCount,
+                        isDark: isDark,
+                      ),
+                      _segmentButton(
+                        context,
+                        filter: ChatInboxFilter.group,
+                        label: '群聊',
+                        isDark: isDark,
+                      ),
+                    ],
+                  ),
+                ],
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _segmentButton(
+    BuildContext context, {
+    required ChatInboxFilter filter,
+    required String label,
+    int count = 0,
+    required bool isDark,
+  }) {
+    final active = selected == filter;
+    final textColor = active
+        ? (isDark ? const Color(0xFFDFD4FF) : DunesColors.text)
+        : (isDark
+              ? const Color(0xFFF1EFF8).withValues(alpha: 0.62)
+              : DunesColors.text3);
+    final badgeColor = active
+        ? (isDark ? const Color(0xFFC5B0FF) : DunesColors.brandPurple)
+        : (isDark
+              ? const Color(0xFFF1EFF8).withValues(alpha: 0.50)
+              : DunesColors.text3);
+    final countText = count > 99 ? '99+' : '$count';
+
+    return Expanded(
+      child: Semantics(
+        button: true,
+        selected: active,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () {
+            if (!active) HapticFeedback.selectionClick();
+            onSelected(filter);
+          },
+          child: Center(
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Flexible(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: DunesTypography.sans(
+                      fontSize: 12,
+                      fontWeight: active ? FontWeight.w600 : FontWeight.w500,
+                      color: textColor,
+                      context: context,
+                    ),
+                  ),
+                ),
+                if (count > 0) ...[
+                  const SizedBox(width: 3),
+                  Text(
+                    countText,
+                    maxLines: 1,
+                    style: DunesTypography.sans(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w600,
+                      color: badgeColor,
+                      context: context,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -1529,6 +1721,7 @@ class ChatInboxRow extends StatelessWidget {
     this.imStatusText,
     this.imStatusIcon,
     this.imStatusColor,
+    this.onLongPress,
   });
 
   final ChatInboxRowKind kind;
@@ -1567,18 +1760,43 @@ class ChatInboxRow extends StatelessWidget {
   final String? imStatusText;
   final String? imStatusIcon;
   final String? imStatusColor;
+  final VoidCallback? onLongPress;
 
-  Color get _rowBg {
-    if (selected) return DunesColors.accentSoft;
-    if (pinned) return DunesColors.bgSoft;
-    return Colors.white;
+  Color _resolveRowBg(BuildContext context, {required bool desktop}) {
+    if (desktop) {
+      final light = selected
+          ? DunesColors.accentSoft
+          : pinned
+          ? DunesColors.bgSoft
+          : Colors.white;
+      return DunesColors.resolve(context, light, role: DunesColorRole.surface);
+    }
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    if (selected) {
+      return DunesColors.resolve(
+        context,
+        DunesColors.accentSoft,
+        role: DunesColorRole.surface,
+      );
+    }
+    if (pinned) {
+      // 不透明极浅紫底：既体现置顶层级，又不会透出底层左滑按钮。
+      return isDark ? const Color(0xFF252437) : const Color(0xFFF6F4FC);
+    }
+    return DunesColors.resolve(
+      context,
+      Colors.white,
+      role: DunesColorRole.surface,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final desktop = isDesktopCommOnly;
-    final avatarSlot = desktop ? _desktopInboxAvatarSize : 52.0;
-    final avatarLimit = desktop ? avatarSlot : 56.0;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final rowBg = _resolveRowBg(context, desktop: desktop);
+    final avatarSlot = desktop ? _desktopInboxAvatarSize : 48.0;
+    final avatarLimit = desktop ? avatarSlot : 48.0;
     final unreadText = unreadCount > 99 ? '99+' : '$unreadCount';
     final unreadColor =
         desktop ||
@@ -1604,252 +1822,303 @@ class ChatInboxRow extends StatelessWidget {
       generating: previewGenerating,
       mentionLabel: mentionLabel,
     );
-    return Column(
-      children: [
-        DesktopFeedbackSurface(
-          onTap: onTap,
-          selected: selected,
-          showSelectionIndicator: true,
-          visualInset: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-          backgroundColor: DunesColors.resolve(
-            context,
-            _rowBg,
-            role: DunesColorRole.surface,
-          ),
-          child: Padding(
-            padding: desktop
-                ? const EdgeInsets.fromLTRB(14, 9, 14, 9)
-                : const EdgeInsets.fromLTRB(16, 10, 16, 10),
-            child: Row(
-              crossAxisAlignment: desktop
-                  ? CrossAxisAlignment.center
-                  : CrossAxisAlignment.start,
-              children: [
-                SizedBox(
-                  width: avatarSlot,
-                  height: avatarSlot,
-                  child: Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      RepaintBoundary(
-                        child: OverflowBox(
-                          alignment: Alignment.center,
-                          maxWidth: avatarLimit,
-                          maxHeight: avatarLimit,
-                          child:
-                              robotAvatar ??
-                              _Avatar(
-                                kind: kind,
-                                initial: avatarInitial,
-                                seed: avatarSeed,
-                                showOnlineDot: showOnlineDot,
-                                avatarPreset: avatarPreset,
-                                avatarObjectKey: avatarObjectKey,
-                                avatarUrl: avatarUrl,
-                                avatarService: avatarService,
-                                groupAvatarMembers: groupAvatarMembers,
-                              ),
-                        ),
-                      ),
-                      if (!desktop && unreadCount > 0)
-                        Positioned(
-                          right: -4,
-                          top: -5,
-                          child: _UnreadBadge(
-                            text: unreadText,
-                            color: unreadColor,
-                            mini: true,
-                          ),
-                        )
-                      else if (chatInboxMarkedUnreadDot(
-                        unreadCount: unreadCount,
-                        markedUnread: markedUnread,
-                      ))
-                        const Positioned(
-                          right: -1,
-                          top: -1,
-                          child: _MarkedUnreadDot(),
-                        ),
-                    ],
+    final hasUnread = unreadCount > 0 || markedUnread;
+    final rowSurface = DesktopFeedbackSurface(
+      onTap: onTap,
+      selected: selected,
+      showSelectionIndicator: true,
+      visualInset: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      backgroundColor: rowBg,
+      child: Padding(
+        padding: desktop
+            ? const EdgeInsets.fromLTRB(14, 9, 14, 9)
+            : const EdgeInsets.fromLTRB(16, 11, 16, 11),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            SizedBox(
+              width: avatarSlot,
+              height: avatarSlot,
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  RepaintBoundary(
+                    child: Center(
+                      child: desktop
+                          ? OverflowBox(
+                              alignment: Alignment.center,
+                              maxWidth: avatarLimit,
+                              maxHeight: avatarLimit,
+                              child:
+                                  robotAvatar ??
+                                  _Avatar(
+                                    kind: kind,
+                                    initial: avatarInitial,
+                                    seed: avatarSeed,
+                                    showOnlineDot: showOnlineDot,
+                                    avatarPreset: avatarPreset,
+                                    avatarObjectKey: avatarObjectKey,
+                                    avatarUrl: avatarUrl,
+                                    avatarService: avatarService,
+                                    groupAvatarMembers: groupAvatarMembers,
+                                  ),
+                            )
+                          : (robotAvatar ??
+                                _Avatar(
+                                  kind: kind,
+                                  initial: avatarInitial,
+                                  seed: avatarSeed,
+                                  showOnlineDot: showOnlineDot,
+                                  avatarPreset: avatarPreset,
+                                  avatarObjectKey: avatarObjectKey,
+                                  avatarUrl: avatarUrl,
+                                  avatarService: avatarService,
+                                  groupAvatarMembers: groupAvatarMembers,
+                                )),
+                    ),
                   ),
-                ),
-                SizedBox(width: desktop ? 11 : 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  if (!desktop && unreadCount > 0)
+                    Positioned(
+                      right: -3,
+                      top: -3,
+                      child: _UnreadBadge(
+                        text: unreadText,
+                        color: unreadColor,
+                        mini: true,
+                      ),
+                    )
+                  else if (chatInboxMarkedUnreadDot(
+                    unreadCount: unreadCount,
+                    markedUnread: markedUnread,
+                  ))
+                    const Positioned(
+                      right: -1,
+                      top: -1,
+                      child: _MarkedUnreadDot(),
+                    ),
+                ],
+              ),
+            ),
+            SizedBox(width: desktop ? 11 : 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
                     children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: LayoutBuilder(
-                              builder: (context, titleBox) => Row(
-                                children: [
-                                  Flexible(
-                                    child: Text(
-                                      title,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: DunesTypography.sans(
-                                        fontSize: desktop ? 14 : 15,
-                                        fontWeight:
-                                            desktop &&
-                                                (selected ||
-                                                    unreadCount > 0 ||
-                                                    markedUnread)
-                                            ? FontWeight.w700
-                                            : FontWeight.w500,
-                                        letterSpacing: -0.01 * 15,
-                                        color: DunesColors.resolve(
-                                          context,
-                                          DunesColors.text,
-                                        ),
-                                        context: context,
+                      Expanded(
+                        child: LayoutBuilder(
+                          builder: (context, titleBox) => Row(
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  title,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: DunesTypography.sans(
+                                    fontSize: desktop ? 14 : 15,
+                                    fontWeight: desktop && (selected || hasUnread)
+                                        ? FontWeight.w700
+                                        : !desktop && hasUnread
+                                        ? FontWeight.w600
+                                        : FontWeight.w500,
+                                    letterSpacing: -0.01 * 15,
+                                    color: DunesColors.resolve(
+                                      context,
+                                      DunesColors.text,
+                                    ),
+                                    context: context,
+                                  ),
+                                ),
+                              ),
+                              if (!desktop && pinned) ...[
+                                const SizedBox(width: 4),
+                                Icon(
+                                  Icons.push_pin_rounded,
+                                  size: 11.5,
+                                  color: DunesColors.resolve(
+                                    context,
+                                    DunesColors.brandPurple,
+                                  ).withValues(alpha: 0.72),
+                                ),
+                              ],
+                              if (workgroupTag) ...[
+                                const SizedBox(width: 6),
+                                const WorkgroupTag(),
+                              ],
+                              // 列表拖窄时名字优先：状态最多占四成，再窄只留图标。
+                              if (ImUserStatusCatalog.showsBadge(imStatus)) ...[
+                                const SizedBox(width: 6),
+                                ConstrainedBox(
+                                  constraints: BoxConstraints(
+                                    maxWidth: titleBox.maxWidth * 0.4,
+                                  ),
+                                  child: ImStatusBadge(
+                                    status: imStatus!,
+                                    text: imStatusText ?? '',
+                                    iconKey: imStatusIcon ?? '',
+                                    color: imStatusColor ?? '',
+                                    iconOnly: titleBox.maxWidth < 150,
+                                  ),
+                                ),
+                              ],
+                              if (showAiMark) ...[
+                                const SizedBox(width: 6),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 5,
+                                    vertical: 1,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: DunesColors.resolve(
+                                      context,
+                                      DunesColors.accent,
+                                      role: DunesColorRole.surface,
+                                    ),
+                                    borderRadius: BorderRadius.circular(3),
+                                  ),
+                                  child: Text(
+                                    'AI',
+                                    style: DunesTypography.mono(
+                                      fontSize: 8.5,
+                                      fontWeight: FontWeight.w700,
+                                      color: DunesColors.resolve(
+                                        context,
+                                        Colors.white,
                                       ),
+                                      letterSpacing: 0.04 * 8.5,
+                                      context: context,
                                     ),
                                   ),
-                                  if (workgroupTag) ...[
-                                    const SizedBox(width: 6),
-                                    const WorkgroupTag(),
-                                  ],
-                                  // 列表拖窄时名字优先：状态最多占四成，再窄只留图标。
-                                  if (ImUserStatusCatalog.showsBadge(
-                                    imStatus,
-                                  )) ...[
-                                    const SizedBox(width: 6),
-                                    ConstrainedBox(
-                                      constraints: BoxConstraints(
-                                        maxWidth: titleBox.maxWidth * 0.4,
-                                      ),
-                                      child: ImStatusBadge(
-                                        status: imStatus!,
-                                        text: imStatusText ?? '',
-                                        iconKey: imStatusIcon ?? '',
-                                        color: imStatusColor ?? '',
-                                        iconOnly: titleBox.maxWidth < 150,
-                                      ),
-                                    ),
-                                  ],
-                                  if (showAiMark) ...[
-                                    const SizedBox(width: 6),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 5,
-                                        vertical: 1,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: DunesColors.resolve(
-                                          context,
-                                          DunesColors.accent,
-                                          role: DunesColorRole.surface,
-                                        ),
-                                        borderRadius: BorderRadius.circular(3),
-                                      ),
-                                      child: Text(
-                                        'AI',
-                                        style: DunesTypography.mono(
-                                          fontSize: 8.5,
-                                          fontWeight: FontWeight.w700,
-                                          color: DunesColors.resolve(
-                                            context,
-                                            Colors.white,
-                                          ),
-                                          letterSpacing: 0.04 * 8.5,
-                                          context: context,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                  if (subtitle != null &&
-                                      subtitle!.isNotEmpty) ...[
-                                    Text(
-                                      ' · ${subtitle!.toUpperCase()}',
-                                      style: DunesTypography.mono(
-                                        fontSize: 8.5,
-                                        fontWeight: FontWeight.w500,
-                                        letterSpacing: 0.06 * 8.5,
-                                        color: DunesColors.resolve(
-                                          context,
-                                          DunesColors.text3,
-                                        ),
-                                        context: context,
-                                      ),
-                                    ),
-                                  ],
-                                ],
-                              ),
-                            ),
-                          ),
-                          if (timeLabel.isNotEmpty)
-                            Text(
-                              timeLabel,
-                              style: DunesTypography.sans(
-                                fontSize: 11,
-                                color: DunesColors.resolve(
-                                  context,
-                                  DunesColors.text3,
                                 ),
-                                context: context,
-                              ),
-                            ),
-                        ],
+                              ],
+                              if (subtitle != null && subtitle!.isNotEmpty) ...[
+                                Text(
+                                  ' · ${subtitle!.toUpperCase()}',
+                                  style: DunesTypography.mono(
+                                    fontSize: 8.5,
+                                    fontWeight: FontWeight.w500,
+                                    letterSpacing: 0.06 * 8.5,
+                                    color: DunesColors.resolve(
+                                      context,
+                                      DunesColors.text3,
+                                    ),
+                                    context: context,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
                       ),
-                      const SizedBox(height: 3),
-                      if (desktop && unreadCount > 0)
-                        Row(
-                          children: [
-                            Expanded(child: previewLine),
-                            const SizedBox(width: 6),
-                            _UnreadBadge(
-                              text: unreadText,
-                              color: unreadColor,
-                              mini: true,
+                      if (timeLabel.isNotEmpty) ...[
+                        const SizedBox(width: 6),
+                        Text(
+                          timeLabel,
+                          style: DunesTypography.sans(
+                            fontSize: 11,
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.text3,
                             ),
-                          ],
-                        )
-                      else
-                        previewLine,
-                    ],
-                  ),
-                ),
-                if (muted)
-                  Padding(
-                    padding: const EdgeInsets.only(left: 8),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Icon(
-                          Icons.notifications_off_outlined,
-                          size: 14,
-                          color: DunesColors.resolve(
-                            context,
-                            DunesColors.text3,
+                            context: context,
                           ),
                         ),
                       ],
-                    ),
+                    ],
                   ),
-              ],
+                  SizedBox(height: desktop ? 3 : 3.5),
+                  if (desktop && unreadCount > 0)
+                    Row(
+                      children: [
+                        Expanded(child: previewLine),
+                        const SizedBox(width: 6),
+                        _UnreadBadge(
+                          text: unreadText,
+                          color: unreadColor,
+                          mini: true,
+                        ),
+                      ],
+                    )
+                  else if (!desktop && muted)
+                    Row(
+                      children: [
+                        Expanded(child: previewLine),
+                        const SizedBox(width: 8),
+                        Icon(
+                          Icons.notifications_off_outlined,
+                          size: 13.5,
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.text3,
+                          ).withValues(alpha: 0.78),
+                        ),
+                      ],
+                    )
+                  else
+                    previewLine,
+                ],
+              ),
             ),
-          ),
-        ),
-        if (showDivider)
-          ColoredBox(
-            color: DunesColors.resolve(
-              context,
-              desktop ? DunesColors.bgApp : _rowBg,
-              role: DunesColorRole.surface,
-            ),
-            child: Padding(
-              padding: EdgeInsets.only(left: desktop ? 67 : 80, right: 16),
-              child: Divider(
-                height: 1,
-                thickness: 1,
-                color: DunesColors.resolve(
-                  context,
-                  DunesColors.borderSoft,
-                  role: DunesColorRole.border,
+            if (desktop && muted)
+              Padding(
+                padding: const EdgeInsets.only(left: 8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Icon(
+                      Icons.notifications_off_outlined,
+                      size: 14,
+                      color: DunesColors.resolve(context, DunesColors.text3),
+                    ),
+                  ],
                 ),
               ),
+          ],
+        ),
+      ),
+    );
+
+    return Column(
+      children: [
+        if (!desktop && onLongPress != null)
+          GestureDetector(onLongPress: onLongPress, child: rowSurface)
+        else
+          rowSurface,
+        if (showDivider)
+          ColoredBox(
+            color: desktop
+                ? DunesColors.resolve(
+                    context,
+                    DunesColors.bgApp,
+                    role: DunesColorRole.surface,
+                  )
+                : rowBg,
+            child: Padding(
+              padding: EdgeInsets.only(
+                left: desktop ? 67 : 76,
+                right: desktop ? 16 : 0,
+              ),
+              child: desktop
+                  ? Divider(
+                      height: 1,
+                      thickness: 1,
+                      color: DunesColors.resolve(
+                        context,
+                        DunesColors.borderSoft,
+                        role: DunesColorRole.border,
+                      ),
+                    )
+                  : SizedBox(
+                      height: (1 / MediaQuery.devicePixelRatioOf(context))
+                          .clamp(0.33, 0.5),
+                      width: double.infinity,
+                      child: ColoredBox(
+                        color: isDark
+                            ? Colors.white.withValues(alpha: 0.065)
+                            : Colors.black.withValues(alpha: 0.048),
+                      ),
+                    ),
             ),
           ),
       ],
@@ -2707,37 +2976,120 @@ class NovaSectionIcon extends StatelessWidget {
   }
 }
 
-/// 与 WebView C1 左滑删除对齐（本地隐藏，非服务端删除）。
+/// 协调列表中同时只展开一行的左滑操作区。
+class InboxSwipeGroupController extends ChangeNotifier {
+  Object? _openRowKey;
+
+  Object? get openRowKey => _openRowKey;
+
+  void open(Object? rowKey) {
+    if (_openRowKey == rowKey) return;
+    _openRowKey = rowKey;
+    notifyListeners();
+  }
+
+  void closeIf(Object? rowKey) {
+    if (_openRowKey == null || _openRowKey != rowKey) return;
+    _openRowKey = null;
+    notifyListeners();
+  }
+
+  void closeAll() {
+    if (_openRowKey == null) return;
+    _openRowKey = null;
+    notifyListeners();
+  }
+}
+
+/// 列表行左滑快捷操作：跟手拖动、松手回弹、支持多行互斥收起。
 class SwipeableChatInboxRow extends StatefulWidget {
   const SwipeableChatInboxRow({
     super.key,
     required this.child,
-    this.onDelete,
+    this.rowKey,
+    this.swipeGroup,
+    this.onTogglePin,
+    this.pinLabel = '置顶',
     this.onMarkUnread,
     this.markUnreadLabel = '标为未读',
+    this.onToggleMute,
+    this.muteLabel = '免打扰',
+    this.onDelete,
   });
 
   final Widget child;
-  final VoidCallback? onDelete;
+  final Object? rowKey;
+  final InboxSwipeGroupController? swipeGroup;
+  final VoidCallback? onTogglePin;
+  final String pinLabel;
   final VoidCallback? onMarkUnread;
   final String markUnreadLabel;
+  final VoidCallback? onToggleMute;
+  final String muteLabel;
+  final VoidCallback? onDelete;
 
   @override
   State<SwipeableChatInboxRow> createState() => _SwipeableChatInboxRowState();
 }
 
 class _SwipeableChatInboxRowState extends State<SwipeableChatInboxRow> {
-  static const _actionWidth = 76.0;
   double _offset = 0;
+  bool _dragging = false;
 
   int get _actionCount =>
-      (widget.onMarkUnread == null ? 0 : 1) + (widget.onDelete == null ? 0 : 1);
+      (widget.onTogglePin == null ? 0 : 1) +
+      (widget.onMarkUnread == null ? 0 : 1) +
+      (widget.onToggleMute == null ? 0 : 1) +
+      (widget.onDelete == null ? 0 : 1);
+
+  double get _actionWidth => _actionCount >= 3 ? 68.0 : 76.0;
 
   double get _openWidth => _actionWidth * _actionCount;
 
+  @override
+  void initState() {
+    super.initState();
+    widget.swipeGroup?.addListener(_onSwipeGroupChanged);
+  }
+
+  @override
+  void didUpdateWidget(covariant SwipeableChatInboxRow oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.swipeGroup != widget.swipeGroup) {
+      oldWidget.swipeGroup?.removeListener(_onSwipeGroupChanged);
+      widget.swipeGroup?.addListener(_onSwipeGroupChanged);
+    }
+    final maxWidth = _openWidth;
+    if (_offset < -maxWidth) {
+      _offset = -maxWidth;
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.swipeGroup?.removeListener(_onSwipeGroupChanged);
+    super.dispose();
+  }
+
+  void _onSwipeGroupChanged() {
+    final group = widget.swipeGroup;
+    if (group == null || !mounted) return;
+    final key = widget.rowKey ?? this;
+    if (group.openRowKey != key && _offset != 0) {
+      setState(() {
+        _dragging = false;
+        _offset = 0;
+      });
+    }
+  }
+
   void _close() {
     if (_offset == 0) return;
-    setState(() => _offset = 0);
+    setState(() {
+      _dragging = false;
+      _offset = 0;
+    });
+    widget.swipeGroup?.closeIf(widget.rowKey ?? this);
   }
 
   Widget _swipeAction({
@@ -2759,13 +3111,18 @@ class _SwipeableChatInboxRowState extends State<SwipeableChatInboxRow> {
             onTap();
           },
           child: Center(
-            child: Text(
-              label,
-              style: DunesTypography.sans(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: DunesColors.resolve(context, Colors.white),
-                context: context,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: DunesTypography.sans(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600,
+                  color: DunesColors.resolve(context, Colors.white),
+                  context: context,
+                ),
               ),
             ),
           ),
@@ -2776,6 +3133,8 @@ class _SwipeableChatInboxRowState extends State<SwipeableChatInboxRow> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
     return Stack(
       clipBehavior: Clip.hardEdge,
       children: [
@@ -2787,19 +3146,30 @@ class _SwipeableChatInboxRowState extends State<SwipeableChatInboxRow> {
                 width: _openWidth,
                 child: Row(
                   children: [
+                    if (widget.onTogglePin != null)
+                      _swipeAction(
+                        label: widget.pinLabel,
+                        color: DunesColors.brandPurple,
+                        onTap: widget.onTogglePin!,
+                      ),
                     if (widget.onMarkUnread != null)
                       _swipeAction(
                         label: widget.markUnreadLabel,
-                        color: DunesColors.resolve(
-                          context,
-                          const Color(0xFF3478F6),
-                        ),
+                        color: const Color(0xFF3478F6),
                         onTap: widget.onMarkUnread!,
+                      ),
+                    if (widget.onToggleMute != null)
+                      _swipeAction(
+                        label: widget.muteLabel,
+                        color: isDark
+                            ? const Color(0xFF5A586B)
+                            : const Color(0xFF8E8E93),
+                        onTap: widget.onToggleMute!,
                       ),
                     if (widget.onDelete != null)
                       _swipeAction(
                         label: '删除',
-                        color: DunesColors.resolve(context, DunesColors.coral),
+                        color: DunesColors.coral,
                         onTap: widget.onDelete!,
                       ),
                   ],
@@ -2808,6 +3178,12 @@ class _SwipeableChatInboxRowState extends State<SwipeableChatInboxRow> {
             ),
           ),
         GestureDetector(
+          onHorizontalDragStart: _actionCount == 0
+              ? null
+              : (_) {
+                  widget.swipeGroup?.open(widget.rowKey ?? this);
+                  setState(() => _dragging = true);
+                },
           onHorizontalDragUpdate: _actionCount == 0
               ? null
               : (details) {
@@ -2821,17 +3197,30 @@ class _SwipeableChatInboxRowState extends State<SwipeableChatInboxRow> {
                 },
           onHorizontalDragEnd: _actionCount == 0
               ? null
-              : (_) {
+              : (details) {
+                  final vx = details.primaryVelocity ?? 0;
+                  final shouldOpen =
+                      vx < -320 || (vx <= 180 && _offset < -_openWidth * 0.42);
+                  final target = shouldOpen ? -_openWidth : 0.0;
+                  if (shouldOpen) {
+                    widget.swipeGroup?.open(widget.rowKey ?? this);
+                  } else {
+                    widget.swipeGroup?.closeIf(widget.rowKey ?? this);
+                  }
                   setState(() {
-                    _offset = _offset < -_openWidth / 2 ? -_openWidth : 0;
+                    _dragging = false;
+                    _offset = target;
                   });
                 },
+          onHorizontalDragCancel: _actionCount == 0 ? null : _close,
           onTap: _offset == 0 ? null : _close,
           child: AnimatedContainer(
-            duration: const Duration(milliseconds: 180),
+            duration: _dragging || reduceMotion
+                ? Duration.zero
+                : const Duration(milliseconds: 220),
             curve: Curves.easeOutCubic,
             transform: Matrix4.translationValues(_offset, 0, 0),
-            child: widget.child,
+            child: AbsorbPointer(absorbing: _offset != 0, child: widget.child),
           ),
         ),
       ],

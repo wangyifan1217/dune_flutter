@@ -548,16 +548,27 @@ abstract final class DunesTheme {
       dialogTheme: DialogThemeData(
         backgroundColor: palette.surface,
         surfaceTintColor: Colors.transparent,
-        elevation: 8,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        elevation: 16,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(22),
+          side: BorderSide(color: palette.borderSubtle, width: 0.8),
+        ),
       ),
       popupMenuTheme: PopupMenuThemeData(
         color: palette.surface,
         surfaceTintColor: Colors.transparent,
-        elevation: 4,
+        elevation: 8,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(10),
-          side: BorderSide(color: palette.borderSubtle),
+          borderRadius: BorderRadius.circular(14),
+          side: BorderSide(color: palette.borderSubtle, width: 0.8),
+        ),
+      ),
+      bottomSheetTheme: BottomSheetThemeData(
+        backgroundColor: palette.surface,
+        modalBackgroundColor: palette.surface,
+        surfaceTintColor: Colors.transparent,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
         ),
       ),
     );
@@ -633,13 +644,29 @@ abstract final class DunesTheme {
       popupMenuTheme: PopupMenuThemeData(
         color: palette.surface,
         surfaceTintColor: Colors.transparent,
+        elevation: 8,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: BorderSide(color: palette.borderSubtle, width: 0.8),
+        ),
         textStyle: DunesTypography.sans(color: palette.text),
       ),
-      dialogTheme: DialogThemeData(backgroundColor: palette.surface),
+      dialogTheme: DialogThemeData(
+        backgroundColor: palette.surface,
+        surfaceTintColor: Colors.transparent,
+        elevation: 16,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(22),
+          side: BorderSide(color: palette.borderSubtle, width: 0.8),
+        ),
+      ),
       bottomSheetTheme: BottomSheetThemeData(
         backgroundColor: palette.surface,
         modalBackgroundColor: palette.surface,
         surfaceTintColor: Colors.transparent,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
       ),
     );
   }

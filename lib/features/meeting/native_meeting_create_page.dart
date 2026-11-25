@@ -947,60 +947,154 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
           Scaffold(
             backgroundColor: DunesColors.resolve(
               context,
-              DunesColors.bgApp,
+              const Color(0xFFF5F5F7),
               role: DunesColorRole.surface,
             ),
             appBar: AppBar(
-              leading: BackButton(onPressed: _handleBack),
-              title: const Text('新建会议纪要'),
+              backgroundColor: DunesColors.resolve(
+                context,
+                Colors.white,
+                role: DunesColorRole.surface,
+              ),
+              surfaceTintColor: Colors.transparent,
+              elevation: 0,
+              centerTitle: true,
+              leadingWidth: 76,
+              leading: InkWell(
+                borderRadius: BorderRadius.circular(14),
+                hoverColor: Colors.transparent,
+                onTap: () {
+                  HapticFeedback.selectionClick();
+                  _handleBack();
+                },
+                child: Padding(
+                  padding: const EdgeInsets.only(left: 12),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.arrow_back_ios_new_rounded,
+                        size: 16,
+                        color: DunesColors.resolve(
+                          context,
+                          DunesColors.brandPurple,
+                        ),
+                      ),
+                      const SizedBox(width: 2),
+                      Text(
+                        '返回',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w500,
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.brandPurple,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              title: Text(
+                '新建会议纪要',
+                style: TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: -0.3,
+                  color: DunesColors.resolve(context, const Color(0xFF1D1D1F)),
+                ),
+              ),
+              bottom: PreferredSize(
+                preferredSize: const Size.fromHeight(0.5),
+                child: Divider(
+                  height: 0.5,
+                  thickness: 0.5,
+                  color: DunesColors.resolve(
+                    context,
+                    const Color(0xFFE5E5EA),
+                    role: DunesColorRole.border,
+                  ),
+                ),
+              ),
             ),
-            body: ListView(
-              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-              padding: const EdgeInsets.fromLTRB(16, 10, 16, 24),
+            body: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 680),
+                child: ListView(
+                  keyboardDismissBehavior:
+                      ScrollViewKeyboardDismissBehavior.onDrag,
+                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 28),
               children: [
                 Container(
-                  padding: const EdgeInsets.all(18),
+                  padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(18),
-                    gradient: LinearGradient(
-                      colors: [
-                        DunesColors.resolve(
-                          context,
-                          Color(0xFF7B5CD8),
-                          role: DunesColorRole.surface,
-                        ),
-                        DunesColors.resolve(
-                          context,
-                          Color(0xFF6A4FA0),
-                          role: DunesColorRole.surface,
-                        ),
-                      ],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
+                    color: DunesColors.resolve(
+                      context,
+                      Colors.white,
+                      role: DunesColorRole.surface,
                     ),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: DunesColors.resolve(
+                        context,
+                        const Color(0xFFE5E5EA),
+                        role: DunesColorRole.border,
+                      ),
+                      width: 0.8,
+                    ),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Color(0x07000000),
+                        blurRadius: 16,
+                        offset: Offset(0, 4),
+                      ),
+                    ],
                   ),
                   child: Row(
                     children: [
                       Container(
-                        width: 50,
-                        height: 50,
+                        width: 48,
+                        height: 48,
                         decoration: BoxDecoration(
-                          color: DunesColors.resolveNullable(
-                            context,
-                            Colors.white.withValues(alpha: 0.16),
-                            role: DunesColorRole.surface,
+                          gradient: LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [
+                              Color.lerp(
+                                DunesColors.brandPurple,
+                                Colors.white,
+                                0.22,
+                              )!,
+                              DunesColors.brandPurple,
+                              Color.lerp(
+                                DunesColors.brandPurple,
+                                Colors.black,
+                                0.14,
+                              )!,
+                            ],
+                            stops: const [0.0, 0.58, 1.0],
                           ),
-                          shape: BoxShape.circle,
+                          borderRadius: BorderRadius.circular(14),
+                          boxShadow: [
+                            BoxShadow(
+                              color: DunesColors.brandPurple.withValues(
+                                alpha: 0.28,
+                              ),
+                              blurRadius: 10,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
                         ),
                         child: Icon(
                           isDesktopCommOnly
                               ? Icons.upload_file_rounded
                               : Icons.mic_none_rounded,
-                          color: DunesColors.resolve(context, Colors.white),
-                          size: 28,
+                          color: Colors.white,
+                          size: 25,
                         ),
                       ),
-                      const SizedBox(width: 12),
+                      const SizedBox(width: 14),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1008,16 +1102,17 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
                             Text(
                               'AI 会议纪要',
                               style: DunesTypography.sans(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
+                                fontSize: 16.5,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: -0.2,
                                 color: DunesColors.resolve(
                                   context,
-                                  Colors.white,
+                                  const Color(0xFF1D1D1F),
                                 ),
                                 context: context,
                               ),
                             ),
-                            const SizedBox(height: 4),
+                            const SizedBox(height: 3),
                             Text(
                               _mode == _CreateMode.upload
                                   ? (isDesktopCommOnly
@@ -1025,11 +1120,11 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
                                         : '上传或录制音频，生成摘要与待办')
                                   : '现场录音，结束后一键生成纪要',
                               style: DunesTypography.sans(
-                                fontSize: 12,
+                                fontSize: 12.5,
                                 color: DunesColors.resolve(
                                   context,
-                                  Colors.white,
-                                ).withValues(alpha: 0.85),
+                                  const Color(0xFF6E6E73),
+                                ),
                                 context: context,
                               ),
                             ),
@@ -1042,87 +1137,108 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
 
                 if (!isDesktopCommOnly) ...[
                   const SizedBox(height: 14),
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: DunesColors.resolve(
-                        context,
-                        Colors.white,
-                        role: DunesColorRole.surface,
-                      ),
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(
-                        color: DunesColors.resolve(
-                          context,
-                          DunesColors.borderSoft,
-                          role: DunesColorRole.border,
-                        ),
-                      ),
+                  CupertinoSlidingSegmentedControl<_CreateMode>(
+                    groupValue: _mode,
+                    thumbColor: DunesColors.resolve(
+                      context,
+                      Colors.white,
+                      role: DunesColorRole.surface,
                     ),
-                    child: CupertinoSlidingSegmentedControl<_CreateMode>(
-                      groupValue: _mode,
-                      thumbColor: DunesColors.resolve(
-                        context,
-                        DunesColors.brandPurple,
-                      ),
-                      backgroundColor: DunesColors.resolve(
-                        context,
-                        DunesColors.bgSoft,
-                        role: DunesColorRole.surface,
-                      ),
-                      children: {
-                        _CreateMode.upload: Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 10),
-                          child: Text(
-                            '上传录音转写',
-                            textAlign: TextAlign.center,
-                            style: DunesTypography.sans(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color: _mode == _CreateMode.upload
-                                  ? DunesColors.resolve(context, Colors.white)
-                                  : DunesColors.resolve(
-                                      context,
-                                      DunesColors.text2,
-                                    ),
-                              context: context,
-                            ),
+                    backgroundColor: DunesColors.resolve(
+                      context,
+                      const Color(0xFFEEEEF3),
+                      role: DunesColorRole.surface,
+                    ),
+                    children: {
+                      _CreateMode.upload: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 9),
+                        child: Text(
+                          '上传录音转写',
+                          textAlign: TextAlign.center,
+                          style: DunesTypography.sans(
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.w600,
+                            color: _mode == _CreateMode.upload
+                                ? DunesColors.resolve(
+                                    context,
+                                    DunesColors.brandPurple,
+                                  )
+                                : DunesColors.resolve(
+                                    context,
+                                    const Color(0xFF6E6E73),
+                                  ),
+                            context: context,
                           ),
                         ),
-                        _CreateMode.live: Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 10),
-                          child: Text(
-                            '现场录音',
-                            textAlign: TextAlign.center,
-                            style: DunesTypography.sans(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color: _mode == _CreateMode.live
-                                  ? DunesColors.resolve(context, Colors.white)
-                                  : DunesColors.resolve(
-                                      context,
-                                      DunesColors.text2,
-                                    ),
-                              context: context,
-                            ),
+                      ),
+                      _CreateMode.live: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 9),
+                        child: Text(
+                          '现场录音',
+                          textAlign: TextAlign.center,
+                          style: DunesTypography.sans(
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.w600,
+                            color: _mode == _CreateMode.live
+                                ? DunesColors.resolve(
+                                    context,
+                                    DunesColors.brandPurple,
+                                  )
+                                : DunesColors.resolve(
+                                    context,
+                                    const Color(0xFF6E6E73),
+                                  ),
+                            context: context,
                           ),
                         ),
-                      },
-                      onValueChanged: (value) {
-                        if (value == null || value == _mode) return;
-                        setState(() {
-                          _mode = value;
-                          _error = null;
-                        });
-                      },
-                    ),
+                      ),
+                    },
+                    onValueChanged: (value) {
+                      if (value == null || value == _mode) return;
+                      HapticFeedback.selectionClick();
+                      setState(() {
+                        _mode = value;
+                        _error = null;
+                      });
+                    },
                   ),
                 ],
 
-                const SizedBox(height: 12),
+                const SizedBox(height: 14),
                 _sectionCard(
                   title: '会议信息',
                   icon: Icons.title_rounded,
+                  trailing: _mode == _CreateMode.live && !recording
+                      ? Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 2.5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: DunesColors.resolve(
+                              context,
+                              _hasMeetingTitle
+                                  ? DunesColors.greenSoft
+                                  : DunesColors.brandPurpleSoft,
+                              role: DunesColorRole.surface,
+                            ),
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: Text(
+                            _hasMeetingTitle ? '已填写' : '录音必填',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: DunesColors.resolve(
+                                context,
+                                _hasMeetingTitle
+                                    ? DunesColors.green
+                                    : DunesColors.brandPurple,
+                              ),
+                            ),
+                          ),
+                        )
+                      : null,
                   child: TextField(
                     controller: _titleCtrl,
                     readOnly: _showBusyOverlay,
@@ -1137,26 +1253,26 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
                     },
                     style: DunesTypography.sans(
                       fontSize: 14,
-                      color: DunesColors.resolve(context, DunesColors.text),
+                      color: DunesColors.resolve(
+                        context,
+                        const Color(0xFF1D1D1F),
+                      ),
                       context: context,
                     ),
                     decoration: InputDecoration(
                       hintText: '请输入会议标题，例如：周例会-销售复盘',
-                      helperText:
-                          _mode == _CreateMode.live &&
-                              !recording &&
-                              !_hasMeetingTitle
-                          ? '开始录音前必须填写会议标题'
-                          : null,
-                      helperStyle: DunesTypography.sans(
-                        fontSize: 11,
-                        color: DunesColors.resolve(context, DunesColors.coral),
+                      hintStyle: DunesTypography.sans(
+                        fontSize: 13.5,
+                        color: DunesColors.resolve(
+                          context,
+                          const Color(0xFF8E8E93),
+                        ),
                         context: context,
                       ),
                       filled: true,
                       fillColor: DunesColors.resolve(
                         context,
-                        DunesColors.bgSoft,
+                        const Color(0xFFF5F5F7),
                         role: DunesColorRole.surface,
                       ),
                       border: OutlineInputBorder(
@@ -1164,9 +1280,10 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
                         borderSide: BorderSide(
                           color: DunesColors.resolve(
                             context,
-                            DunesColors.borderSoft,
+                            const Color(0xFFE5E5EA),
                             role: DunesColorRole.border,
                           ),
+                          width: 0.8,
                         ),
                       ),
                       enabledBorder: OutlineInputBorder(
@@ -1174,13 +1291,24 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
                         borderSide: BorderSide(
                           color: DunesColors.resolve(
                             context,
-                            DunesColors.borderSoft,
+                            const Color(0xFFE5E5EA),
                             role: DunesColorRole.border,
                           ),
+                          width: 0.8,
+                        ),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.brandPurple,
+                          ),
+                          width: 1.4,
                         ),
                       ),
                       contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 12,
+                        horizontal: 14,
                         vertical: 12,
                       ),
                     ),
@@ -1603,6 +1731,8 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
                 ],
               ],
             ),
+              ),
+            ),
             bottomNavigationBar: _mode == _CreateMode.upload
                 ? SafeArea(
                     top: false,
@@ -1807,21 +1937,29 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
     Widget? trailing,
   }) {
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(15),
       decoration: BoxDecoration(
         color: DunesColors.resolve(
           context,
           Colors.white,
           role: DunesColorRole.surface,
         ),
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(18),
         border: Border.all(
           color: DunesColors.resolve(
             context,
-            DunesColors.borderSoft,
+            const Color(0xFFE5E5EA),
             role: DunesColorRole.border,
           ),
+          width: 0.8,
         ),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x05000000),
+            blurRadius: 12,
+            offset: Offset(0, 3),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

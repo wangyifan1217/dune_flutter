@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'dart:ui';
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../core/navigation/navigation_controller.dart';
 import '../../core/theme/dunes_theme.dart';
@@ -113,6 +115,7 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
   final ScrollController _overviewScroll = ScrollController();
   late AuthSession _session;
   int _pageIndex = 0;
+  double _syncTurns = 0;
   _WorkbenchView _contentView = _WorkbenchView.tasks;
   bool _hideShellHeader = false;
   Widget? _shellTrailing;
@@ -661,7 +664,7 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
     return ColoredBox(
       color: DunesColors.resolve(
         context,
-        const Color(0xFFF7F5FA),
+        const Color(0xFFF5F5F7),
         role: DunesColorRole.surface,
       ),
       child: SafeArea(
@@ -670,204 +673,186 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             if (!_hideShellHeader)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
-                child: Row(
-                  children: [
-                    if (_isOverview && widget.onExit != null) ...[
-                      InkWell(
-                        onTap: widget.onExit,
-                        borderRadius: BorderRadius.circular(12),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 6,
+              ClipRect(
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: DunesColors.resolve(
+                        context,
+                        Colors.white,
+                        role: DunesColorRole.surface,
+                      ).withValues(alpha: 0.88),
+                      border: Border(
+                        bottom: BorderSide(
+                          color: DunesColors.resolve(
+                            context,
+                            const Color(0xFFE5E5EA),
+                            role: DunesColorRole.border,
                           ),
-                          decoration: BoxDecoration(
-                            color: DunesColors.resolve(
-                              context,
-                              Colors.white,
-                              role: DunesColorRole.surface,
-                            ),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: DunesColors.resolve(
-                                context,
-                                const Color(0xFFECE4F3),
-                                role: DunesColorRole.border,
-                              ),
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: const Color(
-                                  0xFF552D8E,
-                                ).withValues(alpha: .04),
-                                blurRadius: 6,
-                                offset: const Offset(0, 2),
-                              ),
-                            ],
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                Icons.arrow_back_ios_new_rounded,
-                                size: 14,
-                                color: DunesColors.resolveNullable(
-                                  context,
-                                  Color(0xFF6B5882),
-                                ),
-                              ),
-                              SizedBox(width: 4),
-                              Text(
-                                '返回我的',
-                                style: TextStyle(
-                                  fontSize: 12.5,
-                                  fontWeight: FontWeight.w600,
-                                  color: DunesColors.resolveNullable(
-                                    context,
-                                    Color(0xFF37274C),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                    ],
-                    if (!_isOverview) ...[
-                      InkWell(
-                        borderRadius: BorderRadius.circular(12),
-                        onTap: _onShellBackOverride ?? () => _goPage(0),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 6,
-                          ),
-                          decoration: BoxDecoration(
-                            color: DunesColors.resolve(
-                              context,
-                              Colors.white,
-                              role: DunesColorRole.surface,
-                            ),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: DunesColors.resolve(
-                                context,
-                                const Color(0xFFECE4F3),
-                                role: DunesColorRole.border,
-                              ),
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: const Color(
-                                  0xFF552D8E,
-                                ).withValues(alpha: .04),
-                                blurRadius: 6,
-                                offset: const Offset(0, 2),
-                              ),
-                            ],
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                Icons.arrow_back_ios_new_rounded,
-                                size: 14,
-                                color: DunesColors.resolveNullable(
-                                  context,
-                                  Color(0xFF6B5882),
-                                ),
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                (_contentChrome?.backLabel ?? '').trim().isEmpty
-                                    ? '工作台'
-                                    : _contentChrome!.backLabel!.trim(),
-                                style: TextStyle(
-                                  fontSize: 12.5,
-                                  fontWeight: FontWeight.w600,
-                                  color: DunesColors.resolveNullable(
-                                    context,
-                                    Color(0xFF37274C),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                    ],
-                    Expanded(
-                      child: Text(
-                        _isOverview ? '工作台' : (_titles[_contentView] ?? ''),
-                        style: TextStyle(
-                          fontSize: _isOverview ? 20 : 17,
-                          fontWeight: FontWeight.w800,
-                          color: _isOverview
-                              ? DunesColors.resolve(
-                                  context,
-                                  const Color(0xFF2C1E3F),
-                                )
-                              : DunesColors.resolve(
-                                  context,
-                                  const Color(0xFF7045B2),
-                                ),
+                          width: 0.5,
                         ),
                       ),
                     ),
-                    if (_isOverview) ...[
-                      Tooltip(
-                        message: '刷新工作台数据与权限',
-                        child: InkWell(
-                          onTap: () async {
-                            await _refreshSessionOnEnter();
-                            if (!context.mounted) return;
-                            showDunesToast(context, '工作台数据与应用已刷新');
-                          },
-                          borderRadius: BorderRadius.circular(12),
-                          child: Container(
-                            padding: const EdgeInsets.all(7),
-                            decoration: BoxDecoration(
+                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+                    child: SizedBox(
+                      height: 36,
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: _isOverview && widget.onExit != null
+                                ? InkWell(
+                                    onTap: () {
+                                      HapticFeedback.selectionClick();
+                                      widget.onExit!();
+                                    },
+                                    borderRadius: BorderRadius.circular(14),
+                                    hoverColor: Colors.transparent,
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 6,
+                                        vertical: 6,
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(
+                                            Icons.arrow_back_ios_new_rounded,
+                                            size: 16,
+                                            color: DunesColors.resolve(
+                                              context,
+                                              DunesColors.brandPurple,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 2),
+                                          Text(
+                                            '我的',
+                                            style: TextStyle(
+                                              fontSize: 15,
+                                              fontWeight: FontWeight.w500,
+                                              color: DunesColors.resolve(
+                                                context,
+                                                DunesColors.brandPurple,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  )
+                                : !_isOverview
+                                ? InkWell(
+                                    borderRadius: BorderRadius.circular(14),
+                                    hoverColor: Colors.transparent,
+                                    onTap: () {
+                                      HapticFeedback.selectionClick();
+                                      (_onShellBackOverride ??
+                                          () => _goPage(0))();
+                                    },
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 6,
+                                        vertical: 6,
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(
+                                            Icons.arrow_back_ios_new_rounded,
+                                            size: 16,
+                                            color: DunesColors.resolve(
+                                              context,
+                                              DunesColors.brandPurple,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 2),
+                                          Text(
+                                            (_contentChrome?.backLabel ?? '')
+                                                    .trim()
+                                                    .isEmpty
+                                                ? '工作台'
+                                                : _contentChrome!.backLabel!
+                                                      .trim(),
+                                            style: TextStyle(
+                                              fontSize: 15,
+                                              fontWeight: FontWeight.w500,
+                                              color: DunesColors.resolve(
+                                                context,
+                                                DunesColors.brandPurple,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  )
+                                : const SizedBox.shrink(),
+                          ),
+                          Text(
+                            _isOverview
+                                ? '工作台'
+                                : (_titles[_contentView] ?? ''),
+                            style: TextStyle(
+                              fontSize: 17,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: -0.3,
                               color: DunesColors.resolve(
                                 context,
-                                Colors.white,
-                                role: DunesColorRole.surface,
-                              ),
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(
-                                color: DunesColors.resolve(
-                                  context,
-                                  const Color(0xFFECE4F3),
-                                  role: DunesColorRole.border,
-                                ),
-                              ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: const Color(
-                                    0xFF552D8E,
-                                  ).withValues(alpha: .04),
-                                  blurRadius: 6,
-                                  offset: const Offset(0, 2),
-                                ),
-                              ],
-                            ),
-                            child: Icon(
-                              Icons.refresh_rounded,
-                              size: 19,
-                              color: DunesColors.resolveNullable(
-                                context,
-                                Color(0xFF7045B2),
+                                const Color(0xFF1D1D1F),
                               ),
                             ),
                           ),
-                        ),
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (_isOverview)
+                                  Tooltip(
+                                    message: '刷新工作台数据与权限',
+                                    child: InkWell(
+                                      onTap: () async {
+                                        HapticFeedback.selectionClick();
+                                        setState(() => _syncTurns += 1);
+                                        await _refreshSessionOnEnter();
+                                        if (!context.mounted) return;
+                                        showDunesToast(
+                                          context,
+                                          '工作台数据与应用已刷新',
+                                        );
+                                      },
+                                      borderRadius: BorderRadius.circular(18),
+                                      hoverColor: Colors.transparent,
+                                      child: Padding(
+                                        padding: const EdgeInsets.all(6),
+                                        child: AnimatedRotation(
+                                          turns: _syncTurns,
+                                          duration: const Duration(
+                                            milliseconds: 600,
+                                          ),
+                                          curve: Curves.easeOutCubic,
+                                          child: Icon(
+                                            Icons.refresh_rounded,
+                                            size: 21,
+                                            color: DunesColors.resolve(
+                                              context,
+                                              DunesColors.brandPurple,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                if (_shellTrailing != null) _shellTrailing!,
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
-                    ?_shellTrailing,
-                  ],
+                    ),
+                  ),
                 ),
               ),
             Expanded(
@@ -1283,59 +1268,102 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
             PointerDeviceKind.unknown,
           },
         ),
-        child: ListView(
-          controller: _overviewScroll,
-          primary: false,
-          physics: const ClampingScrollPhysics(),
-          padding: EdgeInsets.fromLTRB(
-            isDesktopCommOnly ? 24 : 16,
-            10,
-            isDesktopCommOnly ? 24 : 16,
-            40,
-          ),
-          children: [
-            _buildSuperHeroCard(
-              collaborationCount: collabTiles.length,
-              toolCount: toolTiles.length,
-              adminCount: businessTiles.length + peopleTiles.length,
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 1180),
+            child: LayoutBuilder(
+              builder: (context, outer) {
+                final pcBento = outer.maxWidth >= 840;
+                final sections = <Widget>[
+                  if (collabTiles.isNotEmpty)
+                    _WorkbenchSection(
+                      title: '协同办公',
+                      subtitle: '任务流转 · 文件共享',
+                      accent: _themePurple,
+                      children: collabTiles,
+                    ),
+                  if (toolTiles.isNotEmpty)
+                    _WorkbenchSection(
+                      title: '企业应用',
+                      subtitle: '高频直达 · 单点免登',
+                      accent: DunesColors.resolve(
+                        context,
+                        const Color(0xFF3880FF),
+                      ),
+                      children: toolTiles,
+                    ),
+                  if (businessTiles.isNotEmpty)
+                    _WorkbenchSection(
+                      title: '业务与财务',
+                      subtitle: '提案 · 合同 · 发票 · 对账',
+                      accent: DunesColors.resolve(
+                        context,
+                        const Color(0xFF0F766E),
+                      ),
+                      children: businessTiles,
+                    ),
+                  if (peopleTiles.isNotEmpty)
+                    _WorkbenchSection(
+                      title: '行政人事',
+                      subtitle: '通告 · 绩效 · 薪酬 · 差旅',
+                      accent: DunesColors.resolve(
+                        context,
+                        const Color(0xFF3D7A8C),
+                      ),
+                      children: peopleTiles,
+                    ),
+                ];
+
+                final bentoRows = <Widget>[];
+                if (pcBento) {
+                  for (var i = 0; i < sections.length; i += 2) {
+                    if (i > 0) bentoRows.add(const SizedBox(height: 16));
+                    bentoRows.add(
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(child: sections[i]),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: i + 1 < sections.length
+                                ? sections[i + 1]
+                                : const SizedBox.shrink(),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+                }
+
+                return ListView(
+                  controller: _overviewScroll,
+                  primary: false,
+                  physics: const ClampingScrollPhysics(),
+                  padding: EdgeInsets.fromLTRB(
+                    isDesktopCommOnly ? 24 : 16,
+                    14,
+                    isDesktopCommOnly ? 24 : 16,
+                    40,
+                  ),
+                  children: [
+                    _buildSuperHeroCard(
+                      collaborationCount: collabTiles.length,
+                      toolCount: toolTiles.length,
+                      adminCount: businessTiles.length + peopleTiles.length,
+                    ),
+                    const SizedBox(height: 16),
+                    if (pcBento)
+                      ...bentoRows
+                    else
+                      for (var i = 0; i < sections.length; i++) ...[
+                        if (i > 0) const SizedBox(height: 14),
+                        sections[i],
+                      ],
+                  ],
+                );
+              },
             ),
-            const SizedBox(height: 16),
-            if (collabTiles.isNotEmpty) ...[
-              _WorkbenchSection(
-                title: '协同办公',
-                subtitle: '任务流转 · 文件共享',
-                accent: _themePurple,
-                children: collabTiles,
-              ),
-              const SizedBox(height: 14),
-            ],
-            if (businessTiles.isNotEmpty) ...[
-              _WorkbenchSection(
-                title: '业务与财务',
-                subtitle: '提案 · 合同 · 发票 · 对账',
-                accent: DunesColors.resolve(context, const Color(0xFF0F766E)),
-                children: businessTiles,
-              ),
-              const SizedBox(height: 14),
-            ],
-            if (peopleTiles.isNotEmpty) ...[
-              _WorkbenchSection(
-                title: '行政人事',
-                subtitle: '通告 · 绩效 · 薪酬 · 差旅',
-                accent: DunesColors.resolve(context, const Color(0xFF3D7A8C)),
-                children: peopleTiles,
-              ),
-              const SizedBox(height: 14),
-            ],
-            if (toolTiles.isNotEmpty) ...[
-              _WorkbenchSection(
-                title: '企业应用',
-                subtitle: '高频直达 · 单点免登',
-                accent: DunesColors.resolve(context, const Color(0xFF3880FF)),
-                children: toolTiles,
-              ),
-            ],
-          ],
+          ),
         ),
       ),
     );
@@ -1353,11 +1381,9 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
 
     final dept = _session.departmentName.trim();
     final title = _session.jobTitle.trim();
-    final phone = _session.phone.trim();
     final subParts = <String>[];
     if (dept.isNotEmpty) subParts.add(dept);
     if (title.isNotEmpty) subParts.add(title);
-    if (phone.isNotEmpty) subParts.add(phone);
     final identityLine = subParts.isNotEmpty
         ? subParts.join(' · ')
         : '沙丘团队协同中枢';
@@ -1378,396 +1404,267 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
     if (avatarPreset.isEmpty) avatarPreset = _session.avatarPreset.trim();
     final initial = name.characters.isNotEmpty ? name.characters.first : '沙';
 
-    Widget metricTile({
-      required String label,
-      required String value,
-      required IconData icon,
-    }) {
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              Colors.white.withValues(alpha: .18),
-              Colors.white.withValues(alpha: .06),
+    Widget statColumn(String label, int count) {
+      return Expanded(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 2),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                '$count',
+                style: TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: -0.3,
+                  color: DunesColors.resolve(context, const Color(0xFF1D1D1F)),
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w500,
+                  color: DunesColors.resolve(context, const Color(0xFF8E8E93)),
+                ),
+              ),
             ],
           ),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: Colors.white.withValues(alpha: .26),
-            width: 0.8,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: .12),
-              blurRadius: 10,
-              offset: const Offset(0, 3),
-            ),
-          ],
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(5),
-              decoration: BoxDecoration(
-                color: DunesColors.resolveNullable(
-                  context,
-                  Colors.white.withValues(alpha: .14),
-                  role: DunesColorRole.surface,
-                ),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: Colors.white.withValues(alpha: .20),
-                  width: 0.6,
-                ),
-              ),
-              child: Icon(
-                icon,
-                size: 13,
-                color: DunesColors.resolve(
-                  context,
-                  Colors.white,
-                ).withValues(alpha: .95),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  value,
-                  style: TextStyle(
-                    color: DunesColors.resolve(context, Colors.white),
-                    fontSize: 14,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 0.2,
-                    height: 1.1,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  label,
-                  style: TextStyle(
-                    color: DunesColors.resolveNullable(
-                      context,
-                      Colors.white.withValues(alpha: .75),
-                    ),
-                    fontSize: 10,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ],
-            ),
-          ],
         ),
       );
     }
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final isWide = constraints.maxWidth >= 640;
-
-        return Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(22),
-            gradient: LinearGradient(
-              colors: [
-                DunesColors.resolve(
-                  context,
-                  Color(0xFF140E24),
-                  role: DunesColorRole.surface,
-                ),
-                DunesColors.resolve(
-                  context,
-                  Color(0xFF1B132F),
-                  role: DunesColorRole.surface,
-                ),
-                DunesColors.resolve(
-                  context,
-                  Color(0xFF281946),
-                  role: DunesColorRole.surface,
-                ),
-                DunesColors.resolve(
-                  context,
-                  Color(0xFF19102C),
-                  role: DunesColorRole.surface,
-                ),
-              ],
-              stops: [0.0, 0.35, 0.75, 1.0],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(22),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            DunesColors.resolve(
+              context,
+              Colors.white,
+              role: DunesColorRole.surface,
             ),
-            border: Border.all(
-              color: Colors.white.withValues(alpha: .22),
-              width: 0.8,
+            DunesColors.resolve(
+              context,
+              const Color(0xFFF9F7FD),
+              role: DunesColorRole.surface,
             ),
-            boxShadow: const [
-              BoxShadow(
-                color: Color(0x3D110724),
-                blurRadius: 28,
-                offset: Offset(0, 10),
-              ),
-            ],
+          ],
+        ),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFE5E5EA),
+            role: DunesColorRole.border,
           ),
-          child: Stack(
-            children: [
-              Positioned(
-                right: -20,
-                top: -30,
-                child: Container(
-                  width: 180,
-                  height: 180,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: RadialGradient(
-                      colors: [
-                        DunesColors.resolve(
-                          context,
-                          const Color(0xFF8855DF),
-                          role: DunesColorRole.surface,
-                        ).withValues(alpha: .24),
-                        DunesColors.resolve(
-                          context,
-                          const Color(0xFF8855DF),
-                          role: DunesColorRole.surface,
-                        ).withValues(alpha: 0),
-                      ],
-                    ),
-                  ),
-                ),
+          width: 0.8,
+        ),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x0A000000),
+            blurRadius: 20,
+            offset: Offset(0, 6),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.fromLTRB(18, 16, 18, 14),
+      child: LayoutBuilder(
+        builder: (context, heroConstraints) {
+          final isWideHero = heroConstraints.maxWidth >= 680;
+          final syncButton = InkWell(
+            onTap: () async {
+              HapticFeedback.selectionClick();
+              setState(() => _syncTurns += 1);
+              await _refreshSessionOnEnter();
+              if (!context.mounted) return;
+              showDunesToast(context, '工作台权限与应用已同步');
+            },
+            borderRadius: BorderRadius.circular(18),
+            child: Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 7,
               ),
-              Positioned(
-                left: 20,
-                right: 20,
-                top: 0,
-                child: Container(
-                  height: 0.8,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        Colors.white.withValues(alpha: 0),
-                        Colors.white.withValues(alpha: .45),
-                        Colors.white.withValues(alpha: 0),
-                      ],
-                    ),
-                  ),
+              decoration: BoxDecoration(
+                color: DunesColors.resolve(
+                  context,
+                  DunesColors.brandPurpleSoft,
+                  role: DunesColorRole.surface,
                 ),
+                borderRadius: BorderRadius.circular(18),
               ),
-              Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 18,
-                  vertical: 16,
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Row(
-                      children: [
-                        NativeAvatarCircle(
-                          size: 48,
-                          avatarPreset: avatarPreset,
-                          avatarUrl: avatarUrl,
-                          fallbackText: initial,
-                          borderColor: Colors.white.withValues(alpha: 0.55),
-                          borderWidth: 1.5,
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  Text(
-                                    name,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      color: DunesColors.resolve(
-                                        context,
-                                        Colors.white,
-                                      ),
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.w800,
-                                      letterSpacing: 0.2,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 6,
-                                      vertical: 2,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      gradient: LinearGradient(
-                                        colors: [
-                                          Colors.white.withValues(alpha: .22),
-                                          Colors.white.withValues(alpha: .08),
-                                        ],
-                                      ),
-                                      borderRadius: BorderRadius.circular(6),
-                                      border: Border.all(
-                                        color: Colors.white.withValues(
-                                          alpha: .28,
-                                        ),
-                                        width: 0.6,
-                                      ),
-                                    ),
-                                    child: Text(
-                                      '数智协同中枢',
-                                      style: TextStyle(
-                                        color: DunesColors.resolve(
-                                          context,
-                                          Colors.white,
-                                        ),
-                                        fontSize: 9.5,
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 3),
-                              Text(
-                                identityLine,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  color: DunesColors.resolveNullable(
-                                    context,
-                                    Colors.white.withValues(alpha: .72),
-                                  ),
-                                  fontSize: 11.5,
-                                  fontWeight: FontWeight.w400,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        if (isWide) ...[
-                          metricTile(
-                            label: '协同业务',
-                            value: '$collaborationCount项',
-                            icon: Icons.task_alt_rounded,
-                          ),
-                          const SizedBox(width: 8),
-                          metricTile(
-                            label: '敏捷工具',
-                            value: '$toolCount款',
-                            icon: Icons.rocket_launch_rounded,
-                          ),
-                          const SizedBox(width: 8),
-                          metricTile(
-                            label: '管理赋能',
-                            value: '$adminCount类',
-                            icon: Icons.shield_outlined,
-                          ),
-                          const SizedBox(width: 12),
-                        ],
-                        InkWell(
-                          onTap: () async {
-                            await _refreshSessionOnEnter();
-                            if (!context.mounted) return;
-                            showDunesToast(context, '工作台权限与应用已同步');
-                          },
-                          borderRadius: BorderRadius.circular(14),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 8,
-                            ),
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                                colors: [
-                                  Colors.white.withValues(alpha: .22),
-                                  Colors.white.withValues(alpha: .08),
-                                ],
-                              ),
-                              borderRadius: BorderRadius.circular(14),
-                              border: Border.all(
-                                color: Colors.white.withValues(alpha: .32),
-                                width: 0.8,
-                              ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withValues(alpha: .16),
-                                  blurRadius: 10,
-                                  offset: const Offset(0, 3),
-                                ),
-                              ],
-                            ),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  Icons.sync_rounded,
-                                  color: DunesColors.resolve(
-                                    context,
-                                    Colors.white,
-                                  ),
-                                  size: 18,
-                                ),
-                                const SizedBox(height: 3),
-                                Text(
-                                  '同步状态',
-                                  style: TextStyle(
-                                    color: DunesColors.resolve(
-                                      context,
-                                      Colors.white,
-                                    ).withValues(alpha: .95),
-                                    fontSize: 9.5,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    if (!isWide) ...[
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: metricTile(
-                              label: '协同业务',
-                              value: '$collaborationCount项',
-                              icon: Icons.task_alt_rounded,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: metricTile(
-                              label: '敏捷工具',
-                              value: '$toolCount款',
-                              icon: Icons.rocket_launch_rounded,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: metricTile(
-                              label: '管理赋能',
-                              value: '$adminCount类',
-                              icon: Icons.shield_outlined,
-                            ),
-                          ),
-                        ],
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  AnimatedRotation(
+                    turns: _syncTurns,
+                    duration: const Duration(milliseconds: 600),
+                    curve: Curves.easeOutCubic,
+                    child: Icon(
+                      Icons.sync_rounded,
+                      size: 14,
+                      color: DunesColors.resolve(
+                        context,
+                        DunesColors.brandPurple,
                       ),
-                    ],
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    '同步',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: DunesColors.resolve(
+                        context,
+                        DunesColors.brandPurple,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+
+          final profileRow = Row(
+            children: [
+              NativeAvatarCircle(
+                size: 48,
+                avatarPreset: avatarPreset,
+                avatarUrl: avatarUrl,
+                fallbackText: initial,
+                borderColor: DunesColors.resolve(
+                  context,
+                  DunesColors.brandPurpleLine,
+                  role: DunesColorRole.border,
+                ),
+                borderWidth: 1.5,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: DunesColors.resolve(
+                          context,
+                          const Color(0xFF1D1D1F),
+                        ),
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: -0.3,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      identityLine,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: DunesColors.resolve(
+                          context,
+                          const Color(0xFF6E6E73),
+                        ),
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w400,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (isWideHero) ...[
+                const SizedBox(width: 16),
+                SizedBox(
+                  width: 300,
+                  child: IntrinsicHeight(
+                    child: Row(
+                      children: [
+                        statColumn('协同业务', collaborationCount),
+                        VerticalDivider(
+                          width: 0.6,
+                          thickness: 0.6,
+                          color: DunesColors.resolve(
+                            context,
+                            const Color(0xFFEFEFF4),
+                            role: DunesColorRole.border,
+                          ),
+                        ),
+                        statColumn('便捷工具', toolCount),
+                        VerticalDivider(
+                          width: 0.6,
+                          thickness: 0.6,
+                          color: DunesColors.resolve(
+                            context,
+                            const Color(0xFFEFEFF4),
+                            role: DunesColorRole.border,
+                          ),
+                        ),
+                        statColumn('管理赋能', adminCount),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 16),
+              ] else
+                const SizedBox(width: 8),
+              syncButton,
+            ],
+          );
+
+          if (isWideHero) return profileRow;
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              profileRow,
+              const SizedBox(height: 14),
+              Divider(
+                height: 0.6,
+                thickness: 0.6,
+                color: DunesColors.resolve(
+                  context,
+                  const Color(0xFFEFEFF4),
+                  role: DunesColorRole.border,
+                ),
+              ),
+              const SizedBox(height: 10),
+              IntrinsicHeight(
+                child: Row(
+                  children: [
+                    statColumn('协同业务', collaborationCount),
+                    VerticalDivider(
+                      width: 0.6,
+                      thickness: 0.6,
+                      color: DunesColors.resolve(
+                        context,
+                        const Color(0xFFEFEFF4),
+                        role: DunesColorRole.border,
+                      ),
+                    ),
+                    statColumn('便捷工具', toolCount),
+                    VerticalDivider(
+                      width: 0.6,
+                      thickness: 0.6,
+                      color: DunesColors.resolve(
+                        context,
+                        const Color(0xFFEFEFF4),
+                        role: DunesColorRole.border,
+                      ),
+                    ),
+                    statColumn('管理赋能', adminCount),
                   ],
                 ),
               ),
             ],
-          ),
-        );
-      },
+          );
+        },
+      ),
     );
   }
 }
@@ -1857,132 +1754,81 @@ class _WorkbenchSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: DunesColors.resolve(
-          context,
-          Colors.white,
-          role: DunesColorRole.surface,
-        ),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: DunesColors.resolve(
-            context,
-            const Color(0xFFECE4F3),
-            role: DunesColorRole.border,
-          ),
-          width: 0.8,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF552D8E).withValues(alpha: .04),
-            blurRadius: 14,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(6, 2, 6, 8),
+          child: Row(
             children: [
-              Container(
-                width: 4,
-                height: 16,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [accent, accent.withValues(alpha: .65)],
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                  ),
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                title,
-                style: TextStyle(
-                  fontSize: 15.5,
-                  fontWeight: FontWeight.w700,
-                  color: DunesColors.resolveNullable(
-                    context,
-                    Color(0xFF2C1E3F),
-                  ),
-                  letterSpacing: -0.2,
-                ),
-              ),
-              const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  subtitle,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                  title,
                   style: TextStyle(
-                    fontSize: 11.5,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
                     color: DunesColors.resolve(
                       context,
-                      const Color(0xFF7A688F),
-                    ).withValues(alpha: .85),
+                      const Color(0xFF1D1D1F),
+                    ),
+                    letterSpacing: -0.2,
                   ),
                 ),
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                decoration: BoxDecoration(
+              Text(
+                '${children.length}项',
+                style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w500,
                   color: DunesColors.resolve(
                     context,
-                    const Color(0xFFF6F2FA),
-                    role: DunesColorRole.surface,
-                  ),
-                  borderRadius: BorderRadius.circular(99),
-                  border: Border.all(
-                    color: DunesColors.resolve(
-                      context,
-                      const Color(0xFFEBE3F2),
-                      role: DunesColorRole.border,
-                    ),
-                    width: 0.6,
-                  ),
-                ),
-                child: Text(
-                  '${children.length}项',
-                  style: TextStyle(
-                    fontSize: 10.5,
-                    fontWeight: FontWeight.w600,
-                    color: DunesColors.resolveNullable(
-                      context,
-                      Color(0xFF7045B2),
-                    ),
+                    const Color(0xFF8E8E93),
                   ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 14),
-          // 响应式排版：APP 移动端 3 列紧凑，PC 桌面端 4~6 列自适应
-          LayoutBuilder(
+        ),
+        Container(
+          width: double.infinity,
+          decoration: BoxDecoration(
+            color: DunesColors.resolve(
+              context,
+              Colors.white,
+              role: DunesColorRole.surface,
+            ),
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(
+              color: DunesColors.resolve(
+                context,
+                const Color(0xFFE5E5EA),
+                role: DunesColorRole.border,
+              ),
+              width: 0.8,
+            ),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x07000000),
+                blurRadius: 16,
+                offset: Offset(0, 4),
+              ),
+            ],
+          ),
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+          child: LayoutBuilder(
             builder: (context, c) {
               final width = c.maxWidth;
               final int perRow;
-              final double gap;
-              final double cardHeight;
-
-              if (width < 540) {
+              const double gap = 10.0;
+              if (width < 560) {
+                perRow = 2;
+              } else if (width < 880) {
                 perRow = 3;
-                gap = 8.0;
-                cardHeight = 114.0;
-              } else if (width < 840) {
-                perRow = 4;
-                gap = 12.0;
-                cardHeight = 118.0;
               } else {
-                perRow = width > 1000 ? 6 : 5;
-                gap = 12.0;
-                cardHeight = 120.0;
+                perRow = 4;
               }
 
-              final cardWidth = ((width - gap * (perRow - 1)) / perRow)
+              final tileWidth = ((width - gap * (perRow - 1)) / perRow)
                   .floorToDouble();
 
               return Wrap(
@@ -1991,16 +1837,15 @@ class _WorkbenchSection extends StatelessWidget {
                 children: [
                   for (final tile in children)
                     SizedBox(
-                      width: cardWidth,
-                      height: cardHeight,
+                      width: tileWidth,
                       child: _WorkbenchCard(tile: tile),
                     ),
                 ],
               );
             },
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
@@ -2034,11 +1879,12 @@ class _WorkbenchCard extends StatefulWidget {
 
 class _WorkbenchCardState extends State<_WorkbenchCard> {
   bool _hovered = false;
+  bool _pressed = false;
 
   @override
   Widget build(BuildContext context) {
     final tile = widget.tile;
-    final opacity = tile.enabled ? 1.0 : 0.48;
+    final opacity = tile.enabled ? 1.0 : 0.45;
 
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
@@ -2048,124 +1894,164 @@ class _WorkbenchCardState extends State<_WorkbenchCard> {
           : SystemMouseCursors.basic,
       child: Opacity(
         opacity: opacity,
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            borderRadius: BorderRadius.circular(14),
-            onTap: tile.enabled ? tile.onTap : null,
+        child: AnimatedScale(
+          scale: _pressed ? 0.91 : (_hovered ? 1.03 : 1.0),
+          duration: const Duration(milliseconds: 120),
+          curve: Curves.easeOutCubic,
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(14),
+              hoverColor: Colors.transparent,
+              splashColor: Colors.transparent,
+              highlightColor: Colors.transparent,
+              onTap: tile.enabled
+                  ? () {
+                      HapticFeedback.selectionClick();
+                      tile.onTap?.call();
+                    }
+                  : null,
+              onTapDown: tile.enabled
+                  ? (_) => setState(() => _pressed = true)
+                  : null,
+              onTapUp: tile.enabled
+                  ? (_) => setState(() => _pressed = false)
+                  : null,
+              onTapCancel: tile.enabled
+                  ? () => setState(() => _pressed = false)
+                  : null,
             child: AnimatedContainer(
-              duration: const Duration(milliseconds: 160),
+              duration: const Duration(milliseconds: 140),
               curve: Curves.easeOutCubic,
+              padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 10),
               decoration: BoxDecoration(
                 color: _hovered
                     ? DunesColors.resolve(
                         context,
-                        const Color(0xFFFAF7FD),
+                        const Color(0xFFF2F2F7),
                         role: DunesColorRole.surface,
                       )
                     : DunesColors.resolve(
                         context,
-                        const Color(0xFFFDFDFE),
+                        const Color(0xFFF9F9FB),
                         role: DunesColorRole.surface,
                       ),
-                borderRadius: BorderRadius.circular(14),
+                borderRadius: BorderRadius.circular(15),
                 border: Border.all(
                   color: _hovered
-                      ? tile.color.withValues(alpha: 0.45)
+                      ? tile.color.withValues(alpha: 0.30)
                       : DunesColors.resolve(
                           context,
-                          const Color(0xFFEFE8F5),
+                          const Color(0xFFEAEAEF),
                           role: DunesColorRole.border,
                         ),
-                  width: _hovered ? 1.0 : 0.8,
+                  width: 0.7,
                 ),
-                boxShadow: [
-                  BoxShadow(
-                    color: _hovered
-                        ? tile.color.withValues(alpha: 0.12)
-                        : const Color(0xFF552D8E).withValues(alpha: 0.03),
-                    blurRadius: _hovered ? 12 : 6,
-                    offset: _hovered ? const Offset(0, 4) : const Offset(0, 2),
-                  ),
-                ],
               ),
-              padding: const EdgeInsets.fromLTRB(10, 10, 10, 9),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              child: Row(
                 children: [
-                  Row(
-                    children: [
-                      Container(
-                        width: 34,
-                        height: 34,
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            colors: [
-                              tile.color.withValues(alpha: 0.18),
-                              tile.color.withValues(alpha: 0.06),
-                            ],
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 140),
+                    curve: Curves.easeOutCubic,
+                    width: 38,
+                    height: 38,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          Color.lerp(tile.color, Colors.white, 0.24)!,
+                          tile.color,
+                          Color.lerp(tile.color, Colors.black, 0.14)!,
+                        ],
+                        stops: const [0.0, 0.58, 1.0],
+                      ),
+                      borderRadius: BorderRadius.circular(11),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.36),
+                        width: 0.7,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: tile.color.withValues(
+                            alpha: _hovered ? 0.32 : 0.22,
                           ),
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(
-                            color: tile.color.withValues(alpha: 0.24),
-                            width: 0.8,
+                          blurRadius: _hovered ? 10 : 7,
+                          offset: Offset(0, _hovered ? 4 : 3),
+                        ),
+                      ],
+                    ),
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        Positioned(
+                          top: 0,
+                          left: 0,
+                          right: 0,
+                          height: 18,
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              borderRadius: const BorderRadius.vertical(
+                                top: Radius.circular(10),
+                              ),
+                              gradient: LinearGradient(
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomCenter,
+                                colors: [
+                                  Colors.white.withValues(alpha: 0.28),
+                                  Colors.white.withValues(alpha: 0.0),
+                                ],
+                              ),
+                            ),
                           ),
                         ),
-                        child: Icon(
+                        Icon(
                           tile.icon,
-                          color: DunesColors.resolveNullable(
-                            context,
-                            tile.color,
-                          ),
-                          size: 18,
+                          color: Colors.white,
+                          size: 20,
+                          shadows: [
+                            Shadow(
+                              color: Colors.black.withValues(alpha: 0.16),
+                              blurRadius: 3,
+                              offset: const Offset(0, 1),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      tile.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 13.5,
+                        height: 1.2,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: -0.2,
+                        color: DunesColors.resolve(
+                          context,
+                          const Color(0xFF1D1D1F),
                         ),
                       ),
-                      const Spacer(),
-                      Icon(
-                        Icons.arrow_outward_rounded,
-                        size: 13,
-                        color: _hovered
-                            ? tile.color.withValues(alpha: 0.80)
-                            : DunesColors.resolve(
-                                context,
-                                const Color(0xFFB5A9C4),
-                              ).withValues(alpha: 0.60),
-                      ),
-                    ],
-                  ),
-                  const Spacer(),
-                  Text(
-                    tile.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 13,
-                      height: 1.2,
-                      fontWeight: FontWeight.w700,
-                      color: DunesColors.resolveNullable(
-                        context,
-                        Color(0xFF2C1E3F),
-                      ),
                     ),
                   ),
-                  const SizedBox(height: 2),
-                  Text(
-                    tile.subtitle,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 10.5,
-                      height: 1.2,
-                      color: DunesColors.resolveNullable(
-                        context,
-                        Color(0xFF7A688F),
-                      ),
-                    ),
+                  const SizedBox(width: 2),
+                  Icon(
+                    Icons.chevron_right_rounded,
+                    size: 16,
+                    color: _hovered
+                        ? tile.color.withValues(alpha: 0.85)
+                        : DunesColors.resolve(
+                            context,
+                            const Color(0xFFC7C7CC),
+                          ),
                   ),
                 ],
               ),
+            ),
             ),
           ),
         ),

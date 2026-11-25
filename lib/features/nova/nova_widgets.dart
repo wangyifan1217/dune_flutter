@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import '../../core/platform/desktop_features.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../../core/widgets/desktop_feedback_surface.dart';
+import '../../core/widgets/dunes_text_selection_toolbar.dart';
 import '../chat/user_avatar_widget.dart';
 import '../conversation/conversation_service.dart';
 import '../shell/dunes_toast.dart';
@@ -126,49 +127,60 @@ class NovaPageHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final actionOpacity = actionsEnabled ? 1.0 : 0.40;
-    return Container(
-      height: isDesktopCommOnly
-          ? 68 + (MediaQuery.textScalerOf(context).scale(14) - 14).clamp(0, 28)
-          : 52,
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      decoration: BoxDecoration(
-        color: DunesColors.resolve(
-          context,
-          Colors.white,
-          role: DunesColorRole.surface,
-        ),
-        border: Border(
-          bottom: BorderSide(
+    return ClipRect(
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+        child: Container(
+          height: isDesktopCommOnly
+              ? 68 +
+                    (MediaQuery.textScalerOf(context).scale(14) - 14).clamp(
+                      0,
+                      28,
+                    )
+              : 54,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(
             color: DunesColors.resolve(
               context,
-              Color(0xFFF0F1F5),
-              role: DunesColorRole.border,
+              Colors.white,
+              role: DunesColorRole.surface,
+            ).withValues(alpha: 0.88),
+            border: Border(
+              bottom: BorderSide(
+                color: DunesColors.resolve(
+                  context,
+                  const Color(0xFFE5E5EA),
+                  role: DunesColorRole.border,
+                ),
+                width: 0.5,
+              ),
             ),
-            width: 0.8,
+          ),
+          child: Row(
+            children: [
+              Opacity(
+                opacity: actionOpacity,
+                child: _HeaderCircleButton(
+                  icon: Icons.notes_rounded,
+                  iconSize: 20,
+                  tooltip: '个人与历史记录',
+                  onTap: actionsEnabled ? onOpenDrawer : null,
+                ),
+              ),
+              Expanded(
+                child: Center(
+                  child: _NovaSegmentedTabs(controller: tabController),
+                ),
+              ),
+              _HeaderCircleButton(
+                icon: Icons.close_rounded,
+                iconSize: 20,
+                tooltip: '关闭',
+                onTap: onBack,
+              ),
+            ],
           ),
         ),
-      ),
-      child: Row(
-        children: [
-          Opacity(
-            opacity: actionOpacity,
-            child: _HeaderCircleButton(
-              icon: Icons.notes_rounded,
-              iconSize: 20,
-              tooltip: '个人与历史记录',
-              onTap: actionsEnabled ? onOpenDrawer : null,
-            ),
-          ),
-          Expanded(
-            child: Center(child: _NovaSegmentedTabs(controller: tabController)),
-          ),
-          _HeaderCircleButton(
-            icon: Icons.close_rounded,
-            iconSize: 20,
-            tooltip: '关闭',
-            onTap: onBack,
-          ),
-        ],
       ),
     );
   }
@@ -188,22 +200,22 @@ class _NovaSegmentedTabs extends StatelessWidget {
         final t = (controller.animation?.value ?? controller.index.toDouble())
             .clamp(0.0, 1.0);
         return Container(
-          width: 156,
+          width: 164,
           height: isDesktopCommOnly
-              ? 32 +
+              ? 34 +
                     (MediaQuery.textScalerOf(context).scale(14) - 14).clamp(
                       0,
                       28,
                     )
-              : 32,
+              : 34,
           padding: const EdgeInsets.all(3),
           decoration: BoxDecoration(
             color: DunesColors.resolve(
               context,
-              const Color(0xFFF2F3F7),
+              const Color(0xFFEEEEF3),
               role: DunesColorRole.surface,
             ),
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(17),
           ),
           child: LayoutBuilder(
             builder: (context, constraints) {
@@ -222,12 +234,12 @@ class _NovaSegmentedTabs extends StatelessWidget {
                           Colors.white,
                           role: DunesColorRole.surface,
                         ),
-                        borderRadius: BorderRadius.circular(13),
+                        borderRadius: BorderRadius.circular(14),
                         boxShadow: const [
                           BoxShadow(
                             color: Color(0x14000000),
-                            blurRadius: 4,
-                            offset: Offset(0, 1),
+                            blurRadius: 6,
+                            offset: Offset(0, 1.5),
                           ),
                         ],
                       ),
@@ -241,6 +253,7 @@ class _NovaSegmentedTabs extends StatelessWidget {
                             selected: controller.index == i,
                             onTap: () {
                               if (controller.index != i) {
+                                HapticFeedback.selectionClick();
                                 controller.animateTo(i);
                               }
                             },
@@ -248,16 +261,17 @@ class _NovaSegmentedTabs extends StatelessWidget {
                               child: Text(
                                 NovaPageHeader.tabLabels[i],
                                 style: DunesTypography.sans(
-                                  fontSize: 14,
+                                  fontSize: 13.5,
                                   fontWeight: FontWeight.w600,
+                                  letterSpacing: -0.1,
                                   color: Color.lerp(
                                     DunesColors.resolve(
                                       context,
-                                      const Color(0xFF8B919E),
+                                      const Color(0xFF63636B),
                                     ),
                                     DunesColors.resolve(
                                       context,
-                                      const Color(0xFF6B3FE2),
+                                      DunesColors.brandPurple,
                                     ),
                                     i == 0 ? (1 - t) : t,
                                   ),
@@ -918,9 +932,9 @@ class _NovaC4ThinkPanelState extends State<NovaC4ThinkPanel> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Icon(
-                    Icons.auto_awesome,
-                    size: 13,
-                    color: DunesColors.resolve(context, DunesColors.accentDeep),
+                    Icons.auto_awesome_rounded,
+                    size: 13.5,
+                    color: DunesColors.resolve(context, DunesColors.brandPurple),
                   ),
                   const SizedBox(width: 6),
                   Expanded(
@@ -955,8 +969,10 @@ class _NovaC4ThinkPanelState extends State<NovaC4ThinkPanel> {
                       ],
                     ),
                   ),
-                  Transform.rotate(
-                    angle: _collapsed ? -1.5708 : 0,
+                  AnimatedRotation(
+                    turns: _collapsed ? -0.25 : 0.0,
+                    duration: const Duration(milliseconds: 180),
+                    curve: Curves.easeOutCubic,
                     child: Icon(
                       Icons.keyboard_arrow_down_rounded,
                       size: 16,
@@ -967,31 +983,37 @@ class _NovaC4ThinkPanelState extends State<NovaC4ThinkPanel> {
               ),
             ),
           ),
-          if (!_collapsed && widget.body.trim().isNotEmpty)
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.fromLTRB(10, 0, 10, 8),
-              decoration: BoxDecoration(
-                border: Border(
-                  top: BorderSide(
-                    color: DunesColors.resolve(
-                      context,
-                      DunesColors.borderSoft,
-                      role: DunesColorRole.border,
+          AnimatedSize(
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOutCubic,
+            alignment: Alignment.topCenter,
+            child: !_collapsed && widget.body.trim().isNotEmpty
+                ? Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.fromLTRB(10, 6, 10, 8),
+                    decoration: BoxDecoration(
+                      border: Border(
+                        top: BorderSide(
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.borderSoft,
+                            role: DunesColorRole.border,
+                          ),
+                        ),
+                      ),
                     ),
-                  ),
-                ),
-              ),
-              child: Text(
-                widget.body,
-                style: DunesTypography.sans(
-                  fontSize: 11,
-                  color: DunesColors.resolve(context, DunesColors.text3),
-                  height: 1.55,
-                  context: context,
-                ),
-              ),
-            ),
+                    child: Text(
+                      widget.body,
+                      style: DunesTypography.sans(
+                        fontSize: 11,
+                        color: DunesColors.resolve(context, DunesColors.text3),
+                        height: 1.55,
+                        context: context,
+                      ),
+                    ),
+                  )
+                : const SizedBox.shrink(),
+          ),
         ],
       ),
     );
@@ -1012,39 +1034,40 @@ class NovaC4AiBubble extends StatelessWidget {
             ? 680
             : MediaQuery.sizeOf(context).width * 0.88,
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
       decoration: BoxDecoration(
         color: DunesColors.resolve(
           context,
-          Colors.white,
+          DunesColors.imSurface,
           role: DunesColorRole.surface,
         ),
         borderRadius: const BorderRadius.only(
-          topLeft: Radius.circular(4),
-          topRight: Radius.circular(18),
-          bottomLeft: Radius.circular(18),
-          bottomRight: Radius.circular(18),
+          topLeft: Radius.circular(6),
+          topRight: Radius.circular(20),
+          bottomLeft: Radius.circular(20),
+          bottomRight: Radius.circular(20),
         ),
-        boxShadow: const [
+        boxShadow: [
           BoxShadow(
-            color: Color(0x0A18274B),
-            blurRadius: 12,
-            offset: Offset(0, 3),
+            color: DunesColors.text.withValues(alpha: 0.045),
+            blurRadius: 14,
+            offset: const Offset(0, 4),
           ),
         ],
         border: Border.all(
           color: DunesColors.resolve(
             context,
-            const Color(0xFFEDEFF5),
+            DunesColors.borderSoft,
             role: DunesColorRole.border,
           ),
+          width: 0.8,
         ),
       ),
       child: DefaultTextStyle(
         style: DunesTypography.sans(
           fontSize: 14.5,
-          color: DunesColors.resolve(context, const Color(0xFF1F2329)),
-          height: 1.55,
+          color: DunesColors.resolve(context, DunesColors.text),
+          height: 1.58,
           context: context,
         ),
         child: child,
@@ -1078,31 +1101,31 @@ class NovaC4SentBubble extends StatelessWidget {
       ),
       padding: compactMedia
           ? const EdgeInsets.all(4)
-          : const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
+          : const EdgeInsets.symmetric(horizontal: 15, vertical: 10.5),
       decoration: BoxDecoration(
         color: DunesColors.resolve(
           context,
-          const Color(0xFFE8F1FF),
+          DunesColors.brandPurpleSoft,
           role: DunesColorRole.surface,
         ),
         borderRadius: const BorderRadius.only(
-          topLeft: Radius.circular(18),
-          topRight: Radius.circular(4),
-          bottomLeft: Radius.circular(18),
-          bottomRight: Radius.circular(18),
+          topLeft: Radius.circular(20),
+          topRight: Radius.circular(6),
+          bottomLeft: Radius.circular(20),
+          bottomRight: Radius.circular(20),
         ),
-        boxShadow: const [
+        boxShadow: [
           BoxShadow(
-            color: Color(0x082E75FF),
-            blurRadius: 8,
-            offset: Offset(0, 2),
+            color: DunesColors.brandPurple.withValues(alpha: 0.07),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
           ),
         ],
         border: highlighted
             ? Border.all(
                 color: DunesColors.resolve(
                   context,
-                  const Color(0xFF2E75FF),
+                  DunesColors.brandPurple,
                   role: DunesColorRole.border,
                 ),
                 width: 1.5,
@@ -1110,7 +1133,7 @@ class NovaC4SentBubble extends StatelessWidget {
             : Border.all(
                 color: DunesColors.resolve(
                   context,
-                  const Color(0xFFD4E5FF),
+                  DunesColors.brandPurpleLine,
                   role: DunesColorRole.border,
                 ),
                 width: 0.8,
@@ -1122,8 +1145,8 @@ class NovaC4SentBubble extends StatelessWidget {
             text,
             style: DunesTypography.sans(
               fontSize: 14.5,
-              color: DunesColors.resolve(context, const Color(0xFF1D2129)),
-              height: 1.45,
+              color: DunesColors.resolve(context, DunesColors.text),
+              height: 1.48,
               context: context,
             ),
           ),
@@ -1221,12 +1244,12 @@ class NovaC4MessageStream extends StatelessWidget {
           colors: [
             DunesColors.resolve(
               context,
-              Color(0xFFF7F8FC),
+              const Color(0xFFF9F9FB),
               role: DunesColorRole.surface,
             ),
             DunesColors.resolve(
               context,
-              Color(0xFFF3F5FA),
+              const Color(0xFFF5F5F7),
               role: DunesColorRole.surface,
             ),
           ],
@@ -2061,7 +2084,7 @@ class NovaC4MessageRow extends StatelessWidget {
             },
           ),
         ];
-        return AdaptiveTextSelectionToolbar.buttonItems(
+        return DunesTextSelectionToolbar.buttonItems(
           anchors: selectableRegionState.contextMenuAnchors,
           buttonItems: items,
         );
@@ -2145,7 +2168,8 @@ class NovaC4MessageRow extends StatelessWidget {
   }
 
   Widget _buildAiAvatar(BuildContext context) {
-    return Container(
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 300),
       width: 38,
       height: 38,
       margin: const EdgeInsets.only(right: 8),
@@ -2154,16 +2178,19 @@ class NovaC4MessageRow extends StatelessWidget {
         border: Border.all(
           color: DunesColors.resolve(
             context,
-            Colors.white,
+            thinking ? DunesColors.brandPurpleLine : Colors.white,
             role: DunesColorRole.border,
           ),
-          width: 1.5,
+          width: thinking ? 2.0 : 1.5,
         ),
-        boxShadow: const [
+        boxShadow: [
           BoxShadow(
-            color: Color(0x186B3FE2),
-            blurRadius: 6,
-            offset: Offset(0, 2),
+            color: DunesColors.brandPurple.withValues(
+              alpha: thinking ? 0.34 : 0.14,
+            ),
+            blurRadius: thinking ? 12 : 6,
+            spreadRadius: thinking ? 1 : 0,
+            offset: const Offset(0, 2),
           ),
         ],
       ),
@@ -2998,32 +3025,36 @@ class NovaC4InputBar extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // 悬浮大药丸输入条（高度自适应，圆角 30）
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(
-              color: DunesColors.resolve(
-                context,
-                Colors.white,
-                role: DunesColorRole.surface,
-              ),
-              borderRadius: BorderRadius.circular(30),
-              boxShadow: const [
-                BoxShadow(
-                  color: Color(0x121A2038),
-                  blurRadius: 16,
-                  offset: Offset(0, 4),
-                  spreadRadius: 1,
+          // 悬浮磨砂药丸输入条（高度自适应，圆角 28）
+          ClipRRect(
+            borderRadius: BorderRadius.circular(28),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: DunesColors.resolve(
+                    context,
+                    Colors.white,
+                    role: DunesColorRole.surface,
+                  ).withValues(alpha: 0.94),
+                  borderRadius: BorderRadius.circular(28),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Color(0x0F000000),
+                      blurRadius: 18,
+                      offset: Offset(0, 4),
+                    ),
+                  ],
+                  border: Border.all(
+                    color: DunesColors.resolve(
+                      context,
+                      const Color(0xFFE5E5EA),
+                      role: DunesColorRole.border,
+                    ),
+                    width: 0.8,
+                  ),
                 ),
-              ],
-              border: Border.all(
-                color: DunesColors.resolve(
-                  context,
-                  const Color(0xFFEDEFF5),
-                  role: DunesColorRole.border,
-                ),
-              ),
-            ),
             child: voiceMode
                 ? Row(
                     children: [
@@ -3115,6 +3146,8 @@ class NovaC4InputBar extends StatelessWidget {
                       ),
                     ],
                   ),
+              ),
+            ),
           ),
           const SizedBox(height: 10),
           _NovaShortcutStrip(
@@ -3181,12 +3214,14 @@ class _NovaShortcutItem {
   const _NovaShortcutItem({
     required this.icon,
     required this.label,
+    this.color,
     this.onTap,
     this.active = false,
   });
 
   final IconData icon;
   final String label;
+  final Color? color;
   final VoidCallback? onTap;
   final bool active;
 }
@@ -3229,25 +3264,29 @@ class _NovaShortcutStrip extends StatelessWidget {
     final items = <_NovaShortcutItem>[
       if (onNewChat != null)
         _NovaShortcutItem(
-          icon: Icons.add_comment_outlined,
+          icon: Icons.add_comment_rounded,
           label: '新对话',
+          color: DunesColors.brandPurple,
           onTap: locked ? null : onNewChat,
         ),
       if (onOpenKb != null)
         _NovaShortcutItem(
-          icon: Icons.menu_book_outlined,
+          icon: Icons.menu_book_rounded,
           label: '知识库',
+          color: DunesColors.blue,
           onTap: locked ? null : onOpenKb,
         ),
       if (onOpenMeeting != null)
         _NovaShortcutItem(
           icon: Icons.groups_2_rounded,
           label: '会议',
+          color: DunesColors.accent,
           onTap: locked ? null : onOpenMeeting,
         ),
       _NovaShortcutItem(
         icon: expanded ? Icons.expand_less_rounded : Icons.apps_rounded,
         label: expanded ? '收起' : '更多',
+        color: expanded ? DunesColors.brandPurple : DunesColors.amber,
         onTap: locked ? null : onToggleMore,
         active: expanded,
       ),
@@ -3265,6 +3304,7 @@ class _NovaShortcutStrip extends StatelessWidget {
                   child: _NovaCircleAction(
                     icon: item.icon,
                     label: item.label,
+                    color: item.color,
                     onTap: item.onTap,
                     active: item.active,
                   ),
@@ -3280,12 +3320,12 @@ class _NovaShortcutStrip extends StatelessWidget {
                 color: expanded
                     ? DunesColors.resolve(
                         context,
-                        const Color(0xFFC4B5E8),
+                        DunesColors.brandPurpleLine,
                         role: DunesColorRole.surface,
                       )
                     : DunesColors.resolve(
                         context,
-                        const Color(0xFFD8DCE6),
+                        const Color(0xFFD1D1D6),
                         role: DunesColorRole.surface,
                       ),
                 borderRadius: BorderRadius.circular(2),
@@ -3298,97 +3338,134 @@ class _NovaShortcutStrip extends StatelessWidget {
   }
 }
 
-class _NovaCircleAction extends StatelessWidget {
+class _NovaCircleAction extends StatefulWidget {
   const _NovaCircleAction({
     required this.icon,
     required this.label,
+    this.color,
     this.onTap,
     this.active = false,
   });
 
   final IconData icon;
   final String label;
+  final Color? color;
   final VoidCallback? onTap;
   final bool active;
 
   @override
+  State<_NovaCircleAction> createState() => _NovaCircleActionState();
+}
+
+class _NovaCircleActionState extends State<_NovaCircleAction> {
+  bool _pressed = false;
+
+  @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap == null
-            ? null
-            : () {
-                HapticFeedback.selectionClick();
-                onTap!();
-              },
-        borderRadius: BorderRadius.circular(16),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 4),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              AnimatedContainer(
-                duration: const Duration(milliseconds: 180),
-                width: 46,
-                height: 46,
-                decoration: BoxDecoration(
-                  color: active
-                      ? DunesColors.resolve(
-                          context,
-                          const Color(0xFFF1EBFA),
-                          role: DunesColorRole.surface,
-                        )
-                      : DunesColors.resolve(
-                          context,
-                          Colors.white,
-                          role: DunesColorRole.surface,
-                        ),
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: active
-                        ? DunesColors.resolve(
-                            context,
-                            const Color(0xFFD9C9F4),
-                            role: DunesColorRole.border,
-                          )
-                        : DunesColors.resolve(
-                            context,
-                            const Color(0xFFEEF0F5),
-                            role: DunesColorRole.border,
+    final enabled = widget.onTap != null;
+    final baseColor = DunesColors.resolve(
+      context,
+      widget.color ?? DunesColors.brandPurple,
+    );
+    final topColor = Color.lerp(baseColor, Colors.white, 0.24) ?? baseColor;
+    final bottomColor = Color.lerp(baseColor, Colors.black, 0.14) ?? baseColor;
+
+    return Opacity(
+      opacity: enabled ? 1.0 : 0.48,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: widget.onTap == null
+              ? null
+              : () {
+                  HapticFeedback.selectionClick();
+                  widget.onTap!();
+                },
+          onHighlightChanged: (v) {
+            if (_pressed != v) setState(() => _pressed = v);
+          },
+          borderRadius: BorderRadius.circular(16),
+          hoverColor: Colors.transparent,
+          splashColor: Colors.transparent,
+          highlightColor: Colors.transparent,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                AnimatedScale(
+                  scale: _pressed ? 0.92 : 1.0,
+                  duration: const Duration(milliseconds: 110),
+                  curve: Curves.easeOutCubic,
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    width: 46,
+                    height: 46,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [topColor, baseColor, bottomColor],
+                        stops: const [0.0, 0.55, 1.0],
+                      ),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: widget.active
+                            ? Colors.white.withValues(alpha: 0.65)
+                            : Colors.white.withValues(alpha: 0.22),
+                        width: widget.active ? 1.2 : 0.6,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: baseColor.withValues(
+                            alpha: widget.active ? 0.34 : 0.22,
                           ),
-                  ),
-                  boxShadow: const [
-                    BoxShadow(
-                      color: Color(0x0A000000),
-                      blurRadius: 10,
-                      offset: Offset(0, 3),
+                          blurRadius: widget.active ? 12 : 8,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
                     ),
-                  ],
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        Positioned.fill(
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(14),
+                              gradient: LinearGradient(
+                                begin: Alignment.topCenter,
+                                end: Alignment.center,
+                                colors: [
+                                  Colors.white.withValues(alpha: 0.28),
+                                  Colors.white.withValues(alpha: 0.0),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                        Icon(widget.icon, size: 22, color: Colors.white),
+                      ],
+                    ),
+                  ),
                 ),
-                child: Icon(
-                  icon,
-                  size: 22,
-                  color: active
-                      ? DunesColors.resolve(context, const Color(0xFF6B3FE2))
-                      : DunesColors.resolve(context, const Color(0xFF2C323F)),
+                const SizedBox(height: 6),
+                Text(
+                  widget.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: DunesTypography.sans(
+                    fontSize: 11.5,
+                    fontWeight: widget.active
+                        ? FontWeight.w600
+                        : FontWeight.w500,
+                    color: widget.active
+                        ? DunesColors.resolve(context, DunesColors.brandPurple)
+                        : DunesColors.resolve(context, DunesColors.text2),
+                    context: context,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: DunesTypography.sans(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                  color: active
-                      ? DunesColors.resolve(context, const Color(0xFF6B3FE2))
-                      : DunesColors.resolve(context, const Color(0xFF4E5969)),
-                  context: context,
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -3422,44 +3499,51 @@ class _NovaMoreGrid extends StatelessWidget {
     final actions = <_NovaShortcutItem>[
       if (onCamera != null)
         _NovaShortcutItem(
-          icon: Icons.photo_camera_outlined,
+          icon: Icons.photo_camera_rounded,
           label: '拍照',
+          color: DunesColors.blue,
           onTap: onCamera,
         ),
       if (onAlbum != null)
         _NovaShortcutItem(
-          icon: Icons.photo_library_outlined,
+          icon: Icons.photo_library_rounded,
           label: '图片',
+          color: DunesColors.green,
           onTap: onAlbum,
         ),
       if (onAttach != null)
         _NovaShortcutItem(
           icon: Icons.attach_file_rounded,
           label: '文件',
+          color: DunesColors.amber,
           onTap: onAttach,
         ),
       if (onMeetingPrd != null)
         _NovaShortcutItem(
-          icon: Icons.article_outlined,
+          icon: Icons.article_rounded,
           label: 'PRD',
+          color: DunesColors.brandPurple,
           onTap: onMeetingPrd,
         ),
       if (onVoiceCall != null)
         _NovaShortcutItem(
           icon: Icons.phone_in_talk_rounded,
           label: '电话',
+          color: DunesColors.green,
           onTap: onVoiceCall,
         ),
       if (onHistory != null)
         _NovaShortcutItem(
           icon: Icons.history_rounded,
           label: '历史',
+          color: DunesColors.accent,
           onTap: onHistory,
         ),
       if (onPickModel != null)
         _NovaShortcutItem(
           icon: Icons.auto_awesome_rounded,
           label: modelLabel.trim().isEmpty ? '模型' : modelLabel,
+          color: DunesColors.pink,
           onTap: onPickModel,
         ),
     ];
@@ -3470,6 +3554,7 @@ class _NovaMoreGrid extends StatelessWidget {
       padding: const EdgeInsets.only(top: 8, bottom: 4),
       child: Wrap(
         alignment: WrapAlignment.start,
+        runSpacing: 6,
         children: [
           for (final action in actions)
             SizedBox(
@@ -3479,6 +3564,7 @@ class _NovaMoreGrid extends StatelessWidget {
               child: _NovaCircleAction(
                 icon: action.icon,
                 label: action.label,
+                color: action.color,
                 onTap: action.onTap,
               ),
             ),
@@ -3572,7 +3658,9 @@ class _NovaInputIcon extends StatelessWidget {
       child: InkWell(
         customBorder: const CircleBorder(),
         onTap: onTap,
-        child: Ink(
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          curve: Curves.easeOutCubic,
           width: filled ? 32 : 30,
           height: filled ? 32 : 30,
           decoration: BoxDecoration(
@@ -3580,26 +3668,26 @@ class _NovaInputIcon extends StatelessWidget {
                 ? (accentBlue
                       ? DunesColors.resolve(
                           context,
-                          const Color(0xFF6B3FE2),
+                          DunesColors.brandPurple,
                           role: DunesColorRole.surface,
                         )
                       : DunesColors.resolve(
                           context,
-                          const Color(0xFF4E5969),
+                          DunesColors.text2,
                           role: DunesColorRole.surface,
                         ))
                 : DunesColors.resolve(
                     context,
-                    const Color(0xFFF5F6F9),
+                    const Color(0xFFF2F2F7),
                     role: DunesColorRole.surface,
                   ),
             shape: BoxShape.circle,
             boxShadow: filled
-                ? const [
+                ? [
                     BoxShadow(
-                      color: Color(0x226B3FE2),
+                      color: DunesColors.brandPurple.withValues(alpha: 0.22),
                       blurRadius: 8,
-                      offset: Offset(0, 2),
+                      offset: const Offset(0, 2),
                     ),
                   ]
                 : null,
@@ -3609,7 +3697,7 @@ class _NovaInputIcon extends StatelessWidget {
             size: filled ? 18 : 17,
             color: filled
                 ? DunesColors.resolve(context, Colors.white)
-                : DunesColors.resolve(context, const Color(0xFF4E5969)),
+                : DunesColors.resolve(context, DunesColors.text2),
           ),
         ),
       ),

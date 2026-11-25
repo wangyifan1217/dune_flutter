@@ -114,50 +114,43 @@ class _VoiceRecordingOverlayState extends State<VoiceRecordingOverlay>
 
   @override
   Widget build(BuildContext context) {
-    final inActionPanel = widget.action != VoiceHoldAction.none;
     return SizedBox.expand(
       child: Stack(
         fit: StackFit.expand,
         children: [
-          // 轻磨砂压暗会话内容，但不能拦截输入栏的拖动手势。
+          // 全屏轻磨砂紫灰遮罩，保留输入栏底层拖动手势透传。
           IgnorePointer(
             child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-              child: ColoredBox(
-                color: const Color(0x6E151221),
+              filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+              child: const ColoredBox(color: Color(0x78141122)),
+            ),
+          ),
+          // 居中悬浮的毛玻璃紫色声纹卡片（始终于键盘区上方居中，不与底部操作弧遮挡）。
+          Positioned(
+            top: 0,
+            left: 24,
+            right: 24,
+            bottom: kVoiceRecordingOverlayHeight * 0.72,
+            child: IgnorePointer(
+              child: Center(
+                child: _RecordingCenterBubble(
+                  controller: _waveController,
+                  durationMs: widget.durationMs,
+                  action: widget.action,
+                ),
               ),
             ),
           ),
+          // 底部弧形磨砂操作面板（发送 / 转文字 / 取消三个彩色磁吸圆环，几何与 resolveVoiceHoldAction 完全一致）。
           IgnorePointer(
-            child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 170),
-              switchInCurve: Curves.easeOutCubic,
-              switchOutCurve: Curves.easeInCubic,
-              transitionBuilder: (child, animation) {
-                return FadeTransition(
-                  opacity: animation,
-                  child: ScaleTransition(
-                    scale: Tween<double>(
-                      begin: 0.94,
-                      end: 1,
-                    ).animate(animation),
-                    child: child,
-                  ),
-                );
-              },
-              child: inActionPanel
-                  ? _VoiceActionPanel(
-                      key: const ValueKey('voice-actions'),
-                      controller: _waveController,
-                      durationMs: widget.durationMs,
-                      action: widget.action,
-                      transcribeEnabled: widget.transcribeEnabled,
-                    )
-                  : _RecordingCenterPanel(
-                      key: const ValueKey('voice-center'),
-                      controller: _waveController,
-                      durationMs: widget.durationMs,
-                    ),
+            child: Align(
+              alignment: Alignment.bottomCenter,
+              child: _VoiceActionPanel(
+                controller: _waveController,
+                durationMs: widget.durationMs,
+                action: widget.action,
+                transcribeEnabled: widget.transcribeEnabled,
+              ),
             ),
           ),
         ],
@@ -173,142 +166,198 @@ String _formatClock(int durationMs) {
   return '$mm:$ss';
 }
 
-String _formatShortClock(int durationMs) {
-  final seconds = (durationMs / 1000).floor();
-  return '${seconds ~/ 60}:${(seconds % 60).toString().padLeft(2, '0')}';
-}
-
-/// 图一：居中波形计时面板。
-class _RecordingCenterPanel extends StatelessWidget {
-  const _RecordingCenterPanel({
-    super.key,
+/// 居中悬浮毛玻璃紫色声纹气泡。
+class _RecordingCenterBubble extends StatelessWidget {
+  const _RecordingCenterBubble({
     required this.controller,
     required this.durationMs,
+    required this.action,
   });
 
   final Animation<double> controller;
   final int durationMs;
+  final VoiceHoldAction action;
 
   @override
   Widget build(BuildContext context) {
     final remainSec = ((kVoiceRecordMaxDurationMs - durationMs) / 1000).ceil();
+    final isCancel = action == VoiceHoldAction.cancel;
+    final isTranscribe = action == VoiceHoldAction.transcribe;
     final tip = remainSec <= 10 && remainSec > 0
         ? '还可以说 $remainSec 秒'
-        : '松手发送，上滑选择';
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 152,
-            height: 152,
+        : switch (action) {
+            VoiceHoldAction.cancel => '松手取消发送',
+            VoiceHoldAction.transcribe => '松手转为文字',
+            VoiceHoldAction.send => '松手发送语音',
+            VoiceHoldAction.none => '松手发送，上滑更多操作',
+          };
+    final accentColor = isCancel
+        ? _kWeChatRed
+        : isTranscribe
+        ? const Color(0xFF4F6CE6)
+        : ImVisualTokens.purple;
+    final cardTint = isCancel
+        ? const Color(0xD93C212A)
+        : Colors.white.withValues(alpha: 0.78);
+    final clockColor = isCancel
+        ? Colors.white.withValues(alpha: 0.92)
+        : const Color(0xFF3E2D7A);
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        AnimatedScale(
+          scale: isCancel ? 0.95 : 1.0,
+          duration: const Duration(milliseconds: 160),
+          curve: Curves.easeOutCubic,
+          child: Container(
+            width: 224,
             decoration: BoxDecoration(
-              color: const Color(0xEB231F33),
-              borderRadius: BorderRadius.circular(26),
-              border: Border.all(
-                color: ImVisualTokens.purpleLight.withValues(alpha: 0.28),
-                width: 0.9,
-              ),
+              borderRadius: BorderRadius.circular(24),
               boxShadow: [
                 BoxShadow(
-                  color: ImVisualTokens.purple.withValues(alpha: 0.28),
-                  blurRadius: 28,
+                  color: accentColor.withValues(alpha: 0.30),
+                  blurRadius: 30,
                   spreadRadius: -4,
-                  offset: const Offset(0, 10),
+                  offset: const Offset(0, 12),
                 ),
               ],
             ),
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                Positioned.fill(
-                  child: IgnorePointer(
-                    child: _BreathingHalo(controller: controller),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(24),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 180),
+                  curve: Curves.easeOutCubic,
+                  padding: const EdgeInsets.fromLTRB(18, 18, 18, 14),
+                  decoration: BoxDecoration(
+                    color: cardTint,
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(
+                      color: isCancel
+                          ? _kWeChatRed.withValues(alpha: 0.55)
+                          : Colors.white.withValues(alpha: 0.65),
+                      width: 1.0,
+                    ),
                   ),
-                ),
-                // Stack 内 Column 对齐基准不同，波形容易被顶到边缘；
-                // 给 Column 固定尺寸，和加光环之前保持一致。
-                SizedBox(
-                  width: 148,
-                  height: 148,
                   child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
+                    mainAxisSize: MainAxisSize.min,
                     children: [
                       SizedBox(
-                        width: 64,
-                        height: 40,
-                        child: _WaveBars(
+                        width: 176,
+                        height: 46,
+                        child: _SymmetricWaveBars(
                           controller: controller,
-                          barCount: 7,
-                          maxHeight: 38,
-                          barWidth: 3.5,
-                          color: DunesColors.resolve(context, Colors.white),
+                          barCount: 19,
+                          maxHeight: 44,
+                          barWidth: 3.4,
+                          primaryColor: isCancel
+                              ? const Color(0xFFFF8686)
+                              : accentColor,
+                          secondaryColor: isCancel
+                              ? _kWeChatRed
+                              : ImVisualTokens.purpleLight,
                         ),
                       ),
                       const SizedBox(height: 12),
-                      Text(
-                        _formatClock(durationMs),
-                        style: DunesTypography.mono(
-                          fontSize: 17,
-                          fontWeight: FontWeight.w600,
-                          color: DunesColors.resolve(context, Colors.white),
-                          context: context,
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 3,
+                        ),
+                        decoration: BoxDecoration(
+                          color: isCancel
+                              ? Colors.white.withValues(alpha: 0.14)
+                              : accentColor.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Text(
+                          _formatClock(durationMs),
+                          style: DunesTypography.mono(
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.w600,
+                            color: clockColor,
+                            context: context,
+                          ),
                         ),
                       ),
                     ],
                   ),
                 ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 20),
-          Text(
-            tip,
-            style: DunesTypography.sans(
-              fontSize: 13,
-              color: Colors.white.withValues(alpha: 0.6),
-              context: context,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// 面板内侧轻微呼吸的光环。
-class _BreathingHalo extends StatelessWidget {
-  const _BreathingHalo({required this.controller});
-
-  final Animation<double> controller;
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: controller,
-      builder: (context, _) {
-        final t = 0.5 + 0.5 * math.sin(controller.value * math.pi * 2);
-        return Padding(
-          padding: const EdgeInsets.all(8),
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(15),
-              border: Border.all(
-                color: Colors.white.withValues(alpha: 0.16 + 0.14 * t),
-                width: 1.2,
               ),
             ),
           ),
-        );
-      },
+        ),
+        const SizedBox(height: 14),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+          decoration: BoxDecoration(
+            color: Colors.black.withValues(alpha: 0.28),
+            borderRadius: BorderRadius.circular(999),
+          ),
+          child: Text(
+            tip,
+            style: DunesTypography.sans(
+              fontSize: 12.5,
+              fontWeight: FontWeight.w500,
+              color: Colors.white.withValues(alpha: 0.90),
+              context: context,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
 
-/// 图二：底部操作面板（发送 / 转文字 / 取消）。
+/// 底部弧形磨砂面板裁切器：顶部呈柔和上凸圆弧，高度与 [kVoiceRecordingOverlayHeight] 一致。
+class _VoiceDockArchClipper extends CustomClipper<Path> {
+  const _VoiceDockArchClipper();
+
+  static const double archDrop = 24.0;
+
+  @override
+  Path getClip(Size size) {
+    return Path()
+      ..moveTo(0, archDrop)
+      ..quadraticBezierTo(size.width * 0.5, -archDrop * 0.45, size.width, archDrop)
+      ..lineTo(size.width, size.height)
+      ..lineTo(0, size.height)
+      ..close();
+  }
+
+  @override
+  bool shouldReclip(covariant CustomClipper<Path> oldClipper) => false;
+}
+
+class _VoiceDockArchBorderPainter extends CustomPainter {
+  const _VoiceDockArchBorderPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final path = Path()
+      ..moveTo(0, _VoiceDockArchClipper.archDrop)
+      ..quadraticBezierTo(
+        size.width * 0.5,
+        -_VoiceDockArchClipper.archDrop * 0.45,
+        size.width,
+        _VoiceDockArchClipper.archDrop,
+      );
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.0
+      ..color = Colors.white.withValues(alpha: 0.20);
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+/// 底部弧形磨砂操作面板（发送 / 转文字 / 取消）。
 class _VoiceActionPanel extends StatelessWidget {
   const _VoiceActionPanel({
-    super.key,
     required this.controller,
     required this.durationMs,
     required this.action,
@@ -329,133 +378,110 @@ class _VoiceActionPanel extends StatelessWidget {
         : switch (action) {
             VoiceHoldAction.cancel => '松手取消',
             VoiceHoldAction.transcribe => '松手转文字',
-            _ => '松手发送',
+            VoiceHoldAction.send => '松手发送',
+            VoiceHoldAction.none => '松手即发 · 上滑选操作',
           };
-    return Align(
-      alignment: Alignment.bottomCenter,
-      child: ClipRRect(
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+    return SizedBox(
+      height: kVoiceRecordingOverlayHeight,
+      width: double.infinity,
+      child: ClipPath(
+        clipper: const _VoiceDockArchClipper(),
         child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-          child: Container(
-            height: kVoiceRecordingOverlayHeight,
-            decoration: BoxDecoration(
-              color: const Color(0xEB221E31),
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(28),
-              ),
-              border: Border(
-                top: BorderSide(
-                  color: Colors.white.withValues(alpha: 0.14),
-                  width: 0.7,
+          filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+          child: CustomPaint(
+            painter: const _VoiceDockArchBorderPainter(),
+            child: Container(
+              height: kVoiceRecordingOverlayHeight,
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [Color(0xCF262139), Color(0xE81A1728)],
                 ),
               ),
-            ),
-        child: Column(
-          children: [
-            const SizedBox(height: 20),
-            // 波形时长胶囊。
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: DunesColors.resolve(
-                  context,
-                  const Color(0x2EFFFFFF),
-                  role: DunesColorRole.surface,
-                ),
-                borderRadius: BorderRadius.circular(15),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
+              child: Stack(
                 children: [
-                  SizedBox(
-                    width: 22,
-                    height: 16,
-                    child: _WaveBars(
-                      controller: controller,
-                      barCount: 4,
-                      maxHeight: 14,
-                      barWidth: 2,
-                      color: DunesColors.resolve(context, Colors.white),
+                  Positioned(
+                    top: 10,
+                    left: 0,
+                    right: 0,
+                    child: Center(
+                      child: Icon(
+                        Icons.keyboard_arrow_up_rounded,
+                        size: 20,
+                        color: Colors.white.withValues(alpha: 0.45),
+                      ),
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  Text(
-                    _formatShortClock(durationMs),
-                    style: DunesTypography.mono(
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w500,
-                      color: DunesColors.resolve(context, Colors.white),
-                      context: context,
+                  // 三个彩色磁吸圆圈，圆心 Y 严格保持在 _kCircleRowCenterY (93.0)。
+                  Positioned(
+                    top: _kCircleRowCenterY - 43,
+                    left: 0,
+                    right: 0,
+                    height: 92,
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        final width = constraints.maxWidth;
+                        return Stack(
+                          children: [
+                            for (final entry in voiceHoldCircleLayout(
+                              transcribeEnabled,
+                            ))
+                              Positioned(
+                                left: width * entry.fraction - 46,
+                                top: 0,
+                                bottom: 0,
+                                width: 92,
+                                child: _VoiceActionCircle(
+                                  action: entry.action,
+                                  highlighted: action == entry.action,
+                                ),
+                              ),
+                          ],
+                        );
+                      },
+                    ),
+                  ),
+                  Positioned(
+                    left: 20,
+                    right: 20,
+                    bottom: bottomInset + 14,
+                    child: SizedBox(
+                      height: 30,
+                      child: Row(
+                        children: [
+                          _BlinkDot(controller: controller),
+                          const SizedBox(width: 8),
+                          Text(
+                            '录音中…',
+                            style: DunesTypography.sans(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.white.withValues(alpha: 0.72),
+                              context: context,
+                            ),
+                          ),
+                          const Spacer(),
+                          Text(
+                            hint,
+                            style: DunesTypography.sans(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.white.withValues(alpha: 0.72),
+                              context: context,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ],
               ),
             ),
-            const SizedBox(height: 14),
-            // 三个圆圈动作，几何与 resolveVoiceHoldAction 一致。
-            SizedBox(
-              height: 86,
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  final width = constraints.maxWidth;
-                  return Stack(
-                    children: [
-                      for (final entry in voiceHoldCircleLayout(
-                        transcribeEnabled,
-                      ))
-                        Positioned(
-                          left: width * entry.fraction - 44,
-                          top: 0,
-                          bottom: 0,
-                          width: 88,
-                          child: _VoiceActionCircle(
-                            action: entry.action,
-                            highlighted: action == entry.action,
-                          ),
-                        ),
-                    ],
-                  );
-                },
-              ),
-            ),
-            const Spacer(),
-            // 录音状态行。
-            Padding(
-              padding: EdgeInsets.fromLTRB(20, 0, 20, bottomInset + 10),
-              child: SizedBox(
-                height: 30,
-                child: Row(
-                  children: [
-                    _BlinkDot(controller: controller),
-                    const SizedBox(width: 8),
-                    Text(
-                      '录音中…',
-                      style: DunesTypography.sans(
-                        fontSize: 13,
-                        color: Colors.white.withValues(alpha: 0.55),
-                        context: context,
-                      ),
-                    ),
-                    const Spacer(),
-                    Text(
-                      hint,
-                      style: DunesTypography.sans(
-                        fontSize: 13,
-                        color: Colors.white.withValues(alpha: 0.55),
-                        context: context,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            ],
           ),
         ),
       ),
-    ),
-  );
+    );
   }
 }
 
@@ -470,70 +496,81 @@ class _VoiceActionCircle extends StatelessWidget {
     final (label, icon) = switch (action) {
       VoiceHoldAction.send => (
         '发送',
-        Icon(
-          Icons.check_rounded,
-          size: 30,
-          color: DunesColors.resolve(context, Colors.white),
-        ),
+        const Icon(Icons.check_rounded, size: 28, color: Colors.white),
       ),
       VoiceHoldAction.transcribe => (
         '转文字',
         Text(
           '文',
           style: DunesTypography.sans(
-            fontSize: 26,
-            fontWeight: FontWeight.w600,
-            color: DunesColors.resolve(context, Colors.white),
+            fontSize: 24,
+            fontWeight: FontWeight.w700,
+            color: Colors.white,
             context: context,
           ),
         ),
       ),
       VoiceHoldAction.cancel => (
         '取消',
-        Icon(
-          Icons.close_rounded,
-          size: 30,
-          color: DunesColors.resolve(context, Colors.white),
-        ),
+        const Icon(Icons.close_rounded, size: 28, color: Colors.white),
       ),
       _ => ('', const SizedBox.shrink()),
     };
-    final highlightColor = action == VoiceHoldAction.cancel
-        ? DunesColors.resolve(context, _kWeChatRed)
+    final baseColor = action == VoiceHoldAction.cancel
+        ? _kWeChatRed
         : action == VoiceHoldAction.transcribe
         ? const Color(0xFF4F6CE6)
         : ImVisualTokens.purple;
+    final secondaryColor = action == VoiceHoldAction.cancel
+        ? const Color(0xFFD93B3B)
+        : action == VoiceHoldAction.transcribe
+        ? const Color(0xFF3954C9)
+        : ImVisualTokens.purpleDeep;
+
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         AnimatedScale(
           scale: highlighted ? 1.18 : 1.0,
-          duration: const Duration(milliseconds: 140),
+          duration: const Duration(milliseconds: 150),
           curve: Curves.easeOutBack,
           child: AnimatedContainer(
-            duration: const Duration(milliseconds: 140),
+            duration: const Duration(milliseconds: 150),
             width: 62,
             height: 62,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: highlighted
-                  ? highlightColor
-                  : Colors.white.withValues(alpha: 0.14),
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: highlighted
+                    ? [baseColor, secondaryColor]
+                    : [
+                        baseColor.withValues(alpha: 0.48),
+                        secondaryColor.withValues(alpha: 0.42),
+                      ],
+              ),
               border: Border.all(
                 color: highlighted
-                    ? Colors.white.withValues(alpha: 0.45)
-                    : Colors.white.withValues(alpha: 0.12),
-                width: highlighted ? 1.4 : 0.7,
+                    ? Colors.white.withValues(alpha: 0.65)
+                    : Colors.white.withValues(alpha: 0.22),
+                width: highlighted ? 1.6 : 0.8,
               ),
               boxShadow: highlighted
                   ? [
                       BoxShadow(
-                        color: highlightColor.withValues(alpha: 0.45),
-                        blurRadius: 18,
-                        spreadRadius: -2,
+                        color: baseColor.withValues(alpha: 0.55),
+                        blurRadius: 20,
+                        spreadRadius: -1,
                       ),
                     ]
-                  : const [],
+                  : [
+                      BoxShadow(
+                        color: baseColor.withValues(alpha: 0.20),
+                        blurRadius: 10,
+                        spreadRadius: -2,
+                      ),
+                    ],
             ),
             alignment: Alignment.center,
             child: icon,
@@ -543,11 +580,11 @@ class _VoiceActionCircle extends StatelessWidget {
         Text(
           label,
           style: DunesTypography.sans(
-            fontSize: 12.5,
-            fontWeight: FontWeight.w500,
+            fontSize: 12,
+            fontWeight: highlighted ? FontWeight.w600 : FontWeight.w500,
             color: highlighted
-                ? DunesColors.resolve(context, Colors.white)
-                : Colors.white.withValues(alpha: 0.6),
+                ? Colors.white
+                : Colors.white.withValues(alpha: 0.72),
             context: context,
           ),
         ),
@@ -589,23 +626,26 @@ class _BlinkDot extends StatelessWidget {
   }
 }
 
-class _WaveBars extends StatelessWidget {
-  const _WaveBars({
+class _SymmetricWaveBars extends StatelessWidget {
+  const _SymmetricWaveBars({
     required this.controller,
     required this.barCount,
     required this.maxHeight,
     required this.barWidth,
-    required this.color,
+    required this.primaryColor,
+    required this.secondaryColor,
   });
 
   final Animation<double> controller;
   final int barCount;
   final double maxHeight;
   final double barWidth;
-  final Color color;
+  final Color primaryColor;
+  final Color secondaryColor;
 
   @override
   Widget build(BuildContext context) {
+    final mid = (barCount - 1) / 2.0;
     return AnimatedBuilder(
       animation: controller,
       builder: (context, _) {
@@ -613,17 +653,21 @@ class _WaveBars extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           crossAxisAlignment: CrossAxisAlignment.center,
           children: List.generate(barCount, (index) {
-            final wave = math.sin(
-              controller.value * math.pi * 2 + index * 0.85,
-            );
+            final dist = (index - mid).abs() / mid;
+            final envelope = 1.0 - 0.58 * dist * dist;
+            final wave = math
+                .sin(controller.value * math.pi * 2 + index * 0.65)
+                .abs();
+            final h =
+                (maxHeight * 0.18 + wave * maxHeight * 0.76) * envelope;
             return Container(
               width: barWidth,
-              height: maxHeight * 0.25 + wave.abs() * maxHeight * 0.75,
+              height: h.clamp(4.0, maxHeight),
               decoration: BoxDecoration(
-                color: DunesColors.resolveNullable(
-                  context,
-                  color,
-                  role: DunesColorRole.surface,
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [secondaryColor, primaryColor],
                 ),
                 borderRadius: BorderRadius.circular(barWidth),
               ),
@@ -642,44 +686,53 @@ class VoiceTranscribingIndicator extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox.expand(
-      child: ColoredBox(
-        color: DunesColors.resolve(
-          context,
-          const Color(0x59000000),
-          role: DunesColorRole.surface,
-        ),
-        child: Center(
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 22),
-            decoration: BoxDecoration(
-              color: DunesColors.resolve(
-                context,
-                const Color(0xE626262A),
-                role: DunesColorRole.surface,
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: ColoredBox(
+          color: const Color(0x66151221),
+          child: Center(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(20),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 28,
+                    vertical: 22,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xDF242034),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: ImVisualTokens.purpleLight.withValues(alpha: 0.30),
+                      width: 0.8,
+                    ),
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.4,
+                          color: ImVisualTokens.purpleLight,
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      Text(
+                        '语音转文字中…',
+                        style: DunesTypography.sans(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.white,
+                          context: context,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                SizedBox(
-                  width: 24,
-                  height: 24,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2.4,
-                    color: DunesColors.resolve(context, Colors.white),
-                  ),
-                ),
-                const SizedBox(height: 14),
-                Text(
-                  '语音转文字中…',
-                  style: DunesTypography.sans(
-                    fontSize: 14,
-                    color: DunesColors.resolve(context, Colors.white),
-                    context: context,
-                  ),
-                ),
-              ],
             ),
           ),
         ),

@@ -1,6 +1,7 @@
 import 'desktop_message_menu.dart';
 import 'desktop_attachment_feedback.dart';
 import 'chat_file_upload_source.dart';
+import '../../core/widgets/dunes_text_selection_toolbar.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
@@ -7557,7 +7558,7 @@ class _NativeChatViewState extends State<NativeChatView>
         };
         if (isDesktopCommOnly) {
           final anchor = selectableRegionState.contextMenuAnchors.primaryAnchor;
-          return AdaptiveTextSelectionToolbar.buttonItems(
+          return DunesTextSelectionToolbar.buttonItems(
             anchors: selectableRegionState.contextMenuAnchors,
             buttonItems: <ContextMenuButtonItem>[
               ...selectableRegionState.contextMenuButtonItems,
@@ -7571,7 +7572,7 @@ class _NativeChatViewState extends State<NativeChatView>
             ],
           );
         }
-        return AdaptiveTextSelectionToolbar.buttonItems(
+        return DunesTextSelectionToolbar.buttonItems(
           anchors: selectableRegionState.contextMenuAnchors,
           buttonItems: <ContextMenuButtonItem>[
             ...selectableRegionState.contextMenuButtonItems,
@@ -11524,8 +11525,12 @@ class _NativeChatViewState extends State<NativeChatView>
                               ),
                             ),
                           Expanded(
-                            child: Stack(
-                              children: [
+                            child: ColoredBox(
+                              color: ImVisualTokens.isDark(context)
+                                  ? ImVisualTokens.chatCanvasDark
+                                  : ImVisualTokens.chatCanvasLight,
+                              child: Stack(
+                                children: [
                                 if (!_bootstrapped && _loading)
                                   const Center(
                                     child: CircularProgressIndicator(
@@ -12259,6 +12264,7 @@ class _NativeChatViewState extends State<NativeChatView>
                                     ),
                                   ),
                               ],
+                            ),
                             ),
                           ),
                         ],

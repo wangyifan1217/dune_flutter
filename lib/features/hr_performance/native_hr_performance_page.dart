@@ -1040,7 +1040,7 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
                 !hrPerformanceExcludedLeader(r.name) &&
                 !hrPerformanceExcludedPerson(r.userId, r.name) &&
                 !hrPerformanceDepartmentExcluded(
-                  departmentId: r.departmentId ?? _userDept[r.userId],
+                  departmentId: r.departmentId,
                   departmentName: r.department,
                   parents: _deptParent,
                   names: _deptName,
@@ -1075,7 +1075,7 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
       final groups = <String, List<HrPerformanceRecord>>{};
       final labels = <String, String>{};
       for (final r in candidates) {
-        final deptId = r.departmentId ?? _userDept[r.userId];
+        final deptId = r.departmentId;
         final name = _deptName[deptId] ?? r.department;
         final key = deptId == null ? 'name:$name' : 'id:$deptId';
         groups.putIfAbsent(key, () => []).add(r);

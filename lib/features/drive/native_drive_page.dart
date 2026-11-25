@@ -544,7 +544,7 @@ class _NativeDrivePageState extends State<NativeDrivePage> {
       ),
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(14)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (context) {
         final bottomInset = MediaQuery.paddingOf(context).bottom;
@@ -800,7 +800,7 @@ class _NativeDrivePageState extends State<NativeDrivePage> {
         role: DunesColorRole.surface,
       ),
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(14)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (ctx) => SafeArea(
         child: Column(

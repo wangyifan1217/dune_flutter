@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import '../../core/platform/desktop_features.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
+import '../../core/widgets/dunes_text_selection_toolbar.dart';
 import '../auth/auth_session.dart';
 import '../conversation/conversation_models.dart';
 import '../conversation/conversation_service.dart';
@@ -735,7 +736,7 @@ class _FavoriteCard extends StatelessWidget {
       text,
       style: style,
       contextMenuBuilder: (context, editableTextState) {
-        return AdaptiveTextSelectionToolbar.editableText(
+        return DunesTextSelectionToolbar.editableText(
           editableTextState: editableTextState,
         );
       },

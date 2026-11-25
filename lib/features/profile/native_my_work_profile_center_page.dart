@@ -1300,25 +1300,16 @@ class _NativeMyWorkProfileCenterPageState
                     Padding(
                       padding: const EdgeInsets.only(left: 8),
                       child: SizedBox(
-                        width: 40,
-                        height: 40,
+                        width: 34,
+                        height: 34,
                         child: DecoratedBox(
                           decoration: BoxDecoration(
                             color: DunesColors.resolve(
                               context,
-                              MinePalette.card,
+                              const Color(0xFFF2F2F7),
                               role: DunesColorRole.surface,
                             ),
                             shape: BoxShape.circle,
-                            boxShadow: [
-                              BoxShadow(
-                                color: const Color(
-                                  0xFF2B2160,
-                                ).withValues(alpha: .06),
-                                blurRadius: 18,
-                                offset: const Offset(0, 6),
-                              ),
-                            ],
                           ),
                           child: _buildMoreMenu(),
                         ),

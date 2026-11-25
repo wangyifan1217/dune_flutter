@@ -498,27 +498,11 @@ class _TaskImportEmployeeDialogState extends State<_TaskImportEmployeeDialog> {
         height: 420,
         child: Column(
           children: [
-            TextField(
+            TaskSearchField(
               controller: _searchCtrl,
+              hintText: '搜索姓名、手机号或工号',
+              showSubmitButton: true,
               onSubmitted: (v) => unawaited(_load(v.trim())),
-              decoration: InputDecoration(
-                hintText: '搜索姓名、手机号或工号',
-                prefixIcon: const Icon(Icons.search, size: 18),
-                suffixIcon: IconButton(
-                  onPressed: () => unawaited(_load(_searchCtrl.text.trim())),
-                  icon: const Icon(Icons.arrow_forward, size: 18),
-                ),
-                filled: true,
-                fillColor: DunesColors.resolve(
-                  context,
-                  const Color(0xFFF5F6F8),
-                  role: DunesColorRole.surface,
-                ),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: BorderSide.none,
-                ),
-              ),
             ),
             const SizedBox(height: 10),
             Expanded(

@@ -579,13 +579,23 @@ class _NativeTaskManagementPaneState extends State<NativeTaskManagementPane> {
         child: ColoredBox(
           color: DunesColors.resolve(
             context,
-            const Color(0xFFF5F6F8),
+            const Color(0xFFF5F5F7),
             role: DunesColorRole.surface,
           ),
           child: Column(
             children: [
               _buildHeader(),
-              Expanded(child: _buildBody()),
+              Expanded(
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 200),
+                  switchInCurve: Curves.easeOutCubic,
+                  switchOutCurve: Curves.easeInCubic,
+                  child: KeyedSubtree(
+                    key: ValueKey(_section),
+                    child: _buildBody(),
+                  ),
+                ),
+              ),
             ],
           ),
         ),
@@ -595,11 +605,23 @@ class _NativeTaskManagementPaneState extends State<NativeTaskManagementPane> {
 
   Widget _buildHeader() {
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
-      color: DunesColors.resolve(
-        context,
-        Colors.white,
-        role: DunesColorRole.surface,
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      decoration: BoxDecoration(
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ).withValues(alpha: 0.90),
+        border: Border(
+          bottom: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              const Color(0xFFE5E5EA),
+              role: DunesColorRole.border,
+            ),
+            width: 0.5,
+          ),
+        ),
       ),
       child: Row(
         children: [
@@ -608,19 +630,31 @@ class _NativeTaskManagementPaneState extends State<NativeTaskManagementPane> {
             onPressed: _section == TaskManagementSection.home
                 ? widget.onBack
                 : () => _select(TaskManagementSection.home),
-            icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
+            icon: Icon(
+              Icons.arrow_back_ios_new_rounded,
+              size: 18,
+              color: DunesColors.resolve(context, kTaskPurple),
+            ),
           ),
           const SizedBox(width: 4),
           Text(
             _title,
-            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+            style: TextStyle(
+              fontSize: 17,
+              fontWeight: FontWeight.w600,
+              letterSpacing: -0.2,
+              color: DunesColors.resolve(context, const Color(0xFF1D1D1F)),
+            ),
           ),
           const Spacer(),
           if (_section == TaskManagementSection.pending)
             IconButton(
               tooltip: '刷新',
               onPressed: () => unawaited(_loadPending()),
-              icon: const Icon(Icons.refresh_rounded),
+              icon: Icon(
+                Icons.refresh_rounded,
+                color: DunesColors.resolve(context, kTaskPurple),
+              ),
             ),
         ],
       ),

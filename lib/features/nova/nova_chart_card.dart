@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'nova_personal_query.dart';
 
@@ -68,8 +69,8 @@ Color _novaInsightTone(String line) {
   return _novaChartPalette.first;
 }
 
-/// 打开小饕时的经营提醒卡片：几条变化 + 可以直接点的追问。
-class NovaInsightCard extends StatelessWidget {
+/// 打开小饕时的经营提醒卡片：默认收起为轻巧胶囊，点击展开查看变化与快捷追问。
+class NovaInsightCard extends StatefulWidget {
   const NovaInsightCard({
     super.key,
     required this.insight,
@@ -86,86 +87,242 @@ class NovaInsightCard extends StatelessWidget {
   final bool dark;
 
   @override
+  State<NovaInsightCard> createState() => _NovaInsightCardState();
+}
+
+class _NovaInsightCardState extends State<NovaInsightCard> {
+  bool _expanded = false;
+
+  @override
   Widget build(BuildContext context) {
-    final ink = dark ? const Color(0xFFF5F2FA) : const Color(0xFF1C1C1E);
-    final muted = dark ? const Color(0xFFC7C7CC) : const Color(0xFF48484A);
+    final dark = widget.dark;
+    final ink = dark ? const Color(0xFFF5F5F7) : const Color(0xFF1D1D1F);
+    final muted = dark ? const Color(0xFFAEAEB2) : const Color(0xFF6E6E73);
+    final surface = dark ? const Color(0xFF242329) : Colors.white;
+    final border = dark
+        ? Colors.white.withValues(alpha: 0.12)
+        : const Color(0xFFE5E5EA);
+    const purple = Color(0xFF7B5CD8);
+
     return Container(
       key: const ValueKey('nova-insight-card'),
-      padding: const EdgeInsets.fromLTRB(12, 8, 4, 10),
       decoration: BoxDecoration(
-        color: dark ? const Color(0xFF26222F) : const Color(0xFFF4F0FF),
-        borderRadius: BorderRadius.circular(12),
+        color: surface,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: border, width: 0.8),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: dark ? 0.24 : 0.05),
+            blurRadius: 14,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Row(
-            children: [
-              Icon(
-                Icons.insights_rounded,
-                size: 16,
-                color: _novaChartPalette.first,
-              ),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  insight.title.isEmpty ? '经营提醒' : insight.title,
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: ink,
-                  ),
-                ),
-              ),
-              IconButton(
-                key: const ValueKey('nova-insight-dismiss'),
-                tooltip: '知道了',
-                visualDensity: VisualDensity.compact,
-                iconSize: 16,
-                onPressed: onDismiss,
-                icon: Icon(Icons.close_rounded, color: muted),
-              ),
-            ],
-          ),
-          for (final line in insight.lines)
-            Padding(
-              padding: const EdgeInsets.only(right: 8, bottom: 4),
+          InkWell(
+            borderRadius: BorderRadius.circular(18),
+            hoverColor: Colors.transparent,
+            onTap: () {
+              HapticFeedback.selectionClick();
+              setState(() => _expanded = !_expanded);
+            },
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 9, 6, 9),
               child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Container(
-                    width: 6,
-                    height: 6,
-                    margin: const EdgeInsets.only(top: 7, right: 8),
+                    width: 26,
+                    height: 26,
                     decoration: BoxDecoration(
-                      color: _novaInsightTone(line),
-                      shape: BoxShape.circle,
+                      gradient: const LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [Color(0xFF987EE6), purple, Color(0xFF5F41BC)],
+                      ),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(
+                      Icons.insights_rounded,
+                      size: 14,
+                      color: Colors.white,
                     ),
                   ),
+                  const SizedBox(width: 9),
                   Expanded(
                     child: Text(
-                      line,
+                      widget.insight.title.isEmpty
+                          ? '经营提醒'
+                          : widget.insight.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        fontSize: 12.5,
-                        height: 1.5,
-                        color: muted,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: -0.1,
+                        color: ink,
                       ),
                     ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 3,
+                    ),
+                    decoration: BoxDecoration(
+                      color: dark
+                          ? purple.withValues(alpha: 0.22)
+                          : const Color(0xFFF3EEFA),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          _expanded ? '收起' : '查看',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: dark ? const Color(0xFFC8B8F6) : purple,
+                          ),
+                        ),
+                        const SizedBox(width: 2),
+                        AnimatedRotation(
+                          turns: _expanded ? 0.5 : 0.0,
+                          duration: const Duration(milliseconds: 180),
+                          curve: Curves.easeOutCubic,
+                          child: Icon(
+                            Icons.keyboard_arrow_down_rounded,
+                            size: 14,
+                            color: dark ? const Color(0xFFC8B8F6) : purple,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    key: const ValueKey('nova-insight-dismiss'),
+                    tooltip: '知道了',
+                    visualDensity: VisualDensity.compact,
+                    iconSize: 16,
+                    onPressed: () {
+                      HapticFeedback.selectionClick();
+                      widget.onDismiss();
+                    },
+                    icon: Icon(Icons.close_rounded, color: muted),
                   ),
                 ],
               ),
             ),
-          if (insight.suggestions.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(top: 8, right: 8),
-              child: NovaFollowUps(
-                title: null,
-                suggestions: insight.suggestions,
-                enabled: enabled,
-                onAsk: onAsk,
-              ),
-            ),
+          ),
+          AnimatedSize(
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeOutCubic,
+            alignment: Alignment.topCenter,
+            child: _expanded
+                ? Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Divider(
+                          height: 1,
+                          thickness: 0.6,
+                          color: border,
+                        ),
+                        const SizedBox(height: 8),
+                        for (final line in widget.insight.lines)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 5),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Container(
+                                  width: 6,
+                                  height: 6,
+                                  margin: const EdgeInsets.only(
+                                    top: 6,
+                                    right: 8,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: _novaInsightTone(line),
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                                Expanded(
+                                  child: Text(
+                                    line,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      height: 1.45,
+                                      color: muted,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        if (widget.insight.suggestions.isNotEmpty) ...[
+                          const SizedBox(height: 6),
+                          Wrap(
+                            spacing: 6,
+                            runSpacing: 6,
+                            children: [
+                              for (final s in widget.insight.suggestions)
+                                InkWell(
+                                  borderRadius: BorderRadius.circular(999),
+                                  onTap: widget.enabled
+                                      ? () {
+                                          HapticFeedback.selectionClick();
+                                          widget.onAsk(s);
+                                        }
+                                      : null,
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 10,
+                                      vertical: 5,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: dark
+                                          ? purple.withValues(alpha: 0.20)
+                                          : const Color(0xFFF3EEFA),
+                                      borderRadius: BorderRadius.circular(999),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(
+                                          s,
+                                          style: TextStyle(
+                                            fontSize: 11.5,
+                                            fontWeight: FontWeight.w500,
+                                            color: dark
+                                                ? const Color(0xFFC8B8F6)
+                                                : purple,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 3),
+                                        Icon(
+                                          Icons.arrow_forward_rounded,
+                                          size: 12,
+                                          color: dark
+                                              ? const Color(0xFFC8B8F6)
+                                              : purple,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ],
+                      ],
+                    ),
+                  )
+                : const SizedBox.shrink(),
+          ),
         ],
       ),
     );

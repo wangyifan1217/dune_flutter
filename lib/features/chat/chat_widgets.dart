@@ -8,6 +8,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/layout/chat_layout.dart';
 import '../../core/platform/desktop_features.dart';
 import '../../core/widgets/desktop_feedback_surface.dart';
+import '../../core/widgets/dunes_text_selection_toolbar.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
 import 'chat_file_type_icon.dart';
@@ -141,82 +142,40 @@ class ChatConvHeader extends StatelessWidget {
             child: GestureDetector(
               onTap: onTapTitle,
               behavior: HitTestBehavior.opaque,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Flexible(
-                        child: Text(
-                          title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: DunesTypography.sans(
-                            fontSize: isDesktopCommOnly ? 16 : 15.5,
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: -0.01 * 15.5,
-                            color: DunesColors.resolve(
-                              context,
-                              DunesColors.text,
-                            ),
-                            context: context,
-                          ),
-                        ),
-                      ),
-                      if (titleBadge case final badge?) ...[
-                        const SizedBox(width: 6),
-                        badge,
-                      ],
-                      if (titleDetail case final detail?) ...[
-                        const SizedBox(width: 4),
-                        Text(
-                          detail,
-                          maxLines: 1,
-                          style: DunesTypography.sans(
-                            fontSize: 12,
-                            color: DunesColors.resolve(context, DunesColors.text3),
-                            context: context,
-                          ),
-                        ),
-                      ],
-                      if (!titleOnly &&
-                          ImUserStatusCatalog.showsBadge(imStatus)) ...[
-                        const SizedBox(width: 6),
-                        ImStatusBadge(
-                          status: imStatus!,
-                          text: imStatusText ?? '',
-                          iconKey: imStatusIcon ?? '',
-                          color: imStatusColor ?? '',
-                        ),
-                      ],
-                    ],
-                  ),
-                  if (!titleOnly) ...[
-                    const SizedBox(height: 2),
+              child: LayoutBuilder(
+                builder: (context, headerBox) => Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                     Row(
                       children: [
-                        if (showOnlineDot && !isDesktopCommOnly) ...[
-                          Container(
-                            width: 7,
-                            height: 7,
-                            margin: const EdgeInsets.only(right: 5),
-                            decoration: BoxDecoration(
-                              color: DunesColors.resolve(
-                                context,
-                                DunesColors.green,
-                                role: DunesColorRole.surface,
-                              ),
-                              borderRadius: BorderRadius.circular(99),
-                            ),
-                          ),
-                        ],
-                        Expanded(
+                        Flexible(
                           child: Text(
-                            subtitle,
+                            title,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: DunesTypography.sans(
-                              fontSize: isDesktopCommOnly ? 12 : 11.5,
+                              fontSize: isDesktopCommOnly ? 16 : 15.5,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: -0.01 * 15.5,
+                              color: DunesColors.resolve(
+                                context,
+                                DunesColors.text,
+                              ),
+                              context: context,
+                            ),
+                          ),
+                        ),
+                        if (titleBadge case final badge?) ...[
+                          const SizedBox(width: 6),
+                          badge,
+                        ],
+                        if (titleDetail case final detail?) ...[
+                          const SizedBox(width: 4),
+                          Text(
+                            detail,
+                            maxLines: 1,
+                            style: DunesTypography.sans(
+                              fontSize: 12,
                               color: DunesColors.resolve(
                                 context,
                                 DunesColors.text3,
@@ -224,11 +183,63 @@ class ChatConvHeader extends StatelessWidget {
                               context: context,
                             ),
                           ),
-                        ),
+                        ],
+                        if (!titleOnly &&
+                            ImUserStatusCatalog.showsBadge(imStatus)) ...[
+                          const SizedBox(width: 6),
+                          ConstrainedBox(
+                            constraints: BoxConstraints(
+                              maxWidth: headerBox.maxWidth * 0.58,
+                            ),
+                            child: ImStatusBadge(
+                              status: imStatus!,
+                              text: imStatusText ?? '',
+                              iconKey: imStatusIcon ?? '',
+                              color: imStatusColor ?? '',
+                            ),
+                          ),
+                        ],
                       ],
                     ),
+                    if (!titleOnly) ...[
+                      const SizedBox(height: 2),
+                      Row(
+                        children: [
+                          if (showOnlineDot && !isDesktopCommOnly) ...[
+                            Container(
+                              width: 7,
+                              height: 7,
+                              margin: const EdgeInsets.only(right: 5),
+                              decoration: BoxDecoration(
+                                color: DunesColors.resolve(
+                                  context,
+                                  DunesColors.green,
+                                  role: DunesColorRole.surface,
+                                ),
+                                borderRadius: BorderRadius.circular(99),
+                              ),
+                            ),
+                          ],
+                          Expanded(
+                            child: Text(
+                              subtitle,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: DunesTypography.sans(
+                                fontSize: isDesktopCommOnly ? 12 : 11.5,
+                                color: DunesColors.resolve(
+                                  context,
+                                  DunesColors.text3,
+                                ),
+                                context: context,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ],
-                ],
+                ),
               ),
             ),
           ),
@@ -1215,7 +1226,12 @@ class _RoundIconBtn extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         customBorder: const CircleBorder(),
-        onTap: onTap,
+        onTap: onTap == null
+            ? null
+            : () {
+                HapticFeedback.selectionClick();
+                onTap!();
+              },
         child: SizedBox(
           width: 40,
           height: 40,
@@ -1259,7 +1275,12 @@ class _WeChatCircleIconBtn extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         customBorder: const CircleBorder(),
-        onTap: onTap,
+        onTap: onTap == null
+            ? null
+            : () {
+                HapticFeedback.selectionClick();
+                onTap!();
+              },
         child: SizedBox(
           width: _kMobileComposerButtonBox,
           height: _kMobileComposerButtonBox,
@@ -1320,7 +1341,12 @@ class _WeChatPlusBtn extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         customBorder: const CircleBorder(),
-        onTap: onTap,
+        onTap: onTap == null
+            ? null
+            : () {
+                HapticFeedback.selectionClick();
+                onTap!();
+              },
         child: Ink(
           width: _kMobileComposerDiscSize,
           height: _kMobileComposerDiscSize,
@@ -1414,7 +1440,12 @@ class _WeChatSendBtn extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
-        onTap: onTap,
+        onTap: onTap == null
+            ? null
+            : () {
+                HapticFeedback.selectionClick();
+                onTap!();
+              },
         child: Ink(
           height: 32,
           padding: const EdgeInsets.symmetric(horizontal: 14),
@@ -1704,7 +1735,7 @@ class _ChatTextFieldState extends State<_ChatTextField> {
       contextMenuBuilder: (context, editableTextState) {
         final buttonItems = _pasteAwareButtonItems(editableTextState);
         if (widget.wide) {
-          return AdaptiveTextSelectionToolbar.buttonItems(
+          return DunesTextSelectionToolbar.buttonItems(
             anchors: editableTextState.contextMenuAnchors,
             buttonItems: buttonItems,
           );
@@ -1712,7 +1743,7 @@ class _ChatTextFieldState extends State<_ChatTextField> {
         final value = editableTextState.textEditingValue;
         final selection = value.selection;
         final canInsertNewline = widget.enabled && selection.isValid;
-        return AdaptiveTextSelectionToolbar.buttonItems(
+        return DunesTextSelectionToolbar.buttonItems(
           anchors: editableTextState.contextMenuAnchors,
           buttonItems: <ContextMenuButtonItem>[
             if (canInsertNewline)
@@ -1958,10 +1989,11 @@ class ChatMessageRow extends StatelessWidget {
                   content,
                   if (readLabel != null)
                     Padding(
-                      padding: const EdgeInsets.only(top: 3, right: 2),
+                      padding: const EdgeInsets.only(top: 4, right: 4),
                       child: Text(
                         readLabel!,
                         style: metaStyle.copyWith(
+                          fontSize: 10.5,
                           fontWeight: FontWeight.w500,
                           color: readLabel == '已读'
                               ? DunesColors.resolve(
@@ -1974,12 +2006,13 @@ class ChatMessageRow extends StatelessWidget {
                     )
                   else if (onReadTap != null)
                     Padding(
-                      padding: const EdgeInsets.only(top: 3, right: 2),
+                      padding: const EdgeInsets.only(top: 4, right: 4),
                       child: GestureDetector(
                         onTap: onReadTap,
                         child: Text(
                           (readTapLabel ?? '查看已读').trim(),
                           style: metaStyle.copyWith(
+                            fontSize: 10.5,
                             fontWeight: FontWeight.w500,
                             color: (readTapLabel ?? '').trim() != '未读'
                                 ? DunesColors.resolve(
@@ -2093,15 +2126,14 @@ class ChatTextBubble extends StatelessWidget {
   final bool preferPartialTextCopy;
 
   TextSpan _buildMentionTextSpan(BuildContext context) {
-    // 对方气泡正文加深一档并略加重，PC/APP 一致，避免发灰难读。
-    // APP 正文与输入框同为 15 号；PC 阅读距离近，保持 13。
     final baseStyle = DunesTypography.sans(
-      fontSize: 13,
-      height: 1.5,
-      fontWeight: FontWeight.w500,
+      fontSize: compactDesktop ? 13.5 : 14.5,
+      height: 1.48,
+      fontWeight: FontWeight.w400,
       color: mine
           ? Colors.white
-          : DunesColors.resolve(context, const Color(0xFF141418)),
+          : DunesColors.resolve(context, const Color(0xFF16151D)),
+      context: context,
     );
     final mentionStyle = baseStyle.copyWith(
       color: mine
@@ -2186,45 +2218,60 @@ class ChatTextBubble extends StatelessWidget {
         return Container(
           constraints: BoxConstraints(maxWidth: maxW),
           padding: compactDesktop
-              ? const EdgeInsets.symmetric(horizontal: 12, vertical: 8.5)
-              : const EdgeInsets.symmetric(horizontal: 13.5, vertical: 9.5),
+              ? const EdgeInsets.symmetric(horizontal: 13, vertical: 9)
+              : const EdgeInsets.symmetric(horizontal: 14.5, vertical: 10),
           decoration: BoxDecoration(
             gradient: mine
                 ? LinearGradient(
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                     colors: dark
-                        ? const [Color(0xFF8364DF), Color(0xFF6648BF)]
-                        : const [Color(0xFF8767E2), Color(0xFF7252CE)],
+                        ? const [
+                            Color(0xFF9071EB),
+                            Color(0xFF7756D6),
+                            Color(0xFF6343BF),
+                          ]
+                        : const [
+                            Color(0xFF9172EC),
+                            Color(0xFF7B5CD8),
+                            Color(0xFF6848C6),
+                          ],
                   )
                 : null,
             color: mine ? null : ImVisualTokens.cardSurface(context),
             border: mine
                 ? Border.all(
-                    color: Colors.white.withValues(alpha: 0.14),
-                    width: 0.5,
+                    color: Colors.white.withValues(alpha: 0.18),
+                    width: 0.6,
                   )
                 : Border.all(
-                    color: ImVisualTokens.hairlineBorder(context),
-                    width: 0.8,
+                    color: dark
+                        ? Colors.white.withValues(alpha: 0.08)
+                        : const Color(0xFFE6E0F2),
+                    width: 0.75,
                   ),
             boxShadow: mine
                 ? [
                     BoxShadow(
                       color: ImVisualTokens.purple.withValues(
-                        alpha: dark ? 0.25 : 0.18,
+                        alpha: dark ? 0.30 : 0.22,
                       ),
-                      blurRadius: 12,
-                      spreadRadius: -3,
-                      offset: const Offset(0, 4),
+                      blurRadius: 16,
+                      spreadRadius: -4,
+                      offset: const Offset(0, 6),
+                    ),
+                    BoxShadow(
+                      color: ImVisualTokens.purpleDeep.withValues(alpha: 0.08),
+                      blurRadius: 4,
+                      offset: const Offset(0, 1),
                     ),
                   ]
                 : ImVisualTokens.softCardShadow(context),
             borderRadius: BorderRadius.only(
-              topLeft: Radius.circular(mine ? 16 : 5),
-              topRight: Radius.circular(mine ? 5 : 16),
-              bottomLeft: const Radius.circular(16),
-              bottomRight: const Radius.circular(16),
+              topLeft: Radius.circular(mine ? 18 : 6),
+              topRight: Radius.circular(mine ? 6 : 18),
+              bottomLeft: const Radius.circular(18),
+              bottomRight: const Radius.circular(18),
             ),
           ),
           child: Column(
@@ -2410,7 +2457,7 @@ class _ChatSelectableRichTextState extends State<_ChatSelectableRichText> {
             };
           }
 
-          return AdaptiveTextSelectionToolbar.buttonItems(
+          return DunesTextSelectionToolbar.buttonItems(
             anchors: editableTextState.contextMenuAnchors,
             buttonItems: chatTextContextMenuButtonItems(
               onCopy: () async {
@@ -2467,7 +2514,7 @@ class _ChatSelectableRichTextState extends State<_ChatSelectableRichText> {
           });
           return const SizedBox.shrink();
         }
-        return AdaptiveTextSelectionToolbar.buttonItems(
+        return DunesTextSelectionToolbar.buttonItems(
           anchors: editableTextState.contextMenuAnchors,
           buttonItems: <ContextMenuButtonItem>[
             ContextMenuButtonItem(
@@ -2617,7 +2664,12 @@ class ChatQuoteBlock extends StatelessWidget {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: onTap,
+        onTap: onTap == null
+            ? null
+            : () {
+                HapticFeedback.selectionClick();
+                onTap!();
+              },
         borderRadius: BorderRadius.circular(6),
         child: child,
       ),
@@ -2697,7 +2749,12 @@ class ChatQuoteBlock extends StatelessWidget {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: onTap,
+        onTap: onTap == null
+            ? null
+            : () {
+                HapticFeedback.selectionClick();
+                onTap!();
+              },
         borderRadius: BorderRadius.circular(9),
         child: child,
       ),
@@ -3226,36 +3283,58 @@ class _ChatVoiceBubbleState extends State<ChatVoiceBubble>
       mainAxisSize: MainAxisSize.min,
       children: [
         ImTapScale(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.only(
+            topLeft: Radius.circular(widget.mine ? 18 : 6),
+            topRight: Radius.circular(widget.mine ? 6 : 18),
+            bottomLeft: const Radius.circular(18),
+            bottomRight: const Radius.circular(18),
+          ),
           onTap: () => unawaited(_toggle()),
           child: Container(
             constraints: BoxConstraints(
-              minWidth: 88 + (widget.durationSec * 4).clamp(0, 88).toDouble(),
+              minWidth: 92 + (widget.durationSec * 4).clamp(0, 88).toDouble(),
             ),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9.5),
+            padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 10),
             decoration: BoxDecoration(
               gradient: widget.mine
-                  ? ImVisualTokens.primaryGradient(context)
+                  ? LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: dark
+                          ? const [Color(0xFF9071EB), Color(0xFF6343BF)]
+                          : const [Color(0xFF9172EC), Color(0xFF6848C6)],
+                    )
                   : null,
               color: widget.mine ? null : ImVisualTokens.cardSurface(context),
               border: widget.mine
-                  ? null
+                  ? Border.all(
+                      color: Colors.white.withValues(alpha: 0.18),
+                      width: 0.6,
+                    )
                   : Border.all(
-                      color: ImVisualTokens.hairlineBorder(context),
-                      width: 0.8,
+                      color: dark
+                          ? Colors.white.withValues(alpha: 0.08)
+                          : const Color(0xFFE6E0F2),
+                      width: 0.75,
                     ),
               boxShadow: widget.mine
                   ? [
                       BoxShadow(
                         color: ImVisualTokens.purple.withValues(
-                          alpha: dark ? 0.25 : 0.18,
+                          alpha: dark ? 0.30 : 0.22,
                         ),
-                        blurRadius: 10,
-                        offset: const Offset(0, 3),
+                        blurRadius: 14,
+                        spreadRadius: -3,
+                        offset: const Offset(0, 5),
                       ),
                     ]
                   : ImVisualTokens.softCardShadow(context),
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.only(
+                topLeft: Radius.circular(widget.mine ? 18 : 6),
+                topRight: Radius.circular(widget.mine ? 6 : 18),
+                bottomLeft: const Radius.circular(18),
+                bottomRight: const Radius.circular(18),
+              ),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
@@ -4321,7 +4400,12 @@ class NotiCard extends StatelessWidget {
                   const SizedBox(width: 8),
                   GestureDetector(
                     behavior: HitTestBehavior.opaque,
-                    onTap: onTap,
+                    onTap: onTap == null
+            ? null
+            : () {
+                HapticFeedback.selectionClick();
+                onTap!();
+              },
                     child: Padding(
                       padding: const EdgeInsets.all(2),
                       child: ImSelectCircle(selected: read, size: 18),

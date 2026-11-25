@@ -1272,7 +1272,7 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
                                 border: Border.all(
                                   color: DunesColors.resolve(
                                     context,
-                                    const Color(0xFFECEAF1),
+                                    const Color(0xFFE5E5EA),
                                     role: DunesColorRole.border,
                                   ),
                                 ),

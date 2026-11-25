@@ -279,6 +279,8 @@ class ImStatusBadge extends StatelessWidget {
     this.color = '',
     this.compact = true,
     this.iconOnly = false,
+    this.maxLines = 1,
+    this.softWrap = false,
   });
 
   final String status;
@@ -290,10 +292,16 @@ class ImStatusBadge extends StatelessWidget {
   /// 位置很窄时只画图标，文字放进悬停提示。
   final bool iconOnly;
 
+  /// 允许在资料页等宽裕容器内换行完整展示签名。
+  final int maxLines;
+  final bool softWrap;
+
   factory ImStatusBadge.fromValue(
     ImUserStatusValue value, {
     Key? key,
     bool compact = true,
+    int maxLines = 1,
+    bool softWrap = false,
   }) {
     return ImStatusBadge(
       key: key,
@@ -302,6 +310,8 @@ class ImStatusBadge extends StatelessWidget {
       iconKey: value.icon,
       color: value.color,
       compact: compact,
+      maxLines: maxLines,
+      softWrap: softWrap,
     );
   }
 
@@ -319,6 +329,7 @@ class ImStatusBadge extends StatelessWidget {
     final def = value.def;
     final iconSize = compact ? 12.0 : 14.0;
     final fontSize = compact ? 11.0 : 12.0;
+    final multiline = maxLines > 1 || softWrap;
     final icon = Icon(
       def.icon,
       size: iconSize,
@@ -329,13 +340,23 @@ class ImStatusBadge extends StatelessWidget {
     }
     return Row(
       mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: multiline
+          ? CrossAxisAlignment.start
+          : CrossAxisAlignment.center,
       children: [
-        icon,
-        const SizedBox(width: 3),
+        if (multiline)
+          Padding(
+            padding: const EdgeInsets.only(top: 1.5),
+            child: icon,
+          )
+        else
+          icon,
+        const SizedBox(width: 4),
         Flexible(
           child: Text(
             def.label,
-            maxLines: 1,
+            maxLines: maxLines,
+            softWrap: softWrap,
             overflow: TextOverflow.ellipsis,
             style: DunesTypography.sans(
               fontSize: fontSize,

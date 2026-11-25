@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../core/theme/dunes_theme.dart';
+import '../../core/widgets/dunes_text_selection_toolbar.dart';
 import '../auth/auth_session.dart';
 import 'task_avatar.dart';
 import 'task_models.dart';
@@ -522,21 +524,29 @@ class _SummaryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      padding: const EdgeInsets.fromLTRB(13, 11, 13, 11),
       decoration: BoxDecoration(
         color: DunesColors.resolve(
           context,
           Colors.white,
           role: DunesColorRole.surface,
         ),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(18),
         border: Border.all(
           color: DunesColors.resolve(
             context,
-            const Color(0xFFE8EAED),
+            const Color(0xFFE5E5EA),
             role: DunesColorRole.border,
           ),
+          width: 0.8,
         ),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x06000000),
+            blurRadius: 12,
+            offset: Offset(0, 3),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -544,31 +554,46 @@ class _SummaryCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(
-                icon,
-                size: 14,
-                color: DunesColors.resolve(context, DunesColors.text3),
+              Container(
+                width: 24,
+                height: 24,
+                decoration: BoxDecoration(
+                  color: valueColor.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(7),
+                ),
+                alignment: Alignment.center,
+                child: Icon(
+                  icon,
+                  size: 13.5,
+                  color: DunesColors.resolveNullable(context, valueColor),
+                ),
               ),
-              const SizedBox(width: 4),
+              const SizedBox(width: 6),
               Flexible(
                 child: Text(
                   title,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    fontSize: 11,
-                    color: DunesColors.resolve(context, DunesColors.text3),
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w500,
+                    color: DunesColors.resolve(
+                      context,
+                      const Color(0xFF6E6E73),
+                    ),
                   ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 8),
           Text(
             value,
             style: TextStyle(
               fontSize: 22,
               fontWeight: FontWeight.w700,
+              letterSpacing: -0.4,
+              fontFeatures: const [FontFeature.tabularFigures()],
               color: DunesColors.resolveNullable(context, valueColor),
               height: 1.05,
             ),
@@ -578,7 +603,7 @@ class _SummaryCard extends StatelessWidget {
             subtitle,
             style: TextStyle(
               fontSize: 11,
-              color: DunesColors.resolve(context, DunesColors.text3),
+              color: DunesColors.resolve(context, const Color(0xFF8E8E93)),
             ),
           ),
         ],
@@ -725,20 +750,36 @@ class TaskNameCard extends StatelessWidget {
         Colors.white,
         role: DunesColorRole.surface,
       ),
-      borderRadius: BorderRadius.circular(14),
+      borderRadius: BorderRadius.circular(18),
       child: InkWell(
-        borderRadius: BorderRadius.circular(14),
-        onTap: onTap,
+        borderRadius: BorderRadius.circular(18),
+        hoverColor: DunesColors.resolve(
+          context,
+          const Color(0xFFF9F9FB),
+          role: DunesColorRole.surface,
+        ),
+        onTap: () {
+          HapticFeedback.selectionClick();
+          onTap();
+        },
         child: Container(
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(18),
             border: Border.all(
               color: DunesColors.resolve(
                 context,
-                const Color(0xFFE8EAED),
+                const Color(0xFFE5E5EA),
                 role: DunesColorRole.border,
               ),
+              width: 0.8,
             ),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x05000000),
+                blurRadius: 10,
+                offset: Offset(0, 2),
+              ),
+            ],
           ),
           padding: const EdgeInsets.fromLTRB(16, 14, 14, 14),
           child: Column(
@@ -897,14 +938,27 @@ class TaskWorkbenchCard extends StatelessWidget {
         role: DunesColorRole.surface,
       ),
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         side: BorderSide(
-          color: DunesColors.resolve(context, DunesColors.border),
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFE5E5EA),
+            role: DunesColorRole.border,
+          ),
+          width: 0.8,
         ),
       ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: onTap,
+        hoverColor: DunesColors.resolve(
+          context,
+          const Color(0xFFF9F9FB),
+          role: DunesColorRole.surface,
+        ),
+        onTap: () {
+          HapticFeedback.selectionClick();
+          onTap();
+        },
         child: Padding(
           padding: const EdgeInsets.all(12),
           child: Column(
@@ -1501,6 +1555,11 @@ ThemeData taskThemeData(BuildContext context) {
   return base.copyWith(
     colorScheme: colorScheme,
     primaryColor: kTaskPurple,
+    scaffoldBackgroundColor: DunesColors.resolve(
+      context,
+      const Color(0xFFF5F5F7),
+      role: DunesColorRole.surface,
+    ),
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
         backgroundColor: kTaskPurple,
@@ -1540,6 +1599,7 @@ ThemeData taskThemeData(BuildContext context) {
       trackOutlineColor: const WidgetStatePropertyAll(Colors.transparent),
     ),
     checkboxTheme: CheckboxThemeData(
+      shape: const CircleBorder(),
       fillColor: WidgetStateProperty.resolveWith((states) {
         if (states.contains(WidgetState.selected)) {
           return DunesColors.resolve(
@@ -1580,10 +1640,10 @@ ThemeData taskThemeData(BuildContext context) {
         kTaskPurple,
       ).withValues(alpha: 0.14),
       checkmarkColor: kTaskPurple,
-      labelStyle: TextStyle(
+      labelStyle: base.textTheme.labelLarge?.copyWith(
         color: DunesColors.resolveNullable(context, palette.textSecondary),
       ),
-      secondaryLabelStyle: TextStyle(
+      secondaryLabelStyle: base.textTheme.labelLarge?.copyWith(
         color: DunesColors.resolveNullable(context, kTaskPurple),
         fontWeight: FontWeight.w600,
       ),
@@ -1700,11 +1760,154 @@ class TaskCopyableScope extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SelectionArea(
+      contextMenuBuilder: (menuContext, selectableRegionState) {
+        return DunesTextSelectionToolbar.buttonItems(
+          anchors: selectableRegionState.contextMenuAnchors,
+          buttonItems: selectableRegionState.contextMenuButtonItems,
+        );
+      },
       child: Listener(
         behavior: HitTestBehavior.translucent,
         onPointerDown: _unfocusOutsideField,
         child: child,
       ),
+    );
+  }
+}
+
+/// 任务模块统一的 iOS 风格搜索框，支持一键清空、可选提交箭头与磨砂长按菜单。
+class TaskSearchField extends StatelessWidget {
+  const TaskSearchField({
+    super.key,
+    this.controller,
+    required this.hintText,
+    this.onChanged,
+    this.onSubmitted,
+    this.elevated = false,
+    this.showSubmitButton = false,
+  });
+
+  final TextEditingController? controller;
+  final String hintText;
+  final ValueChanged<String>? onChanged;
+  final ValueChanged<String>? onSubmitted;
+  final bool elevated;
+  final bool showSubmitButton;
+
+  @override
+  Widget build(BuildContext context) {
+    final fillColor = elevated
+        ? DunesColors.resolve(
+            context,
+            Colors.white,
+            role: DunesColorRole.surface,
+          )
+        : DunesColors.resolve(
+            context,
+            const Color(0xFFEEEEF3),
+            role: DunesColorRole.surface,
+          );
+    final muted = DunesColors.resolve(context, const Color(0xFF8E8E93));
+
+    Widget buildField(bool hasText) {
+      return TextField(
+        controller: controller,
+        onChanged: onChanged,
+        onSubmitted: onSubmitted,
+        textInputAction: TextInputAction.search,
+        contextMenuBuilder: (ctx, editableTextState) =>
+            DunesTextSelectionToolbar.editableText(
+              editableTextState: editableTextState,
+            ),
+        style: TextStyle(
+          fontSize: 13.5,
+          color: DunesColors.resolve(context, const Color(0xFF1D1D1F)),
+        ),
+        decoration: InputDecoration(
+          hintText: hintText,
+          hintStyle: TextStyle(fontSize: 13.5, color: muted),
+          isDense: true,
+          filled: true,
+          fillColor: fillColor,
+          prefixIcon: Icon(Icons.search_rounded, size: 19, color: muted),
+          suffixIcon: (hasText || showSubmitButton)
+              ? Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (hasText && controller != null)
+                      IconButton(
+                        tooltip: '清空',
+                        visualDensity: VisualDensity.compact,
+                        onPressed: () {
+                          HapticFeedback.selectionClick();
+                          controller!.clear();
+                          onChanged?.call('');
+                          if (showSubmitButton) onSubmitted?.call('');
+                        },
+                        icon: Icon(Icons.cancel_rounded, size: 17, color: muted),
+                      ),
+                    if (showSubmitButton)
+                      IconButton(
+                        tooltip: '搜索',
+                        visualDensity: VisualDensity.compact,
+                        onPressed: () {
+                          HapticFeedback.selectionClick();
+                          onSubmitted?.call(controller?.text ?? '');
+                        },
+                        icon: Icon(
+                          Icons.arrow_circle_right_rounded,
+                          size: 20,
+                          color: DunesColors.resolve(context, kTaskPurple),
+                        ),
+                      ),
+                  ],
+                )
+              : null,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: elevated
+                ? BorderSide(
+                    color: DunesColors.resolve(
+                      context,
+                      const Color(0xFFE5E5EA),
+                      role: DunesColorRole.border,
+                    ),
+                    width: 0.8,
+                  )
+                : BorderSide.none,
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: elevated
+                ? BorderSide(
+                    color: DunesColors.resolve(
+                      context,
+                      const Color(0xFFE5E5EA),
+                      role: DunesColorRole.border,
+                    ),
+                    width: 0.8,
+                  )
+                : BorderSide.none,
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide(
+              color: DunesColors.resolve(context, kTaskPurple),
+              width: 1.2,
+            ),
+          ),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 12,
+            vertical: 10,
+          ),
+        ),
+      );
+    }
+
+    if (controller == null) return buildField(false);
+    return ValueListenableBuilder<TextEditingValue>(
+      valueListenable: controller!,
+      builder: (context, value, _) => buildField(value.text.isNotEmpty),
     );
   }
 }
@@ -2000,38 +2203,55 @@ class TaskFilterChipDropdown<T> extends StatelessWidget {
           color: open
               ? DunesColors.resolve(
                   context,
-                  kTaskPurple,
+                  DunesColors.brandPurpleSoft,
                   role: DunesColorRole.surface,
-                ).withValues(alpha: 0.08)
-              : palette.surfaceRaised,
-          borderRadius: BorderRadius.circular(10),
+                )
+              : DunesColors.resolve(
+                  context,
+                  const Color(0xFFF2F2F7),
+                  role: DunesColorRole.surface,
+                ),
+          shape: const StadiumBorder(),
           child: InkWell(
-            borderRadius: BorderRadius.circular(10),
-            onTap: () => open ? controller.close() : controller.open(),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    label,
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
+            customBorder: const StadiumBorder(),
+            hoverColor: Colors.transparent,
+            onTap: () {
+              HapticFeedback.selectionClick();
+              open ? controller.close() : controller.open();
+            },
+            child: SizedBox(
+              height: 34,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      label,
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                        color: open
+                            ? DunesColors.resolve(context, kTaskPurple)
+                            : DunesColors.resolve(
+                                context,
+                                const Color(0xFF1D1D1F),
+                              ),
+                      ),
+                    ),
+                    const SizedBox(width: 3),
+                    Icon(
+                      Icons.expand_more_rounded,
+                      size: 16,
                       color: open
                           ? DunesColors.resolve(context, kTaskPurple)
-                          : DunesColors.resolve(context, DunesColors.text2),
+                          : DunesColors.resolve(
+                              context,
+                              const Color(0xFF8E8E93),
+                            ),
                     ),
-                  ),
-                  const SizedBox(width: 4),
-                  Icon(
-                    Icons.expand_more,
-                    size: 18,
-                    color: open
-                        ? DunesColors.resolve(context, kTaskPurple)
-                        : DunesColors.resolve(context, DunesColors.text3),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),

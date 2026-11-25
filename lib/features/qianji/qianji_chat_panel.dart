@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui';
 
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
@@ -8,30 +9,25 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/platform/desktop_features.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../auth/auth_session.dart';
+import '../chat/file_download.dart' as file_dl;
+import '../chat/im_ui_kit.dart';
 import '../shell/dunes_main_tab_bar.dart';
 import '../shell/dunes_toast.dart';
-import '../chat/file_download.dart' as file_dl;
 import 'qianji_chat_service.dart';
 
 const qianjiAllScopes = '全部板块';
 
-const _purple = Color(0xFF6C5CE7);
-const _purpleLight = Color(0xFF7B6CF0);
-const _purpleDeep = Color(0xFF5A4BD6);
-const _ink = Color(0xFF1F2329);
-const _muted = Color(0xFF8A919F);
-const _faint = Color(0xFFB0B6C0);
-const _line = Color(0xFFECEEF2);
-const _soft = Color(0xFFF7F8FA);
-const _softLine = Color(0xFFECEEF2);
-const _tint = Color(0xFFF7F8FA);
-const _page = Color(0xFFFFFFFF);
-const _glow = Color(0xFFFFFFFF);
-const _selectedBg = Color(0xFFF3F0FF);
-const _hoverBg = Color(0xFFEEF0F3);
-const _disabled = Color(0xFFC9CDD4);
-const _aiBorder = Color(0xFFE5E6EB);
-const _errorRed = Color(0xFFF53F3F);
+const _purple = ImVisualTokens.purple;
+const _ink = Color(0xFF1A1726);
+const _muted = Color(0xFF7D778C);
+const _faint = Color(0xFFA7A1B6);
+const _line = Color(0xFFEBE7F3);
+const _soft = ImVisualTokens.iosGroupedBgLight;
+const _tint = Color(0xFFF6F4FA);
+const _selectedBg = ImVisualTokens.purpleSoft;
+const _hoverBg = Color(0xFFF0EDF7);
+const _disabled = Color(0xFFC9C4D6);
+const _errorRed = Color(0xFFEA4B4B);
 
 const qianjiScopeIcons = <String, IconData>{
   qianjiAllScopes: Icons.auto_awesome_rounded,
@@ -677,18 +673,24 @@ class _QianjiChatPanelState extends State<QianjiChatPanel>
           behavior: HitTestBehavior.translucent,
           onPointerDown: _dismissKeyboardIfOutsideComposer,
           child: DecoratedBox(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              stops: const [0, 0.35, 1],
-              colors: [
-                _c(_glow, surface: true),
-                _c(_page, surface: true),
-                _c(_page, surface: true),
-              ],
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                stops: const [0.0, 0.34, 1.0],
+                colors: ImVisualTokens.isDark(context)
+                    ? [
+                        const Color(0xFF231C38),
+                        const Color(0xFF14141D),
+                        const Color(0xFF12121A),
+                      ]
+                    : [
+                        const Color(0xFFE5DCFA),
+                        const Color(0xFFF0EDF7),
+                        const Color(0xFFF3F0F9),
+                      ],
+              ),
             ),
-          ),
           child: AnimatedBuilder(
             animation: _sidebarCurve,
             child: main,
@@ -776,87 +778,125 @@ class _QianjiChatPanelState extends State<QianjiChatPanel>
 
   Widget _buildHeader() {
     final hasChat = _turns.isNotEmpty || _chatId != null;
-    return SafeArea(
-      bottom: false,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(4, 4, 12, 2),
-        child: Row(
-          children: [
-            IconButton(
-              tooltip: _sidebarOpen ? '收起板块' : '展开板块',
-              visualDensity: VisualDensity.compact,
-              onPressed: _toggleSidebar,
-              icon: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 220),
-                transitionBuilder: (child, animation) => RotationTransition(
-                  turns: Tween(begin: 0.85, end: 1.0).animate(animation),
-                  child: FadeTransition(opacity: animation, child: child),
-                ),
-                child: Icon(
-                  _sidebarOpen ? Icons.menu_open_rounded : Icons.menu_rounded,
-                  key: ValueKey(_sidebarOpen),
-                  size: 21,
-                  color: _c(_ink),
-                ),
+    final dark = ImVisualTokens.isDark(context);
+    return ClipRect(
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+        child: Container(
+          decoration: BoxDecoration(
+            color: ImVisualTokens.cardSurface(
+              context,
+            ).withValues(alpha: dark ? 0.78 : 0.84),
+            border: Border(
+              bottom: BorderSide(
+                color: ImVisualTokens.hairlineBorder(context),
+                width: 0.6,
               ),
             ),
-            const SizedBox(width: 4),
-            const QianjiTaoMark(size: 26),
-            const SizedBox(width: 9),
-            Expanded(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '智能业务查询',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 14.5,
-                      fontWeight: FontWeight.w700,
-                      color: _c(_ink),
-                    ),
-                  ),
-                  Text(
-                    '按当前权限实时取数',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: 10.5, color: _c(_muted)),
-                  ),
-                ],
-              ),
-            ),
-            AnimatedSwitcher(
-              duration: const Duration(milliseconds: 200),
-              transitionBuilder: (child, animation) => ScaleTransition(
-                scale: animation,
-                child: FadeTransition(opacity: animation, child: child),
-              ),
-              child: hasChat
-                  ? IconButton(
-                      key: const ValueKey('new-chat'),
-                      tooltip: '新对话',
+          ),
+          child: SafeArea(
+            bottom: false,
+            child: SizedBox(
+              height: 50,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(4, 0, 12, 0),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    IconButton(
+                      tooltip: _sidebarOpen ? '收起板块' : '展开板块',
                       visualDensity: VisualDensity.compact,
-                      onPressed: _busy ? null : _newChat,
-                      icon: Icon(
-                        Icons.add_comment_outlined,
-                        size: 20,
-                        color: _c(_ink),
+                      onPressed: _toggleSidebar,
+                      icon: AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 220),
+                        transitionBuilder: (child, animation) =>
+                            RotationTransition(
+                              turns: Tween(
+                                begin: 0.85,
+                                end: 1.0,
+                              ).animate(animation),
+                              child: FadeTransition(
+                                opacity: animation,
+                                child: child,
+                              ),
+                            ),
+                        child: Icon(
+                          _sidebarOpen
+                              ? Icons.menu_open_rounded
+                              : Icons.menu_rounded,
+                          key: ValueKey(_sidebarOpen),
+                          size: 21,
+                          color: _c(_ink),
+                        ),
                       ),
-                    )
-                  : const SizedBox.shrink(),
+                    ),
+                    const SizedBox(width: 4),
+                    const QianjiTaoMark(size: 28),
+                    const SizedBox(width: 9),
+                    Expanded(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '智能业务查询',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: DunesTypography.sans(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: -0.2,
+                              color: _c(_ink),
+                              context: context,
+                            ),
+                          ),
+                          Text(
+                            '按当前权限实时取数',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: DunesTypography.sans(
+                              fontSize: 10.5,
+                              color: _c(_muted),
+                              context: context,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 200),
+                      transitionBuilder: (child, animation) => ScaleTransition(
+                        scale: animation,
+                        child: FadeTransition(opacity: animation, child: child),
+                      ),
+                      child: hasChat
+                          ? IconButton(
+                              key: const ValueKey('new-chat'),
+                              tooltip: '新对话',
+                              visualDensity: VisualDensity.compact,
+                              onPressed: _busy ? null : _newChat,
+                              icon: Icon(
+                                Icons.add_comment_outlined,
+                                size: 20,
+                                color: _c(_ink),
+                              ),
+                            )
+                          : const SizedBox.shrink(),
+                    ),
+                    const SizedBox(width: 4),
+                    QianjiPillButton(
+                      icon: Icons.dashboard_outlined,
+                      label: '模块入口',
+                      onTap: () {
+                        _focusNode.unfocus();
+                        widget.onSwitchLegacy();
+                      },
+                    ),
+                  ],
+                ),
+              ),
             ),
-            const SizedBox(width: 4),
-            QianjiPillButton(
-              icon: Icons.dashboard_outlined,
-              label: '模块入口',
-              onTap: () {
-                _focusNode.unfocus();
-                widget.onSwitchLegacy();
-              },
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -1220,39 +1260,112 @@ class _QianjiChatPanelState extends State<QianjiChatPanel>
                   ),
                 ],
               );
+        final dark = ImVisualTokens.isDark(context);
+        final accent = ImVisualTokens.accent(context);
         return ListView(
-          padding: const EdgeInsets.fromLTRB(16, 20, 16, 16),
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 18),
           children: [
-            const _Appear(
-              child: Center(child: QianjiTaoMark(size: 46, glow: true)),
-            ),
-            const SizedBox(height: 14),
             _Appear(
-              delay: 40,
-              child: Text(
-                name.isEmpty ? '你好，想查点什么？' : '$name，你好',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: -0.2,
-                  color: _c(_ink),
+              child: Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(24),
+                  boxShadow: [
+                    BoxShadow(
+                      color: accent.withValues(alpha: dark ? 0.22 : 0.14),
+                      blurRadius: 28,
+                      spreadRadius: -6,
+                      offset: const Offset(0, 12),
+                    ),
+                  ],
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(24),
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                    child: Container(
+                      padding: const EdgeInsets.fromLTRB(18, 22, 18, 18),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: dark
+                              ? [
+                                  const Color(0xD92B2440),
+                                  const Color(0xCC1E1C2A),
+                                ]
+                              : [
+                                  const Color(0xF5FFFFFF),
+                                  const Color(0xEBEDE6FA),
+                                ],
+                        ),
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(
+                          color: dark
+                              ? Colors.white.withValues(alpha: 0.14)
+                              : Colors.white.withValues(alpha: 0.90),
+                          width: 1.0,
+                        ),
+                      ),
+                      child: Column(
+                        children: [
+                          const QianjiTaoMark(size: 56, glow: true),
+                          const SizedBox(height: 14),
+                          Text(
+                            name.isEmpty ? '你好，想查点什么？' : '$name，你好',
+                            textAlign: TextAlign.center,
+                            style: DunesTypography.sans(
+                              fontSize: 21,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: -0.35,
+                              color: _c(_ink),
+                              context: context,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 220),
+                            child: Text(
+                              scoped
+                                  ? '已限定在「$_scope」范围，直接提问即可'
+                                  : '直接说出想查的内容，会自动识别板块、人员、部门和月份',
+                              key: ValueKey(scoped ? _scope : ''),
+                              textAlign: TextAlign.center,
+                              style: DunesTypography.sans(
+                                fontSize: 12.5,
+                                height: 1.5,
+                                color: _c(_muted),
+                                context: context,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+                          Wrap(
+                            alignment: WrapAlignment.center,
+                            spacing: 8,
+                            runSpacing: 6,
+                            children: const [
+                              _HeroFeatureBadge(
+                                icon: Icons.bolt_rounded,
+                                label: '实时取数',
+                              ),
+                              _HeroFeatureBadge(
+                                icon: Icons.verified_user_outlined,
+                                label: '权限隔离',
+                              ),
+                              _HeroFeatureBadge(
+                                icon: Icons.table_view_rounded,
+                                label: '支持导出',
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ),
-            const SizedBox(height: 5),
-            AnimatedSwitcher(
-              duration: const Duration(milliseconds: 220),
-              child: Text(
-                scoped
-                    ? '已限定在「$_scope」范围，直接提问即可'
-                    : '直接说出想查的内容，会自动识别板块、人员、部门和月份',
-                key: ValueKey(scoped ? _scope : ''),
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 12, height: 1.5, color: _c(_muted)),
-              ),
-            ),
-            const SizedBox(height: 22),
+            const SizedBox(height: 20),
             AnimatedSwitcher(
               duration: const Duration(milliseconds: 260),
               switchInCurve: Curves.easeOutCubic,
@@ -1262,19 +1375,16 @@ class _QianjiChatPanelState extends State<QianjiChatPanel>
               ),
               child: section,
             ),
-            const SizedBox(height: 18),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.shield_outlined, size: 12, color: _c(_faint)),
-                const SizedBox(width: 4),
-                Flexible(
-                  child: Text(
-                    '只读查询 · 结果按你当前的数据权限实时计算',
-                    style: TextStyle(fontSize: 10.5, color: _c(_faint)),
-                  ),
+            const SizedBox(height: 20),
+            Center(
+              child: Text(
+                '只读查询 · 结果按你当前的数据权限实时计算',
+                style: DunesTypography.sans(
+                  fontSize: 11,
+                  color: _c(_muted),
+                  context: context,
                 ),
-              ],
+              ),
             ),
           ],
         );
@@ -1317,100 +1427,128 @@ class _QianjiChatPanelState extends State<QianjiChatPanel>
   Widget _buildComposer() {
     final scoped = _scope != qianjiAllScopes;
     final focused = _composerFocused;
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 220),
-      curve: Curves.easeOutCubic,
-      padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
+    final dark = ImVisualTokens.isDark(context);
+    final accent = ImVisualTokens.accent(context);
+    return Container(
       decoration: BoxDecoration(
-        color: _c(Colors.white, surface: true),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: focused
-              ? _c(_purple, border: true).withValues(alpha: 0.45)
-              : _c(_line, border: true),
-        ),
+        borderRadius: BorderRadius.circular(22),
         boxShadow: [
           BoxShadow(
             color: focused
-                ? _purple.withValues(alpha: 0.10)
-                : const Color(0x141F2329),
-            blurRadius: focused ? 20 : 16,
+                ? accent.withValues(alpha: dark ? 0.24 : 0.16)
+                : const Color(0xFF331E54).withValues(alpha: dark ? 0.30 : 0.08),
+            blurRadius: focused ? 22 : 18,
+            spreadRadius: -3,
             offset: const Offset(0, 6),
           ),
         ],
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(10, 4, 2, 0),
-            child: CallbackShortcuts(
-              bindings: {
-                const SingleActivator(LogicalKeyboardKey.enter): () =>
-                    unawaited(_send()),
-                const SingleActivator(LogicalKeyboardKey.numpadEnter): () =>
-                    unawaited(_send()),
-              },
-              child: TextField(
-                controller: _controller,
-                focusNode: _focusNode,
-                enabled: !_busy,
-                maxLength: 1000,
-                maxLines: 5,
-                minLines: 1,
-                textInputAction: TextInputAction.send,
-                onTapOutside: (_) => _focusNode.unfocus(),
-                onSubmitted: (_) => unawaited(_send()),
-                cursorColor: _c(_purple),
-                style: TextStyle(fontSize: 13.5, height: 1.45, color: _c(_ink)),
-                decoration: InputDecoration(
-                  hintText: scoped ? '在「$_scope」中查询…' : '问点什么，例如：张三的知识库有多少文档',
-                  hintStyle: TextStyle(fontSize: 13, color: _c(_faint)),
-                  counterText: '',
-                  filled: false,
-                  isDense: true,
-                  border: InputBorder.none,
-                  enabledBorder: InputBorder.none,
-                  focusedBorder: InputBorder.none,
-                  disabledBorder: InputBorder.none,
-                  contentPadding: const EdgeInsets.symmetric(vertical: 8),
-                ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(22),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+          child: AnimatedContainer(
+            duration: ImVisualTokens.fastAnim,
+            curve: ImVisualTokens.iosCurve,
+            padding: const EdgeInsets.fromLTRB(10, 6, 10, 8),
+            decoration: BoxDecoration(
+              color: ImVisualTokens.cardSurface(
+                context,
+              ).withValues(alpha: dark ? 0.86 : 0.92),
+              borderRadius: BorderRadius.circular(22),
+              border: Border.all(
+                color: focused
+                    ? accent.withValues(alpha: 0.56)
+                    : ImVisualTokens.hairlineBorder(context),
+                width: focused ? 1.1 : 0.75,
               ),
             ),
-          ),
-          const SizedBox(height: 4),
-          Row(
-            children: [
-              _ScopeChip(
-                scope: _scope,
-                onTap: _openScopePicker,
-                onClear: scoped
-                    ? () => setState(() => _scope = qianjiAllScopes)
-                    : null,
-              ),
-              const Spacer(),
-              if (isDesktopCommOnly)
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
                 Padding(
-                  padding: const EdgeInsets.only(right: 10),
-                  child: Text(
-                    'Enter 发送',
-                    style: TextStyle(fontSize: 10.5, color: _c(_faint)),
+                  padding: const EdgeInsets.fromLTRB(8, 4, 2, 0),
+                  child: CallbackShortcuts(
+                    bindings: {
+                      const SingleActivator(LogicalKeyboardKey.enter): () =>
+                          unawaited(_send()),
+                      const SingleActivator(LogicalKeyboardKey.numpadEnter):
+                          () => unawaited(_send()),
+                    },
+                    child: TextField(
+                      controller: _controller,
+                      focusNode: _focusNode,
+                      enabled: !_busy,
+                      maxLength: 1000,
+                      maxLines: 5,
+                      minLines: 1,
+                      textInputAction: TextInputAction.send,
+                      onTapOutside: (_) => _focusNode.unfocus(),
+                      onSubmitted: (_) => unawaited(_send()),
+                      cursorColor: accent,
+                      style: DunesTypography.sans(
+                        fontSize: 14,
+                        height: 1.45,
+                        color: _c(_ink),
+                        context: context,
+                      ),
+                      decoration: InputDecoration(
+                        hintText: scoped
+                            ? '在「$_scope」中查询…'
+                            : '问点什么，例如：张三的知识库有多少文档',
+                        hintStyle: DunesTypography.sans(
+                          fontSize: 13.5,
+                          color: _c(_faint),
+                          context: context,
+                        ),
+                        counterText: '',
+                        filled: false,
+                        isDense: true,
+                        border: InputBorder.none,
+                        enabledBorder: InputBorder.none,
+                        focusedBorder: InputBorder.none,
+                        disabledBorder: InputBorder.none,
+                        contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                      ),
+                    ),
                   ),
                 ),
-              ValueListenableBuilder<TextEditingValue>(
-                valueListenable: _controller,
-                builder: (context, value, _) {
-                  final hasText = value.text.trim().isNotEmpty;
-                  return _SendButton(
-                    busy: _busy,
-                    active: hasText,
-                    onTap: _busy ? null : () => unawaited(_send()),
-                  );
-                },
-              ),
-            ],
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    _ScopeChip(
+                      scope: _scope,
+                      onTap: _openScopePicker,
+                      onClear: scoped
+                          ? () => setState(() => _scope = qianjiAllScopes)
+                          : null,
+                    ),
+                    const Spacer(),
+                    if (isDesktopCommOnly)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 10),
+                        child: Text(
+                          'Enter 发送',
+                          style: TextStyle(fontSize: 10.5, color: _c(_faint)),
+                        ),
+                      ),
+                    ValueListenableBuilder<TextEditingValue>(
+                      valueListenable: _controller,
+                      builder: (context, value, _) {
+                        final hasText = value.text.trim().isNotEmpty;
+                        return _SendButton(
+                          busy: _busy,
+                          active: hasText,
+                          onTap: _busy ? null : () => unawaited(_send()),
+                        );
+                      },
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
-        ],
+        ),
       ),
     );
   }
@@ -1784,10 +1922,10 @@ Future<String?> showQianjiScopePicker({
       onTap: enabled ? () => Navigator.of(ctx).pop(label) : null,
     );
     return Material(
-      color: c(Colors.white, surface: true),
+      color: ImVisualTokens.groupedBackground(ctx),
       borderRadius: sheet
-          ? const BorderRadius.vertical(top: Radius.circular(22))
-          : BorderRadius.circular(22),
+          ? const BorderRadius.vertical(top: Radius.circular(24))
+          : BorderRadius.circular(24),
       clipBehavior: Clip.antiAlias,
       child: ConstrainedBox(
         constraints: BoxConstraints(
@@ -1880,7 +2018,7 @@ Future<String?> showQianjiScopePicker({
   );
 }
 
-/// 饕品牌标识：与金刚区一致的紫色微渐变底座。
+/// 饕品牌标识：与全 App 统一的品牌紫微渐变底座。
 class QianjiTaoMark extends StatelessWidget {
   const QianjiTaoMark({super.key, this.size = 32, this.glow = false});
 
@@ -1889,21 +2027,22 @@ class QianjiTaoMark extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final end = DunesColors.resolve(context, _purpleDeep);
+    final accent = ImVisualTokens.accent(context);
     final mark = Container(
       width: size,
       height: size,
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [DunesColors.resolve(context, _purpleLight), end],
-        ),
+        gradient: ImVisualTokens.primaryGradient(context),
         borderRadius: BorderRadius.circular(size * 0.32),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.28),
+          width: 0.7,
+        ),
         boxShadow: [
           BoxShadow(
-            color: end.withValues(alpha: glow ? 0.32 : 0.22),
-            blurRadius: glow ? 22 : 7,
+            color: accent.withValues(alpha: glow ? 0.34 : 0.22),
+            blurRadius: glow ? 24 : 8,
+            spreadRadius: glow ? -2 : 0,
             offset: Offset(0, glow ? 8 : 3),
           ),
         ],
@@ -1911,20 +2050,20 @@ class QianjiTaoMark extends StatelessWidget {
       alignment: Alignment.center,
       child: Icon(
         Icons.auto_awesome_rounded,
-        size: size * 0.5,
+        size: size * 0.52,
         color: Colors.white,
       ),
     );
     if (!glow) return mark;
     return Container(
-      padding: const EdgeInsets.all(8),
+      padding: const EdgeInsets.all(9),
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: DunesColors.resolve(
-          context,
-          _purple,
-          role: DunesColorRole.surface,
-        ).withValues(alpha: 0.08),
+        color: ImVisualTokens.accentSoftSurface(context),
+        border: Border.all(
+          color: accent.withValues(alpha: 0.16),
+          width: 0.8,
+        ),
       ),
       child: mark,
     );
@@ -1945,34 +2084,42 @@ class QianjiPillButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = DunesColors.resolve(context, _purple);
-    return Material(
-      color: DunesColors.resolve(
-        context,
-        _purple,
-        role: DunesColorRole.surface,
-      ).withValues(alpha: 0.08),
-      borderRadius: BorderRadius.circular(99),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(99),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, size: 13, color: color),
-              const SizedBox(width: 4),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 11.5,
-                  fontWeight: FontWeight.w600,
-                  color: color,
-                ),
-              ),
-            ],
+    final accentText = ImVisualTokens.accentText(context);
+    final accent = ImVisualTokens.accent(context);
+    return ImTapScale(
+      onTap: onTap == null
+          ? null
+          : () {
+              HapticFeedback.selectionClick();
+              onTap!();
+            },
+      borderRadius: BorderRadius.circular(999),
+      pressedScale: 0.95,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
+        decoration: BoxDecoration(
+          color: ImVisualTokens.accentSoftSurface(context),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(
+            color: accent.withValues(alpha: 0.24),
+            width: 0.65,
           ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 13.5, color: accentText),
+            const SizedBox(width: 4.5),
+            Text(
+              label,
+              style: DunesTypography.sans(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: accentText,
+                context: context,
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -1991,48 +2138,45 @@ class QianjiSuggestionChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final accent = DunesColors.resolve(context, _purple);
-    return _Pressable(
-      child: Material(
-        color: DunesColors.resolve(
-          context,
-          Colors.white,
-          role: DunesColorRole.surface,
-        ),
-        shape: StadiumBorder(
-          side: BorderSide(
-            color: DunesColors.resolve(
-              context,
-              _softLine,
-              role: DunesColorRole.border,
-            ),
+    final accentText = ImVisualTokens.accentText(context);
+    final accent = ImVisualTokens.accent(context);
+    return ImTapScale(
+      borderRadius: BorderRadius.circular(999),
+      pressedScale: 0.96,
+      onTap: () {
+        HapticFeedback.selectionClick();
+        onTap();
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+        decoration: BoxDecoration(
+          color: ImVisualTokens.cardSurface(context),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(
+            color: accent.withValues(alpha: 0.22),
+            width: 0.75,
           ),
+          boxShadow: ImVisualTokens.softCardShadow(context),
         ),
-        child: InkWell(
-          onTap: onTap,
-          customBorder: const StadiumBorder(),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.north_east_rounded, size: 12, color: accent),
-                const SizedBox(width: 4),
-                Flexible(
-                  child: Text(
-                    label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 11.5,
-                      fontWeight: FontWeight.w500,
-                      color: accent,
-                    ),
-                  ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.north_east_rounded, size: 12.5, color: accent),
+            const SizedBox(width: 4.5),
+            Flexible(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: DunesTypography.sans(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: accentText,
+                  context: context,
                 ),
-              ],
+              ),
             ),
-          ),
+          ],
         ),
       ),
     );
@@ -2040,22 +2184,61 @@ class QianjiSuggestionChip extends StatelessWidget {
 }
 
 class _SectionLabel extends StatelessWidget {
-  const _SectionLabel({required this.text, this.horizontal = 0});
+  const _SectionLabel({required this.text});
 
   final String text;
-  final double horizontal;
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.fromLTRB(horizontal, 0, horizontal, 0),
-      child: Text(
-        text,
-        style: TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.w600,
-          color: DunesColors.resolve(context, const Color(0xFF646A73)),
+    return Text(
+      text,
+      style: DunesTypography.sans(
+        fontSize: 12,
+        fontWeight: FontWeight.w600,
+        color: DunesColors.resolve(context, _muted),
+        context: context,
+      ),
+    );
+  }
+}
+
+class _HeroFeatureBadge extends StatelessWidget {
+  const _HeroFeatureBadge({required this.icon, required this.label});
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = ImVisualTokens.accent(context);
+    final accentText = ImVisualTokens.accentText(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+      decoration: BoxDecoration(
+        color: ImVisualTokens.isDark(context)
+            ? accent.withValues(alpha: 0.16)
+            : Colors.white.withValues(alpha: 0.85),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(
+          color: accent.withValues(alpha: 0.22),
+          width: 0.65,
         ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 12, color: accent),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: DunesTypography.sans(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: accentText,
+              context: context,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -2072,96 +2255,122 @@ class _BoardTile extends StatelessWidget {
   final String hint;
   final VoidCallback onTap;
 
+  static List<Color> _tileGradient(String label) => switch (label) {
+    '资金流向' => const [Color(0xFF2CB67D), Color(0xFF1D8C5E)],
+    '月结' => const [Color(0xFF9071EB), Color(0xFF6B4BD0)],
+    '资金借调' => const [Color(0xFFF39C38), Color(0xFFD6721A)],
+    '差旅管理' => const [Color(0xFF2EA5C4), Color(0xFF1A7D9B)],
+    '工作情况' => const [Color(0xFF8B6BE8), Color(0xFF6743D3)],
+    '员工画像' => const [Color(0xFF9F77DF), Color(0xFF6E47AC)],
+    '使用热力' => const [Color(0xFF6B5CE8), Color(0xFF4A3BC7)],
+    '会议纪要' => const [Color(0xFFA84AC9), Color(0xFF7D25A0)],
+    'IM会话' => const [Color(0xFF4E89EC), Color(0xFF2D63BE)],
+    '知识库' => const [Color(0xFFDE8437), Color(0xFFB5611B)],
+    '任务' => const [Color(0xFF2F9B88), Color(0xFF1F6F62)],
+    '日报' => const [Color(0xFF3E8398), Color(0xFF275C6B)],
+    '群响应' => const [Color(0xFF6275CE), Color(0xFF3E529E)],
+    '提案时效' => const [Color(0xFFCC5F80), Color(0xFF9E3E5C)],
+    _ => const [Color(0xFF896AE4), Color(0xFF6747C8)],
+  };
+
   @override
   Widget build(BuildContext context) {
-    final color = DunesColors.resolve(context, _purple);
-    return _Pressable(
-      child: Material(
-        color: DunesColors.resolve(
-          context,
-          Colors.white,
-          role: DunesColorRole.surface,
+    final grad = _tileGradient(label);
+    return ImTapScale(
+      borderRadius: BorderRadius.circular(18),
+      pressedScale: 0.96,
+      onTap: () {
+        HapticFeedback.selectionClick();
+        onTap();
+      },
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(13, 13, 13, 12),
+        decoration: BoxDecoration(
+          color: ImVisualTokens.cardSurface(context),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(
+            color: ImVisualTokens.hairlineBorder(context),
+            width: 0.75,
+          ),
+          boxShadow: ImVisualTokens.softCardShadow(context),
         ),
-        borderRadius: BorderRadius.circular(16),
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(16),
-          child: Container(
-            padding: const EdgeInsets.fromLTRB(11, 11, 11, 11),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                color: DunesColors.resolve(
-                  context,
-                  _line,
-                  role: DunesColorRole.border,
-                ),
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: const Color(0xFF331E54).withValues(alpha: 0.04),
-                  blurRadius: 14,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
               children: [
-                Row(
-                  children: [
-                    Container(
-                      width: 24,
-                      height: 24,
-                      decoration: BoxDecoration(
-                        color: DunesColors.resolve(
-                          context,
-                          _purple,
-                          role: DunesColorRole.surface,
-                        ).withValues(alpha: 0.10),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      alignment: Alignment.center,
-                      child: Icon(
-                        qianjiScopeIcons[label] ?? Icons.apps_rounded,
-                        size: 14,
-                        color: color,
-                      ),
+                Container(
+                  width: 34,
+                  height: 34,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: grad,
                     ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        label,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w700,
-                          color: DunesColors.resolve(context, _ink),
-                        ),
+                    borderRadius: BorderRadius.circular(10.5),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.25),
+                      width: 0.6,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: grad.last.withValues(alpha: 0.28),
+                        blurRadius: 8,
+                        spreadRadius: -2,
+                        offset: const Offset(0, 3),
                       ),
-                    ),
-                    Icon(
-                      Icons.chevron_right_rounded,
-                      size: 16,
-                      color: DunesColors.resolve(context, _faint),
-                    ),
-                  ],
+                    ],
+                  ),
+                  alignment: Alignment.center,
+                  child: Icon(
+                    qianjiScopeIcons[label] ?? Icons.apps_rounded,
+                    size: 17,
+                    color: Colors.white,
+                  ),
                 ),
-                const SizedBox(height: 6),
-                Text(
-                  hint,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 11,
-                    height: 1.4,
-                    color: DunesColors.resolve(context, _muted),
+                const SizedBox(width: 9),
+                Expanded(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: DunesTypography.sans(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w700,
+                      color: DunesColors.resolve(context, _ink),
+                      context: context,
+                    ),
+                  ),
+                ),
+                Container(
+                  width: 20,
+                  height: 20,
+                  decoration: BoxDecoration(
+                    color: ImVisualTokens.accentSoftSurface(context),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.chevron_right_rounded,
+                    size: 14,
+                    color: ImVisualTokens.accent(context),
                   ),
                 ),
               ],
             ),
-          ),
+            const SizedBox(height: 9),
+            Text(
+              hint,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: DunesTypography.sans(
+                fontSize: 11.5,
+                height: 1.35,
+                color: DunesColors.resolve(context, _muted),
+                context: context,
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -2185,7 +2394,8 @@ class _QuestionBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final radius = const BorderRadius.only(
+    final dark = ImVisualTokens.isDark(context);
+    const radius = BorderRadius.only(
       topLeft: Radius.circular(18),
       topRight: Radius.circular(6),
       bottomLeft: Radius.circular(18),
@@ -2203,19 +2413,36 @@ class _QuestionBubble extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
-                color: DunesColors.resolve(
-                  context,
-                  _purple,
-                  role: DunesColorRole.surface,
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: dark
+                      ? const [
+                          Color(0xFF9071EB),
+                          Color(0xFF7756D6),
+                          Color(0xFF6343BF),
+                        ]
+                      : const [
+                          Color(0xFF9172EC),
+                          Color(0xFF7B5CD8),
+                          Color(0xFF6848C6),
+                        ],
                 ),
                 borderRadius: radius,
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.18),
+                  width: 0.6,
+                ),
                 boxShadow: [
                   BoxShadow(
-                    color: _purple.withValues(alpha: 0.18),
-                    blurRadius: 12,
-                    offset: const Offset(0, 4),
+                    color: ImVisualTokens.purple.withValues(
+                      alpha: dark ? 0.30 : 0.22,
+                    ),
+                    blurRadius: 16,
+                    spreadRadius: -4,
+                    offset: const Offset(0, 6),
                   ),
                 ],
               ),
@@ -2227,10 +2454,11 @@ class _QuestionBubble extends StatelessWidget {
                   : null,
               child: Text(
                 text,
-                style: const TextStyle(
-                  fontSize: 13.5,
-                  height: 1.45,
+                style: DunesTypography.sans(
+                  fontSize: 14,
+                  height: 1.48,
                   color: Colors.white,
+                  context: context,
                 ),
               ),
             ),
@@ -2486,21 +2714,18 @@ class _ReplyCardState extends State<_ReplyCard>
           child: Container(
             padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
             decoration: BoxDecoration(
-              color: c(Colors.white, surface: true),
+              color: ImVisualTokens.cardSurface(context),
               borderRadius: const BorderRadius.only(
                 topLeft: Radius.circular(6),
                 topRight: Radius.circular(18),
                 bottomLeft: Radius.circular(18),
                 bottomRight: Radius.circular(18),
               ),
-              border: Border.all(color: c(_aiBorder, border: true)),
-              boxShadow: [
-                BoxShadow(
-                  color: const Color(0xFF1F2329).withValues(alpha: 0.04),
-                  blurRadius: 16,
-                  offset: const Offset(0, 4),
-                ),
-              ],
+              border: Border.all(
+                color: ImVisualTokens.hairlineBorder(context),
+                width: 0.75,
+              ),
+              boxShadow: ImVisualTokens.softCardShadow(context),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -3102,11 +3327,7 @@ class _ThinkingCardState extends State<_ThinkingCard>
       child: Container(
         padding: const EdgeInsets.fromLTRB(12, 10, 14, 10),
         decoration: BoxDecoration(
-          color: DunesColors.resolve(
-            context,
-            Colors.white,
-            role: DunesColorRole.surface,
-          ),
+          color: ImVisualTokens.cardSurface(context),
           borderRadius: const BorderRadius.only(
             topLeft: Radius.circular(6),
             topRight: Radius.circular(18),
@@ -3114,12 +3335,10 @@ class _ThinkingCardState extends State<_ThinkingCard>
             bottomRight: Radius.circular(18),
           ),
           border: Border.all(
-            color: DunesColors.resolve(
-              context,
-              _line,
-              role: DunesColorRole.border,
-            ),
+            color: ImVisualTokens.hairlineBorder(context),
+            width: 0.75,
           ),
+          boxShadow: ImVisualTokens.softCardShadow(context),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -3243,50 +3462,63 @@ class _ScopeChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final all = scope == qianjiAllScopes;
-    final fg = DunesColors.resolve(context, all ? _ink : _purple);
-    final bg = DunesColors.resolve(
-      context,
-      all ? _hoverBg : _selectedBg,
-      role: DunesColorRole.surface,
-    );
-    return Material(
-      color: bg,
-      borderRadius: BorderRadius.circular(99),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(99),
-        child: Padding(
-          padding: EdgeInsets.fromLTRB(9, 5, onClear == null ? 7 : 4, 5),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                qianjiScopeIcons[scope] ?? Icons.apps_rounded,
-                size: 13,
+    final fg = all
+        ? DunesColors.resolve(context, _ink)
+        : ImVisualTokens.accentText(context);
+    final bg = all
+        ? (ImVisualTokens.isDark(context)
+              ? Colors.white.withValues(alpha: 0.08)
+              : _hoverBg)
+        : ImVisualTokens.accentSoftSurface(context);
+    return ImTapScale(
+      onTap: () {
+        HapticFeedback.selectionClick();
+        onTap();
+      },
+      borderRadius: BorderRadius.circular(999),
+      pressedScale: 0.96,
+      child: Container(
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: BorderRadius.circular(999),
+          border: all
+              ? null
+              : Border.all(
+                  color: ImVisualTokens.accent(context).withValues(alpha: 0.24),
+                  width: 0.65,
+                ),
+        ),
+        padding: EdgeInsets.fromLTRB(10, 5.5, onClear == null ? 8 : 6, 5.5),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              qianjiScopeIcons[scope] ?? Icons.apps_rounded,
+              size: 13,
+              color: fg,
+            ),
+            const SizedBox(width: 4.5),
+            Text(
+              all ? '范围 · 智能识别' : '范围 · $scope',
+              style: DunesTypography.sans(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w600,
                 color: fg,
+                context: context,
               ),
-              const SizedBox(width: 4),
-              Text(
-                all ? '范围 · 智能识别' : '范围 · $scope',
-                style: TextStyle(
-                  fontSize: 11.5,
-                  fontWeight: FontWeight.w600,
-                  color: fg,
+            ),
+            if (onClear == null)
+              Icon(Icons.expand_more_rounded, size: 15, color: fg)
+            else
+              GestureDetector(
+                onTap: onClear,
+                behavior: HitTestBehavior.opaque,
+                child: Padding(
+                  padding: const EdgeInsets.only(left: 3),
+                  child: Icon(Icons.close_rounded, size: 14, color: fg),
                 ),
               ),
-              if (onClear == null)
-                Icon(Icons.expand_more_rounded, size: 16, color: fg)
-              else
-                InkResponse(
-                  onTap: onClear,
-                  radius: 14,
-                  child: Padding(
-                    padding: const EdgeInsets.all(2),
-                    child: Icon(Icons.close_rounded, size: 14, color: fg),
-                  ),
-                ),
-            ],
-          ),
+          ],
         ),
       ),
     );
@@ -3306,6 +3538,7 @@ class _SendButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final accent = ImVisualTokens.accent(context);
     return Tooltip(
       message: '发送',
       child: AnimatedScale(
@@ -3324,21 +3557,29 @@ class _SendButton extends StatelessWidget {
               height: 34,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
+                gradient: active && !busy
+                    ? ImVisualTokens.primaryGradient(context)
+                    : null,
                 color: active && !busy
-                    ? DunesColors.resolve(
-                        context,
-                        _purple,
-                        role: DunesColorRole.surface,
-                      )
+                    ? null
                     : DunesColors.resolve(
                         context,
                         _disabled,
                         role: DunesColorRole.surface,
                       ),
+                boxShadow: active && !busy
+                    ? [
+                        BoxShadow(
+                          color: accent.withValues(alpha: 0.34),
+                          blurRadius: 10,
+                          offset: const Offset(0, 3),
+                        ),
+                      ]
+                    : const [],
               ),
               alignment: Alignment.center,
               child: busy
-                  ? SizedBox(
+                  ? const SizedBox(
                       width: 16,
                       height: 16,
                       child: CircularProgressIndicator(
@@ -3369,50 +3610,50 @@ class _NewChatButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final accent = DunesColors.resolve(context, _purple);
-    final fill = DunesColors.resolve(
-      context,
-      _selectedBg,
-      role: DunesColorRole.surface,
-    );
-    return SizedBox(
-      height: 40,
-      width: double.infinity,
-      child: Material(
-        color: enabled ? fill : fill.withValues(alpha: 0.6),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(10),
-          side: BorderSide(color: accent.withValues(alpha: enabled ? 1 : 0.4)),
+    final accent = ImVisualTokens.accentText(context);
+    final borderColor = ImVisualTokens.accent(context);
+    final fill = ImVisualTokens.accentSoftSurface(context);
+    return ImTapScale(
+      onTap: enabled ? onTap : null,
+      borderRadius: BorderRadius.circular(12),
+      pressedScale: 0.97,
+      child: Container(
+        height: 40,
+        width: double.infinity,
+        decoration: BoxDecoration(
+          color: enabled ? fill : fill.withValues(alpha: 0.55),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: borderColor.withValues(alpha: enabled ? 0.32 : 0.14),
+            width: 0.8,
+          ),
         ),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(10),
-          onTap: enabled ? onTap : null,
-          child: Center(
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                SizedBox(
-                  width: 24,
-                  height: 24,
-                  child: Icon(
-                    Icons.add_comment_outlined,
-                    size: 18,
-                    color: accent,
-                  ),
+        child: Center(
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              SizedBox(
+                width: 24,
+                height: 24,
+                child: Icon(
+                  Icons.add_comment_outlined,
+                  size: 18,
+                  color: accent,
                 ),
-                const SizedBox(width: 8),
-                Text(
-                  '新建对话',
-                  style: TextStyle(
-                    fontSize: 14,
-                    height: 20 / 14,
-                    fontWeight: FontWeight.w500,
-                    color: accent,
-                  ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                '新建对话',
+                style: DunesTypography.sans(
+                  fontSize: 14,
+                  height: 20 / 14,
+                  fontWeight: FontWeight.w600,
+                  color: accent,
+                  context: context,
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
@@ -3434,59 +3675,68 @@ class _ScopeOption extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final enabled = onTap != null;
-    final accent = DunesColors.resolve(context, _purple);
+    final accent = ImVisualTokens.accent(context);
+    final dark = ImVisualTokens.isDark(context);
     final fg = selected
-        ? accent
+        ? Colors.white
         : enabled
         ? DunesColors.resolve(context, _ink)
         : DunesColors.resolve(context, _faint);
-    return Material(
-      color: selected
-          ? DunesColors.resolve(
-              context,
-              _selectedBg,
-              role: DunesColorRole.surface,
-            )
-          : DunesColors.resolve(
-              context,
-              _hoverBg,
-              role: DunesColorRole.surface,
-            ),
-      shape: StadiumBorder(
-        side: BorderSide(
+    return ImTapScale(
+      onTap: onTap == null
+          ? null
+          : () {
+              HapticFeedback.selectionClick();
+              onTap!();
+            },
+      borderRadius: BorderRadius.circular(999),
+      pressedScale: 0.96,
+      child: AnimatedContainer(
+        duration: ImVisualTokens.fastAnim,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7.5),
+        decoration: BoxDecoration(
+          gradient: selected ? ImVisualTokens.primaryGradient(context) : null,
           color: selected
-              ? Colors.transparent
-              : DunesColors.resolve(
-                  context,
-                  _line,
-                  role: DunesColorRole.border,
-                ),
-        ),
-      ),
-      child: InkWell(
-        onTap: onTap,
-        customBorder: const StadiumBorder(),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                qianjiScopeIcons[label] ?? Icons.apps_rounded,
-                size: 14,
-                color: selected ? accent : DunesColors.resolve(context, _muted),
-              ),
-              const SizedBox(width: 5),
-              Text(
-                label == qianjiAllScopes ? '智能识别（全部板块）' : label,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: fg,
-                ),
-              ),
-            ],
+              ? null
+              : (dark
+                    ? Colors.white.withValues(alpha: 0.08)
+                    : ImVisualTokens.cardSurface(context)),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(
+            color: selected
+                ? Colors.transparent
+                : ImVisualTokens.hairlineBorder(context),
+            width: 0.75,
           ),
+          boxShadow: selected
+              ? [
+                  BoxShadow(
+                    color: accent.withValues(alpha: 0.28),
+                    blurRadius: 10,
+                    offset: const Offset(0, 3),
+                  ),
+                ]
+              : const [],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              qianjiScopeIcons[label] ?? Icons.apps_rounded,
+              size: 14,
+              color: selected ? Colors.white : DunesColors.resolve(context, _muted),
+            ),
+            const SizedBox(width: 5),
+            Text(
+              label == qianjiAllScopes ? '智能识别（全部板块）' : label,
+              style: DunesTypography.sans(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: fg,
+                context: context,
+              ),
+            ),
+          ],
         ),
       ),
     );

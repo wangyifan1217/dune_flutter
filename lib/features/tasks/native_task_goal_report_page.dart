@@ -185,7 +185,7 @@ class _NativeTaskGoalReportPageState extends State<NativeTaskGoalReportPage> {
         .add(const Duration(hours: 8));
     final date = submittedAt == null
         ? row['reportDate'] ?? '—'
-        : '${formatTaskYmd(submittedAt)} ${TimeOfDay.fromDateTime(submittedAt).format(context)}';
+        : submittedAt.toIso8601String().substring(0, 16).replaceFirst('T', ' ');
     final blockers = '${row['blockers'] ?? ''}';
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
@@ -215,13 +215,14 @@ class _NativeTaskGoalReportPageState extends State<NativeTaskGoalReportPage> {
         ),
         onExpansionChanged: (open) {
           if (open && !_history.containsKey(id)) {
-            setState(
-              () => _history[id] = widget.api.goalReportProgress(
-                from: _period.start,
-                to: _period.end,
-                goalId: id,
-              ),
+            final request = widget.api.goalReportProgress(
+              from: _period.start,
+              to: _period.end,
+              goalId: id,
             );
+            setState(() {
+              _history[id] = request;
+            });
           }
         },
         children: [if (_history[id] != null) _historyPage(id, _history[id]!)],

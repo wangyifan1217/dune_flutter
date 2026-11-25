@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
@@ -798,26 +799,32 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
       color: active
           ? DunesColors.resolve(
               context,
-              kTaskPurple,
+              DunesColors.brandPurpleSoft,
               role: DunesColorRole.surface,
-            ).withValues(alpha: 0.08)
+            )
           : DunesColors.resolve(
               context,
-              const Color(0xFFF5F6F8),
+              const Color(0xFFF2F2F7),
               role: DunesColorRole.surface,
             ),
-      borderRadius: BorderRadius.circular(10),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          InkWell(
-            borderRadius: BorderRadius.circular(10),
-            onTap: _pickDateRange,
-            child: Padding(
-              padding: EdgeInsets.fromLTRB(12, 10, active ? 4 : 12, 10),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
+      shape: const StadiumBorder(),
+      child: SizedBox(
+        height: 34,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            InkWell(
+              customBorder: const StadiumBorder(),
+              hoverColor: Colors.transparent,
+              onTap: () {
+                HapticFeedback.selectionClick();
+                _pickDateRange();
+              },
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(12, 0, active ? 4 : 12, 0),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
                   Icon(
                     Icons.date_range_outlined,
                     size: 16,
@@ -840,20 +847,25 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
               ),
             ),
           ),
-          if (active)
-            InkWell(
-              borderRadius: BorderRadius.circular(10),
-              onTap: _clearDateRange,
-              child: Padding(
-                padding: EdgeInsets.fromLTRB(2, 10, 10, 10),
-                child: Icon(
-                  Icons.close,
-                  size: 14,
-                  color: DunesColors.resolveNullable(context, kTaskPurple),
+            if (active)
+              InkWell(
+                customBorder: const StadiumBorder(),
+                hoverColor: Colors.transparent,
+                onTap: () {
+                  HapticFeedback.selectionClick();
+                  _clearDateRange();
+                },
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(2, 0, 10, 0),
+                  child: Icon(
+                    Icons.close_rounded,
+                    size: 14,
+                    color: DunesColors.resolveNullable(context, kTaskPurple),
+                  ),
                 ),
               ),
-            ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -972,7 +984,7 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
     return ColoredBox(
       color: DunesColors.resolve(
         context,
-        const Color(0xFFF5F6F8),
+        const Color(0xFFF5F5F7),
         role: DunesColorRole.surface,
       ),
       child: RefreshIndicator(
@@ -1229,51 +1241,10 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
   }
 
   Widget _buildInboxSearch() {
-    return TextField(
+    return TaskSearchField(
       controller: _search,
-      decoration: InputDecoration(
-        hintText: '搜索标题或负责人',
-        hintStyle: TextStyle(
-          color: DunesColors.resolve(context, DunesColors.text3),
-          fontSize: 13,
-        ),
-        isDense: true,
-        filled: true,
-        fillColor: DunesColors.resolve(
-          context,
-          Colors.white,
-          role: DunesColorRole.surface,
-        ),
-        prefixIcon: Icon(
-          Icons.search,
-          size: 20,
-          color: DunesColors.resolve(context, DunesColors.text3),
-        ),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(
-            color: DunesColors.resolve(
-              context,
-              Color(0xFFE8EAED),
-              role: DunesColorRole.border,
-            ),
-          ),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(
-            color: DunesColors.resolve(
-              context,
-              Color(0xFFE8EAED),
-              role: DunesColorRole.border,
-            ),
-          ),
-        ),
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 12,
-          vertical: 10,
-        ),
-      ),
+      hintText: '搜索标题或负责人',
+      elevated: true,
     );
   }
 
@@ -1286,46 +1257,28 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
           Colors.white,
           role: DunesColorRole.surface,
         ),
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(18),
         border: Border.all(
           color: DunesColors.resolve(
             context,
-            const Color(0xFFE8EAED),
+            const Color(0xFFE5E5EA),
             role: DunesColorRole.border,
           ),
+          width: 0.8,
         ),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x05000000),
+            blurRadius: 10,
+            offset: Offset(0, 2),
+          ),
+        ],
       ),
       child: Column(
         children: [
-          TextField(
+          TaskSearchField(
             controller: _search,
-            decoration: InputDecoration(
-              hintText: '搜索标题或负责人',
-              hintStyle: TextStyle(
-                color: DunesColors.resolve(context, DunesColors.text3),
-                fontSize: 13,
-              ),
-              isDense: true,
-              filled: true,
-              fillColor: DunesColors.resolve(
-                context,
-                const Color(0xFFF5F6F8),
-                role: DunesColorRole.surface,
-              ),
-              prefixIcon: Icon(
-                Icons.search,
-                size: 20,
-                color: DunesColors.resolve(context, DunesColors.text3),
-              ),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: BorderSide.none,
-              ),
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 12,
-                vertical: 10,
-              ),
-            ),
+            hintText: '搜索标题或负责人',
           ),
           const SizedBox(height: 10),
           Row(
@@ -1343,6 +1296,7 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
                   ('rejected', '已驳回'),
                 ],
                 onChanged: (v) {
+                  HapticFeedback.selectionClick();
                   setState(() => _setStatus(v));
                   unawaited(_reload());
                 },
@@ -1351,10 +1305,13 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
               const Spacer(),
               IconButton(
                 tooltip: '刷新',
-                onPressed: _reload,
+                onPressed: () {
+                  HapticFeedback.selectionClick();
+                  unawaited(_reload());
+                },
                 icon: Icon(
                   Icons.refresh_rounded,
-                  color: DunesColors.resolve(context, DunesColors.text2),
+                  color: DunesColors.resolve(context, kTaskPurple),
                 ),
               ),
             ],
@@ -1385,20 +1342,23 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
               _listFocusChip('overdue', '逾期'),
               _listFocusChip('dueToday', '今天截止'),
               _listFocusChip('high', '高优先级'),
-              ActionChip(
-                label: Text(_ownerFilter?.displayName ?? '负责人'),
-                onPressed: _filterByOwner,
+              _uniformFilterPill(
+                label: _ownerFilter?.displayName ?? '负责人',
+                active: _ownerFilter != null,
+                onTap: _filterByOwner,
               ),
-              ActionChip(
-                label: Text(_completedMonth == null
+              _uniformFilterPill(
+                label: _completedMonth == null
                     ? '完成月份'
-                    : '${_completedMonth!.year}年${_completedMonth!.month}月'),
-                onPressed: _filterByCompletedMonth,
+                    : '${_completedMonth!.year}年${_completedMonth!.month}月',
+                active: _completedMonth != null,
+                onTap: _filterByCompletedMonth,
               ),
               if (_ownerFilter != null || _completedMonth != null)
-                ActionChip(
-                  label: const Text('清除人员和月份'),
-                  onPressed: () {
+                _uniformFilterPill(
+                  label: '清除筛选',
+                  active: false,
+                  onTap: () {
                     setState(() {
                       _ownerFilter = null;
                       _completedMonth = null;
@@ -1445,46 +1405,72 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
     await _reload();
   }
 
-  Widget _listFocusChip(String value, String label) {
-    final on = _listFocus == value;
+  Widget _uniformFilterPill({
+    required String label,
+    required bool active,
+    required VoidCallback onTap,
+  }) {
     return Material(
-      color: on
+      color: active
           ? DunesColors.resolve(
               context,
-              kTaskPurple,
+              DunesColors.brandPurpleSoft,
               role: DunesColorRole.surface,
-            ).withValues(alpha: 0.12)
+            )
           : DunesColors.resolve(
               context,
-              const Color(0xFFF5F6F8),
+              const Color(0xFFF2F2F7),
               role: DunesColorRole.surface,
             ),
-      borderRadius: BorderRadius.circular(8),
+      shape: const StadiumBorder(),
       child: InkWell(
-        borderRadius: BorderRadius.circular(8),
+        customBorder: const StadiumBorder(),
+        hoverColor: Colors.transparent,
         onTap: () {
-          setState(() {
-            _listFocus = on ? null : value;
-            if (!on && value != 'high' && _status != null && _status != 'active' && _status != 'in_progress') {
-              _setStatus(null);
-            }
-          });
-          unawaited(_reload());
+          HapticFeedback.selectionClick();
+          onTap();
         },
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-          child: Text(
-            label,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: on
-                  ? DunesColors.resolve(context, kTaskPurple)
-                  : DunesColors.resolve(context, DunesColors.text2),
+        child: SizedBox(
+          height: 34,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Center(
+              widthFactor: 1,
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600,
+                  color: active
+                      ? DunesColors.resolve(context, kTaskPurple)
+                      : DunesColors.resolve(context, const Color(0xFF1D1D1F)),
+                ),
+              ),
             ),
           ),
         ),
       ),
+    );
+  }
+
+  Widget _listFocusChip(String value, String label) {
+    final on = _listFocus == value;
+    return _uniformFilterPill(
+      label: label,
+      active: on,
+      onTap: () {
+        setState(() {
+          _listFocus = on ? null : value;
+          if (!on &&
+              value != 'high' &&
+              _status != null &&
+              _status != 'active' &&
+              _status != 'in_progress') {
+            _setStatus(null);
+          }
+        });
+        unawaited(_reload());
+      },
     );
   }
 

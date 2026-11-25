@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'package:dunes_app/features/auth/auth_session.dart';
 import 'package:dunes_app/features/meeting/meeting_task_suggestions_section.dart';
 import 'package:dunes_app/features/tasks/native_task_form.dart';
+import 'package:dunes_app/features/tasks/native_task_goal_report_page.dart';
+import 'package:dunes_app/features/tasks/task_api.dart';
 import 'package:dunes_app/features/tasks/task_models.dart';
 import 'package:dunes_app/features/tasks/task_widgets.dart';
 import 'package:flutter/material.dart';
@@ -93,6 +95,45 @@ void main() {
           utf8.encode(jsonEncode({'success': true, 'data': data})),
           200,
         );
+      }),
+    );
+  });
+
+  testWidgets('目标进展以北京时间显示提交时间并可展开日报', (tester) async {
+    await http.runWithClient(
+      () async {
+        await tester.pumpWidget(
+          MaterialApp(home: NativeTaskGoalReportPage(api: TaskApi(_session))),
+        );
+        await tester.pumpAndSettle();
+        expect(find.textContaining('2026-11-24 17:42'), findsOneWidget);
+        await tester.tap(find.text('核对供应商清单'));
+        await tester.pumpAndSettle();
+        expect(find.textContaining('子任务 复核凭证'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      },
+      () => MockClient((request) async {
+        final isHistory = request.url.queryParameters['goalId'] == '21';
+        final body = {
+          'success': true,
+          'data': {
+            'names': {'91': '测试用户'},
+            'items': [
+              {
+                'goalId': 21,
+                'title': '核对供应商清单',
+                'ownerId': 91,
+                'reporterId': 91,
+                'reportDate': '2026-11-24',
+                'submittedAt': '2026-11-24T09:42:00Z',
+                'taskId': isHistory ? 26 : 21,
+                'taskTitle': '复核凭证',
+                'workDone': '已复核',
+              },
+            ],
+          },
+        };
+        return http.Response.bytes(utf8.encode(jsonEncode(body)), 200);
       }),
     );
   });

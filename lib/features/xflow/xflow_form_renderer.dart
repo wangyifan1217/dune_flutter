@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../core/theme/dunes_theme.dart';
+import '../../core/widgets/dunes_text_selection_toolbar.dart';
 import '../chat/user_avatar_widget.dart';
 import '../shell/dunes_toast.dart';
 import 'xflow_bill_cascade_field.dart';
@@ -2655,7 +2656,7 @@ class _XflowUserPickerState extends State<_XflowUserPicker> {
             readOnly: widget.readonly,
             enableInteractiveSelection: true,
             contextMenuBuilder: (context, editableTextState) {
-              return AdaptiveTextSelectionToolbar.editableText(
+              return DunesTextSelectionToolbar.editableText(
                 editableTextState: editableTextState,
               );
             },
@@ -2784,7 +2785,7 @@ class _XflowTextFieldState extends State<_XflowTextField> {
       readOnly: widget.readOnly,
       enableInteractiveSelection: true,
       contextMenuBuilder: (context, editableTextState) {
-        return AdaptiveTextSelectionToolbar.editableText(
+        return DunesTextSelectionToolbar.editableText(
           editableTextState: editableTextState,
         );
       },
@@ -3573,7 +3574,7 @@ class _XflowRemoteSearchPickerState extends State<_XflowRemoteSearchPicker> {
             readOnly: widget.readonly,
             enableInteractiveSelection: true,
             contextMenuBuilder: (context, editableTextState) {
-              return AdaptiveTextSelectionToolbar.editableText(
+              return DunesTextSelectionToolbar.editableText(
                 editableTextState: editableTextState,
               );
             },

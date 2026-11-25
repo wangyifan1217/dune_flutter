@@ -56,7 +56,6 @@ class ChatInboxHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final showStatusBadge = selfImStatus.showsBadge;
     if (isDesktopCommOnly) {
       return Container(
         constraints: BoxConstraints(
@@ -112,36 +111,6 @@ class ChatInboxHeader extends StatelessWidget {
                         context: context,
                       ),
                     ),
-                  if (showStatusBadge) ...[
-                    const SizedBox(height: 3),
-                    Tooltip(
-                      message: selfImStatus.def.label,
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            selfImStatus.def.icon,
-                            size: 12,
-                            color: selfImStatus.def.color,
-                          ),
-                          const SizedBox(width: 3),
-                          Flexible(
-                            child: Text(
-                              selfImStatus.def.label,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: DunesTypography.sans(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w500,
-                                color: selfImStatus.def.color,
-                                context: context,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
                 ],
               ),
             ),
@@ -163,30 +132,21 @@ class ChatInboxHeader extends StatelessWidget {
       color: Colors.transparent,
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 6),
       child: SizedBox(
-        height: showStatusBadge ? 52 : 40,
+        height: 40,
         child: Stack(
           alignment: Alignment.center,
           children: [
-            Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  '消息',
-                  style: DunesTypography.sans(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: DunesColors.resolve(
-                      context,
-                      const Color(0xFF1C1C1C),
-                    ),
-                    context: context,
-                  ),
+            Text(
+              '消息',
+              style: DunesTypography.sans(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: DunesColors.resolve(
+                  context,
+                  const Color(0xFF1C1C1C),
                 ),
-                if (showStatusBadge) ...[
-                  const SizedBox(height: 1),
-                  ImStatusBadge.fromValue(selfImStatus),
-                ],
-              ],
+                context: context,
+              ),
             ),
             if (showNovaLeading && onOpenNova != null)
               Align(
@@ -1334,6 +1294,7 @@ class _InboxSearchChromeState extends State<_InboxSearchChrome> {
       return AnimatedContainer(
         duration: disableAnim ? Duration.zero : ImVisualTokens.fastAnim,
         curve: ImVisualTokens.iosCurve,
+        alignment: Alignment.center,
         height:
             38 +
             (MediaQuery.textScalerOf(context).scale(13) - 13).clamp(0.0, 18.0),
@@ -1377,6 +1338,7 @@ class _InboxSearchChromeState extends State<_InboxSearchChrome> {
         child: AnimatedContainer(
           duration: disableAnim ? Duration.zero : ImVisualTokens.fastAnim,
           curve: ImVisualTokens.iosCurve,
+          alignment: Alignment.center,
           height:
               36 +
               (MediaQuery.textScalerOf(context).scale(13) - 13).clamp(
@@ -1439,25 +1401,33 @@ class _InboxSearchTapTarget extends StatelessWidget {
       borderRadius: BorderRadius.circular(18),
       pressedScale: 0.985,
       enableHoverTint: false,
-      child: Row(
-        children: [
-          Icon(
-            Icons.search_rounded,
-            size: isDesktopCommOnly ? 16 : 17,
-            color: mutedColor,
-          ),
-          SizedBox(width: isDesktopCommOnly ? 8 : 7),
-          Expanded(
-            child: Text(
-              hint,
-              style: DunesTypography.sans(
-                fontSize: 13.5,
-                color: mutedColor,
-                context: context,
+      child: SizedBox(
+        width: double.infinity,
+        height: double.infinity,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.search_rounded,
+              size: isDesktopCommOnly ? 16 : 17,
+              color: mutedColor,
+            ),
+            SizedBox(width: isDesktopCommOnly ? 8 : 7),
+            Expanded(
+              child: Text(
+                hint,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: DunesTypography.sans(
+                  fontSize: 13.5,
+                  height: 1.2,
+                  color: mutedColor,
+                  context: context,
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -2028,12 +1998,12 @@ class ChatInboxRow extends StatelessWidget {
                                 const SizedBox(width: 6),
                                 const WorkgroupTag(),
                               ],
-                              // 列表拖窄时名字优先：状态最多占四成，再窄只留图标。
+                              // 列表拖窄时名字优先：状态最多占近六成，再窄只留图标。
                               if (ImUserStatusCatalog.showsBadge(imStatus)) ...[
                                 const SizedBox(width: 6),
                                 ConstrainedBox(
                                   constraints: BoxConstraints(
-                                    maxWidth: titleBox.maxWidth * 0.4,
+                                    maxWidth: titleBox.maxWidth * 0.58,
                                   ),
                                   child: ImStatusBadge(
                                     status: imStatus!,
@@ -3318,23 +3288,41 @@ class WorkgroupTag extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // 石绿。不用 accentSoft：桌面主题会把它改成浅紫。
-    final ink = DunesColors.resolve(context, DunesColors.accent);
+    final accent = ImVisualTokens.accent(context);
+    final textColor = ImVisualTokens.accentText(context);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+      padding: const EdgeInsets.symmetric(horizontal: 6.5, vertical: 2),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(3),
-        border: Border.all(color: ink.withValues(alpha: 0.45)),
-        color: ink.withValues(alpha: 0.12),
-      ),
-      child: Text(
-        '工作群',
-        style: DunesTypography.sans(
-          fontSize: fontSize,
-          fontWeight: FontWeight.w600,
-          color: ink,
-          context: context,
+        borderRadius: BorderRadius.circular(999),
+        color: ImVisualTokens.accentSoftSurface(context),
+        border: Border.all(
+          color: accent.withValues(alpha: 0.24),
+          width: 0.6,
         ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 4.5,
+            height: 4.5,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: accent,
+            ),
+          ),
+          const SizedBox(width: 3.5),
+          Text(
+            '工作群',
+            style: DunesTypography.sans(
+              fontSize: fontSize,
+              height: 1.1,
+              fontWeight: FontWeight.w600,
+              color: textColor,
+              context: context,
+            ),
+          ),
+        ],
       ),
     );
   }

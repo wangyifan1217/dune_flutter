@@ -316,86 +316,93 @@ class ContactRowTile extends StatelessWidget {
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Flexible(
-                            child: Text(
-                              contact.displayLabel,
-                              style: DunesTypography.sans(
-                                fontSize: 15,
-                                fontWeight: FontWeight.w600,
-                                color: disabled
-                                    ? DunesColors.resolve(
-                                        context,
-                                        DunesColors.text3,
-                                      )
-                                    : DunesColors.resolve(
-                                        context,
-                                        DunesColors.text,
-                                      ),
-                                context: context,
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          if (isMe) ...[
-                            const SizedBox(width: 6),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 6,
-                                vertical: 1,
-                              ),
-                              decoration: BoxDecoration(
-                                color: DunesColors.resolve(
-                                  context,
-                                  const Color(0xFF7B5CD8),
-                                  role: DunesColorRole.surface,
-                                ).withValues(alpha: 0.12),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
+                  child: LayoutBuilder(
+                    builder: (context, nameBox) => Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Flexible(
                               child: Text(
-                                '我',
+                                contact.displayLabel,
                                 style: DunesTypography.sans(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w700,
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w600,
+                                  color: disabled
+                                      ? DunesColors.resolve(
+                                          context,
+                                          DunesColors.text3,
+                                        )
+                                      : DunesColors.resolve(
+                                          context,
+                                          DunesColors.text,
+                                        ),
+                                  context: context,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            if (isMe) ...[
+                              const SizedBox(width: 6),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 1,
+                                ),
+                                decoration: BoxDecoration(
                                   color: DunesColors.resolve(
                                     context,
                                     const Color(0xFF7B5CD8),
+                                    role: DunesColorRole.surface,
+                                  ).withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  '我',
+                                  style: DunesTypography.sans(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
+                                    color: DunesColors.resolve(
+                                      context,
+                                      const Color(0xFF7B5CD8),
+                                    ),
+                                    context: context,
                                   ),
-                                  context: context,
                                 ),
                               ),
-                            ),
+                            ],
+                            if (status.showsBadge) ...[
+                              const SizedBox(width: 6),
+                              ConstrainedBox(
+                                constraints: BoxConstraints(
+                                  maxWidth: nameBox.maxWidth * 0.58,
+                                ),
+                                child: ImStatusBadge.fromValue(status),
+                              ),
+                            ],
                           ],
-                          if (status.showsBadge) ...[
-                            const SizedBox(width: 6),
-                            ImStatusBadge.fromValue(status),
-                          ],
-                        ],
-                      ),
-                      const SizedBox(height: 3),
-                      Text(
-                        [
-                          if (contact.primaryRole.isNotEmpty)
-                            contact.primaryRole,
-                          if ((contact.department ?? '').trim().isNotEmpty)
-                            contact.department!.trim(),
-                        ].join(' · '),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: DunesTypography.sans(
-                          fontSize: 12,
-                          color: DunesColors.resolve(
-                            context,
-                            DunesColors.text3,
-                          ),
-                          context: context,
                         ),
-                      ),
-                    ],
+                        const SizedBox(height: 3),
+                        Text(
+                          [
+                            if (contact.primaryRole.isNotEmpty)
+                              contact.primaryRole,
+                            if ((contact.department ?? '').trim().isNotEmpty)
+                              contact.department!.trim(),
+                          ].join(' · '),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: DunesTypography.sans(
+                            fontSize: 12,
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.text3,
+                            ),
+                            context: context,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
                 if (!pickMode && !isMe && contact.enabled)

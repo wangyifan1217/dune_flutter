@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:dunes_app/core/theme/dunes_theme.dart';
 import '../../core/platform/desktop_features.dart';
 import '../push/desktop_notification_card.dart';
@@ -140,7 +142,7 @@ class _DunesToastOverlayState extends State<_DunesToastOverlay>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 200),
+    duration: const Duration(milliseconds: 260),
   )..forward();
 
   late final Animation<double> _fade = CurvedAnimation(
@@ -148,12 +150,27 @@ class _DunesToastOverlayState extends State<_DunesToastOverlay>
     curve: Curves.easeOut,
   );
 
+  late final Animation<double> _scale = CurvedAnimation(
+    parent: _controller,
+    curve: Curves.easeOutBack,
+  );
+
+  bool get _isCenter => widget.alignment == Alignment.center;
+
   late final Animation<Offset> _slide = Tween<Offset>(
-    begin: widget.alignment == Alignment.center
-        ? const Offset(0, 0.04)
-        : const Offset(0, 0.12),
+    begin: _isCenter ? const Offset(0, 0.06) : const Offset(0, -0.35),
     end: Offset.zero,
-  ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOut));
+  ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic));
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.kind == DunesToastKind.error) {
+      HapticFeedback.heavyImpact();
+    } else {
+      HapticFeedback.lightImpact();
+    }
+  }
 
   @override
   void dispose() {
@@ -161,59 +178,101 @@ class _DunesToastOverlayState extends State<_DunesToastOverlay>
     super.dispose();
   }
 
+  IconData _toastIcon() {
+    if (widget.kind == DunesToastKind.error) return Icons.error_rounded;
+    final msg = widget.message;
+    if (RegExp(r'已|成功|完成|通过|同步|刷新|复制|保存').hasMatch(msg)) {
+      return Icons.check_circle_rounded;
+    }
+    return Icons.auto_awesome_rounded;
+  }
+
+  Color _iconColor() {
+    if (widget.kind == DunesToastKind.error) return const Color(0xFFFF6961);
+    final msg = widget.message;
+    if (RegExp(r'已|成功|完成|通过|同步|刷新|复制|保存').hasMatch(msg)) {
+      return const Color(0xFF34C759);
+    }
+    return const Color(0xFFB9A8EC);
+  }
+
   @override
   Widget build(BuildContext context) {
-    final bottomInset = MediaQuery.paddingOf(context).bottom;
-    final centered = widget.alignment == Alignment.center;
+    final topInset = MediaQuery.paddingOf(context).top;
+    final effectiveAlignment = _isCenter
+        ? Alignment.center
+        : Alignment.topCenter;
     return Positioned.fill(
       child: IgnorePointer(
+        ignoring: true,
         child: Align(
-          alignment: widget.alignment,
+          alignment: effectiveAlignment,
           child: Padding(
-            padding: centered
+            padding: _isCenter
                 ? const EdgeInsets.symmetric(horizontal: 32)
-                : EdgeInsets.fromLTRB(24, 0, 24, 88 + bottomInset),
+                : EdgeInsets.fromLTRB(20, topInset + 10, 20, 0),
             child: FadeTransition(
               opacity: _fade,
               child: SlideTransition(
                 position: _slide,
-                child: Material(
-                  color: Colors.transparent,
-                  child: Container(
-                    constraints: const BoxConstraints(maxWidth: 320),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 10,
-                    ),
-                    decoration: BoxDecoration(
-                      color: widget.kind == DunesToastKind.error
-                          ? DunesColors.resolve(
-                              context,
-                              const Color(0xF0B43228),
-                              role: DunesColorRole.surface,
-                            )
-                          : DunesColors.resolve(
-                              context,
-                              const Color(0xE6141414),
-                              role: DunesColorRole.surface,
+                child: ScaleTransition(
+                  scale: _scale,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(999),
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                      child: Material(
+                        color: Colors.transparent,
+                        child: Container(
+                          constraints: const BoxConstraints(maxWidth: 320),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 9,
+                          ),
+                          decoration: BoxDecoration(
+                            color: widget.kind == DunesToastKind.error
+                                ? const Color(0xEB9E2A22)
+                                : const Color(0xEB1C1C1E),
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.14),
+                              width: 0.7,
                             ),
-                      borderRadius: BorderRadius.circular(10),
-                      boxShadow: const [
-                        BoxShadow(
-                          color: Color(0x33000000),
-                          blurRadius: 16,
-                          offset: Offset(0, 6),
+                            boxShadow: const [
+                              BoxShadow(
+                                color: Color(0x38000000),
+                                blurRadius: 22,
+                                offset: Offset(0, 8),
+                              ),
+                            ],
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                _toastIcon(),
+                                size: 16,
+                                color: _iconColor(),
+                              ),
+                              const SizedBox(width: 7),
+                              Flexible(
+                                child: Text(
+                                  widget.message,
+                                  textAlign: TextAlign.center,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 12.5,
+                                    height: 1.35,
+                                    fontWeight: FontWeight.w500,
+                                    letterSpacing: -0.1,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                      ],
-                    ),
-                    child: Text(
-                      widget.message,
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: DunesColors.resolve(context, Colors.white),
-                        fontSize: 12,
-                        height: 1.45,
-                        fontWeight: FontWeight.w500,
                       ),
                     ),
                   ),

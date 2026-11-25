@@ -578,81 +578,93 @@ class _PhoneStepState extends State<_PhoneStep> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const AuthAppLogo(size: 88),
-          const SizedBox(height: 20),
+          const AuthAppLogo(size: 84),
+          const SizedBox(height: 18),
           Text(
             '沙丘',
             textAlign: TextAlign.center,
             style: DunesTypography.sans(
-              fontSize: 28,
-              fontWeight: FontWeight.w600,
-              color: DunesColors.resolve(context, DunesColors.text),
-              letterSpacing: -0.02 * 28,
+              fontSize: 26,
+              fontWeight: FontWeight.w700,
+              color: DunesColors.resolve(context, const Color(0xFF1D1D1F)),
+              letterSpacing: -0.5,
               context: context,
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
           Text(
             '企业协作 · 审批 · 通讯',
             textAlign: TextAlign.center,
             style: DunesTypography.sans(
-              fontSize: 14,
-              color: DunesColors.resolve(context, DunesColors.text3),
+              fontSize: 13.5,
+              color: DunesColors.resolve(context, const Color(0xFF6E6E73)),
               height: 1.5,
               context: context,
             ),
           ),
-          const SizedBox(height: 48),
-          Text(
-            '手机号登录',
-            style: DunesTypography.sans(
-              fontSize: 15,
-              fontWeight: FontWeight.w600,
-              color: DunesColors.resolve(context, DunesColors.text),
-              context: context,
-            ),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _phone,
-            keyboardType: TextInputType.phone,
-            inputFormatters: [
-              FilteringTextInputFormatter.digitsOnly,
-              LengthLimitingTextInputFormatter(11),
-            ],
-            style: DunesTypography.sans(
-              fontSize: 18,
-              fontWeight: FontWeight.w500,
-              color: DunesColors.resolve(context, DunesColors.text),
-              letterSpacing: 1.2,
-              context: context,
-            ),
-            decoration:
-                authInputDecoration(
-                  context: context,
-                  hintText: '请输入手机号',
-                  errorText: _error,
-                ).copyWith(
-                  prefixIcon: const AuthPhonePrefix(),
-                  prefixIconConstraints: const BoxConstraints(
-                    minWidth: 0,
-                    minHeight: 0,
+          const SizedBox(height: 34),
+          AuthFormCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  '手机号登录',
+                  style: DunesTypography.sans(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: DunesColors.resolve(
+                      context,
+                      const Color(0xFF1D1D1F),
+                    ),
+                    context: context,
                   ),
-                  contentPadding: const EdgeInsets.fromLTRB(0, 16, 16, 16),
                 ),
-            onChanged: (_) {
-              if (_error != null) setState(() => _error = null);
-            },
-            onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
-            onSubmitted: (_) => _next(),
-          ),
-          const SizedBox(height: 28),
-          SizedBox(
-            height: 50,
-            child: FilledButton(
-              onPressed: _next,
-              style: authPrimaryButtonStyle,
-              child: const Text('获取验证码'),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _phone,
+                  keyboardType: TextInputType.phone,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                    LengthLimitingTextInputFormatter(11),
+                  ],
+                  style: DunesTypography.sans(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w500,
+                    color: DunesColors.resolve(
+                      context,
+                      const Color(0xFF1D1D1F),
+                    ),
+                    letterSpacing: 1.0,
+                    context: context,
+                  ),
+                  decoration:
+                      authInputDecoration(
+                        context: context,
+                        hintText: '请输入手机号',
+                        errorText: _error,
+                      ).copyWith(
+                        prefixIcon: const AuthPhonePrefix(),
+                        prefixIconConstraints: const BoxConstraints(
+                          minWidth: 0,
+                          minHeight: 0,
+                        ),
+                        contentPadding: const EdgeInsets.fromLTRB(
+                          0,
+                          15,
+                          16,
+                          15,
+                        ),
+                      ),
+                  onChanged: (_) {
+                    if (_error != null) setState(() => _error = null);
+                  },
+                  onTapOutside: (_) =>
+                      FocusManager.instance.primaryFocus?.unfocus(),
+                  onSubmitted: (_) => _next(),
+                ),
+                const SizedBox(height: 20),
+                AuthPrimaryButton(label: '获取验证码', onPressed: _next),
+              ],
             ),
           ),
           // 「扫码邀请注册」入口暂隐藏，需要时再打开。

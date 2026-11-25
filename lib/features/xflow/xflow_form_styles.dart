@@ -6,7 +6,7 @@ import '../../core/theme/dunes_theme.dart';
 class XfProposalUi {
   const XfProposalUi._();
 
-  static const bg = Color(0xFFF3F5F4);
+  static const bg = Color(0xFFF5F5F7);
   static const card = Color(0xFFFFFFFF);
   static const cardAlt = Color(0xFFFAF9FD);
   static const ink = Color(0xFF23212A);

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../core/theme/dunes_theme.dart';
 
 /// Quiet, compact summary shared by the four approval lists.
@@ -17,50 +18,82 @@ class ApprovalListSummary extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final parts = kicker.split('·');
+    final purple = DunesColors.resolve(context, DunesColors.brandPurple);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
       decoration: BoxDecoration(
         color: DunesColors.resolve(
           context,
           Colors.white,
           role: DunesColorRole.surface,
         ),
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(
           color: DunesColors.resolve(
             context,
-            DunesColors.borderSoft,
+            const Color(0xFFE5E5EA),
             role: DunesColorRole.border,
           ),
+          width: 0.8,
         ),
       ),
       child: Row(
         children: [
-          Icon(
-            Icons.fact_check_outlined,
-            size: 22,
-            color: DunesColors.resolve(context, DunesColors.brandPurple),
+          Container(
+            width: 26,
+            height: 26,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Color.lerp(purple, Colors.white, 0.22)!,
+                  purple,
+                  Color.lerp(purple, Colors.black, 0.14)!,
+                ],
+                stops: const [0.0, 0.58, 1.0],
+              ),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Icon(
+              Icons.fact_check_rounded,
+              size: 14,
+              color: Colors.white,
+            ),
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 9),
           Expanded(
             child: Text(
               parts.first.trim(),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w700,
-                color: DunesColors.resolve(context, DunesColors.text),
+                fontSize: 14.5,
+                fontWeight: FontWeight.w600,
+                letterSpacing: -0.2,
+                color: DunesColors.resolve(context, const Color(0xFF1D1D1F)),
               ),
             ),
           ),
           if (parts.length > 1) ...[
-            const SizedBox(width: 12),
-            Text(
-              '共 ${parts.last.trim()}',
-              style: TextStyle(
-                fontSize: 12,
-                color: DunesColors.resolve(context, DunesColors.text3),
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2.5),
+              decoration: BoxDecoration(
+                color: DunesColors.resolve(
+                  context,
+                  DunesColors.brandPurpleSoft,
+                  role: DunesColorRole.surface,
+                ),
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: Text(
+                '共 ${parts.last.trim()}',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: purple,
+                ),
               ),
             ),
           ],
@@ -90,34 +123,40 @@ class ApprovalListFilterChip extends StatelessWidget {
         active ? DunesColors.brandPurpleSoft : Colors.white,
         role: DunesColorRole.surface,
       ),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(6),
+      shape: StadiumBorder(
         side: BorderSide(
           color: DunesColors.resolve(
             context,
-            active ? DunesColors.brandPurpleLine : DunesColors.borderSoft,
+            active ? DunesColors.brandPurpleLine : const Color(0xFFE5E5EA),
             role: DunesColorRole.border,
           ),
+          width: 0.8,
         ),
       ),
       child: InkWell(
-        borderRadius: BorderRadius.circular(6),
-        onTap: onTap,
+        customBorder: const StadiumBorder(),
+        hoverColor: Colors.transparent,
+        onTap: () {
+          HapticFeedback.selectionClick();
+          onTap();
+        },
         child: ConstrainedBox(
-          constraints: BoxConstraints(minHeight: compact ? 32 : 44),
+          constraints: BoxConstraints(minHeight: compact ? 32 : 36),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 6),
             child: Center(
               widthFactor: 1,
               heightFactor: 1,
               child: Text(
                 label,
                 style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: active ? FontWeight.w600 : FontWeight.w400,
+                  fontSize: 12.5,
+                  fontWeight: active ? FontWeight.w600 : FontWeight.w500,
                   color: DunesColors.resolve(
                     context,
-                    active ? DunesColors.brandPurpleDeep : DunesColors.text2,
+                    active
+                        ? DunesColors.brandPurple
+                        : const Color(0xFF6E6E73),
                   ),
                 ),
               ),
@@ -134,29 +173,42 @@ class ApprovalListEmpty extends StatelessWidget {
   final bool filtered;
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 40),
+    padding: const EdgeInsets.symmetric(vertical: 48),
     child: Column(
       children: [
-        Icon(
-          filtered ? Icons.search_off_rounded : Icons.task_alt_rounded,
-          size: 36,
-          color: DunesColors.resolve(context, DunesColors.brandPurpleLine),
+        Container(
+          width: 56,
+          height: 56,
+          decoration: BoxDecoration(
+            color: DunesColors.resolve(
+              context,
+              DunesColors.brandPurpleSoft,
+              role: DunesColorRole.surface,
+            ),
+            shape: BoxShape.circle,
+          ),
+          alignment: Alignment.center,
+          child: Icon(
+            filtered ? Icons.search_off_rounded : Icons.task_alt_rounded,
+            size: 28,
+            color: DunesColors.resolve(context, DunesColors.brandPurple),
+          ),
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 12),
         Text(
           filtered ? '没有符合条件的审批' : '暂无审批记录',
           style: TextStyle(
-            fontSize: 13,
+            fontSize: 14.5,
             fontWeight: FontWeight.w600,
-            color: DunesColors.resolve(context, DunesColors.text2),
+            color: DunesColors.resolve(context, const Color(0xFF1D1D1F)),
           ),
         ),
         const SizedBox(height: 5),
         Text(
           filtered ? '试试其他状态、模板或关键词' : '新的审批记录将在这里展示',
           style: TextStyle(
-            fontSize: 11,
-            color: DunesColors.resolve(context, DunesColors.text3),
+            fontSize: 12,
+            color: DunesColors.resolve(context, const Color(0xFF8E8E93)),
           ),
         ),
       ],

@@ -13,6 +13,7 @@ import '../shell/dunes_toast.dart';
 import 'task_api.dart';
 import 'task_link_api.dart';
 import 'task_link_models.dart';
+import 'task_widgets.dart';
 import 'task_models.dart';
 
 const _purple = Color(0xFF7B5CD8);
@@ -961,24 +962,9 @@ class _TaskLinkPickerState extends State<_TaskLinkPicker> {
             ],
           ),
           const SizedBox(height: 8),
-          TextField(
-            autofocus: false,
+          TaskSearchField(
+            hintText: '搜索会议或文档',
             onChanged: (v) => setState(() => _query = v.trim()),
-            decoration: InputDecoration(
-              hintText: '搜索会议或文档',
-              prefixIcon: const Icon(Icons.search, size: 18),
-              isDense: true,
-              filled: true,
-              fillColor: DunesColors.resolve(
-                context,
-                const Color(0xFFF5F6F8),
-                role: DunesColorRole.surface,
-              ),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: BorderSide.none,
-              ),
-            ),
           ),
           const SizedBox(height: 10),
           Expanded(

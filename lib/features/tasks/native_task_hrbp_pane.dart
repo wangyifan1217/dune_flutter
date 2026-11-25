@@ -587,17 +587,27 @@ class _NativeTaskHrbpPaneState extends State<NativeTaskHrbpPane> {
       color: active
           ? DunesColors.resolve(
               context,
-              kTaskPurple,
+              DunesColors.brandPurpleSoft,
               role: DunesColorRole.surface,
-            ).withValues(alpha: 0.08)
+            )
           : DunesColors.resolve(
               context,
-              const Color(0xFFF5F6F8),
+              Colors.white,
               role: DunesColorRole.surface,
             ),
-      borderRadius: BorderRadius.circular(10),
+      shape: StadiumBorder(
+        side: BorderSide(
+          color: DunesColors.resolve(
+            context,
+            active ? DunesColors.brandPurpleLine : const Color(0xFFE5E5EA),
+            role: DunesColorRole.border,
+          ),
+          width: 0.8,
+        ),
+      ),
       child: InkWell(
-        borderRadius: BorderRadius.circular(10),
+        customBorder: const StadiumBorder(),
+        hoverColor: Colors.transparent,
         onTap: onTap,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),

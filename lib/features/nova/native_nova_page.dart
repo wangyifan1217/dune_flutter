@@ -4564,7 +4564,7 @@ class _NativeNovaPageState extends State<NativeNovaPage>
         key: _scaffoldKey,
         backgroundColor: DunesColors.resolve(
           context,
-          const Color(0xFFF6F8FC),
+          const Color(0xFFF5F5F7),
           role: DunesColorRole.surface,
         ),
         drawer: SizedBox(
@@ -5093,35 +5093,50 @@ class _NovaJumpToLatestButton extends StatelessWidget {
     return Material(
       color: DunesColors.resolve(
         context,
-        Colors.white,
+        DunesColors.imSurface,
         role: DunesColorRole.surface,
       ),
-      elevation: 3,
-      shadowColor: const Color(0x3318274B),
+      elevation: 0,
       borderRadius: BorderRadius.circular(20),
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(20),
-        child: Padding(
-          padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 8),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: DunesColors.resolve(
+                context,
+                DunesColors.brandPurpleLine,
+                role: DunesColorRole.border,
+              ),
+              width: 0.8,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: DunesColors.text.withValues(alpha: 0.08),
+                blurRadius: 14,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               Icon(
                 Icons.arrow_downward_rounded,
                 size: 15,
-                color: DunesColors.resolveNullable(context, Color(0xFF6B3FE2)),
+                color: DunesColors.resolve(context, DunesColors.brandPurple),
               ),
-              SizedBox(width: 4),
+              const SizedBox(width: 4),
               Text(
                 '回到最新',
-                style: TextStyle(
+                style: DunesTypography.sans(
                   fontSize: 12.5,
                   fontWeight: FontWeight.w600,
-                  color: DunesColors.resolveNullable(
-                    context,
-                    Color(0xFF6B3FE2),
-                  ),
+                  color: DunesColors.resolve(context, DunesColors.brandPurple),
+                  context: context,
                 ),
               ),
             ],

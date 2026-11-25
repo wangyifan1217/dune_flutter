@@ -1,9 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
-import 'dart:ui' show FontFeature, PointerDeviceKind;
+import 'dart:ui' show FontFeature, ImageFilter, PointerDeviceKind;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../core/http/session_http.dart';
 import '../../core/platform/desktop_features.dart';
@@ -46,20 +47,20 @@ import '../xflow/xflow_service.dart';
 
 /// v3 色板：底色直接用灯塔主页的淡灰紫，线和分段底也走冷紫灰；卡片不描边，改淡阴影。
 abstract final class MinePalette {
-  static const page = lighthouseMainPageBg; // #F3F1F7，跟灯塔主页同一个底
+  static const page = Color(0xFFF5F5F7);
   static const card = Color(0xFFFFFFFF);
-  static const ink = Color(0xFF1F2421);
-  static const ink2 = Color(0xFF5A5C56);
+  static const ink = Color(0xFF1D1D1F);
+  static const ink2 = Color(0xFF6E6E73);
   static const night = Color(0xFF2B2160);
-  static const purple = Color(0xFF5B3FB8);
-  static const purpleDeep = Color(0xFF45309A);
-  static const purpleSoft = Color(0xFFF0ECF6);
+  static const purple = DunesColors.brandPurple;
+  static const purpleDeep = DunesColors.brandPurpleDeep;
+  static const purpleSoft = DunesColors.brandPurpleSoft;
   static const lavender = Color(0xFFB9A8EC);
-  static const wash = Color(0xFFF8F6FC);
+  static const wash = Color(0xFFF9F8FC);
   static const washLine = Color(0xFFEEE9F7);
   static const washBorder = Color(0xFFE4DDF3);
-  static const line = Color(0xFFECE8F3);
-  static const track = Color(0xFFE7E3F0);
+  static const line = Color(0xFFE5E5EA);
+  static const track = Color(0xFFEEEEF3);
   static const copper = Color(0xFF8A5D1C);
   static const copperMid = Color(0xFFB07A2B);
   static const copperSoft = Color(0xFFFBF3E4);
@@ -86,20 +87,19 @@ Color _r(
   DunesColorRole role = DunesColorRole.foreground,
 ]) => DunesColors.resolve(context, light, role: role);
 
-BoxDecoration _cardDecoration(BuildContext context, {double radius = 24}) {
+BoxDecoration _cardDecoration(BuildContext context, {double radius = 22}) {
   return BoxDecoration(
     color: _r(context, MinePalette.card, DunesColorRole.surface),
     borderRadius: BorderRadius.circular(radius),
-    boxShadow: [
+    border: Border.all(
+      color: _r(context, const Color(0xFFE5E5EA), DunesColorRole.border),
+      width: 0.8,
+    ),
+    boxShadow: const [
       BoxShadow(
-        color: const Color(0xFF1F2421).withValues(alpha: .04),
-        blurRadius: 2,
-        offset: const Offset(0, 1),
-      ),
-      BoxShadow(
-        color: const Color(0xFF2B2160).withValues(alpha: .06),
-        blurRadius: 30,
-        offset: const Offset(0, 10),
+        color: Color(0x08000000),
+        blurRadius: 18,
+        offset: Offset(0, 4),
       ),
     ],
   );
@@ -197,40 +197,59 @@ class MineHomeTitleBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ColoredBox(
-      color: _r(context, MinePalette.page, DunesColorRole.surface),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(
-          kMinePageGutter,
-          18,
-          kMinePageGutter,
-          8,
-        ),
-        child: Row(
-          children: [
-            Text(
-              '我的',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0.4,
-                height: 1,
-                color: _r(context, MinePalette.ink),
+    return ClipRect(
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+        child: Container(
+          decoration: BoxDecoration(
+            color: _r(
+              context,
+              Colors.white,
+              DunesColorRole.surface,
+            ).withValues(alpha: 0.88),
+            border: Border(
+              bottom: BorderSide(
+                color: _r(
+                  context,
+                  const Color(0xFFE5E5EA),
+                  DunesColorRole.border,
+                ),
+                width: 0.5,
               ),
             ),
-            const SizedBox(width: 10),
-            const Flexible(
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  alignment: Alignment.centerLeft,
-                  child: MinePixelDunes(),
+          ),
+          padding: const EdgeInsets.fromLTRB(
+            kMinePageGutter,
+            12,
+            kMinePageGutter,
+            10,
+          ),
+          child: Row(
+            children: [
+              Text(
+                '我的',
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: -0.4,
+                  height: 1,
+                  color: _r(context, MinePalette.ink),
                 ),
               ),
-            ),
-            ...actions,
-          ],
+              const SizedBox(width: 10),
+              const Flexible(
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: MinePixelDunes(),
+                  ),
+                ),
+              ),
+              ...actions,
+            ],
+          ),
         ),
       ),
     );
@@ -277,15 +296,29 @@ class MineHomeHeader extends StatelessWidget {
     }) {
       return GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onTap: onTap,
-        child: Container(
+        onTap: onTap == null
+            ? null
+            : () {
+                HapticFeedback.selectionClick();
+                onTap();
+              },
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          curve: Curves.easeOutCubic,
           height: 30,
           padding: EdgeInsets.only(left: 12, right: picker ? 8 : 12),
           alignment: Alignment.center,
           decoration: on
               ? BoxDecoration(
-                  color: _r(context, MinePalette.purple),
+                  color: _r(context, Colors.white, DunesColorRole.surface),
                   borderRadius: BorderRadius.circular(999),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Color(0x14000000),
+                      blurRadius: 6,
+                      offset: Offset(0, 1.5),
+                    ),
+                  ],
                 )
               : null,
           child: Row(
@@ -295,9 +328,11 @@ class MineHomeHeader extends StatelessWidget {
                 label,
                 style: TextStyle(
                   fontSize: 12.5,
-                  fontWeight: FontWeight.w700,
+                  fontWeight: FontWeight.w600,
                   fontFeatures: _tnum,
-                  color: on ? Colors.white : _r(context, MinePalette.night),
+                  color: on
+                      ? _r(context, MinePalette.purple)
+                      : _r(context, MinePalette.ink2),
                 ),
               ),
               if (picker) ...[
@@ -305,7 +340,9 @@ class MineHomeHeader extends StatelessWidget {
                 Icon(
                   Icons.expand_more_rounded,
                   size: 16,
-                  color: on ? Colors.white : _r(context, MinePalette.night),
+                  color: on
+                      ? _r(context, MinePalette.purple)
+                      : _r(context, MinePalette.ink2),
                 ),
               ],
             ],
@@ -317,7 +354,7 @@ class MineHomeHeader extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.fromLTRB(
         kMinePageGutter,
-        6,
+        14,
         kMinePageGutter,
         16,
       ),
@@ -334,8 +371,9 @@ class MineHomeHeader extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    fontSize: 16,
+                    fontSize: 17,
                     fontWeight: FontWeight.w700,
+                    letterSpacing: -0.3,
                     color: _r(context, MinePalette.ink),
                   ),
                 ),
@@ -346,7 +384,7 @@ class MineHomeHeader extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      fontSize: 11.5,
+                      fontSize: 12,
                       color: _r(context, MinePalette.ink2),
                     ),
                   ),
@@ -358,7 +396,10 @@ class MineHomeHeader extends StatelessWidget {
           Container(
             height: 36,
             padding: const EdgeInsets.all(3),
-            decoration: _cardDecoration(context, radius: 999),
+            decoration: BoxDecoration(
+              color: _r(context, const Color(0xFFEEEEF3), DunesColorRole.surface),
+              borderRadius: BorderRadius.circular(999),
+            ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -399,10 +440,13 @@ class MineWorkbenchChip extends StatelessWidget {
           color: Colors.transparent,
           child: InkWell(
             borderRadius: BorderRadius.circular(999),
-            onTap: onTap,
+            onTap: () {
+              HapticFeedback.selectionClick();
+              onTap();
+            },
             child: Ink(
-              height: 36,
-              padding: const EdgeInsets.symmetric(horizontal: 10),
+              height: 34,
+              padding: const EdgeInsets.symmetric(horizontal: 11),
               decoration: BoxDecoration(
                 color: _r(
                   context,
@@ -414,13 +458,13 @@ class MineWorkbenchChip extends StatelessWidget {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.apps_rounded, size: 16, color: color),
+                  Icon(Icons.apps_rounded, size: 15, color: color),
                   const SizedBox(width: 4),
                   Text(
                     '工作台',
                     style: TextStyle(
                       fontSize: 12.5,
-                      fontWeight: FontWeight.w700,
+                      fontWeight: FontWeight.w600,
                       color: color,
                     ),
                   ),
@@ -457,15 +501,25 @@ class MineRoundAction extends StatelessWidget {
           color: Colors.transparent,
           child: InkWell(
             customBorder: const CircleBorder(),
-            onTap: onTap,
+            onTap: () {
+              HapticFeedback.selectionClick();
+              onTap();
+            },
             child: Ink(
-              width: 40,
-              height: 40,
-              decoration: _cardDecoration(context, radius: 999),
+              width: 34,
+              height: 34,
+              decoration: BoxDecoration(
+                color: _r(
+                  context,
+                  const Color(0xFFF2F2F7),
+                  DunesColorRole.surface,
+                ),
+                shape: BoxShape.circle,
+              ),
               child: Icon(
                 icon,
-                size: 19,
-                color: _r(context, MinePalette.night),
+                size: 18,
+                color: _r(context, MinePalette.ink),
               ),
             ),
           ),
@@ -484,25 +538,48 @@ class MineCreateFab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final purple = _r(context, MinePalette.purple);
     return Tooltip(
       message: '更多',
       child: Material(
-        color: _r(context, MinePalette.night),
-        borderRadius: BorderRadius.circular(19),
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(18),
         elevation: 0,
         child: InkWell(
-          borderRadius: BorderRadius.circular(19),
-          onTap: onTap,
+          borderRadius: BorderRadius.circular(18),
+          onTap: () {
+            HapticFeedback.selectionClick();
+            onTap();
+          },
           child: Container(
-            width: 56,
-            height: 56,
+            width: 54,
+            height: 54,
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(19),
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Color.lerp(purple, Colors.white, 0.18)!,
+                  purple,
+                  Color.lerp(purple, Colors.black, 0.16)!,
+                ],
+                stops: const [0.0, 0.55, 1.0],
+              ),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.34),
+                width: 0.8,
+              ),
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFF2B2160).withValues(alpha: .32),
-                  blurRadius: 26,
-                  offset: const Offset(0, 12),
+                  color: purple.withValues(alpha: 0.34),
+                  blurRadius: 18,
+                  offset: const Offset(0, 7),
+                ),
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.10),
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
                 ),
               ],
             ),
@@ -2590,6 +2667,7 @@ class _MineHomeBodyState extends State<MineHomeBody> {
       required IconData icon,
       required String label,
       required int count,
+      required Color color,
       required VoidCallback onTap,
       bool highlight = false,
     }) {
@@ -2601,33 +2679,75 @@ class _MineHomeBodyState extends State<MineHomeBody> {
           borderRadius: BorderRadius.circular(16),
           child: InkWell(
             borderRadius: BorderRadius.circular(16),
-            onTap: onTap,
+            hoverColor: Colors.transparent,
+            onTap: () {
+              HapticFeedback.selectionClick();
+              onTap();
+            },
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(2, 10, 2, 9),
+              padding: const EdgeInsets.fromLTRB(2, 11, 2, 10),
               child: Column(
                 children: [
                   Container(
-                    width: 30,
-                    height: 30,
+                    width: 38,
+                    height: 38,
                     decoration: BoxDecoration(
-                      color: highlight
-                          ? _r(context, MinePalette.purple)
-                          : _r(
-                              context,
-                              MinePalette.page,
-                              DunesColorRole.surface,
-                            ),
-                      borderRadius: BorderRadius.circular(10),
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          Color.lerp(color, Colors.white, 0.22)!,
+                          color,
+                          Color.lerp(color, Colors.black, 0.14)!,
+                        ],
+                        stops: const [0.0, 0.58, 1.0],
+                      ),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.34),
+                        width: 0.7,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: color.withValues(alpha: 0.24),
+                          blurRadius: 8,
+                          offset: const Offset(0, 3),
+                        ),
+                      ],
                     ),
-                    child: Icon(
-                      icon,
-                      size: 15,
-                      color: highlight
-                          ? Colors.white
-                          : _r(context, MinePalette.night),
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        Positioned(
+                          top: 0,
+                          left: 0,
+                          right: 0,
+                          height: 18,
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              borderRadius: const BorderRadius.vertical(
+                                top: Radius.circular(11),
+                              ),
+                              gradient: LinearGradient(
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomCenter,
+                                colors: [
+                                  Colors.white.withValues(alpha: 0.28),
+                                  Colors.white.withValues(alpha: 0.0),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                        Icon(
+                          icon,
+                          size: 18,
+                          color: Colors.white,
+                        ),
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 7),
                   Text.rich(
                     TextSpan(
                       children: [
@@ -2648,7 +2768,7 @@ class _MineHomeBodyState extends State<MineHomeBody> {
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       fontSize: 11.5,
-                      fontWeight: highlight ? FontWeight.w600 : FontWeight.w400,
+                      fontWeight: highlight ? FontWeight.w600 : FontWeight.w500,
                       color: highlight
                           ? _r(context, MinePalette.purpleDeep)
                           : _r(context, MinePalette.ink2),
@@ -2671,6 +2791,7 @@ class _MineHomeBodyState extends State<MineHomeBody> {
             icon: Icons.check_rounded,
             label: '待我审',
             count: c.pendingForMe,
+            color: _r(context, MinePalette.purple),
             onTap: widget.onOpenPendingApprovals,
             highlight: true,
           ),
@@ -2678,18 +2799,21 @@ class _MineHomeBodyState extends State<MineHomeBody> {
             icon: Icons.schedule_rounded,
             label: '待办理',
             count: c.pendingTodo,
+            color: _r(context, DunesColors.amber),
             onTap: widget.onOpenTodoApprovals,
           ),
           cell(
             icon: Icons.near_me_outlined,
             label: '我发起',
             count: c.initiatedPending,
+            color: _r(context, DunesColors.blue),
             onTap: widget.onOpenInitiated,
           ),
           cell(
             icon: Icons.mail_outline_rounded,
             label: '抄送我',
             count: c.cc,
+            color: _r(context, DunesColors.accent),
             onTap: widget.onOpenCc,
           ),
         ],

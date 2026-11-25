@@ -231,13 +231,9 @@ class _NativeChatSearchPageState extends State<NativeChatSearchPage> {
   Future<void> _openTimeRangeSheet() async {
     final action = await showModalBottomSheet<_TimeRangeSheetAction>(
       context: context,
-      backgroundColor: DunesColors.resolve(
-        context,
-        DunesColors.bgApp,
-        role: DunesColorRole.surface,
-      ),
+      backgroundColor: ImVisualTokens.groupedBackground(context),
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (ctx) => _ChatHistoryTimeRangeSheet(current: _timeRange),
     );
@@ -586,23 +582,37 @@ class _NativeChatSearchPageState extends State<NativeChatSearchPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Container(
-                color: ImVisualTokens.cardSurface(context),
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  color: ImVisualTokens.cardSurface(context),
+                  border: Border(
+                    bottom: BorderSide(
+                      color: ImVisualTokens.hairlineBorder(context),
+                      width: 0.7,
+                    ),
+                  ),
+                ),
                 child: Column(
                   children: [
                     Padding(
-                      padding: const EdgeInsets.fromLTRB(4, 6, 12, 8),
-                      child: Row(
-                        children: [
-                          IconButton(
-                            onPressed: _handleBack,
-                            icon: const Icon(
-                              Icons.chevron_left_rounded,
-                              size: 28,
+                      padding: const EdgeInsets.fromLTRB(4, 4, 8, 6),
+                      child: SizedBox(
+                        height: 44,
+                        child: Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: IconButton(
+                                onPressed: _handleBack,
+                                tooltip: '返回',
+                                icon: const Icon(
+                                  Icons.chevron_left_rounded,
+                                  size: 28,
+                                ),
+                              ),
                             ),
-                          ),
-                          Expanded(
-                            child: Text(
+                            Text(
                               '查找聊天内容',
                               style: DunesTypography.sans(
                                 fontSize: 16.5,
@@ -614,36 +624,61 @@ class _NativeChatSearchPageState extends State<NativeChatSearchPage> {
                                 context: context,
                               ),
                             ),
-                          ),
-                        ],
+                            if (_selectedFilter != null ||
+                                _timeRange != null ||
+                                _queryController.text.isNotEmpty)
+                              Align(
+                                alignment: Alignment.centerRight,
+                                child: TextButton(
+                                  onPressed: () {
+                                    _queryController.clear();
+                                    setState(() {
+                                      _selectedFilter = null;
+                                      _timeRange = null;
+                                    });
+                                    _search();
+                                  },
+                                  child: Text(
+                                    '重置',
+                                    style: DunesTypography.sans(
+                                      fontSize: 13.5,
+                                      fontWeight: FontWeight.w600,
+                                      color: ImVisualTokens.accentText(context),
+                                      context: context,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
                       ),
                     ),
                     Padding(
-                      padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+                      padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
                       child: AnimatedContainer(
                         duration: ImVisualTokens.fastAnim,
                         curve: ImVisualTokens.iosCurve,
                         padding: const EdgeInsets.symmetric(
                           horizontal: 13,
-                          vertical: 9,
+                          vertical: 9.5,
                         ),
                         decoration: BoxDecoration(
                           color: focused
                               ? ImVisualTokens.cardSurface(context)
                               : ImVisualTokens.groupedBackground(context),
-                          borderRadius: BorderRadius.circular(14),
+                          borderRadius: BorderRadius.circular(12),
                           border: Border.all(
                             color: focused
-                                ? accent.withValues(alpha: 0.52)
+                                ? accent.withValues(alpha: 0.56)
                                 : ImVisualTokens.hairlineBorder(context),
                             width: focused ? 1.1 : 0.7,
                           ),
                           boxShadow: focused
                               ? [
                                   BoxShadow(
-                                    color: accent.withValues(alpha: 0.10),
-                                    blurRadius: 10,
-                                    offset: const Offset(0, 2),
+                                    color: accent.withValues(alpha: 0.12),
+                                    blurRadius: 12,
+                                    offset: const Offset(0, 3),
                                   ),
                                 ]
                               : const [],
@@ -766,33 +801,35 @@ class _NativeChatSearchPageState extends State<NativeChatSearchPage> {
 
   Widget _buildResults(List<_SearchListEntry> entries) {
     if (_loading) {
-      return const Center(child: CircularProgressIndicator(strokeWidth: 2));
+      return const Padding(
+        padding: EdgeInsets.only(top: 10),
+        child: ImShimmerRow(count: 5),
+      );
     }
     if (_error != null) {
-      return Center(
-        child: Text(
-          _error!,
-          style: TextStyle(
-            fontSize: 12,
-            color: DunesColors.resolve(context, DunesColors.text3),
-          ),
+      return ImEmptyState(
+        icon: Icons.error_outline_rounded,
+        title: '搜索加载失败',
+        subtitle: _error!,
+        action: OutlinedButton(
+          onPressed: _search,
+          child: const Text('重试'),
         ),
       );
     }
     if (entries.isEmpty) {
+      final hasQuery = _queryController.text.trim().isNotEmpty;
       final emptyText =
           _selectedFilter?.emptyHint ??
           (_timeRange != null
               ? '该时间段暂无消息'
-              : (_queryController.text.trim().isEmpty ? '暂无历史消息' : '暂无搜索结果'));
-      return Center(
-        child: Text(
-          emptyText,
-          style: TextStyle(
-            fontSize: 12,
-            color: DunesColors.resolve(context, DunesColors.text3),
-          ),
-        ),
+              : (hasQuery ? '暂无匹配结果' : '暂无历史消息'));
+      return ImEmptyState(
+        icon: Icons.manage_search_rounded,
+        title: emptyText,
+        subtitle: hasQuery || _selectedFilter != null || _timeRange != null
+            ? '试试更换关键词，或切换上方日期/类型筛选'
+            : '当前会话的聊天消息、文件与链接都会展示在这里',
       );
     }
     if (_selectedFilter == ChatHistoryFilter.imageVideo) {
@@ -1226,7 +1263,7 @@ class ChatSearchHitCard extends StatelessWidget {
   }
 }
 
-/// 微信式分类入口：日期 / 图片与视频 / 文件 / 链接 / 转发（APP / PC 共用）。
+/// 微信式分类入口：统一收纳于一张 iOS 圆角白卡内（日期 / 图片与视频 / 文件 / 链接 / 转发）。
 class _ChatHistoryCategoryGrid extends StatelessWidget {
   const _ChatHistoryCategoryGrid({
     required this.selected,
@@ -1241,87 +1278,96 @@ class _ChatHistoryCategoryGrid extends StatelessWidget {
   final VoidCallback onSelectTime;
 
   static const _items =
-      <({ChatHistoryFilter filter, IconData icon, Color tint, Color soft})>[
+      <({ChatHistoryFilter filter, String shortLabel, IconData icon, Color tint, Color soft})>[
         (
           filter: ChatHistoryFilter.imageVideo,
-          icon: Icons.photo_library_outlined,
-          tint: DunesColors.blue,
-          soft: DunesColors.blueSoft,
+          shortLabel: '图片视频',
+          icon: Icons.photo_library_rounded,
+          tint: Color(0xFF4F6CE6),
+          soft: Color(0xFFEDF1FD),
         ),
         (
           filter: ChatHistoryFilter.files,
-          icon: Icons.folder_outlined,
-          tint: DunesColors.amber,
-          soft: DunesColors.amberSoft,
+          shortLabel: '文件',
+          icon: Icons.folder_rounded,
+          tint: Color(0xFFD9821E),
+          soft: Color(0xFFFCF2E4),
         ),
         (
           filter: ChatHistoryFilter.links,
+          shortLabel: '链接',
           icon: Icons.link_rounded,
-          tint: DunesColors.accentDeep,
-          soft: DunesColors.accentSoft,
+          tint: ImVisualTokens.purple,
+          soft: ImVisualTokens.purpleSoft,
         ),
         (
           filter: ChatHistoryFilter.forwards,
+          shortLabel: '转发',
           icon: Icons.reply_all_rounded,
-          tint: DunesColors.green,
-          soft: DunesColors.greenSoft,
+          tint: Color(0xFF159969),
+          soft: Color(0xFFE7F7F0),
         ),
       ];
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 4, 12, 10),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(
-            '快速筛选',
-            textAlign: TextAlign.center,
-            style: DunesTypography.sans(
-              fontSize: 11.5,
-              color: DunesColors.resolve(context, DunesColors.text3),
-              context: context,
-            ),
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(10, 12, 10, 12),
+        decoration: BoxDecoration(
+          color: ImVisualTokens.cardSurface(context),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(
+            color: ImVisualTokens.hairlineBorder(context),
+            width: 0.7,
           ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: _CategoryTile(
-                  icon: Icons.calendar_month_outlined,
-                  tint: DunesColors.resolve(context, DunesColors.accentDeep),
-                  soft: DunesColors.resolve(context, DunesColors.accentSoft),
-                  title: '日期',
-                  selected: timeActive,
-                  onTap: onSelectTime,
+          boxShadow: ImVisualTokens.softCardShadow(context),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: Text(
+                '按内容类型快速筛选',
+                style: DunesTypography.sans(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w600,
+                  color: DunesColors.resolve(context, DunesColors.text3),
+                  context: context,
                 ),
               ),
-              for (final item in _items) ...[
-                const SizedBox(width: 8),
+            ),
+            const SizedBox(height: 10),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
                 Expanded(
                   child: _CategoryTile(
-                    icon: item.icon,
-                    tint: item.tint,
-                    soft: item.soft,
-                    title: item.filter.title,
-                    selected: selected == item.filter,
-                    onTap: () => onSelect(item.filter),
+                    icon: Icons.calendar_month_rounded,
+                    tint: ImVisualTokens.accent(context),
+                    soft: ImVisualTokens.accentSoftSurface(context),
+                    title: '日期',
+                    selected: timeActive,
+                    onTap: onSelectTime,
                   ),
                 ),
+                for (final item in _items)
+                  Expanded(
+                    child: _CategoryTile(
+                      icon: item.icon,
+                      tint: item.tint,
+                      soft: item.soft,
+                      title: item.shortLabel,
+                      selected: selected == item.filter,
+                      onTap: () => onSelect(item.filter),
+                    ),
+                  ),
               ],
-            ],
-          ),
-          const SizedBox(height: 6),
-          Divider(
-            height: 1,
-            color: DunesColors.resolve(
-              context,
-              DunesColors.borderSoft,
-              role: DunesColorRole.border,
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -1347,62 +1393,62 @@ class _CategoryTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final accent = ImVisualTokens.accent(context);
+    final dark = ImVisualTokens.isDark(context);
     return ImTapScale(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(14),
-      child: AnimatedContainer(
-        duration: ImVisualTokens.fastAnim,
-        curve: ImVisualTokens.iosCurve,
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        decoration: BoxDecoration(
-          color: selected
-              ? ImVisualTokens.accentSoftSurface(context)
-              : ImVisualTokens.cardSurface(context),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: selected
-                ? accent.withValues(alpha: 0.35)
-                : ImVisualTokens.hairlineBorder(context),
-            width: selected ? 1.0 : 0.7,
-          ),
-          boxShadow: selected ? const [] : ImVisualTokens.softCardShadow(context),
-        ),
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              width: 38,
-              height: 38,
+            AnimatedContainer(
+              duration: ImVisualTokens.fastAnim,
+              curve: ImVisualTokens.iosCurve,
+              width: 44,
+              height: 44,
               decoration: BoxDecoration(
+                gradient: selected
+                    ? ImVisualTokens.primaryGradient(context)
+                    : null,
                 color: selected
-                    ? accent.withValues(alpha: 0.14)
-                    : DunesColors.resolveNullable(
-                        context,
-                        soft,
-                        role: DunesColorRole.surface,
-                      ),
-                borderRadius: BorderRadius.circular(11),
+                    ? null
+                    : (dark ? tint.withValues(alpha: 0.16) : soft),
+                borderRadius: BorderRadius.circular(13),
+                border: Border.all(
+                  color: selected
+                      ? Colors.white.withValues(alpha: 0.25)
+                      : tint.withValues(alpha: 0.14),
+                  width: 0.7,
+                ),
+                boxShadow: selected
+                    ? [
+                        BoxShadow(
+                          color: accent.withValues(alpha: 0.28),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        ),
+                      ]
+                    : const [],
               ),
               child: Icon(
                 icon,
-                color: selected
-                    ? accent
-                    : DunesColors.resolveNullable(context, tint),
-                size: 20,
+                color: selected ? Colors.white : tint,
+                size: 21,
               ),
             ),
             const SizedBox(height: 6),
             Text(
               title,
               textAlign: TextAlign.center,
-              maxLines: 2,
+              maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: DunesTypography.sans(
-                fontSize: 10.5,
+                fontSize: 11.5,
                 fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
                 color: selected
                     ? ImVisualTokens.accentText(context)
                     : DunesColors.resolve(context, DunesColors.text2),
-                height: 1.15,
                 context: context,
               ),
             ),
@@ -1426,61 +1472,53 @@ class _ChatHistoryTimeRangeChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final accentText = ImVisualTokens.accentText(context);
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
       child: Align(
         alignment: Alignment.centerLeft,
-        child: Material(
-          color: DunesColors.resolve(
-            context,
-            DunesColors.accentSoft,
-            role: DunesColorRole.surface,
-          ),
-          borderRadius: BorderRadius.circular(16),
-          child: InkWell(
-            onTap: onTap,
-            borderRadius: BorderRadius.circular(16),
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(10, 6, 6, 6),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.calendar_today_outlined,
-                    size: 13,
-                    color: DunesColors.resolve(context, DunesColors.accentDeep),
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    label,
-                    style: DunesTypography.sans(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                      color: DunesColors.resolve(
-                        context,
-                        DunesColors.accentDeep,
-                      ),
-                      context: context,
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  GestureDetector(
-                    onTap: onClear,
-                    behavior: HitTestBehavior.opaque,
-                    child: Padding(
-                      padding: EdgeInsets.all(4),
-                      child: Icon(
-                        Icons.close,
-                        size: 14,
-                        color: DunesColors.resolve(
-                          context,
-                          DunesColors.accentDeep,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
+        child: ImTapScale(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(999),
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(11, 5.5, 8, 5.5),
+            decoration: BoxDecoration(
+              color: ImVisualTokens.accentSoftSurface(context),
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(
+                color: ImVisualTokens.accent(context).withValues(alpha: 0.24),
+                width: 0.7,
               ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.calendar_today_rounded,
+                  size: 13,
+                  color: accentText,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  label,
+                  style: DunesTypography.sans(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: accentText,
+                    context: context,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                GestureDetector(
+                  onTap: onClear,
+                  behavior: HitTestBehavior.opaque,
+                  child: Icon(
+                    Icons.close_rounded,
+                    size: 14,
+                    color: accentText,
+                  ),
+                ),
+              ],
             ),
           ),
         ),
@@ -1524,7 +1562,7 @@ class _ChatHistoryTimeRangeSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     return SafeArea(
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
+        padding: const EdgeInsets.fromLTRB(16, 10, 16, 18),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1534,11 +1572,7 @@ class _ChatHistoryTimeRangeSheet extends StatelessWidget {
                 width: 36,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: DunesColors.resolve(
-                    context,
-                    DunesColors.borderSoft,
-                    role: DunesColorRole.surface,
-                  ),
+                  color: ImVisualTokens.hairlineBorder(context),
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -1548,45 +1582,64 @@ class _ChatHistoryTimeRangeSheet extends StatelessWidget {
               '按时间段筛选',
               textAlign: TextAlign.center,
               style: DunesTypography.sans(
-                fontSize: 15,
+                fontSize: 15.5,
                 fontWeight: FontWeight.w600,
                 color: DunesColors.resolve(context, DunesColors.text),
                 context: context,
               ),
             ),
             const SizedBox(height: 14),
-            for (final preset in _presets)
-              _TimeRangeOption(
-                title: preset.title,
-                selected: current?.preset == preset,
-                onTap: () => Navigator.of(context).pop(
-                  _TimeRangeSheetAction.range(
-                    ChatHistoryTimeRange.fromPreset(preset),
+            ImGroupedCard(
+              dividerIndent: 16,
+              children: [
+                for (final preset in _presets)
+                  _TimeRangeOption(
+                    title: preset.title,
+                    selected: current?.preset == preset,
+                    onTap: () => Navigator.of(context).pop(
+                      _TimeRangeSheetAction.range(
+                        ChatHistoryTimeRange.fromPreset(preset),
+                      ),
+                    ),
                   ),
+                _TimeRangeOption(
+                  title: '自定义时间段',
+                  selected: current?.preset == ChatHistoryTimePreset.custom,
+                  subtitle: current?.preset == ChatHistoryTimePreset.custom
+                      ? current!.label
+                      : null,
+                  onTap: () => Navigator.of(
+                    context,
+                  ).pop(const _TimeRangeSheetAction.pickCustom()),
                 ),
-              ),
-            _TimeRangeOption(
-              title: '自定义时间段',
-              selected: current?.preset == ChatHistoryTimePreset.custom,
-              subtitle: current?.preset == ChatHistoryTimePreset.custom
-                  ? current!.label
-                  : null,
-              onTap: () => Navigator.of(
-                context,
-              ).pop(const _TimeRangeSheetAction.pickCustom()),
+              ],
             ),
             if (current != null) ...[
-              const SizedBox(height: 4),
-              TextButton(
-                onPressed: () => Navigator.of(
+              const SizedBox(height: 10),
+              ImTapScale(
+                onTap: () => Navigator.of(
                   context,
                 ).pop(const _TimeRangeSheetAction.clear()),
-                child: Text(
-                  '清除时间筛选',
-                  style: DunesTypography.sans(
-                    fontSize: 13,
-                    color: DunesColors.resolve(context, DunesColors.text3),
-                    context: context,
+                borderRadius: BorderRadius.circular(14),
+                child: Container(
+                  height: 44,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: ImVisualTokens.cardSurface(context),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: ImVisualTokens.hairlineBorder(context),
+                      width: 0.7,
+                    ),
+                  ),
+                  child: Text(
+                    '清除时间筛选',
+                    style: DunesTypography.sans(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w600,
+                      color: ImVisualTokens.accentText(context),
+                      context: context,
+                    ),
                   ),
                 ),
               ),
@@ -1613,69 +1666,48 @@ class _TimeRangeOption extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Material(
-        color: selected
-            ? DunesColors.resolve(
-                context,
-                DunesColors.accentSoft,
-                role: DunesColorRole.surface,
-              )
-            : DunesColors.resolve(
-                context,
-                DunesColors.bgSoft,
-                role: DunesColorRole.surface,
-              ),
-        borderRadius: BorderRadius.circular(12),
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(12),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        style: DunesTypography.sans(
-                          fontSize: 14,
-                          fontWeight: selected
-                              ? FontWeight.w600
-                              : FontWeight.w400,
-                          color: DunesColors.resolve(context, DunesColors.text),
-                          context: context,
+    return ImTapScale(
+      onTap: onTap,
+      borderRadius: BorderRadius.zero,
+      pressedScale: 0.99,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: DunesTypography.sans(
+                      fontSize: 14.5,
+                      fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                      color: selected
+                          ? ImVisualTokens.accentText(context)
+                          : DunesColors.resolve(context, DunesColors.text),
+                      context: context,
+                    ),
+                  ),
+                  if (subtitle != null) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle!,
+                      style: DunesTypography.sans(
+                        fontSize: 12,
+                        color: DunesColors.resolve(
+                          context,
+                          DunesColors.text3,
                         ),
+                        context: context,
                       ),
-                      if (subtitle != null) ...[
-                        const SizedBox(height: 2),
-                        Text(
-                          subtitle!,
-                          style: DunesTypography.sans(
-                            fontSize: 12,
-                            color: DunesColors.resolve(
-                              context,
-                              DunesColors.text3,
-                            ),
-                            context: context,
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-                if (selected)
-                  Icon(
-                    Icons.check_rounded,
-                    size: 18,
-                    color: DunesColors.resolve(context, DunesColors.accentDeep),
-                  ),
-              ],
+                    ),
+                  ],
+                ],
+              ),
             ),
-          ),
+            ImSelectCircle(selected: selected),
+          ],
         ),
       ),
     );

@@ -133,9 +133,17 @@ class _NativeTaskProbationPaneState extends State<NativeTaskProbationPane> {
                   constraints: const BoxConstraints(maxWidth: 160),
                   child: Padding(
                     padding: const EdgeInsets.all(8),
-                    child: Text(
-                      _department.isEmpty ? '全部部门 ▾' : '$_department ▾',
-                      overflow: TextOverflow.ellipsis,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Flexible(
+                          child: Text(
+                            _department.isEmpty ? '全部部门' : _department,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const Icon(Icons.expand_more, size: 16),
+                      ],
                     ),
                   ),
                 ),

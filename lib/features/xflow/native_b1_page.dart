@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:ui';
 
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
@@ -557,10 +559,11 @@ class _NativeProposalListPageState extends State<_NativeProposalListPage> {
     return ColoredBox(
       color: DunesColors.resolve(
         context,
-        DunesColors.bgApp,
+        const Color(0xFFF5F5F7),
         role: DunesColorRole.surface,
       ),
       child: SafeArea(
+        bottom: false,
         child: Column(
           children: [
             _buildTopBar(),
@@ -744,77 +747,113 @@ class _NativeProposalListPageState extends State<_NativeProposalListPage> {
                             ),
                           ],
                           const SizedBox(height: 8),
-                          if (visible.isEmpty)
-                            ApprovalListEmpty(
-                              filtered:
-                                  _search.text.trim().isNotEmpty ||
-                                  _statusFilter != 'ALL' ||
-                                  _templateFilter != 'ALL',
-                            )
-                          else
-                            ...visible.map(
-                              (item) => Padding(
-                                padding: const EdgeInsets.only(bottom: 7),
-                                child: XflowProposalListCard(
-                                  item: item,
-                                  mode: _cardMode,
-                                  onTap: () => _openProposal(item),
-                                  onPrimaryAction:
-                                      widget.type == _ListType.b13 &&
-                                          (_isMyOpenTodo(item) ||
-                                              _isCompletedIssueInvoice(item) ||
-                                              _isCompletedPromotionPayment(
-                                                item,
-                                              ))
-                                      ? () => _completeB13Task(
-                                          item,
-                                          verifyPassed:
-                                              (item.primaryAction ?? '')
-                                                      .toUpperCase() ==
-                                                  'VERIFY_INVOICE'
-                                              ? true
-                                              : null,
-                                        )
-                                      : null,
-                                  primaryActionLabel:
-                                      _isCompletedIssueInvoice(item)
-                                      ? '发票红冲'
-                                      : _isCompletedPromotionPayment(item)
-                                      ? '付款记录'
-                                      : (item.primaryAction ?? '')
-                                                .toUpperCase() ==
-                                            'VERIFY_INVOICE'
-                                      ? '核验通过'
-                                      : item.actionTitle,
-                                  onDangerAction:
-                                      widget.type == _ListType.b13 &&
-                                          _isMyOpenTodo(item) &&
-                                          (item.primaryAction ?? '')
-                                                  .toUpperCase() ==
-                                              'VERIFY_INVOICE'
-                                      ? () => _completeB13Task(
-                                          item,
-                                          verifyPassed: false,
-                                        )
-                                      : null,
-                                  dangerActionLabel: '核验失败',
-                                  onCopy: widget.type == _ListType.b14
-                                      ? () => unawaited(_copyApproval(item))
-                                      : null,
-                                  copying:
-                                      widget.type == _ListType.b14 &&
-                                      _copyingId == item.id,
-                                  onDeleteDraft:
-                                      widget.type == _ListType.b14 &&
-                                          (_normalizeStatus(item.status) ==
-                                                  'DRAFT' ||
-                                              _normalizeStatus(item.status) ==
-                                                  'VOIDED')
-                                      ? () => _deleteDraft(item)
-                                      : null,
-                                ),
+                          AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 200),
+                            switchInCurve: Curves.easeOutCubic,
+                            switchOutCurve: Curves.easeInCubic,
+                            transitionBuilder: (child, anim) => FadeTransition(
+                              opacity: anim,
+                              child: SlideTransition(
+                                position: Tween<Offset>(
+                                  begin: const Offset(0, 0.02),
+                                  end: Offset.zero,
+                                ).animate(anim),
+                                child: child,
                               ),
                             ),
+                            child: visible.isEmpty
+                                ? ApprovalListEmpty(
+                                    key: ValueKey<String>(
+                                      'empty|$_statusFilter|$_templateFilter',
+                                    ),
+                                    filtered:
+                                        _search.text.trim().isNotEmpty ||
+                                        _statusFilter != 'ALL' ||
+                                        _templateFilter != 'ALL',
+                                  )
+                                : Column(
+                                    key: ValueKey<String>(
+                                      'list|$_statusFilter|$_templateFilter|${visible.length}',
+                                    ),
+                                    children: [
+                                      for (final item in visible)
+                                        Padding(
+                                          padding: const EdgeInsets.only(
+                                            bottom: 7,
+                                          ),
+                                          child: XflowProposalListCard(
+                                            item: item,
+                                            mode: _cardMode,
+                                            onTap: () => _openProposal(item),
+                                            onPrimaryAction:
+                                                widget.type == _ListType.b13 &&
+                                                    (_isMyOpenTodo(item) ||
+                                                        _isCompletedIssueInvoice(
+                                                          item,
+                                                        ) ||
+                                                        _isCompletedPromotionPayment(
+                                                          item,
+                                                        ))
+                                                ? () => _completeB13Task(
+                                                    item,
+                                                    verifyPassed:
+                                                        (item.primaryAction ??
+                                                                    '')
+                                                                .toUpperCase() ==
+                                                            'VERIFY_INVOICE'
+                                                        ? true
+                                                        : null,
+                                                  )
+                                                : null,
+                                            primaryActionLabel:
+                                                _isCompletedIssueInvoice(item)
+                                                ? '发票红冲'
+                                                : _isCompletedPromotionPayment(
+                                                    item,
+                                                  )
+                                                ? '付款记录'
+                                                : (item.primaryAction ?? '')
+                                                          .toUpperCase() ==
+                                                      'VERIFY_INVOICE'
+                                                ? '核验通过'
+                                                : item.actionTitle,
+                                            onDangerAction:
+                                                widget.type == _ListType.b13 &&
+                                                    _isMyOpenTodo(item) &&
+                                                    (item.primaryAction ?? '')
+                                                            .toUpperCase() ==
+                                                        'VERIFY_INVOICE'
+                                                ? () => _completeB13Task(
+                                                    item,
+                                                    verifyPassed: false,
+                                                  )
+                                                : null,
+                                            dangerActionLabel: '核验失败',
+                                            onCopy: widget.type == _ListType.b14
+                                                ? () => unawaited(
+                                                    _copyApproval(item),
+                                                  )
+                                                : null,
+                                            copying:
+                                                widget.type == _ListType.b14 &&
+                                                _copyingId == item.id,
+                                            onDeleteDraft:
+                                                widget.type == _ListType.b14 &&
+                                                    (_normalizeStatus(
+                                                              item.status,
+                                                            ) ==
+                                                            'DRAFT' ||
+                                                        _normalizeStatus(
+                                                              item.status,
+                                                            ) ==
+                                                            'VOIDED')
+                                                ? () => _deleteDraft(item)
+                                                : null,
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                          ),
                         ],
                       ),
                     ),
@@ -1107,61 +1146,127 @@ class _NativeProposalListPageState extends State<_NativeProposalListPage> {
   }
 
   Widget _buildTopBar() {
-    return Container(
-      height: 50,
-      padding: const EdgeInsets.fromLTRB(4, 6, 6, 6),
-      decoration: BoxDecoration(
-        color: DunesColors.resolve(
-          context,
-          DunesColors.bgApp,
-          role: DunesColorRole.surface,
-        ),
-        border: Border(
-          bottom: BorderSide(
+    final purple = DunesColors.resolve(context, DunesColors.brandPurple);
+    return ClipRect(
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+        child: Container(
+          height: 52,
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          decoration: BoxDecoration(
             color: DunesColors.resolve(
               context,
-              DunesColors.borderSoft,
-              role: DunesColorRole.border,
-            ),
-          ),
-        ),
-      ),
-      child: Row(
-        children: [
-          if (widget.onBack != null)
-            IconButton(
-              onPressed: widget.onBack,
-              icon: const Icon(Icons.chevron_left, size: 26),
-              tooltip: '返回',
-            ),
-          Expanded(
-            child: Text(
-              _title,
-              style: DunesTypography.sans(
-                fontSize: 16,
-                fontWeight: FontWeight.w700,
-                context: context,
+              Colors.white,
+              role: DunesColorRole.surface,
+            ).withValues(alpha: 0.88),
+            border: Border(
+              bottom: BorderSide(
+                color: DunesColors.resolve(
+                  context,
+                  const Color(0xFFE5E5EA),
+                  role: DunesColorRole.border,
+                ),
+                width: 0.5,
               ),
             ),
           ),
-          if (widget.type == _ListType.b13)
-            IconButton(
-              key: const Key('approval-todo-export'),
-              onPressed: _exportVisibleTodos,
-              icon: const Icon(Icons.file_download_outlined, size: 20),
-              tooltip: '导出',
-            ),
-          if (widget.type == _ListType.b13)
-            IconButton(
-              onPressed: () => showApprovalTodoFlowGuide(context),
-              icon: const Icon(Icons.help_outline, size: 20),
-              tooltip: '通过后待办流程',
-            ),
-          IconButton(
-            onPressed: _load,
-            icon: const Icon(Icons.refresh, size: 20),
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              Align(
+                alignment: Alignment.centerLeft,
+                child: widget.onBack != null
+                    ? InkWell(
+                        onTap: () {
+                          HapticFeedback.selectionClick();
+                          widget.onBack!();
+                        },
+                        borderRadius: BorderRadius.circular(14),
+                        hoverColor: Colors.transparent,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 6,
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.arrow_back_ios_new_rounded,
+                                size: 16,
+                                color: purple,
+                              ),
+                              const SizedBox(width: 2),
+                              Text(
+                                '返回',
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w500,
+                                  color: purple,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      )
+                    : const SizedBox.shrink(),
+              ),
+              Text(
+                _title,
+                style: DunesTypography.sans(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: -0.3,
+                  color: DunesColors.resolve(
+                    context,
+                    const Color(0xFF1D1D1F),
+                  ),
+                  context: context,
+                ),
+              ),
+              Align(
+                alignment: Alignment.centerRight,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (widget.type == _ListType.b13)
+                      IconButton(
+                        key: const Key('approval-todo-export'),
+                        onPressed: _exportVisibleTodos,
+                        icon: Icon(
+                          Icons.file_download_outlined,
+                          size: 20,
+                          color: purple,
+                        ),
+                        tooltip: '导出',
+                      ),
+                    if (widget.type == _ListType.b13)
+                      IconButton(
+                        onPressed: () => showApprovalTodoFlowGuide(context),
+                        icon: Icon(
+                          Icons.help_outline_rounded,
+                          size: 20,
+                          color: purple,
+                        ),
+                        tooltip: '通过后待办流程',
+                      ),
+                    IconButton(
+                      onPressed: () {
+                        HapticFeedback.selectionClick();
+                        _load();
+                      },
+                      icon: Icon(
+                        Icons.refresh_rounded,
+                        size: 20,
+                        color: purple,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }

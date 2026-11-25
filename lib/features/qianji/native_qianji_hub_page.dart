@@ -1,10 +1,12 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../core/theme/dunes_theme.dart';
 import '../../core/widgets/dunes_choice_panel.dart';
 import '../auth/auth_session.dart';
+import '../chat/im_ui_kit.dart';
 import '../robots/robot_character.dart';
 import '../robots/robot_consult_store.dart';
 import '../robots/robot_models.dart';
@@ -17,13 +19,12 @@ import 'qianji_chat_service.dart';
 /// 新版对话页开关。改为 false 后只保留旧版卡片页。
 const bool qianjiHubNewLayoutEnabled = true;
 
-/// 饕板块紫调主色系统
-const _themePurple = Color(0xFF7B5CD8);
-const _deepPurple = Color(0xFF261D38);
-const _subText = Color(0xFF888196);
-const _cardBorder = Color(0xFFEDE8F5);
-const _bgSurface = Color(0xFFF7F6FA);
-const _headerGlow = Color(0xFFEFE9FA);
+/// 饕板块品牌紫主色系统（与全 App 统一的 #7B5CD8 iOS 质感对齐）。
+const _themePurple = ImVisualTokens.purple;
+const _deepPurple = Color(0xFF1E192B);
+const _subText = Color(0xFF7D778C);
+const _cardBorder = Color(0xFFECE7F5);
+const _bgSurface = ImVisualTokens.iosGroupedBgLight;
 
 /// 千机（饕）板块页面：
 /// 采用参考支付宝 APP 的高质感卡片布局风格，并保持当前紫色调为主色。
@@ -309,35 +310,28 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
           offstage: _newLayout,
           child: TickerMode(
             enabled: !_newLayout,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+            child: Stack(
               children: [
-                ColoredBox(
-                  color: DunesColors.resolve(
-                    context,
-                    _headerGlow,
-                    role: DunesColorRole.surface,
-                  ),
+                _buildLegacy(),
+                Positioned(
+                  top: 0,
+                  right: 16,
                   child: SafeArea(
                     bottom: false,
                     child: Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                      child: Align(
-                        alignment: Alignment.centerRight,
+                      padding: const EdgeInsets.only(top: 10),
+                      child: ImFrostedIsland(
+                        padding: EdgeInsets.zero,
                         child: QianjiPillButton(
                           icon: Icons.auto_awesome_rounded,
                           label: '切换新版',
-                          onTap: () => setState(() => _newLayout = true),
+                          onTap: () {
+                            HapticFeedback.selectionClick();
+                            setState(() => _newLayout = true);
+                          },
                         ),
                       ),
                     ),
-                  ),
-                ),
-                Expanded(
-                  child: MediaQuery.removePadding(
-                    context: context,
-                    removeTop: true,
-                    child: _buildLegacy(),
                   ),
                 ),
               ],
@@ -578,12 +572,11 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
         ? '任务 · 日报 · 群响应'
         : '任务 · 日报 · 群响应 · 提案时效';
 
+    final showSwitchPill = _hasAccess && qianjiHubNewLayoutEnabled;
+    final dark = ImVisualTokens.isDark(context);
+    final canvasBg = dark ? const Color(0xFF12121A) : const Color(0xFFF0EDF7);
     return ColoredBox(
-      color: DunesColors.resolve(
-        context,
-        _bgSurface,
-        role: DunesColorRole.surface,
-      ),
+      color: canvasBg,
       child: SafeArea(
         bottom: false,
         child: Column(
@@ -592,48 +585,41 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
             Expanded(
               child: Stack(
                 children: [
-                  // 顶部微光柔和紫光渐变，保留高质感背景氛围
+                  // 顶部柔和品牌紫晕光渐变（自动适配日夜间主题，与苹果大卡片形成通透对比）
                   Positioned(
                     top: 0,
                     left: 0,
                     right: 0,
-                    height: 160,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [
-                            DunesColors.resolve(
-                              context,
-                              Color(0xFFEFE9FA),
-                              role: DunesColorRole.surface,
-                            ),
-                            DunesColors.resolve(
-                              context,
-                              Color(0xFFF7F4FD),
-                              role: DunesColorRole.surface,
-                            ),
-                            DunesColors.resolve(
-                              context,
-                              _bgSurface,
-                              role: DunesColorRole.surface,
-                            ),
-                          ],
-                          stops: [0.0, 0.6, 1.0],
+                    height: 220,
+                    child: IgnorePointer(
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              dark
+                                  ? ImVisualTokens.purple.withValues(alpha: 0.20)
+                                  : const Color(0xFFE3D8FA),
+                              canvasBg,
+                            ],
+                            stops: const [0.0, 1.0],
+                          ),
                         ),
                       ),
                     ),
                   ),
 
-                  // 页面主体容器（PC 端响应式铺平，APP 端紧凑单列）
+                  // 页面主体容器（居中最大宽度 1120，Bento 响应式布局）
                   LayoutBuilder(
                     builder: (context, constraints) {
                       final isWide = constraints.maxWidth >= 768;
+                      final useSplitBento =
+                          isWide && constraints.maxWidth >= 900;
                       final horizontalPadding = isWide ? 24.0 : 16.0;
 
                       return RefreshIndicator(
-                        color: _themePurple,
+                        color: ImVisualTokens.accent(context),
                         onRefresh: _refreshAll,
                         child: ListView(
                           physics: const AlwaysScrollableScrollPhysics(
@@ -641,7 +627,7 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
                           ),
                           padding: EdgeInsets.fromLTRB(
                             horizontalPadding,
-                            16,
+                            14,
                             horizontalPadding,
                             dunesAppBottomNavContentPadding(
                               context,
@@ -649,50 +635,118 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
                             ),
                           ),
                           children: [
-                            // 1. 资金看板（PC 全宽上下结构，宽屏内 2 列铺开）
-                            if (assetRows.isNotEmpty) ...[
-                              _buildFinanceAssetCard(assetRows, isWide: isWide),
-                              SizedBox(height: isWide ? 18 : 14),
-                            ],
+                            Center(
+                              child: ConstrainedBox(
+                                constraints: const BoxConstraints(
+                                  maxWidth: 1120,
+                                ),
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: [
+                                    // 顶部 Apple iOS 柔雾工作台 Hero 概览卡（右侧预留「切换新版」悬浮胶囊位）
+                                    _buildHeroOverviewCard(
+                                      showSwitchPill: showSwitchPill,
+                                      isWide: isWide,
+                                      financeCount: assetRows.length,
+                                      summaryCount: summaryItems.length,
+                                      personalCount: personalItems.length,
+                                      digitalCount: _digitalEmployees.length,
+                                    ),
+                                    SizedBox(height: isWide ? 18 : 14),
 
-                            // 2. 督导管理区：组织汇总 / 业务查阅 拆分
-                            if (summaryItems.isNotEmpty) ...[
-                              _buildSuperviseGridCard(
-                                summaryItems,
-                                isWide: isWide,
-                                title: '组织汇总',
-                                subtitle: '部门态势 · 用量与效能',
-                              ),
-                              SizedBox(height: isWide ? 18 : 14),
-                            ],
-                            if (personalItems.isNotEmpty) ...[
-                              _buildSuperviseGridCard(
-                                personalItems,
-                                isWide: isWide,
-                                title: '业务查阅',
-                                subtitle: lookupSubtitle.isEmpty
-                                    ? '会议纪要 · IM会话 · 知识库'
-                                    : lookupSubtitle,
-                              ),
-                              SizedBox(height: isWide ? 18 : 14),
-                            ],
+                                    // 1. 资金看板（Bento 网格卡片：窄屏 2 列，宽屏 4 列）
+                                    if (assetRows.isNotEmpty) ...[
+                                      _buildFinanceAssetCard(
+                                        assetRows,
+                                        isWide: isWide,
+                                      ),
+                                      SizedBox(height: isWide ? 18 : 14),
+                                    ],
 
-                            // 3. 数字员工专区（PC 宽屏自适应 3~4 列平铺网格）
-                            if (_canUseDigitalEmployees &&
-                                (_loadingDigitalEmployees ||
-                                    _digitalEmployees.isNotEmpty)) ...[
-                              _buildDigitalEmployeesSection(
-                                _digitalEmployees,
-                                isWide: isWide,
-                              ),
-                              const SizedBox(height: 18),
-                            ],
+                                    // 2. 督导管理区：宽屏左右 Bento 双栏并排，窄屏上下错落
+                                    if (useSplitBento &&
+                                        summaryItems.isNotEmpty &&
+                                        personalItems.isNotEmpty) ...[
+                                      IntrinsicHeight(
+                                        child: Row(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.stretch,
+                                          children: [
+                                            Expanded(
+                                              flex: 5,
+                                              child: _buildSuperviseGridCard(
+                                                summaryItems,
+                                                isWide: isWide,
+                                                compactColumns: true,
+                                                title: '组织汇总',
+                                                subtitle: '部门态势 · 用量与效能',
+                                              ),
+                                            ),
+                                            const SizedBox(width: 16),
+                                            Expanded(
+                                              flex: 7,
+                                              child: _buildSuperviseGridCard(
+                                                personalItems,
+                                                isWide: isWide,
+                                                compactColumns: true,
+                                                title: '业务查阅',
+                                                subtitle: lookupSubtitle.isEmpty
+                                                    ? '会议纪要 · IM会话 · 知识库'
+                                                    : lookupSubtitle,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      const SizedBox(height: 18),
+                                    ] else ...[
+                                      if (summaryItems.isNotEmpty) ...[
+                                        _buildSuperviseGridCard(
+                                          summaryItems,
+                                          isWide: isWide,
+                                          title: '组织汇总',
+                                          subtitle: '部门态势 · 用量与效能',
+                                        ),
+                                        SizedBox(height: isWide ? 18 : 14),
+                                      ],
+                                      if (personalItems.isNotEmpty) ...[
+                                        _buildSuperviseGridCard(
+                                          personalItems,
+                                          isWide: isWide,
+                                          title: '业务查阅',
+                                          subtitle: lookupSubtitle.isEmpty
+                                              ? '会议纪要 · IM会话 · 知识库'
+                                              : lookupSubtitle,
+                                        ),
+                                        SizedBox(height: isWide ? 18 : 14),
+                                      ],
+                                    ],
 
-                            // 4. 智能机器人矩阵（PC 宽屏双列平铺网格）
-                            if (_canUseRobots &&
-                                (_loadingRobots || _robots.isNotEmpty)) ...[
-                              _buildRobotSection(_robots, isWide: isWide),
-                            ],
+                                    // 3. 数字员工专区（PC 宽屏自适应 3~4 列平铺网格）
+                                    if (_canUseDigitalEmployees &&
+                                        (_loadingDigitalEmployees ||
+                                            _digitalEmployees.isNotEmpty)) ...[
+                                      _buildDigitalEmployeesSection(
+                                        _digitalEmployees,
+                                        isWide: isWide,
+                                      ),
+                                      const SizedBox(height: 18),
+                                    ],
+
+                                    // 4. 智能机器人矩阵（PC 宽屏双列平铺网格）
+                                    if (_canUseRobots &&
+                                        (_loadingRobots ||
+                                            _robots.isNotEmpty)) ...[
+                                      _buildRobotSection(
+                                        _robots,
+                                        isWide: isWide,
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                            ),
                           ],
                         ),
                       );
@@ -707,57 +761,193 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
     );
   }
 
-  /// 1. 资金与财务看板
-  Widget _buildFinanceAssetCard(List<Widget> assetRows, {bool isWide = false}) {
+  /// 顶部 Apple iOS 柔雾工作台 Hero 概览卡
+  Widget _buildHeroOverviewCard({
+    required bool showSwitchPill,
+    required bool isWide,
+    required int financeCount,
+    required int summaryCount,
+    required int personalCount,
+    required int digitalCount,
+  }) {
+    final dark = ImVisualTokens.isDark(context);
+    final accent = ImVisualTokens.accent(context);
+    final accentText = ImVisualTokens.accentText(context);
+    final chips = <(IconData, String)>[
+      if (financeCount > 0) (Icons.account_balance_wallet_rounded, '资金 $financeCount 项'),
+      if (summaryCount > 0) (Icons.pie_chart_rounded, '汇总 $summaryCount 项'),
+      if (personalCount > 0) (Icons.grid_view_rounded, '查阅 $personalCount 项'),
+      if (digitalCount > 0) (Icons.smart_toy_rounded, '数字员工 $digitalCount'),
+    ];
+
     return Container(
+      padding: EdgeInsets.fromLTRB(
+        18,
+        16,
+        showSwitchPill && !isWide ? 18 : 18,
+        16,
+      ),
       decoration: BoxDecoration(
-        color: DunesColors.resolve(
-          context,
-          Colors.white,
-          role: DunesColorRole.surface,
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: dark
+              ? [const Color(0xFF231F36), const Color(0xFF1A1828)]
+              : [const Color(0xFFFFFFFF), const Color(0xFFF6F2FF)],
         ),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: DunesColors.resolve(
-            context,
-            _cardBorder,
-            role: DunesColorRole.border,
-          ),
+          color: accent.withValues(alpha: dark ? 0.28 : 0.16),
+          width: 0.9,
         ),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF331E54).withValues(alpha: 0.04),
-            blurRadius: 14,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        boxShadow: ImVisualTokens.softCardShadow(context),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
+            padding: EdgeInsets.only(right: showSwitchPill ? 104 : 0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        '业务工作台',
+                        style: DunesTypography.sans(
+                          fontSize: isWide ? 24 : 21,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -0.45,
+                          color: DunesColors.resolveNullable(
+                            context,
+                            _deepPurple,
+                          ),
+                          context: context,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: ImVisualTokens.accentSoftSurface(context),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Text(
+                        '模块入口',
+                        style: DunesTypography.sans(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w600,
+                          color: accentText,
+                          context: context,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '资金看板 · 组织督导 · AI 数字协同',
+                  style: DunesTypography.sans(
+                    fontSize: 12.5,
+                    color: DunesColors.resolveNullable(context, _subText),
+                    context: context,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (chips.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final chip in chips)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 5,
+                    ),
+                    decoration: BoxDecoration(
+                      color: dark
+                          ? Colors.white.withValues(alpha: 0.06)
+                          : Colors.white.withValues(alpha: 0.86),
+                      borderRadius: BorderRadius.circular(999),
+                      border: Border.all(
+                        color: ImVisualTokens.hairlineBorder(context),
+                        width: 0.65,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(chip.$1, size: 13, color: accentText),
+                        const SizedBox(width: 5),
+                        Text(
+                          chip.$2,
+                          style: DunesTypography.sans(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w600,
+                            color: DunesColors.resolveNullable(
+                              context,
+                              _deepPurple,
+                            ),
+                            context: context,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// 1. 资金与财务看板（Bento 网格卡片）
+  Widget _buildFinanceAssetCard(List<Widget> assetRows, {bool isWide = false}) {
+    return Container(
+      decoration: BoxDecoration(
+        color: ImVisualTokens.cardSurface(context),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: ImVisualTokens.hairlineBorder(context),
+          width: 0.75,
+        ),
+        boxShadow: ImVisualTokens.softCardShadow(context),
+      ),
+      padding: const EdgeInsets.fromLTRB(14, 15, 14, 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(2, 0, 2, 12),
             child: Row(
               children: [
                 Container(
-                  width: 4,
-                  height: 16,
+                  width: 3.5,
+                  height: 15,
                   decoration: BoxDecoration(
-                    color: DunesColors.resolveNullable(
-                      context,
-                      _themePurple,
-                      role: DunesColorRole.surface,
-                    ),
+                    gradient: ImVisualTokens.primaryGradient(context),
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
                 const SizedBox(width: 8),
                 Text(
                   '资金看板',
-                  style: TextStyle(
+                  style: DunesTypography.sans(
                     fontSize: 15.5,
                     fontWeight: FontWeight.w700,
+                    letterSpacing: -0.2,
                     color: DunesColors.resolveNullable(context, _deepPurple),
+                    context: context,
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -766,9 +956,10 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
                     '账户流向 · 月结 · 差旅',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
+                    style: DunesTypography.sans(
                       fontSize: 11.5,
                       color: DunesColors.resolveNullable(context, _subText),
+                      context: context,
                     ),
                   ),
                 ),
@@ -777,65 +968,20 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
           ),
           LayoutBuilder(
             builder: (context, constraints) {
-              final useTwoCol = isWide && constraints.maxWidth >= 720;
-              if (!useTwoCol) {
-                return Column(
-                  children: [
-                    for (var i = 0; i < assetRows.length; i++) ...[
-                      assetRows[i],
-                      if (i < assetRows.length - 1)
-                        Divider(
-                          height: 1,
-                          indent: 64,
-                          endIndent: 16,
-                          color: DunesColors.resolve(
-                            context,
-                            Color(0xFFF3F0F7),
-                            role: DunesColorRole.border,
-                          ),
-                        ),
-                    ],
-                  ],
-                );
-              }
+              final columns = isWide && constraints.maxWidth >= 820
+                  ? (assetRows.length >= 4 ? 4 : assetRows.length)
+                  : (assetRows.length == 1 ? 1 : 2);
+              const gap = 10.0;
+              final itemWidth =
+                  ((constraints.maxWidth - (columns - 1) * gap) / columns)
+                      .floorToDouble();
 
-              const columns = 2;
-              final itemWidth = (constraints.maxWidth / columns)
-                  .floorToDouble();
               return Wrap(
+                spacing: gap,
+                runSpacing: gap,
                 children: [
-                  for (var i = 0; i < assetRows.length; i++)
-                    SizedBox(
-                      width: itemWidth,
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          border: Border(
-                            right: i.isEven
-                                ? BorderSide(
-                                    color: DunesColors.resolve(
-                                      context,
-                                      Color(0xFFF3F0F7),
-                                      role: DunesColorRole.border,
-                                    ),
-                                  )
-                                : BorderSide.none,
-                            bottom:
-                                i <
-                                    assetRows.length -
-                                        (assetRows.length.isOdd ? 1 : 2)
-                                ? BorderSide(
-                                    color: DunesColors.resolve(
-                                      context,
-                                      Color(0xFFF3F0F7),
-                                      role: DunesColorRole.border,
-                                    ),
-                                  )
-                                : BorderSide.none,
-                          ),
-                        ),
-                        child: assetRows[i],
-                      ),
-                    ),
+                  for (final row in assetRows)
+                    SizedBox(width: itemWidth, child: row),
                 ],
               );
             },
@@ -849,60 +995,46 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
   Widget _buildSuperviseGridCard(
     List<_SuperviseItemData> items, {
     bool isWide = false,
+    bool compactColumns = false,
     String title = '',
     String subtitle = '',
   }) {
     return Container(
       decoration: BoxDecoration(
-        color: DunesColors.resolve(
-          context,
-          Colors.white,
-          role: DunesColorRole.surface,
-        ),
-        borderRadius: BorderRadius.circular(16),
+        color: ImVisualTokens.cardSurface(context),
+        borderRadius: BorderRadius.circular(18),
         border: Border.all(
-          color: DunesColors.resolve(
-            context,
-            _cardBorder,
-            role: DunesColorRole.border,
-          ),
+          color: ImVisualTokens.hairlineBorder(context),
+          width: 0.75,
         ),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF331E54).withValues(alpha: 0.04),
-            blurRadius: 14,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        boxShadow: ImVisualTokens.softCardShadow(context),
       ),
-      padding: const EdgeInsets.fromLTRB(8, 14, 8, 16),
+      padding: const EdgeInsets.fromLTRB(12, 15, 12, 14),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (title.isNotEmpty)
             Padding(
-              padding: const EdgeInsets.fromLTRB(8, 0, 8, 12),
+              padding: const EdgeInsets.fromLTRB(4, 0, 4, 12),
               child: Row(
                 children: [
                   Container(
-                    width: 4,
-                    height: 16,
+                    width: 3.5,
+                    height: 15,
                     decoration: BoxDecoration(
-                      color: DunesColors.resolveNullable(
-                        context,
-                        _themePurple,
-                        role: DunesColorRole.surface,
-                      ),
+                      gradient: ImVisualTokens.primaryGradient(context),
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
                   const SizedBox(width: 8),
                   Text(
                     title,
-                    style: TextStyle(
+                    style: DunesTypography.sans(
                       fontSize: 15.5,
                       fontWeight: FontWeight.w700,
+                      letterSpacing: -0.2,
                       color: DunesColors.resolveNullable(context, _deepPurple),
+                      context: context,
                     ),
                   ),
                   if (subtitle.isNotEmpty) ...[
@@ -912,9 +1044,10 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
                         subtitle,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
+                        style: DunesTypography.sans(
                           fontSize: 11.5,
                           color: DunesColors.resolveNullable(context, _subText),
+                          context: context,
                         ),
                       ),
                     ),
@@ -922,33 +1055,47 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
                 ],
               ),
             ),
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final columns = isWide
-                  ? (constraints.maxWidth >= 960
-                        ? 6
-                        : (constraints.maxWidth >= 480 ? 4 : 3))
-                  : 4;
+          Builder(
+            builder: (context) {
+              final int columns;
+              if (items.length <= 3) {
+                columns = items.length;
+              } else if (compactColumns) {
+                columns = 4;
+              } else if (isWide) {
+                columns = 6;
+              } else {
+                columns = 4;
+              }
               const gap = 8.0;
-              final itemWidth =
-                  ((constraints.maxWidth - (columns - 1) * gap) / columns)
-                      .floorToDouble();
+              final rowCount = (items.length / columns).ceil();
 
-              return Wrap(
-                spacing: gap,
-                runSpacing: 14,
+              return Column(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  for (final item in items)
-                    SizedBox(
-                      width: itemWidth,
-                      child: _AlipayGridItem(
-                        icon: item.icon,
-                        gradientColors: item.gradientColors,
-                        title: item.title,
-                        subtitle: item.subtitle,
-                        onTap: item.onTap,
-                      ),
+                  for (var r = 0; r < rowCount; r++) ...[
+                    if (r > 0) const SizedBox(height: 10),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        for (var c = 0; c < columns; c++) ...[
+                          if (c > 0) const SizedBox(width: gap),
+                          Expanded(
+                            child: (r * columns + c) < items.length
+                                ? _AlipayGridItem(
+                                    icon: items[r * columns + c].icon,
+                                    gradientColors:
+                                        items[r * columns + c].gradientColors,
+                                    title: items[r * columns + c].title,
+                                    subtitle: items[r * columns + c].subtitle,
+                                    onTap: items[r * columns + c].onTap,
+                                  )
+                                : const SizedBox.shrink(),
+                          ),
+                        ],
+                      ],
                     ),
+                  ],
                 ],
               );
             },
@@ -963,6 +1110,8 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
     List<DigitalEmployeeItem> items, {
     bool isWide = false,
   }) {
+    final accent = ImVisualTokens.accent(context);
+    final accentText = ImVisualTokens.accentText(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -971,66 +1120,58 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
           child: Row(
             children: [
               Container(
-                width: 4,
-                height: 16,
+                width: 3.5,
+                height: 15,
                 decoration: BoxDecoration(
-                  color: DunesColors.resolveNullable(
-                    context,
-                    _themePurple,
-                    role: DunesColorRole.surface,
-                  ),
+                  gradient: ImVisualTokens.primaryGradient(context),
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
               const SizedBox(width: 8),
               Text(
                 'AI 数字员工',
-                style: TextStyle(
+                style: DunesTypography.sans(
                   fontSize: 16,
                   fontWeight: FontWeight.w700,
+                  letterSpacing: -0.2,
                   color: DunesColors.resolveNullable(context, _deepPurple),
+                  context: context,
                 ),
               ),
               if (_loadingDigitalEmployees) ...[
                 const SizedBox(width: 8),
-                const SizedBox(
+                SizedBox(
                   width: 12,
                   height: 12,
                   child: CircularProgressIndicator(
                     strokeWidth: 2,
-                    color: _themePurple,
+                    color: accent,
                   ),
                 ),
               ],
               const Spacer(),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3.5),
                 decoration: BoxDecoration(
-                  color: DunesColors.resolve(
-                    context,
-                    const Color(0xFFF1EBF9),
-                    role: DunesColorRole.surface,
+                  color: ImVisualTokens.accentSoftSurface(context),
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(
+                    color: accent.withValues(alpha: 0.20),
+                    width: 0.6,
                   ),
-                  borderRadius: BorderRadius.circular(10),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(
-                      Icons.bolt_rounded,
-                      size: 12,
-                      color: DunesColors.resolveNullable(context, _themePurple),
-                    ),
-                    SizedBox(width: 2),
+                    Icon(Icons.bolt_rounded, size: 12, color: accentText),
+                    const SizedBox(width: 2),
                     Text(
                       '7×24h 在岗运行',
-                      style: TextStyle(
+                      style: DunesTypography.sans(
                         fontSize: 11,
                         fontWeight: FontWeight.w600,
-                        color: DunesColors.resolveNullable(
-                          context,
-                          _themePurple,
-                        ),
+                        color: accentText,
+                        context: context,
                       ),
                     ),
                   ],
@@ -1039,7 +1180,7 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
             ],
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 10),
         LayoutBuilder(
           builder: (context, constraints) {
             final columns = isWide
@@ -1047,7 +1188,7 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
                       ? 4
                       : (constraints.maxWidth >= 680 ? 3 : 2))
                 : (constraints.maxWidth >= 360 ? 2 : 1);
-            const gap = 8.0;
+            const gap = 10.0;
             final itemWidth =
                 ((constraints.maxWidth - (columns - 1) * gap) / columns)
                     .floorToDouble();
@@ -1074,6 +1215,7 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
 
   /// 4. 智能机器人矩阵
   Widget _buildRobotSection(List<RobotRole> robots, {bool isWide = false}) {
+    final accent = ImVisualTokens.accent(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1082,61 +1224,60 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
           child: Row(
             children: [
               Container(
-                width: 4,
-                height: 16,
+                width: 3.5,
+                height: 15,
                 decoration: BoxDecoration(
-                  color: DunesColors.resolveNullable(
-                    context,
-                    _themePurple,
-                    role: DunesColorRole.surface,
-                  ),
+                  gradient: ImVisualTokens.primaryGradient(context),
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
               const SizedBox(width: 8),
               Text(
                 '智能机器人矩阵',
-                style: TextStyle(
+                style: DunesTypography.sans(
                   fontSize: 16,
                   fontWeight: FontWeight.w700,
+                  letterSpacing: -0.2,
                   color: DunesColors.resolveNullable(context, _deepPurple),
+                  context: context,
                 ),
               ),
               if (_loadingRobots) ...[
                 const SizedBox(width: 8),
-                const SizedBox(
+                SizedBox(
                   width: 12,
                   height: 12,
                   child: CircularProgressIndicator(
                     strokeWidth: 2,
-                    color: _themePurple,
+                    color: accent,
                   ),
                 ),
               ],
               const Spacer(),
               if (widget.onOpenRobotHome != null)
-                InkWell(
+                ImTapScale(
                   onTap: widget.onOpenRobotHome,
-                  borderRadius: BorderRadius.circular(6),
+                  borderRadius: BorderRadius.circular(999),
                   child: Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
                     child: Row(
                       children: [
                         Text(
                           '服务大厅',
-                          style: TextStyle(
+                          style: DunesTypography.sans(
                             fontSize: 12,
-                            color: DunesColors.resolveNullable(
-                              context,
-                              _subText,
-                            ),
-                            fontWeight: FontWeight.w500,
+                            color: ImVisualTokens.accentText(context),
+                            fontWeight: FontWeight.w600,
+                            context: context,
                           ),
                         ),
                         Icon(
                           Icons.chevron_right_rounded,
                           size: 16,
-                          color: DunesColors.resolveNullable(context, _subText),
+                          color: ImVisualTokens.accentText(context),
                         ),
                       ],
                     ),
@@ -1145,7 +1286,7 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
             ],
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 10),
         LayoutBuilder(
           builder: (context, constraints) {
             if (isWide && constraints.maxWidth >= 680) {
@@ -1164,29 +1305,15 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
                       width: itemWidth,
                       child: Container(
                         decoration: BoxDecoration(
-                          color: DunesColors.resolve(
-                            context,
-                            Colors.white,
-                            role: DunesColorRole.surface,
-                          ),
-                          borderRadius: BorderRadius.circular(16),
+                          color: ImVisualTokens.cardSurface(context),
+                          borderRadius: BorderRadius.circular(18),
                           border: Border.all(
-                            color: DunesColors.resolve(
-                              context,
-                              _cardBorder,
-                              role: DunesColorRole.border,
-                            ),
+                            color: ImVisualTokens.hairlineBorder(context),
+                            width: 0.75,
                           ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: const Color(
-                                0xFF331E54,
-                              ).withValues(alpha: 0.04),
-                              blurRadius: 14,
-                              offset: const Offset(0, 4),
-                            ),
-                          ],
+                          boxShadow: ImVisualTokens.softCardShadow(context),
                         ),
+                        clipBehavior: Clip.antiAlias,
                         child: _RobotListTile(
                           role: robot,
                           onTap: () {
@@ -1203,56 +1330,22 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
               );
             }
 
-            return Container(
-              decoration: BoxDecoration(
-                color: DunesColors.resolve(
-                  context,
-                  Colors.white,
-                  role: DunesColorRole.surface,
-                ),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: DunesColors.resolve(
-                    context,
-                    _cardBorder,
-                    role: DunesColorRole.border,
+            return ImGroupedCard(
+              radius: 18,
+              dividerIndent: 74,
+              children: [
+                for (final robot in robots)
+                  _RobotListTile(
+                    role: robot,
+                    onTap: () {
+                      if (widget.onOpenRobot != null) {
+                        widget.onOpenRobot!(robot);
+                        return;
+                      }
+                      widget.onOpenRobotHome?.call();
+                    },
                   ),
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: const Color(0xFF331E54).withValues(alpha: 0.04),
-                    blurRadius: 14,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: Column(
-                children: [
-                  for (var i = 0; i < robots.length; i++) ...[
-                    _RobotListTile(
-                      role: robots[i],
-                      onTap: () {
-                        if (widget.onOpenRobot != null) {
-                          widget.onOpenRobot!(robots[i]);
-                          return;
-                        }
-                        widget.onOpenRobotHome?.call();
-                      },
-                    ),
-                    if (i < robots.length - 1)
-                      Divider(
-                        height: 1,
-                        indent: 64,
-                        endIndent: 16,
-                        color: DunesColors.resolve(
-                          context,
-                          Color(0xFFF3F0F7),
-                          role: DunesColorRole.border,
-                        ),
-                      ),
-                  ],
-                ],
-              ),
+              ],
             );
           },
         ),
@@ -1364,87 +1457,126 @@ class _AlipayAssetRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-          child: Row(
-            children: [
-              // 浅底圆角高质感双色图标
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: DunesColors.resolveNullable(
-                    context,
-                    iconBgColor,
-                    role: DunesColorRole.surface,
-                  ),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                alignment: Alignment.center,
-                child: Icon(
-                  icon,
-                  color: DunesColors.resolveNullable(context, iconColor),
-                  size: 21,
-                ),
-              ),
-              const SizedBox(width: 14),
-
-              // 主副标题
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700,
-                        color: DunesColors.resolveNullable(
-                          context,
-                          _deepPurple,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      subtitle,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: DunesColors.resolveNullable(context, _subText),
-                        fontWeight: FontWeight.w400,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              // 右侧辅助说明文案 + 细箭头
-              Text(
-                actionText,
-                style: TextStyle(
-                  fontSize: 12.5,
-                  color: DunesColors.resolveNullable(
-                    context,
-                    Color(0xFF9F98AC),
-                  ),
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              const SizedBox(width: 2),
-              Icon(
-                Icons.chevron_right_rounded,
-                size: 18,
-                color: DunesColors.resolveNullable(context, Color(0xFFB5AFBF)),
-              ),
-            ],
+    final dark = ImVisualTokens.isDark(context);
+    final tileBg = dark
+        ? Colors.white.withValues(alpha: 0.045)
+        : const Color(0xFFF9F7FD);
+    return ImTapScale(
+      onTap: () {
+        HapticFeedback.selectionClick();
+        onTap();
+      },
+      borderRadius: BorderRadius.circular(14),
+      pressedScale: 0.965,
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: tileBg,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: ImVisualTokens.hairlineBorder(context),
+            width: 0.7,
           ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                // 浅底圆角高质感双色图标
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: dark
+                        ? iconColor.withValues(alpha: 0.16)
+                        : DunesColors.resolveNullable(
+                            context,
+                            iconBgColor,
+                            role: DunesColorRole.surface,
+                          ),
+                    borderRadius: BorderRadius.circular(11),
+                    border: Border.all(
+                      color: iconColor.withValues(alpha: dark ? 0.25 : 0.14),
+                      width: 0.6,
+                    ),
+                  ),
+                  alignment: Alignment.center,
+                  child: Icon(
+                    icon,
+                    color: DunesColors.resolveNullable(context, iconColor),
+                    size: 19,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                // 右侧品牌紫柔雾胶囊标签 + 细箭头
+                Expanded(
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 7,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: ImVisualTokens.accentSoftSurface(context),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Flexible(
+                            child: Text(
+                              actionText,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: DunesTypography.sans(
+                                fontSize: 10.5,
+                                color: ImVisualTokens.accentText(context),
+                                fontWeight: FontWeight.w600,
+                                context: context,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 1),
+                          Icon(
+                            Icons.chevron_right_rounded,
+                            size: 13,
+                            color: ImVisualTokens.accentText(context),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Text(
+              title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: DunesTypography.sans(
+                fontSize: 14.5,
+                fontWeight: FontWeight.w700,
+                color: DunesColors.resolveNullable(context, _deepPurple),
+                context: context,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              subtitle,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: DunesTypography.sans(
+                fontSize: 11.5,
+                color: DunesColors.resolveNullable(context, _subText),
+                fontWeight: FontWeight.w400,
+                context: context,
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -1469,72 +1601,81 @@ class _AlipayGridItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
+    return ImTapScale(
+      onTap: onTap == null
+          ? null
+          : () {
+              HapticFeedback.selectionClick();
+              onTap!();
+            },
+      borderRadius: BorderRadius.circular(14),
+      pressedScale: 0.94,
+      child: SizedBox(
+        width: double.infinity,
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 2),
           child: Column(
             mainAxisSize: MainAxisSize.min,
-            children: [
-              // 立体微渐变底座 + 高质感白图标
-              Container(
-                width: 42,
-                height: 42,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: gradientColors,
+          children: [
+            // 立体微渐变底座 + 顶部高光细边 + 高质感白图标
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: gradientColors,
+                ),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.25),
+                  width: 0.6,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: gradientColors.last.withValues(alpha: 0.28),
+                    blurRadius: 10,
+                    spreadRadius: -2,
+                    offset: const Offset(0, 4),
                   ),
-                  borderRadius: BorderRadius.circular(13),
-                  boxShadow: [
-                    BoxShadow(
-                      color: gradientColors.last.withValues(alpha: 0.22),
-                      blurRadius: 7,
-                      offset: const Offset(0, 3),
-                    ),
-                  ],
-                ),
-                alignment: Alignment.center,
-                child: Icon(
-                  icon,
-                  color: DunesColors.resolve(context, Colors.white),
-                  size: 21,
-                ),
+                ],
               ),
-              const SizedBox(height: 8),
+              alignment: Alignment.center,
+              child: Icon(icon, color: Colors.white, size: 22),
+            ),
+            const SizedBox(height: 8),
 
-              // 主标题
+            // 主标题
+            Text(
+              title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: DunesTypography.sans(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: DunesColors.resolveNullable(context, _deepPurple),
+                letterSpacing: -0.2,
+                context: context,
+              ),
+            ),
+            if (subtitle.trim().isNotEmpty) ...[
+              const SizedBox(height: 2),
               Text(
-                title,
+                subtitle,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  color: DunesColors.resolveNullable(context, _deepPurple),
-                  letterSpacing: -0.2,
+                style: DunesTypography.sans(
+                  fontSize: 10.5,
+                  color: DunesColors.resolveNullable(context, _subText),
+                  fontWeight: FontWeight.w400,
+                  context: context,
                 ),
               ),
-              if (subtitle.trim().isNotEmpty) ...[
-                const SizedBox(height: 2),
-                Text(
-                  subtitle,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 10.5,
-                    color: DunesColors.resolveNullable(context, _subText),
-                    fontWeight: FontWeight.w400,
-                  ),
-                ),
-              ],
             ],
-          ),
+          ],
         ),
+      ),
       ),
     );
   }
@@ -1549,172 +1690,142 @@ class _DigitalEmployeeCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: DunesColors.resolve(
-        context,
-        Colors.white,
-        role: DunesColorRole.surface,
-      ),
-      borderRadius: BorderRadius.circular(12),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.fromLTRB(10, 9, 10, 8),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: DunesColors.resolve(
-                context,
-                _cardBorder,
-                role: DunesColorRole.border,
-              ),
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFF331E54).withValues(alpha: 0.03),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
-              ),
-            ],
+    final accent = ImVisualTokens.accent(context);
+    final accentText = ImVisualTokens.accentText(context);
+    return ImTapScale(
+      borderRadius: BorderRadius.circular(16),
+      pressedScale: 0.968,
+      onTap: () {
+        HapticFeedback.selectionClick();
+        onTap();
+      },
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(12, 12, 12, 11),
+        decoration: BoxDecoration(
+          color: ImVisualTokens.cardSurface(context),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: ImVisualTokens.hairlineBorder(context),
+            width: 0.75,
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    width: 30,
-                    height: 30,
-                    decoration: BoxDecoration(
-                      color: DunesColors.resolve(
-                        context,
-                        const Color(0xFFF0EBF9),
-                        role: DunesColorRole.surface,
-                      ),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: DunesColors.resolve(
-                          context,
-                          const Color(0xFFE2D6F5),
-                          role: DunesColorRole.border,
-                        ),
-                      ),
-                    ),
-                    alignment: Alignment.center,
-                    child: Icon(
-                      digitalEmployeeIcon(item.iconKey),
-                      color: DunesColors.resolveNullable(context, _themePurple),
-                      size: 16,
+          boxShadow: ImVisualTokens.softCardShadow(context),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 34,
+                  height: 34,
+                  decoration: BoxDecoration(
+                    color: ImVisualTokens.accentSoftSurface(context),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: accent.withValues(alpha: 0.22),
+                      width: 0.6,
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          item.name,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                            color: DunesColors.resolveNullable(
-                              context,
-                              _deepPurple,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 4,
-                            vertical: 1,
-                          ),
-                          decoration: BoxDecoration(
-                            color: DunesColors.resolve(
-                              context,
-                              const Color(0xFFEDE7F6),
-                              role: DunesColorRole.surface,
-                            ),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            'AI 协同助理',
-                            style: TextStyle(
-                              fontSize: 9,
-                              fontWeight: FontWeight.w600,
-                              color: DunesColors.resolveNullable(
-                                context,
-                                _themePurple,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
+                  alignment: Alignment.center,
+                  child: Icon(
+                    digitalEmployeeIcon(item.iconKey),
+                    color: accent,
+                    size: 18,
                   ),
-                ],
-              ),
-              const SizedBox(height: 6),
-              Text(
-                item.subtitle,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 11,
-                  height: 1.25,
-                  color: DunesColors.resolveNullable(context, _subText),
                 ),
-              ),
-              const SizedBox(height: 6),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 7,
-                      vertical: 3,
-                    ),
-                    decoration: BoxDecoration(
-                      color: DunesColors.resolve(
-                        context,
-                        _themePurple,
-                        role: DunesColorRole.surface,
-                      ).withValues(alpha: 0.08),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          '开启对话',
-                          style: TextStyle(
-                            fontSize: 10.5,
-                            fontWeight: FontWeight.w600,
-                            color: DunesColors.resolveNullable(
-                              context,
-                              _themePurple,
-                            ),
-                          ),
-                        ),
-                        SizedBox(width: 2),
-                        Icon(
-                          Icons.arrow_forward_rounded,
-                          size: 12,
+                const SizedBox(width: 9),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        item.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: DunesTypography.sans(
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w700,
                           color: DunesColors.resolveNullable(
                             context,
-                            _themePurple,
+                            _deepPurple,
+                          ),
+                          context: context,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 1.5,
+                        ),
+                        decoration: BoxDecoration(
+                          color: ImVisualTokens.accentSoftSurface(context),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Text(
+                          'AI 协同助理',
+                          style: DunesTypography.sans(
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w600,
+                            color: accentText,
+                            context: context,
                           ),
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
-                ],
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              item.subtitle,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: DunesTypography.sans(
+                fontSize: 11.5,
+                height: 1.25,
+                color: DunesColors.resolveNullable(context, _subText),
+                context: context,
               ),
-            ],
-          ),
+            ),
+            const SizedBox(height: 9),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 9,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: ImVisualTokens.accentSoftSurface(context),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        '开启对话',
+                        style: DunesTypography.sans(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: accentText,
+                          context: context,
+                        ),
+                      ),
+                      const SizedBox(width: 2),
+                      Icon(
+                        Icons.arrow_forward_rounded,
+                        size: 12,
+                        color: accentText,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );
@@ -1730,6 +1841,8 @@ class _RobotListTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final dark = ImVisualTokens.isDark(context);
+    final accentText = ImVisualTokens.accentText(context);
     return ListenableBuilder(
       listenable: RobotConsultStore.instance,
       builder: (context, _) {
@@ -1739,207 +1852,179 @@ class _RobotListTile extends StatelessWidget {
             status == RobotConsultStatus.running ||
             status == RobotConsultStatus.queued;
 
-        return Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: onTap,
-            borderRadius: BorderRadius.circular(16),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              child: Row(
-                children: [
-                  // 头像与状态光标
-                  Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      Container(
-                        width: 44,
-                        height: 44,
-                        decoration: BoxDecoration(
-                          color: DunesColors.resolveNullable(
-                            context,
-                            role.accent.withValues(alpha: 0.12),
-                            role: DunesColorRole.surface,
-                          ),
-                          borderRadius: BorderRadius.circular(13),
-                        ),
-                        alignment: Alignment.center,
-                        child: RobotFaceAvatar(
-                          role: role,
-                          size: 34,
-                          animate: true,
-                          busy: isBusy,
+        return ImTapScale(
+          onTap: () {
+            HapticFeedback.selectionClick();
+            onTap();
+          },
+          borderRadius: BorderRadius.zero,
+          pressedScale: 0.985,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+            child: Row(
+              children: [
+                // 头像与状态光标
+                Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Container(
+                      width: 46,
+                      height: 46,
+                      decoration: BoxDecoration(
+                        color: role.accent.withValues(alpha: dark ? 0.18 : 0.12),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: role.accent.withValues(alpha: 0.18),
+                          width: 0.6,
                         ),
                       ),
-                      Positioned(
-                        right: -2,
-                        top: -2,
-                        child: Container(
-                          width: 10,
-                          height: 10,
-                          decoration: BoxDecoration(
-                            color: role.canChat
-                                ? DunesColors.resolve(
-                                    context,
-                                    const Color(0xFF2E7D32),
-                                    role: DunesColorRole.surface,
-                                  )
-                                : DunesColors.resolve(
-                                    context,
-                                    const Color(0xFFD67E33),
-                                    role: DunesColorRole.surface,
-                                  ),
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: DunesColors.resolve(
-                                context,
-                                Colors.white,
-                                role: DunesColorRole.border,
+                      alignment: Alignment.center,
+                      child: RobotFaceAvatar(
+                        role: role,
+                        size: 35,
+                        animate: true,
+                        busy: isBusy,
+                      ),
+                    ),
+                    Positioned(
+                      right: -2,
+                      top: -2,
+                      child: Container(
+                        width: 10.5,
+                        height: 10.5,
+                        decoration: BoxDecoration(
+                          color: role.canChat
+                              ? const Color(0xFF28A745)
+                              : const Color(0xFFE08833),
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: ImVisualTokens.cardSurface(context),
+                            width: 1.8,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(width: 14),
+
+                // 机器人名称与职能
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              role.name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: DunesTypography.sans(
+                                fontSize: 14.5,
+                                fontWeight: FontWeight.w700,
+                                color: DunesColors.resolveNullable(
+                                  context,
+                                  _deepPurple,
+                                ),
+                                context: context,
                               ),
-                              width: 1.8,
                             ),
                           ),
+                          const SizedBox(width: 6),
+                          if (!role.canChat)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 1.5,
+                              ),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFD67E33).withValues(
+                                  alpha: dark ? 0.18 : 0.12,
+                                ),
+                                borderRadius: BorderRadius.circular(999),
+                              ),
+                              child: Text(
+                                '仅推送',
+                                style: DunesTypography.sans(
+                                  fontSize: 9.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: const Color(0xFFB5611B),
+                                  context: context,
+                                ),
+                              ),
+                            )
+                          else
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 1.5,
+                              ),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF2E7D32).withValues(
+                                  alpha: dark ? 0.18 : 0.10,
+                                ),
+                                borderRadius: BorderRadius.circular(999),
+                              ),
+                              child: Text(
+                                '在线',
+                                style: DunesTypography.sans(
+                                  fontSize: 9.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: const Color(0xFF2E7D32),
+                                  context: context,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        role.desc.isNotEmpty ? role.desc : role.category,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: DunesTypography.sans(
+                          fontSize: 12,
+                          color: DunesColors.resolveNullable(context, _subText),
+                          context: context,
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(width: 14),
+                ),
+                const SizedBox(width: 8),
 
-                  // 机器人名称与职能
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Flexible(
-                              child: Text(
-                                role.name,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontSize: 14.5,
-                                  fontWeight: FontWeight.w700,
-                                  color: DunesColors.resolveNullable(
-                                    context,
-                                    _deepPurple,
-                                  ),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                            if (!role.canChat)
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 5,
-                                  vertical: 1,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: DunesColors.resolve(
-                                    context,
-                                    const Color(0xFFFFF3E0),
-                                    role: DunesColorRole.surface,
-                                  ),
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: Text(
-                                  '仅推送',
-                                  style: TextStyle(
-                                    fontSize: 9.5,
-                                    fontWeight: FontWeight.w600,
-                                    color: DunesColors.resolveNullable(
-                                      context,
-                                      Color(0xFFB5611B),
-                                    ),
-                                  ),
-                                ),
-                              )
-                            else
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 5,
-                                  vertical: 1,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: DunesColors.resolve(
-                                    context,
-                                    const Color(0xFFE8F5E9),
-                                    role: DunesColorRole.surface,
-                                  ),
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: Text(
-                                  '在线',
-                                  style: TextStyle(
-                                    fontSize: 9.5,
-                                    fontWeight: FontWeight.w600,
-                                    color: DunesColors.resolveNullable(
-                                      context,
-                                      Color(0xFF2E7D32),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                          ],
-                        ),
-                        const SizedBox(height: 3),
-                        Text(
-                          role.desc.isNotEmpty ? role.desc : role.category,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 11.5,
-                            color: DunesColors.resolveNullable(
-                              context,
-                              _subText,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
+                // 右侧咨询胶囊
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 5,
                   ),
-
-                  // 右侧咨询按钮
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 5,
-                    ),
-                    decoration: BoxDecoration(
-                      color: DunesColors.resolve(
-                        context,
-                        _themePurple,
-                        role: DunesColorRole.surface,
-                      ).withValues(alpha: 0.08),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          role.canChat ? '咨询' : '详情',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: DunesColors.resolveNullable(
-                              context,
-                              _themePurple,
-                            ),
-                          ),
-                        ),
-                        Icon(
-                          Icons.chevron_right_rounded,
-                          size: 15,
-                          color: DunesColors.resolveNullable(
-                            context,
-                            _themePurple,
-                          ),
-                        ),
-                      ],
-                    ),
+                  decoration: BoxDecoration(
+                    color: ImVisualTokens.accentSoftSurface(context),
+                    borderRadius: BorderRadius.circular(999),
                   ),
-                ],
-              ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        role.canChat ? '咨询' : '详情',
+                        style: DunesTypography.sans(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: accentText,
+                          context: context,
+                        ),
+                      ),
+                      Icon(
+                        Icons.chevron_right_rounded,
+                        size: 15,
+                        color: accentText,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ),
         );

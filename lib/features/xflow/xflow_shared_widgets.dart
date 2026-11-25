@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../core/theme/dunes_theme.dart';
 import 'proposal_upload_config.dart';
@@ -787,19 +788,21 @@ class XflowWfListSearch extends StatelessWidget {
             fillColor ??
             DunesColors.resolve(
               context,
-              DunesColors.bgSoft,
+              const Color(0xFFEEEEF3),
               role: DunesColorRole.surface,
             ),
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(12),
         border: borderColor == null ? null : Border.all(color: borderColor!),
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
       child: Row(
         children: [
           Icon(
-            Icons.search,
-            size: 16,
-            color: iconColor ?? DunesColors.resolve(context, DunesColors.text3),
+            Icons.search_rounded,
+            size: 17,
+            color:
+                iconColor ??
+                DunesColors.resolve(context, const Color(0xFF8E8E93)),
           ),
           const SizedBox(width: 7),
           Expanded(
@@ -808,15 +811,15 @@ class XflowWfListSearch extends StatelessWidget {
               onTapOutside: (_) =>
                   FocusManager.instance.primaryFocus?.unfocus(),
               style: DunesTypography.sans(
-                fontSize: 11,
-                color: DunesColors.resolve(context, DunesColors.text),
+                fontSize: 13,
+                color: DunesColors.resolve(context, const Color(0xFF1D1D1F)),
                 context: context,
               ),
               decoration: InputDecoration(
                 hintText: hint,
                 hintStyle: DunesTypography.sans(
-                  fontSize: 11,
-                  color: DunesColors.resolve(context, DunesColors.text3),
+                  fontSize: 13,
+                  color: DunesColors.resolve(context, const Color(0xFF8E8E93)),
                   context: context,
                 ),
                 border: InputBorder.none,
@@ -1369,21 +1372,33 @@ class XflowProposalListCard extends StatelessWidget {
         Colors.white,
         role: DunesColorRole.surface,
       ),
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(16),
       child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        hoverColor: Colors.transparent,
+        onTap: () {
+          HapticFeedback.selectionClick();
+          onTap();
+        },
         child: Container(
-          padding: const EdgeInsets.fromLTRB(12, 11, 12, 10),
+          padding: const EdgeInsets.fromLTRB(13, 10, 13, 9),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(16),
             border: Border.all(
               color: DunesColors.resolve(
                 context,
-                DunesColors.borderSoft,
+                const Color(0xFFE5E5EA),
                 role: DunesColorRole.border,
               ),
+              width: 0.8,
             ),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x05000000),
+                blurRadius: 10,
+                offset: Offset(0, 2),
+              ),
+            ],
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1450,21 +1465,33 @@ class XflowProposalListCard extends StatelessWidget {
         Colors.white,
         role: DunesColorRole.surface,
       ),
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(16),
       child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        hoverColor: Colors.transparent,
+        onTap: () {
+          HapticFeedback.selectionClick();
+          onTap();
+        },
         child: Container(
-          padding: const EdgeInsets.fromLTRB(12, 11, 12, 10),
+          padding: const EdgeInsets.fromLTRB(13, 10, 13, 9),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(16),
             border: Border.all(
               color: DunesColors.resolve(
                 context,
-                DunesColors.borderSoft,
+                const Color(0xFFE5E5EA),
                 role: DunesColorRole.border,
               ),
+              width: 0.8,
             ),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x05000000),
+                blurRadius: 10,
+                offset: Offset(0, 2),
+              ),
+            ],
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1547,27 +1574,27 @@ class XflowProposalListCard extends StatelessWidget {
     final labelColor = DunesColors.resolve(context, DunesColors.text3);
     final valueColor = DunesColors.resolve(context, DunesColors.text);
     return Padding(
-      padding: const EdgeInsets.only(top: 6),
+      padding: const EdgeInsets.only(top: 4),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           for (var i = 0; i < item.highlights.length; i++) ...[
-            if (i > 0) const SizedBox(height: 3),
+            if (i > 0) const SizedBox(height: 2),
             Text.rich(
               TextSpan(
                 children: [
                   TextSpan(
                     text: item.highlights[i].label,
-                    style: TextStyle(fontSize: 12, color: labelColor),
+                    style: TextStyle(fontSize: 11.5, color: labelColor),
                   ),
                   const TextSpan(text: '  '),
                   TextSpan(
                     text: item.highlights[i].value,
                     style: TextStyle(
                       fontSize: item.highlights[i].label.contains('金额')
-                          ? 15
-                          : 12,
-                      height: 1.35,
+                          ? 14
+                          : 11.5,
+                      height: 1.3,
                       fontWeight: item.highlights[i].label.contains('金额')
                           ? FontWeight.w700
                           : FontWeight.w500,
@@ -1576,7 +1603,7 @@ class XflowProposalListCard extends StatelessWidget {
                   ),
                 ],
               ),
-              maxLines: 2,
+              maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
           ],
@@ -1599,23 +1626,24 @@ class XflowProposalListCard extends StatelessWidget {
       children: [
         Wrap(
           spacing: 8,
-          runSpacing: 4,
+          runSpacing: 3,
           crossAxisAlignment: WrapCrossAlignment.center,
           children: [
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               decoration: BoxDecoration(
                 color: DunesColors.resolve(
                   context,
                   DunesColors.brandPurpleSoft,
                   role: DunesColorRole.surface,
                 ),
-                borderRadius: BorderRadius.circular(4),
+                borderRadius: BorderRadius.circular(5),
               ),
               child: Text(
                 kind,
                 style: TextStyle(
-                  fontSize: 12,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
                   color: DunesColors.resolve(
                     context,
                     DunesColors.brandPurpleDeep,
@@ -1629,7 +1657,7 @@ class XflowProposalListCard extends StatelessWidget {
               Text(
                 type,
                 style: TextStyle(
-                  fontSize: 12,
+                  fontSize: 11.5,
                   color: DunesColors.resolve(context, DunesColors.text2),
                 ),
               ),
@@ -1637,21 +1665,20 @@ class XflowProposalListCard extends StatelessWidget {
               Text(
                 '发起人 $submitter',
                 style: TextStyle(
-                  fontSize: 12,
+                  fontSize: 11.5,
                   color: DunesColors.resolve(context, DunesColors.text2),
                 ),
               ),
+            Text(
+              '审核人：$_currentReviewerLabel',
+              style: TextStyle(
+                fontSize: 11.5,
+                color: DunesColors.resolve(context, DunesColors.text2),
+              ),
+            ),
           ],
         ),
-        const SizedBox(height: 7),
-        Text(
-          '当前审核人：$_currentReviewerLabel',
-          style: TextStyle(
-            fontSize: 13,
-            color: DunesColors.resolve(context, DunesColors.text2),
-          ),
-        ),
-        const SizedBox(height: 7),
+        const SizedBox(height: 5),
         Row(
           children: [
             Expanded(
@@ -1659,7 +1686,7 @@ class XflowProposalListCard extends StatelessWidget {
                 code,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontSize: 12, color: muted),
+                style: TextStyle(fontSize: 11.5, color: muted),
               ),
             ),
             const SizedBox(width: 8),

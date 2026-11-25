@@ -176,12 +176,18 @@ class _DunesShellState extends State<DunesShell> with WidgetsBindingObserver {
                               child: GestureDetector(
                                 behavior: HitTestBehavior.translucent,
                                 onHorizontalDragStart: (_) => _edgeDragDx = 0,
-                                onHorizontalDragUpdate: (d) =>
-                                    _edgeDragDx += d.delta.dx,
+                                onHorizontalDragUpdate: (d) {
+                                  final prev = _edgeDragDx;
+                                  _edgeDragDx += d.delta.dx;
+                                  if (prev <= 40 && _edgeDragDx > 40) {
+                                    HapticFeedback.mediumImpact();
+                                  }
+                                },
                                 onHorizontalDragEnd: (d) {
                                   final v = d.primaryVelocity ?? 0;
                                   if (_navigation.canHandleBack &&
                                       (_edgeDragDx > 40 || v > 300)) {
+                                    HapticFeedback.selectionClick();
                                     _navigation.handleBack();
                                   }
                                   _edgeDragDx = 0;

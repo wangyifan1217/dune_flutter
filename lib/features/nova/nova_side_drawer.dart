@@ -164,13 +164,13 @@ class _NovaSideDrawerState extends State<NovaSideDrawer> {
     return Drawer(
       backgroundColor: DunesColors.resolve(
         context,
-        Colors.white,
+        DunesColors.bgApp,
         role: DunesColorRole.surface,
       ),
       surfaceTintColor: Colors.transparent,
       elevation: 16,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.horizontal(right: Radius.circular(20)),
+        borderRadius: BorderRadius.horizontal(right: Radius.circular(22)),
       ),
       child: SafeArea(
         child: Column(
@@ -191,7 +191,7 @@ class _NovaSideDrawerState extends State<NovaSideDrawer> {
                     height: 1,
                     color: DunesColors.resolve(
                       context,
-                      Color(0xFFF2F3F5),
+                      DunesColors.borderSoft,
                       role: DunesColorRole.border,
                     ),
                   ),

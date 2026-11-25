@@ -3,9 +3,9 @@ import 'package:flutter/services.dart';
 
 import '../../core/theme/dunes_theme.dart';
 
-const authBlue = Color(0xFF1A6FDB);
-const authBlueDeep = Color(0xFF0D4A9E);
-const authBg = Color(0xFFF7F8FA);
+const authBlue = DunesColors.brandPurple;
+const authBlueDeep = DunesColors.brandPurpleDeep;
+const authBg = Color(0xFFF5F5F7);
 const authSurface = Colors.white;
 
 class AuthScaffold extends StatelessWidget {
@@ -59,85 +59,119 @@ class AuthAppLogo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Center(
-      child: Container(
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          // Logo 本体是黑底白字，圆形容器同步黑底，避免透出白底。
-          color: DunesColors.resolve(
-            context,
-            Colors.black,
-            role: DunesColorRole.surface,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: authBlue.withValues(alpha: 0.18),
-              blurRadius: size * 0.28,
-              offset: Offset(0, size * 0.08),
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Container(
+            width: size * 1.38,
+            height: size * 1.38,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: RadialGradient(
+                colors: [
+                  DunesColors.resolve(
+                    context,
+                    DunesColors.brandPurpleSoft,
+                    role: DunesColorRole.surface,
+                  ),
+                  DunesColors.resolve(
+                    context,
+                    const Color(0x00F5F5F7),
+                    role: DunesColorRole.surface,
+                  ),
+                ],
+                stops: const [0.3, 1.0],
+              ),
             ),
-          ],
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: Image.asset(
-          _assetPath,
-          fit: BoxFit.cover,
-          filterQuality: FilterQuality.medium,
-          gaplessPlayback: true,
-          errorBuilder: (context, error, stackTrace) {
-            // 资源偶发失败时用同风格文字 Logo，避免落到地形占位图标。
-            return ColoredBox(
+          ),
+          Container(
+            width: size,
+            height: size,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
               color: DunesColors.resolve(
                 context,
-                Colors.black,
+                const Color(0xFF1D1D1F),
                 role: DunesColorRole.surface,
               ),
-              child: Center(
-                child: Text.rich(
-                  TextSpan(
-                    children: [
+              border: Border.all(
+                color: DunesColors.resolve(
+                  context,
+                  Colors.white,
+                  role: DunesColorRole.border,
+                ),
+                width: 2.5,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: DunesColors.brandPurple.withValues(alpha: 0.22),
+                  blurRadius: size * 0.32,
+                  offset: Offset(0, size * 0.1),
+                ),
+              ],
+            ),
+            child: ClipOval(
+              child: Image.asset(
+              _assetPath,
+              fit: BoxFit.cover,
+              filterQuality: FilterQuality.medium,
+              gaplessPlayback: true,
+              errorBuilder: (context, error, stackTrace) {
+                return ColoredBox(
+                  color: DunesColors.resolve(
+                    context,
+                    const Color(0xFF1D1D1F),
+                    role: DunesColorRole.surface,
+                  ),
+                  child: Center(
+                    child: Text.rich(
                       TextSpan(
-                        text: 'DU',
-                        style: TextStyle(
-                          color: DunesColors.resolve(context, Colors.white),
-                          fontSize: size * 0.22,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 0.5,
-                          height: 1,
-                        ),
-                      ),
-                      WidgetSpan(
-                        alignment: PlaceholderAlignment.top,
-                        child: Padding(
-                          padding: EdgeInsets.only(left: size * 0.01),
-                          child: Icon(
-                            Icons.auto_awesome,
-                            size: size * 0.1,
-                            color: DunesColors.resolve(
-                              context,
-                              const Color(0xFF7DFFB3),
+                        children: [
+                          TextSpan(
+                            text: 'DU',
+                            style: TextStyle(
+                              color: DunesColors.resolve(context, Colors.white),
+                              fontSize: size * 0.22,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.5,
+                              height: 1,
                             ),
                           ),
-                        ),
+                          WidgetSpan(
+                            alignment: PlaceholderAlignment.top,
+                            child: Padding(
+                              padding: EdgeInsets.only(left: size * 0.01),
+                              child: Icon(
+                                Icons.auto_awesome,
+                                size: size * 0.1,
+                                color: DunesColors.resolve(
+                                  context,
+                                  const Color(0xFF7DFFB3),
+                                ),
+                              ),
+                            ),
+                          ),
+                          TextSpan(
+                            text: 'NE',
+                            style: TextStyle(
+                              color: DunesColors.resolve(context, Colors.white),
+                              fontSize: size * 0.22,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.5,
+                              height: 1,
+                            ),
+                          ),
+                        ],
                       ),
-                      TextSpan(
-                        text: 'NE',
-                        style: TextStyle(
-                          color: DunesColors.resolve(context, Colors.white),
-                          fontSize: size * 0.22,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 0.5,
-                          height: 1,
-                        ),
-                      ),
-                    ],
+                      textAlign: TextAlign.center,
+                    ),
                   ),
-                  textAlign: TextAlign.center,
-                ),
-              ),
-            );
-          },
-        ),
+                );
+              },
+            ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -151,24 +185,146 @@ class AuthBackButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return IconButton(
-      onPressed: onPressed,
+      onPressed: () {
+        HapticFeedback.selectionClick();
+        onPressed();
+      },
       style: IconButton.styleFrom(
         backgroundColor: DunesColors.resolve(
+          context,
+          const Color(0xFFF2F2F7),
+          role: DunesColorRole.surface,
+        ),
+        foregroundColor: DunesColors.resolve(context, const Color(0xFF1D1D1F)),
+        shape: const CircleBorder(),
+      ),
+      icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 17),
+    );
+  }
+}
+
+class AuthFormCard extends StatelessWidget {
+  const AuthFormCard({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: DunesColors.resolve(
           context,
           authSurface,
           role: DunesColorRole.surface,
         ),
-        foregroundColor: DunesColors.resolve(context, DunesColors.text),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        side: BorderSide(
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
           color: DunesColors.resolve(
             context,
-            Color(0xFFE8ECF2),
+            const Color(0xFFE5E5EA),
             role: DunesColorRole.border,
+          ),
+          width: 0.8,
+        ),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x0A000000),
+            blurRadius: 24,
+            offset: Offset(0, 8),
+          ),
+        ],
+      ),
+      child: child,
+    );
+  }
+}
+
+class AuthPrimaryButton extends StatefulWidget {
+  const AuthPrimaryButton({
+    super.key,
+    required this.label,
+    required this.onPressed,
+  });
+
+  final String label;
+  final VoidCallback? onPressed;
+
+  @override
+  State<AuthPrimaryButton> createState() => _AuthPrimaryButtonState();
+}
+
+class _AuthPrimaryButtonState extends State<AuthPrimaryButton> {
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = widget.onPressed != null;
+    final purple = DunesColors.resolve(context, DunesColors.brandPurple);
+    return Opacity(
+      opacity: enabled ? 1.0 : 0.48,
+      child: AnimatedScale(
+        scale: _pressed && enabled ? 0.97 : 1.0,
+        duration: const Duration(milliseconds: 110),
+        curve: Curves.easeOutCubic,
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(16),
+            onTap: enabled
+                ? () {
+                    HapticFeedback.selectionClick();
+                    widget.onPressed!();
+                  }
+                : null,
+            onTapDown: enabled ? (_) => setState(() => _pressed = true) : null,
+            onTapUp: enabled ? (_) => setState(() => _pressed = false) : null,
+            onTapCancel:
+                enabled ? () => setState(() => _pressed = false) : null,
+            child: Ink(
+              height: 50,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    Color.lerp(purple, Colors.white, 0.16)!,
+                    purple,
+                    Color.lerp(purple, Colors.black, 0.14)!,
+                  ],
+                  stops: const [0.0, 0.55, 1.0],
+                ),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.30),
+                  width: 0.7,
+                ),
+                boxShadow: enabled
+                    ? [
+                        BoxShadow(
+                          color: purple.withValues(alpha: 0.30),
+                          blurRadius: 16,
+                          offset: const Offset(0, 6),
+                        ),
+                      ]
+                    : null,
+              ),
+              child: Center(
+                child: Text(
+                  widget.label,
+                  style: DunesTypography.sans(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
+                    letterSpacing: -0.2,
+                    context: context,
+                  ),
+                ),
+              ),
+            ),
           ),
         ),
       ),
-      icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
     );
   }
 }
@@ -454,39 +610,39 @@ InputDecoration authInputDecoration({
     hintText: hintText,
     errorText: errorText,
     hintStyle: DunesTypography.sans(
-      fontSize: 16,
-      color: resolve(DunesColors.text3, DunesColorRole.foreground),
+      fontSize: 15.5,
+      color: resolve(const Color(0xFF8E8E93), DunesColorRole.foreground),
     ),
     filled: true,
-    fillColor: resolve(authSurface, DunesColorRole.surface),
-    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+    fillColor: resolve(const Color(0xFFF5F5F7), DunesColorRole.surface),
+    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
     border: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(14),
+      borderRadius: BorderRadius.circular(16),
       borderSide: BorderSide(
-        color: resolve(const Color(0xFFE8ECF2), DunesColorRole.border),
+        color: resolve(const Color(0xFFE5E5EA), DunesColorRole.border),
       ),
     ),
     enabledBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(14),
+      borderRadius: BorderRadius.circular(16),
       borderSide: BorderSide(
-        color: resolve(const Color(0xFFE8ECF2), DunesColorRole.border),
+        color: resolve(const Color(0xFFE5E5EA), DunesColorRole.border),
       ),
     ),
     focusedBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(14),
+      borderRadius: BorderRadius.circular(16),
       borderSide: BorderSide(
-        color: resolve(authBlue, DunesColorRole.foreground),
+        color: resolve(DunesColors.brandPurple, DunesColorRole.foreground),
         width: 1.5,
       ),
     ),
     errorBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(14),
+      borderRadius: BorderRadius.circular(16),
       borderSide: BorderSide(
         color: resolve(DunesColors.coral, DunesColorRole.foreground),
       ),
     ),
     focusedErrorBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(14),
+      borderRadius: BorderRadius.circular(16),
       borderSide: BorderSide(
         color: resolve(DunesColors.coral, DunesColorRole.foreground),
         width: 1.5,

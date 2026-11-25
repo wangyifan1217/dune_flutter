@@ -112,6 +112,9 @@ class _IssueInvoiceDialogState extends State<_IssueInvoiceDialog> {
 
   bool get _completed => widget.item.todoHint?.status.toUpperCase() == 'DONE';
   bool get _reversing => _original != null;
+  bool get _localReversal =>
+      _original != null &&
+      _sourceBatch(_original!)?['registrationOnly'] == true;
   int get _fileLimit => _reversing ? 1 : _maxBatchFiles;
 
   Map<String, dynamic>? _sourceBatch(Map<String, dynamic> original) {
@@ -388,7 +391,7 @@ class _IssueInvoiceDialogState extends State<_IssueInvoiceDialog> {
     final ok = await _askIssueConfirm(
       context,
       '将对「${original['fileName'] ?? '所选原票'}」登记红冲 ¥${_money(amount)}。'
-      '${_completed ? '资管确认后，待办将重新打开。' : ''}',
+      '${_completed ? (_localReversal ? '登记后，待办将重新打开。' : '资管确认后，待办将重新打开。') : ''}',
       title: '确认发票红冲',
       okText: '确认红冲',
     );
@@ -403,7 +406,7 @@ class _IssueInvoiceDialogState extends State<_IssueInvoiceDialog> {
         comment: _comment.text.trim(),
       );
       if (!mounted) return;
-      showDunesToast(context, '红冲已登记并同步资管');
+      showDunesToast(context, _localReversal ? '红冲已在沙丘登记' : '红冲已登记并同步资管');
       Navigator.pop(context, true);
     } catch (e) {
       if (!mounted) return;
@@ -514,24 +517,33 @@ class _IssueInvoiceDialogState extends State<_IssueInvoiceDialog> {
     setState(() => _saving = false);
     final lines = _allocationLines(preview);
     final extra = _moneyText(preview['unallocatedAmount']);
+    final registrationOnly = preview['registrationOnly'] == true;
+    final detail = registrationOnly
+        ? '本次只登记在沙丘，待办仍可继续办理。'
+        : '已按最新账单剩余依次填满：\n$lines'
+              '${extra == '0.00' ? '' : '\n超出剩余可开票 ¥$extra，不摊进账单。'}'
+              '\n确认后通知资管并写入原单，这条待办保持未完成。';
     final ok = await _askIssueConfirm(
       context,
-      '本次开票金额 ¥${_money(amount)}。已按最新账单剩余依次填满：\n$lines'
-      '${extra == '0.00' ? '' : '\n超出剩余可开票 ¥$extra，不摊进账单。'}'
-      '${_batch.isEmpty ? '\n本次仅登记金额，未添加发票附件。' : ''}'
-      '\n确认后通知资管并写入原单，这条待办保持未完成。',
+      '本次开票金额 ¥${_money(amount)}。$detail'
+      '${_batch.isEmpty ? '\n本次仅登记金额，未添加发票附件。' : ''}',
     );
     if (ok != true || !mounted) return;
     setState(() => _saving = true);
     try {
-      await widget.service.appendIssuedInvoices(
+      final result = await widget.service.appendIssuedInvoices(
         todoId: widget.todoId,
         invoiceFiles: [for (final item in _batch) item.toPayload()],
         invoiceAmount: amount,
         comment: _comment.text.trim(),
       );
       if (!mounted) return;
-      showDunesToast(context, '已记入本次开票并通知资管，待办仍可继续');
+      showDunesToast(
+        context,
+        result['registrationOnly'] == true
+            ? '本次开票已在沙丘登记'
+            : '已记入本次开票并通知资管，待办仍可继续',
+      );
       Navigator.pop(context, true);
     } catch (e) {
       if (!mounted) return;
@@ -570,7 +582,9 @@ class _IssueInvoiceDialogState extends State<_IssueInvoiceDialog> {
                 const SizedBox(height: 6),
                 Text(
                   _completed || _reversing
-                      ? '选择已登记的原票，上传对应红字发票。资管同步成功后，已完结的待办将重新打开。'
+                      ? (_localReversal
+                            ? '选择已登记的原票并上传红字发票。登记后，已完结的待办将重新打开。'
+                            : '选择已登记的原票，上传对应红字发票。资管同步成功后，已完结的待办将重新打开。')
                       : '可以分多次登记发票；全部办理完成后，点击“完结待办”。',
                   style: DunesTypography.sans(
                     fontSize: 11.5,

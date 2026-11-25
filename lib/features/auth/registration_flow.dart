@@ -182,43 +182,53 @@ class _RegistrationFlowPageState extends State<RegistrationFlowPage> {
                 onPressed: () => Navigator.of(context).pop(),
               ),
             ),
-            const SizedBox(height: 12),
-            Text(
-              '等待审核',
-              style: DunesTypography.sans(
-                fontSize: 22,
-                fontWeight: FontWeight.w600,
-                context: context,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              '您的注册申请已提交，管理员审核通过后将自动进入 App。',
-              style: DunesTypography.sans(
-                fontSize: 14,
-                color: DunesColors.resolve(context, DunesColors.text3),
-                height: 1.5,
-                context: context,
-              ),
-            ),
-            if (_error != null) ...[
-              const SizedBox(height: 12),
-              Text(
-                _error!,
-                style: DunesTypography.sans(
-                  fontSize: 13,
-                  color: DunesColors.resolve(context, DunesColors.coral),
-                  context: context,
-                ),
-              ),
-            ],
-            const SizedBox(height: 24),
-            SizedBox(
-              height: 50,
-              child: FilledButton(
-                onPressed: _loading ? null : _pollStatus,
-                style: authPrimaryButtonStyle,
-                child: Text(_loading ? '查询中…' : '刷新审核状态'),
+            const SizedBox(height: 16),
+            AuthFormCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    '等待审核',
+                    style: DunesTypography.sans(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w700,
+                      color: DunesColors.resolve(
+                        context,
+                        const Color(0xFF1D1D1F),
+                      ),
+                      context: context,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    '您的注册申请已提交，管理员审核通过后将自动进入 App。',
+                    style: DunesTypography.sans(
+                      fontSize: 14,
+                      color: DunesColors.resolve(
+                        context,
+                        const Color(0xFF6E6E73),
+                      ),
+                      height: 1.5,
+                      context: context,
+                    ),
+                  ),
+                  if (_error != null) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      _error!,
+                      style: DunesTypography.sans(
+                        fontSize: 13,
+                        color: DunesColors.resolve(context, DunesColors.coral),
+                        context: context,
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 22),
+                  AuthPrimaryButton(
+                    label: _loading ? '查询中…' : '刷新审核状态',
+                    onPressed: _loading ? null : _pollStatus,
+                  ),
+                ],
               ),
             ),
           ],
@@ -260,59 +270,71 @@ class _RegistrationFlowPageState extends State<RegistrationFlowPage> {
             ),
           ),
           const SizedBox(height: 24),
-          _textField(
-            controller: _phone,
-            hint: '手机号',
-            keyboardType: TextInputType.phone,
-            inputFormatters: [
-              FilteringTextInputFormatter.digitsOnly,
-              LengthLimitingTextInputFormatter(11),
-            ],
-            error: _error,
-          ),
-          const SizedBox(height: 12),
-          _textField(controller: _displayName, hint: '昵称（必填）'),
-          const SizedBox(height: 12),
-          _textField(controller: _organization, hint: '组织机构（选填）'),
-          const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-            decoration: BoxDecoration(
-              color: DunesColors.resolve(
-                context,
-                const Color(0xFFF5F5F7),
-                role: DunesColorRole.surface,
-              ),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Row(
+          AuthFormCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Icon(
-                  Icons.person_outline,
-                  size: 20,
-                  color: DunesColors.resolve(context, DunesColors.text3),
+                _textField(
+                  controller: _phone,
+                  hint: '手机号',
+                  keyboardType: TextInputType.phone,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                    LengthLimitingTextInputFormatter(11),
+                  ],
+                  error: _error,
                 ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    '邀请人：$inviter',
-                    style: DunesTypography.sans(
-                      fontSize: 15,
-                      color: DunesColors.resolve(context, DunesColors.text2),
-                      context: context,
+                const SizedBox(height: 12),
+                _textField(controller: _displayName, hint: '昵称（必填）'),
+                const SizedBox(height: 12),
+                _textField(controller: _organization, hint: '组织机构（选填）'),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 13,
+                  ),
+                  decoration: BoxDecoration(
+                    color: DunesColors.resolve(
+                      context,
+                      const Color(0xFFF5F5F7),
+                      role: DunesColorRole.surface,
                     ),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.person_outline_rounded,
+                        size: 19,
+                        color: DunesColors.resolve(
+                          context,
+                          DunesColors.brandPurple,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          '邀请人：$inviter',
+                          style: DunesTypography.sans(
+                            fontSize: 14.5,
+                            color: DunesColors.resolve(
+                              context,
+                              const Color(0xFF6E6E73),
+                            ),
+                            context: context,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
+                const SizedBox(height: 22),
+                AuthPrimaryButton(
+                  label: _loading ? '处理中…' : '获取验证码',
+                  onPressed: _loading ? null : _submitProfile,
+                ),
               ],
-            ),
-          ),
-          const SizedBox(height: 24),
-          SizedBox(
-            height: 50,
-            child: FilledButton(
-              onPressed: _loading ? null : _submitProfile,
-              style: authPrimaryButtonStyle,
-              child: Text(_loading ? '处理中…' : '获取验证码'),
             ),
           ),
         ],

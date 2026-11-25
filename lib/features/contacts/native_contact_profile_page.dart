@@ -507,7 +507,7 @@ class _ProfileHero extends StatelessWidget {
         ),
         boxShadow: ImVisualTokens.softCardShadow(context),
       ),
-      padding: const EdgeInsets.fromLTRB(16, 20, 16, 20),
+      padding: const EdgeInsets.fromLTRB(14, 18, 14, 18),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
@@ -545,10 +545,10 @@ class _ProfileHero extends StatelessWidget {
             ),
           ),
           if (onAddToGroup != null && !nightApp && !isDesktopCommOnly) ...[
-            const SizedBox(width: 12),
+            const SizedBox(width: 10),
             _ProfileAddCell(size: avatarSize, onTap: onAddToGroup!),
           ],
-          const SizedBox(width: 16),
+          const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -569,36 +569,31 @@ class _ProfileHero extends StatelessWidget {
                 ),
                 if (status.showsBadge) ...[
                   const SizedBox(height: 6),
-                  nightApp
-                      ? Tooltip(
-                          message: status.def.label,
-                          child: Row(
-                            children: [
-                              Icon(
-                                status.def.icon,
-                                size: 14,
-                                color: DunesColors.resolve(
-                                  context,
-                                  status.def.color,
-                                ),
-                              ),
-                              const SizedBox(width: 4),
-                              Flexible(
-                                child: Text(
-                                  status.def.label,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: DunesTypography.sans(
-                                    fontSize: 12,
-                                    color: status.def.color,
-                                    context: context,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        )
-                      : ImStatusBadge.fromValue(status, compact: false),
+                  Tooltip(
+                    message: status.def.label,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: status.def.color.withValues(
+                          alpha: ImVisualTokens.isDark(context) ? 0.16 : 0.10,
+                        ),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: status.def.color.withValues(alpha: 0.22),
+                          width: 0.6,
+                        ),
+                      ),
+                      child: ImStatusBadge.fromValue(
+                        status,
+                        compact: false,
+                        maxLines: 2,
+                        softWrap: true,
+                      ),
+                    ),
+                  ),
                 ],
                 if (subtitleBits.isNotEmpty) ...[
                   const SizedBox(height: 6),

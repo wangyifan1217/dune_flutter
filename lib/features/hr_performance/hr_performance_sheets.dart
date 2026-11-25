@@ -771,27 +771,14 @@ Future<Map<String, dynamic>?> showHrAssignmentSheet(
   BuildContext context,
   HrPerformanceRecord record,
   Map<String, dynamic> config, {
-  List<Map<String, dynamic>> departments = const [],
   List<Map<String, dynamic>> positions = const [],
 }) => hrFormSheet(
   context,
   title: '补配本周期考核表',
-  message: '直属主管和分管主管取组织用户的当前关系。这里只补本周期的模板和人员资料。',
+  message: '部门跟随组织资料，主管沿用当前配置。这里可补配本周期模板和人员资料。',
   values: {'reason': ''},
   fields: (v, update) => [
     if (['opening', 'indicators'].contains(record.stage)) ...[
-      HrSelect<int>(
-        decoration: InputDecoration(labelText: '部门（当前：${record.department}）'),
-        items: departments
-            .map(
-              (d) => DropdownMenuItem(
-                value: (d['id'] as num).toInt(),
-                child: Text('${d['name']}'),
-              ),
-            )
-            .toList(),
-        onChanged: (x) => v['departmentId'] = x,
-      ),
       HrSelect<int>(
         decoration: InputDecoration(labelText: '岗位（当前：${record.position}）'),
         items: positions
@@ -834,7 +821,6 @@ Future<Map<String, dynamic>?> showHrAssignmentSheet(
     if (hrText(v['reason']).isEmpty) throw const FormatException('请填写修改原因');
     if ([
       'templateId',
-      'departmentId',
       'positionId',
       'hiredAt',
       'probationEndAt',

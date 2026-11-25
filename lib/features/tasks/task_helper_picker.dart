@@ -7,6 +7,7 @@ import '../../core/util/friendly_error.dart';
 import 'task_avatar.dart';
 import 'task_api.dart';
 import 'task_models.dart';
+import 'task_widgets.dart';
 
 Future<List<TaskAssignee>?> showTaskHelperPicker(
   BuildContext context, {
@@ -173,13 +174,9 @@ class _TaskHelperPickerState extends State<_TaskHelperPicker> {
             ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: TextField(
+              child: TaskSearchField(
                 controller: _searchCtrl,
-                decoration: const InputDecoration(
-                  hintText: '输入姓名筛选',
-                  isDense: true,
-                  prefixIcon: Icon(Icons.search, size: 18),
-                ),
+                hintText: '输入姓名筛选',
                 onChanged: _onSearch,
               ),
             ),

@@ -342,7 +342,6 @@ class _HrPerformanceDetailState extends State<HrPerformanceDetail> {
             context,
             _record,
             config,
-            departments: hrMaps(_options!['departments']),
             positions: hrMaps(_options!['positions']),
           );
         case 'exempt':

@@ -139,28 +139,11 @@ class _TaskAssignDialogState extends State<_TaskAssignDialog> {
               ),
             ),
             const SizedBox(height: 10),
-            TextField(
+            TaskSearchField(
               controller: _searchCtrl,
+              hintText: '搜索同事姓名',
+              showSubmitButton: true,
               onSubmitted: (v) => _load(v.trim()),
-              decoration: InputDecoration(
-                hintText: '搜索同事姓名',
-                prefixIcon: const Icon(Icons.search, size: 18),
-                suffixIcon: IconButton(
-                  tooltip: '搜索',
-                  onPressed: () => _load(_searchCtrl.text.trim()),
-                  icon: const Icon(Icons.arrow_forward, size: 18),
-                ),
-                filled: true,
-                fillColor: DunesColors.resolve(
-                  context,
-                  const Color(0xFFF5F6F8),
-                  role: DunesColorRole.surface,
-                ),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: BorderSide.none,
-                ),
-              ),
             ),
             const SizedBox(height: 8),
             Expanded(

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../core/theme/dunes_theme.dart';
 import '../auth/auth_session.dart';
@@ -1543,7 +1544,7 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
       child: ColoredBox(
         color: DunesColors.resolve(
           context,
-          const Color(0xFFF5F6F8),
+          const Color(0xFFF5F5F7),
           role: DunesColorRole.surface,
         ),
         child: TaskCopyableScope(child: _buildContent(d)),
@@ -1576,8 +1577,12 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
                 LayoutBuilder(
                   builder: (context, constraints) {
                     final back = InkWell(
-                      borderRadius: BorderRadius.circular(8),
-                      onTap: widget.onBack,
+                      borderRadius: BorderRadius.circular(12),
+                      hoverColor: Colors.transparent,
+                      onTap: () {
+                        HapticFeedback.selectionClick();
+                        widget.onBack();
+                      },
                       child: Padding(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 4,
@@ -1587,21 +1592,19 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Icon(
-                              Icons.arrow_back_ios_new,
-                              size: 14,
-                              color: DunesColors.resolve(
-                                context,
-                                DunesColors.text2,
-                              ),
+                              Icons.arrow_back_ios_new_rounded,
+                              size: 15,
+                              color: DunesColors.resolve(context, _themePurple),
                             ),
                             const SizedBox(width: 2),
                             Text(
                               widget.backLabel,
                               style: TextStyle(
-                                fontSize: 13,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500,
                                 color: DunesColors.resolve(
                                   context,
-                                  DunesColors.text2,
+                                  _themePurple,
                                 ),
                               ),
                             ),

@@ -1427,6 +1427,17 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage>
                           ),
                         ),
                       ),
+                    if (line.task.overdue)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: TaskMetaChip(
+                          text: '已逾期',
+                          color: DunesColors.resolve(
+                            context,
+                            const Color(0xFFB45309),
+                          ),
+                        ),
+                      ),
                   ],
                 ),
               ),

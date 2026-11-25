@@ -38,25 +38,25 @@ class _NovaAiPartnerWelcomeViewState extends State<NovaAiPartnerWelcomeView>
       title: '帮我在知识库里找相关资料',
       subtitle: '检索已上传的制度、材料和文档',
       prompt: '帮我在知识库里找相关资料',
-      icon: Icons.menu_book_outlined,
-      iconColor: Color(0xFF2E75FF),
-      iconBg: Color(0xFFEBF3FF),
+      icon: Icons.menu_book_rounded,
+      iconColor: DunesColors.blue,
+      iconBg: DunesColors.blueSoft,
     ),
     _WelcomePromptItem(
       title: '总结一下知识库里最近的文档',
       subtitle: '提炼要点，方便快速过一遍',
       prompt: '总结一下知识库里最近的文档，列出关键要点',
-      icon: Icons.auto_awesome_outlined,
-      iconColor: Color(0xFF7A42F4),
-      iconBg: Color(0xFFF2ECFC),
+      icon: Icons.auto_awesome_rounded,
+      iconColor: DunesColors.brandPurple,
+      iconBg: DunesColors.brandPurpleSoft,
     ),
     _WelcomePromptItem(
       title: '根据会议纪要列出要点',
       subtitle: '从会议入口选纪要，也可以直接问我',
       prompt: '根据最近的会议纪要，帮我列出要点和待办',
       icon: Icons.groups_2_rounded,
-      iconColor: Color(0xFF00B087),
-      iconBg: Color(0xFFE6F8F3),
+      iconColor: DunesColors.green,
+      iconBg: DunesColors.greenSoft,
     ),
     _WelcomePromptItem(
       title: '管理我的任务',
@@ -64,17 +64,17 @@ class _NovaAiPartnerWelcomeViewState extends State<NovaAiPartnerWelcomeView>
       prompt: '帮我看看和我相关的任务',
       capability: NovaPersonalCapability.tasks,
       icon: Icons.task_alt_rounded,
-      iconColor: Color(0xFF7965B2),
-      iconBg: Color(0xFFF3F0FA),
+      iconColor: DunesColors.accent,
+      iconBg: DunesColors.accentSoft,
     ),
     _WelcomePromptItem(
       title: '查询灯塔数据',
       subtitle: '看今天的经营总览，只读',
       prompt: '今天灯塔整体怎么样？',
       capability: NovaPersonalCapability.lighthouse,
-      icon: Icons.insights_outlined,
-      iconColor: Color(0xFFC47B2D),
-      iconBg: Color(0xFFFFF4E8),
+      icon: Icons.insights_rounded,
+      iconColor: DunesColors.amber,
+      iconBg: DunesColors.amberSoft,
     ),
   ];
 
@@ -139,7 +139,7 @@ class _NovaAiPartnerWelcomeViewState extends State<NovaAiPartnerWelcomeView>
         children: [
           const SizedBox(height: 8),
 
-          // 1. 头像区：拟人 3D 头像 + 阿宝柔光粉紫蓝渐变光晕
+          // 1. 头像区：拟人 3D 头像 + 沙丘紫暖金柔光光晕
           _buildStaggeredItem(
             start: 0.00,
             end: 0.40,
@@ -147,36 +147,34 @@ class _NovaAiPartnerWelcomeViewState extends State<NovaAiPartnerWelcomeView>
             child: Stack(
               alignment: Alignment.center,
               children: [
-                // 蓝粉微光渐变光晕
                 Container(
-                  width: 150,
-                  height: 150,
+                  width: 156,
+                  height: 156,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     gradient: RadialGradient(
                       colors: [
                         DunesColors.resolve(
                           context,
-                          Color(0xFFE5EEFC),
+                          DunesColors.brandPurpleSoft,
                           role: DunesColorRole.surface,
                         ),
                         DunesColors.resolve(
                           context,
-                          Color(0xFFEDE4FB),
+                          const Color(0x80F3EEFA),
                           role: DunesColorRole.surface,
                         ),
                         DunesColors.resolve(
                           context,
-                          Color(0x00F8F7FF),
+                          const Color(0x00F5F5F7),
                           role: DunesColorRole.surface,
                         ),
                       ],
-                      stops: [0.25, 0.70, 1.0],
+                      stops: const [0.22, 0.62, 1.0],
                     ),
                   ),
                 ),
-                // 眨眼 3D 卡通拟人形象
-                const NovaBlinkingAvatar(size: 114),
+                const NovaBlinkingAvatar(size: 112),
               ],
             ),
           ),
@@ -190,142 +188,118 @@ class _NovaAiPartnerWelcomeViewState extends State<NovaAiPartnerWelcomeView>
             child: Text(
               'Hi，我是${widget.name}',
               style: DunesTypography.sans(
-                fontSize: 25,
-                fontWeight: FontWeight.w800,
-                color: DunesColors.resolve(context, const Color(0xFF191D24)),
-                letterSpacing: -0.3,
+                fontSize: 26,
+                fontWeight: FontWeight.w700,
+                color: DunesColors.resolve(context, DunesColors.text),
+                letterSpacing: -0.5,
                 context: context,
               ),
             ),
           ),
-          const SizedBox(height: 5),
+          const SizedBox(height: 6),
 
-          // 3. 副标题：“你在沙丘上的AI全能伙伴” + 右侧贴边悬浮“反馈与投诉”
+          // 3. 副标题 + iOS 胶囊反馈按钮
           _buildStaggeredItem(
             start: 0.16,
             end: 0.54,
             offsetY: 16.0,
-            child: Stack(
-              clipBehavior: Clip.none,
-              alignment: Alignment.center,
+            child: Column(
               children: [
-                Align(
-                  alignment: Alignment.center,
-                  child: Text(
-                    widget.subtitle,
-                    style: DunesTypography.sans(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w400,
-                      color: DunesColors.resolve(
-                        context,
-                        const Color(0xFF7E8695),
-                      ),
-                      context: context,
-                    ),
+                Text(
+                  widget.subtitle,
+                  textAlign: TextAlign.center,
+                  style: DunesTypography.sans(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w400,
+                    color: DunesColors.resolve(context, DunesColors.text2),
+                    context: context,
                   ),
                 ),
-                Positioned(
-                  right: -16,
-                  child: Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      onTap: _showFeedbackDialog,
-                      borderRadius: const BorderRadius.horizontal(
-                        left: Radius.circular(16),
-                      ),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 5,
-                        ),
-                        decoration: BoxDecoration(
-                          color: DunesColors.resolveNullable(
-                            context,
-                            Color(0xFF32363D),
-                            role: DunesColorRole.surface,
-                          ),
-                          borderRadius: BorderRadius.horizontal(
-                            left: Radius.circular(16),
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Color(0x18000000),
-                              blurRadius: 6,
-                              offset: Offset(-1, 2),
-                            ),
-                          ],
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.edit_note_rounded,
-                              color: DunesColors.resolve(context, Colors.white),
-                              size: 14,
-                            ),
-                            SizedBox(width: 3),
-                            Text(
-                              '反馈与投诉',
-                              style: TextStyle(
-                                color: DunesColors.resolve(
-                                  context,
-                                  Colors.white,
-                                ),
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
+                const SizedBox(height: 10),
+                _FeedbackPillButton(onTap: _showFeedbackDialog),
               ],
             ),
           ),
-          const SizedBox(height: 26),
+          const SizedBox(height: 24),
 
-          // 4. 推荐提问卡片：3 张白色大圆角卡片（与支付宝阿宝一致）
-          ..._prompts.asMap().entries.map((entry) {
-            final index = entry.key;
-            final item = entry.value;
-            final start = 0.24 + index * 0.09;
-            final end = (start + 0.40).clamp(0.0, 1.0);
-            return _buildStaggeredItem(
-              start: start,
-              end: end,
-              offsetY: 30.0,
-              child: Padding(
-                padding: const EdgeInsets.only(bottom: 11),
-                child: _PromptCard(
-                  item: item,
-                  onTap: () {
-                    final capability = item.capability;
-                    if (capability != null &&
-                        widget.onSelectCapability != null) {
-                      widget.onSelectCapability!(capability, item.prompt);
-                      return;
-                    }
-                    widget.onSelectPrompt(item.prompt);
-                  },
+          // 4. iOS Inset Grouped 推荐提问卡片组
+          _buildStaggeredItem(
+            start: 0.24,
+            end: 0.78,
+            offsetY: 26.0,
+            child: Container(
+              decoration: BoxDecoration(
+                color: DunesColors.resolve(
+                  context,
+                  DunesColors.imSurface,
+                  role: DunesColorRole.surface,
                 ),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: DunesColors.resolve(
+                    context,
+                    DunesColors.borderSoft,
+                    role: DunesColorRole.border,
+                  ),
+                  width: 0.8,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: DunesColors.text.withValues(alpha: 0.04),
+                    offset: const Offset(0, 6),
+                    blurRadius: 20,
+                  ),
+                ],
               ),
-            );
-          }),
-          const SizedBox(height: 14),
+              clipBehavior: Clip.antiAlias,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (var i = 0; i < _prompts.length; i++) ...[
+                    if (i > 0)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 70),
+                        child: Divider(
+                          height: 0.6,
+                          thickness: 0.6,
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.borderSoft,
+                            role: DunesColorRole.border,
+                          ),
+                        ),
+                      ),
+                    _PromptCard(
+                      item: _prompts[i],
+                      onTap: () {
+                        final item = _prompts[i];
+                        final capability = item.capability;
+                        if (capability != null &&
+                            widget.onSelectCapability != null) {
+                          widget.onSelectCapability!(capability, item.prompt);
+                          return;
+                        }
+                        widget.onSelectPrompt(item.prompt);
+                      },
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
 
           _buildStaggeredItem(
             start: 0.58,
             end: 0.98,
-            offsetY: 24.0,
+            offsetY: 20.0,
             child: Padding(
-              padding: const EdgeInsets.only(top: 8, bottom: 8),
+              padding: const EdgeInsets.only(top: 4, bottom: 8),
               child: Text(
                 '内容由 AI 生成',
                 style: DunesTypography.sans(
-                  fontSize: 11,
-                  color: DunesColors.resolve(context, const Color(0xFFC2C7D0)),
+                  fontSize: 11.5,
+                  color: DunesColors.resolve(context, DunesColors.text3),
                   context: context,
                 ),
               ),
@@ -359,6 +333,87 @@ class _WelcomePromptItem {
   final Color iconBg;
 }
 
+class _FeedbackPillButton extends StatefulWidget {
+  const _FeedbackPillButton({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  State<_FeedbackPillButton> createState() => _FeedbackPillButtonState();
+}
+
+class _FeedbackPillButtonState extends State<_FeedbackPillButton> {
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedScale(
+      scale: _pressed ? 0.95 : 1.0,
+      duration: const Duration(milliseconds: 110),
+      curve: Curves.easeOutCubic,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () {
+            HapticFeedback.selectionClick();
+            widget.onTap();
+          },
+          onTapDown: (_) => setState(() => _pressed = true),
+          onTapUp: (_) => setState(() => _pressed = false),
+          onTapCancel: () => setState(() => _pressed = false),
+          borderRadius: BorderRadius.circular(18),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: DunesColors.resolve(
+                context,
+                Colors.white,
+                role: DunesColorRole.surface,
+              ),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(
+                color: DunesColors.resolve(
+                  context,
+                  const Color(0xFFE5E5EA),
+                  role: DunesColorRole.border,
+                ),
+                width: 0.8,
+              ),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x0A000000),
+                  blurRadius: 8,
+                  offset: Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.edit_note_rounded,
+                  color: DunesColors.resolve(context, DunesColors.text2),
+                  size: 15,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  '反馈与投诉',
+                  style: DunesTypography.sans(
+                    color: DunesColors.resolve(context, DunesColors.text2),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    context: context,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _PromptCard extends StatefulWidget {
   const _PromptCard({required this.item, required this.onTap});
 
@@ -376,12 +431,11 @@ class _PromptCardState extends State<_PromptCard> {
   Widget build(BuildContext context) {
     final item = widget.item;
     return AnimatedScale(
-      scale: _pressed ? 0.975 : 1.0,
-      duration: const Duration(milliseconds: 120),
+      scale: _pressed ? 0.985 : 1.0,
+      duration: const Duration(milliseconds: 110),
       curve: Curves.easeOutCubic,
       child: Material(
         color: Colors.transparent,
-        borderRadius: BorderRadius.circular(22),
         child: InkWell(
           onTap: () {
             HapticFeedback.selectionClick();
@@ -390,52 +444,31 @@ class _PromptCardState extends State<_PromptCard> {
           onTapDown: (_) => setState(() => _pressed = true),
           onTapUp: (_) => setState(() => _pressed = false),
           onTapCancel: () => setState(() => _pressed = false),
-          borderRadius: BorderRadius.circular(22),
-          splashColor: item.iconColor.withValues(alpha: 0.08),
-          highlightColor: item.iconColor.withValues(alpha: 0.04),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            decoration: BoxDecoration(
-              color: DunesColors.resolve(
-                context,
-                Colors.white,
-                role: DunesColorRole.surface,
-              ),
-              borderRadius: BorderRadius.circular(22),
-              border: Border.all(
-                color: DunesColors.resolve(
-                  context,
-                  const Color(0xFFEEF0F5),
-                  role: DunesColorRole.border,
-                ),
-                width: 1,
-              ),
-              boxShadow: const [
-                BoxShadow(
-                  color: Color(0x0A2B3B60),
-                  offset: Offset(0, 4),
-                  blurRadius: 14,
-                  spreadRadius: 0,
-                ),
-              ],
-            ),
+          splashColor: item.iconColor.withValues(alpha: 0.07),
+          highlightColor: DunesColors.resolve(
+            context,
+            DunesColors.bgSoft,
+            role: DunesColorRole.surface,
+          ).withValues(alpha: 0.7),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
             child: Row(
               children: [
                 Container(
-                  width: 42,
-                  height: 42,
+                  width: 40,
+                  height: 40,
                   decoration: BoxDecoration(
                     color: DunesColors.resolveNullable(
                       context,
                       item.iconBg,
                       role: DunesColorRole.surface,
                     ),
-                    borderRadius: BorderRadius.circular(13),
+                    borderRadius: BorderRadius.circular(12),
                   ),
                   alignment: Alignment.center,
                   child: Icon(
                     item.icon,
-                    size: 21,
+                    size: 20,
                     color: DunesColors.resolveNullable(context, item.iconColor),
                   ),
                 ),
@@ -450,40 +483,31 @@ class _PromptCardState extends State<_PromptCard> {
                         overflow: TextOverflow.ellipsis,
                         style: DunesTypography.sans(
                           fontSize: 15,
-                          fontWeight: FontWeight.w700,
-                          color: DunesColors.resolve(
-                            context,
-                            const Color(0xFF191D24),
-                          ),
+                          fontWeight: FontWeight.w600,
+                          color: DunesColors.resolve(context, DunesColors.text),
                           letterSpacing: -0.2,
                           context: context,
                         ),
                       ),
-                      const SizedBox(height: 3),
+                      const SizedBox(height: 2.5),
                       Text(
                         item.subtitle,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: DunesTypography.sans(
-                          fontSize: 12,
-                          color: DunesColors.resolve(
-                            context,
-                            const Color(0xFF86909C),
-                          ),
+                          fontSize: 12.5,
+                          color: DunesColors.resolve(context, DunesColors.text2),
                           context: context,
                         ),
                       ),
                     ],
                   ),
                 ),
-                const SizedBox(width: 6),
+                const SizedBox(width: 8),
                 Icon(
-                  Icons.arrow_forward_ios_rounded,
-                  size: 13,
-                  color: DunesColors.resolveNullable(
-                    context,
-                    Color(0xFFCFD5DF),
-                  ),
+                  Icons.chevron_right_rounded,
+                  size: 18,
+                  color: DunesColors.resolve(context, DunesColors.text3),
                 ),
               ],
             ),
@@ -510,15 +534,15 @@ class NovaBlinkingAvatar extends StatelessWidget {
         border: Border.all(
           color: DunesColors.resolve(
             context,
-            Colors.white,
+            DunesColors.imSurface,
             role: DunesColorRole.border,
           ),
           width: 3.5,
         ),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF6B3FE2).withValues(alpha: 0.16),
-            blurRadius: 20,
+            color: DunesColors.brandPurple.withValues(alpha: 0.16),
+            blurRadius: 22,
             offset: const Offset(0, 8),
             spreadRadius: 2,
           ),

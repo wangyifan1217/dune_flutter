@@ -2,8 +2,10 @@ import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../core/navigation/navigation_controller.dart';
+import '../../core/platform/desktop_features.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../chat/native_audio_recorder.dart';
 import '../shell/dunes_main_tab_bar.dart';
@@ -215,13 +217,9 @@ class _MeetingRecordingCoordinatorState
   Widget build(BuildContext context) => widget.child;
 }
 
-double _meetingRecordingBarHeight(BuildContext context) {
-  final textHeight = MediaQuery.textScalerOf(context).scale(13);
-  return 54 + textHeight * 2 - 16;
-}
-
-/// 悬浮在页面上，不把整页顶出一块底色。
-/// 底栏由调用方绘制在 [bottomNavigationExtent] 以下，这里按看得见的胶囊高度贴上去。
+/// 顶部居中「会议录音灵动岛」容器：
+/// 不再占据或遮挡底部 IM 输入框与底栏，以紧凑深色灵动岛胶囊悬停在顶部安全区下方居中，
+/// 左侧 `< 返回` 与右侧菜单完全无遮挡；点击灵动岛即可一键回到会议录音页。
 class MeetingRecordingLayout extends StatelessWidget {
   const MeetingRecordingLayout({
     super.key,
@@ -244,43 +242,25 @@ class MeetingRecordingLayout extends StatelessWidget {
       child: child,
       builder: (context, active, content) {
         final show = visible && active;
-        final media = MediaQuery.of(context);
-        final barHeight = show ? _meetingRecordingBarHeight(context) : 0.0;
-        final safe = bottomNavigationExtent > 0 ? 0.0 : media.padding.bottom;
-        final barBottom = show ? bottomNavigationExtent + safe + 8 : 0.0;
-        final clearance = show ? barBottom + barHeight + 8 : 0.0;
-        // 列表原本只让出 96 的底栏堆叠。条贴着 56 的胶囊后，还差出来的一截补进滚动留白。
-        final reserved = bottomNavigationExtent > 0
-            ? kDunesAppBottomNavStackHeight +
-                  (media.viewPadding.bottom > kDunesAppBottomNavMinGap
-                      ? media.viewPadding.bottom
-                      : kDunesAppBottomNavMinGap)
-            : 0.0;
-        final extra = clearance > reserved ? clearance - reserved : 0.0;
-        final liftedBottom = media.padding.bottom >= clearance
-            ? media.padding.bottom
-            : clearance;
-        final page = !show || liftedBottom == media.padding.bottom
-            ? content!
-            : MediaQuery(
-                data: media.copyWith(
-                  padding: media.padding.copyWith(bottom: liftedBottom),
-                ),
-                child: content!,
-              );
+        final topInset = MediaQuery.paddingOf(context).top;
+        final islandTop = isDesktopCommOnly
+            ? 10.0
+            : (topInset > 14 ? topInset + 4.0 : 10.0);
         return MeetingRecordingChromeInset(
-          extra: extra,
+          extra: 0.0,
           child: Stack(
             fit: StackFit.expand,
             children: [
-              page,
+              content!,
               if (show)
                 Positioned(
-                  left: 16,
-                  right: 16,
-                  bottom: barBottom,
-                  height: barHeight,
-                  child: MeetingRecordingBar(onOpen: onOpen),
+                  top: islandTop,
+                  left: 56,
+                  right: 56,
+                  child: Align(
+                    alignment: Alignment.topCenter,
+                    child: MeetingRecordingBar(onOpen: onOpen),
+                  ),
                 ),
             ],
           ),
@@ -290,13 +270,22 @@ class MeetingRecordingLayout extends StatelessWidget {
   }
 }
 
-class MeetingRecordingBar extends StatelessWidget {
+class MeetingRecordingBar extends StatefulWidget {
   const MeetingRecordingBar({super.key, required this.onOpen});
   final VoidCallback onOpen;
 
   @override
+  State<MeetingRecordingBar> createState() => _MeetingRecordingBarState();
+}
+
+class _MeetingRecordingBarState extends State<MeetingRecordingBar> {
+  bool _hovered = false;
+  bool _pressed = false;
+
+  @override
   Widget build(BuildContext context) {
     final live = MeetingLiveController.instance;
+    final disableAnim = MediaQuery.disableAnimationsOf(context);
     return ListenableBuilder(
       listenable: Listenable.merge([
         live.paused,
@@ -314,162 +303,175 @@ class MeetingRecordingBar extends StatelessWidget {
             : failed
             ? const Color(0xFFFF5B61)
             : const Color(0xFFB69BFF);
-        final label = failed
+        final shortLabel = failed
+            ? '待恢复'
+            : recovering
+            ? '恢复中…'
+            : paused
+            ? '已暂停'
+            : '录音中';
+        final fullLabel = failed
             ? '录音待恢复保存'
             : recovering
             ? '正在恢复录音…'
             : paused
             ? '会议录音已暂停'
             : '会议录音中';
+        final elapsed = meetingRecordingElapsed(live.elapsed.value);
         final title = live.meetingTitle.value.trim();
+
         return Semantics(
-          label:
-              '$label，${meetingRecordingElapsed(live.elapsed.value)}，点击进入当前会议',
+          label: '$fullLabel，$elapsed，点击进入当前会议',
           button: true,
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(24),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.38),
-                  blurRadius: 22,
-                  spreadRadius: -4,
-                  offset: const Offset(0, 8),
-                ),
-                BoxShadow(
-                  color: accentColor.withValues(alpha: 0.24),
-                  blurRadius: 16,
-                  spreadRadius: -6,
-                  offset: const Offset(0, 3),
-                ),
-              ],
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(24),
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 22, sigmaY: 22),
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: failed
-                        ? const Color(0xF5210D0E)
-                        : const Color(0xF50B0B10),
-                    borderRadius: BorderRadius.circular(24),
-                    border: Border.all(
-                      color: accentColor.withValues(alpha: 0.30),
-                      width: 0.8,
-                    ),
-                  ),
-                  child: Material(
-                    key: const Key('meeting-recording-bar'),
-                    type: MaterialType.transparency,
-                    child: InkWell(
-                      onTap: onOpen,
-                      splashColor: accentColor.withValues(alpha: 0.14),
-                      highlightColor: Colors.transparent,
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 9,
+          child: MouseRegion(
+            cursor: SystemMouseCursors.click,
+            onEnter: (_) {
+              if (mounted) setState(() => _hovered = true);
+            },
+            onExit: (_) {
+              if (mounted) setState(() => _hovered = false);
+            },
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTapDown: (_) {
+                if (mounted) setState(() => _pressed = true);
+              },
+              onTapUp: (_) {
+                if (mounted) setState(() => _pressed = false);
+              },
+              onTapCancel: () {
+                if (mounted) setState(() => _pressed = false);
+              },
+              onTap: () {
+                HapticFeedback.selectionClick();
+                widget.onOpen();
+              },
+              child: AnimatedScale(
+                scale: _pressed && !disableAnim ? 0.95 : 1.0,
+                duration: const Duration(milliseconds: 110),
+                curve: Curves.easeOutCubic,
+                child: Tooltip(
+                  message: title.isEmpty ? '$fullLabel · 点击返回' : '$title · 点击返回',
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(999),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.36),
+                          blurRadius: _hovered ? 22 : 16,
+                          spreadRadius: -4,
+                          offset: const Offset(0, 6),
                         ),
-                        child: Row(
-                          children: [
-                            Container(
-                              width: 36,
-                              height: 36,
-                              decoration: BoxDecoration(
-                                color: accentColor.withValues(alpha: 0.18),
-                                shape: BoxShape.circle,
+                        BoxShadow(
+                          color: accentColor.withValues(
+                            alpha: _hovered ? 0.34 : 0.22,
+                          ),
+                          blurRadius: _hovered ? 18 : 12,
+                          spreadRadius: -5,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(999),
+                      child: BackdropFilter(
+                        filter: ImageFilter.blur(sigmaX: 22, sigmaY: 22),
+                        child: AnimatedContainer(
+                          key: const Key('meeting-recording-bar'),
+                          duration: const Duration(milliseconds: 150),
+                          height: 36,
+                          padding: const EdgeInsets.fromLTRB(6, 0, 6, 0),
+                          decoration: BoxDecoration(
+                            color: failed
+                                ? const Color(0xF5210D0E)
+                                : const Color(0xF50B0B10),
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(
+                              color: accentColor.withValues(
+                                alpha: _hovered ? 0.52 : 0.32,
                               ),
-                              child: recovering
-                                  ? Padding(
-                                      padding: const EdgeInsets.all(9),
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
+                              width: 0.85,
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              Container(
+                                width: 24,
+                                height: 24,
+                                decoration: BoxDecoration(
+                                  color: accentColor.withValues(alpha: 0.18),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: recovering
+                                    ? Padding(
+                                        padding: const EdgeInsets.all(6),
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 1.8,
+                                          color: accentColor,
+                                        ),
+                                      )
+                                    : paused || failed
+                                    ? Icon(
+                                        failed
+                                            ? Icons.warning_amber_rounded
+                                            : Icons.pause_rounded,
+                                        color: accentColor,
+                                        size: 14,
+                                      )
+                                    : _MeetingIslandEqualizer(
                                         color: accentColor,
                                       ),
-                                    )
-                                  : paused || failed
-                                  ? Icon(
-                                      failed
-                                          ? Icons.warning_amber_rounded
-                                          : Icons.pause_rounded,
-                                      color: accentColor,
-                                      size: 20,
-                                    )
-                                  : _MeetingIslandEqualizer(color: accentColor),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    label,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: DunesTypography.sans(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w600,
-                                      color: Colors.white,
-                                      context: context,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: Text(
-                                          title.isEmpty ? '现场会议' : title,
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: DunesTypography.sans(
-                                            fontSize: 11.5,
-                                            color: Colors.white.withValues(
-                                              alpha: 0.68,
-                                            ),
-                                            context: context,
-                                          ),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Text(
-                                        meetingRecordingElapsed(
-                                          live.elapsed.value,
-                                        ),
-                                        style: DunesTypography.sans(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w600,
-                                          color: accentColor,
-                                          context: context,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ],
                               ),
-                            ),
-                            const SizedBox(width: 8),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 10,
-                                vertical: 5,
-                              ),
-                              decoration: BoxDecoration(
-                                color: accentColor.withValues(alpha: 0.22),
-                                borderRadius: BorderRadius.circular(999),
-                              ),
-                              child: Text(
-                                paused || failed ? '处理' : '返回',
+                              const SizedBox(width: 7),
+                              Text(
+                                shortLabel,
+                                maxLines: 1,
                                 style: DunesTypography.sans(
-                                  fontSize: 11.5,
+                                  fontSize: 12.5,
                                   fontWeight: FontWeight.w600,
                                   color: Colors.white,
                                   context: context,
                                 ),
                               ),
-                            ),
-                          ],
+                              const SizedBox(width: 6),
+                              Text(
+                                elapsed,
+                                maxLines: 1,
+                                style: DunesTypography.sans(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                  color: accentColor,
+                                  context: context,
+                                ).copyWith(
+                                  fontFeatures: const [
+                                    FontFeature.tabularFigures(),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 7),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 3.5,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: accentColor.withValues(alpha: 0.24),
+                                  borderRadius: BorderRadius.circular(999),
+                                ),
+                                child: Text(
+                                  paused || failed ? '处理' : '返回',
+                                  style: DunesTypography.sans(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.white,
+                                    context: context,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ),

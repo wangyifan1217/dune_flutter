@@ -403,11 +403,10 @@ void main() {
       await live.start(session, title: '产品周会');
       final nav = await mount(tester);
       expect(find.byKey(const Key('meeting-recording-bar')), findsOneWidget);
+      // Top-center Dynamic Island sits cleanly above the bottom composer.
       expect(
-        tester.getRect(find.byKey(const Key('composer'))).bottom,
-        lessThan(
-          tester.getRect(find.byKey(const Key('meeting-recording-bar'))).top,
-        ),
+        tester.getRect(find.byKey(const Key('meeting-recording-bar'))).bottom,
+        lessThan(tester.getRect(find.byKey(const Key('composer'))).top),
       );
       await capture(tester, 'recording-bar');
       await tester.tap(find.byKey(const Key('meeting-recording-bar')));
@@ -506,15 +505,15 @@ void main() {
       final bar = find.byKey(const Key('meeting-recording-bar'));
       expect(tester.getRect(bar).bottom, lessThanOrEqualTo(780 - 110));
       expect(
-        tester.getRect(find.byKey(const Key('composer'))).bottom,
-        lessThan(tester.getRect(bar).top),
+        tester.getRect(bar).bottom,
+        lessThan(tester.getRect(find.byKey(const Key('composer'))).top),
       );
       tester.view.viewInsets = const FakeViewPadding(bottom: 280);
       await tester.pump();
       expect(tester.getRect(bar).bottom, lessThan(500));
       expect(
-        tester.getRect(find.byKey(const Key('composer'))).bottom,
-        lessThan(tester.getRect(bar).top),
+        tester.getRect(bar).bottom,
+        lessThan(tester.getRect(find.byKey(const Key('composer'))).top),
       );
       expect(tester.takeException(), isNull);
     },

@@ -774,8 +774,13 @@ Future<Map<String, dynamic>?> showHrAssignmentSheet(
   List<Map<String, dynamic>> positions = const [],
 }) => hrFormSheet(
   context,
-  title: '补配本周期考核表',
-  message: '部门跟随组织资料，主管沿用当前配置。这里可补配本周期模板和人员资料。',
+  title: record.stage == 'review' ? '切换考核模板' : '补配本周期考核表',
+  message: record.stage == 'review'
+      ? '当前模板：${record.snapshot['templateName']}。请选择新的模板，切换后仍由主管初评。'
+      : '部门和主管跟随当前组织关系。这里可补配本周期模板和人员资料。',
+  confirmationMessage: record.stage == 'review'
+      ? () => '将使用新模板的指标和权重。原指标、草稿评分及待处理的指标调整申请不会带入，变更会记录在操作日志。'
+      : null,
   values: {'reason': ''},
   fields: (v, update) => [
     if (['opening', 'indicators'].contains(record.stage)) ...[
@@ -801,10 +806,14 @@ Future<Map<String, dynamic>?> showHrAssignmentSheet(
         decoration: const InputDecoration(labelText: '试用期截止（YYYY-MM-DD，可清空）'),
         onChanged: (x) => v['probationEndAt'] = x,
       ),
+    ],
+    if (['opening', 'indicators', 'review'].contains(record.stage))
       HrSelect<String>(
-        decoration: const InputDecoration(labelText: '本周期模板（留空保持）'),
+        decoration: InputDecoration(
+          labelText: record.stage == 'review' ? '新考核模板' : '本周期模板（留空保持）',
+        ),
         items: hrMaps(config['templates'])
-            .where((t) => t['enabled'] == true)
+            .where((t) => record.stage == 'review' || t['enabled'] == true)
             .map(
               (t) => DropdownMenuItem(
                 value: '${t['id']}',
@@ -814,11 +823,13 @@ Future<Map<String, dynamic>?> showHrAssignmentSheet(
             .toList(),
         onChanged: (x) => v['templateId'] = x,
       ),
-    ],
     hrReasonField(v),
   ],
   submit: (v) {
     if (hrText(v['reason']).isEmpty) throw const FormatException('请填写修改原因');
+    if (record.stage == 'review' && v['templateId'] == null) {
+      throw const FormatException('请选择新的考核模板');
+    }
     if ([
       'templateId',
       'positionId',

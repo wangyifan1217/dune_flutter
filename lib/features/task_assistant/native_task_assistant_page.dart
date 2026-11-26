@@ -5,7 +5,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 
 import '../../core/navigation/navigation_controller.dart';
+import '../../core/theme/dunes_page_transition.dart';
 import '../../core/theme/dunes_theme.dart';
+import '../../core/widgets/dunes_motion_kit.dart';
+import '../chat/assistant_ui_kit.dart';
 import '../auth/auth_session.dart';
 import '../chat/assistant_transcript_support.dart';
 import '../chat/chat_widgets.dart';
@@ -767,13 +770,13 @@ class _NativeTaskAssistantPageState extends State<NativeTaskAssistantPage> {
               actions: [
                 if (!_showTasks)
                   _compactHeaderAction(
-                    icon: Icons.task_alt_outlined,
+                    icon: Icons.task_alt_rounded,
                     tooltip: '进入任务',
                     onPressed: _openActiveTasks,
                   ),
                 if (!_showTasks)
                   _compactHeaderAction(
-                    icon: Icons.edit_calendar_outlined,
+                    icon: Icons.edit_calendar_rounded,
                     tooltip: _dailyPending ? '日报待填' : '日报',
                     color: _dailyPending ? const Color(0xFFE11D48) : null,
                     showDot: _dailyPending,
@@ -781,14 +784,27 @@ class _NativeTaskAssistantPageState extends State<NativeTaskAssistantPage> {
                   ),
                 if (!_showTasks)
                   _compactHeaderAction(
-                    icon: Icons.delete_sweep_outlined,
+                    icon: Icons.delete_sweep_rounded,
                     tooltip: '清空',
                     onPressed: _clearing ? null : _clearHistory,
                     busy: _clearing,
                   ),
               ],
             ),
-            Expanded(child: _showTasks ? _buildTasks() : _buildMessages()),
+            Expanded(
+              child: DunesBlurExpandSwitcher(
+                isBack: !_showTasks,
+                child: _showTasks
+                    ? KeyedSubtree(
+                        key: const ValueKey('ta-tasks'),
+                        child: AssistantFeedFrame(child: _buildTasks()),
+                      )
+                    : KeyedSubtree(
+                        key: const ValueKey('ta-messages'),
+                        child: AssistantFeedFrame(child: _buildMessages()),
+                      ),
+              ),
+            ),
           ],
         ),
       ),
@@ -796,20 +812,23 @@ class _NativeTaskAssistantPageState extends State<NativeTaskAssistantPage> {
   }
 
   Widget _buildMessages() {
-    if (_loading) return const Center(child: CircularProgressIndicator());
+    if (_loading) return const DunesListSkeleton();
     if (_error != null) {
-      return Center(
-        child: TextButton(onPressed: _loadMessages, child: Text('重试：$_error')),
+      return AssistantEmptyCard(
+        icon: Icons.cloud_off_rounded,
+        title: '任务通知加载失败',
+        subtitle: _error!,
+        accent: const Color(0xFFFF5B61),
+        actionLabel: '重试',
+        onAction: _loadMessages,
       );
     }
     if (_messages.isEmpty) {
-      return Center(
-        child: Text(
-          '任务相关的信息会在这里通知你',
-          style: TextStyle(
-            color: DunesColors.resolve(context, DunesColors.text3),
-          ),
-        ),
+      return const AssistantEmptyCard(
+        icon: Icons.task_alt_rounded,
+        title: '暂无任务通知',
+        subtitle: '主目标拆解、待确认、逾期提醒和日报状态都会及时推送到这里',
+        accent: Color(0xFF2F8F7E),
       );
     }
     return Stack(

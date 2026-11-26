@@ -7347,6 +7347,7 @@ class _NativeChatViewState extends State<NativeChatView>
                       controller: _inputController,
                       focusNode: _inputFocusNode,
                       backgroundColor: wide ? Colors.transparent : null,
+                      includeBottomSafeArea: false,
                       onKeyIntercept: wide ? _onComposerKeyIntercept : null,
                       showTopBorder:
                           !wide &&

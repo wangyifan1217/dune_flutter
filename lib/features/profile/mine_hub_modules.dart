@@ -11,7 +11,6 @@ import '../kb/native_kb_models.dart';
 import '../kb/native_kb_service.dart';
 import '../meeting/native_meeting_models.dart';
 import '../meeting/native_meeting_service.dart';
-import '../nova/nova_icon.dart';
 import '../tasks/task_api.dart';
 import 'mine_home.dart';
 
@@ -101,8 +100,12 @@ class _AppleTactileState extends State<_AppleTactile> {
     final reduceMotion = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
     return MouseRegion(
       cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
+      onEnter: (_) {
+        if (mounted) setState(() => _hovered = true);
+      },
+      onExit: (_) {
+        if (mounted) setState(() => _hovered = false);
+      },
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTapDown: enabled ? (_) => setState(() => _pressed = true) : null,
@@ -417,8 +420,12 @@ class _ProposalTypeOptionTileState extends State<_ProposalTypeOptionTile> {
     final opt = widget.option;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return MouseRegion(
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
+      onEnter: (_) {
+        if (mounted) setState(() => _hovered = true);
+      },
+      onExit: (_) {
+        if (mounted) setState(() => _hovered = false);
+      },
       child: _AppleTactile(
         onTap: widget.onSelected,
         child: AnimatedContainer(
@@ -617,7 +624,6 @@ class _MineHubOverviewSectionState extends State<MineHubOverviewSection> {
         final isWide = constraints.maxWidth >= 820;
         final heroCard = _buildUnifiedHeroCard(context, isWide: isWide);
         final focusCard = _buildTodayFocusCard(context);
-        final aiCard = _buildXiaoTaoBriefCard(context);
         final recentCard = _buildRecentActivityCard(context);
 
         return Column(
@@ -632,17 +638,7 @@ class _MineHubOverviewSectionState extends State<MineHubOverviewSection> {
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Expanded(
-                      flex: 11,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          focusCard,
-                          const SizedBox(height: 12),
-                          Expanded(child: aiCard),
-                        ],
-                      ),
-                    ),
+                    Expanded(flex: 11, child: focusCard),
                     const SizedBox(width: 12),
                     Expanded(flex: 12, child: recentCard),
                   ],
@@ -650,8 +646,6 @@ class _MineHubOverviewSectionState extends State<MineHubOverviewSection> {
               )
             else ...[
               focusCard,
-              const SizedBox(height: 12),
-              aiCard,
               const SizedBox(height: 12),
               recentCard,
             ],
@@ -772,10 +766,11 @@ class _MineHubOverviewSectionState extends State<MineHubOverviewSection> {
               const SizedBox(height: 3),
               Text(
                 widget.subtitle,
-                maxLines: 1,
+                maxLines: isWide ? 1 : 2,
                 overflow: TextOverflow.ellipsis,
                 style: DunesTypography.sans(
                   fontSize: 12.5,
+                  height: 1.35,
                   color: DunesColors.resolve(context, MinePalette.ink2),
                   context: context,
                 ),
@@ -928,7 +923,7 @@ class _MineHubOverviewSectionState extends State<MineHubOverviewSection> {
                   onTap: widget.onOpenPendingApprovals,
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 6),
               Expanded(
                 child: _FocusMetricTile(
                   label: '待办理',
@@ -937,7 +932,7 @@ class _MineHubOverviewSectionState extends State<MineHubOverviewSection> {
                   onTap: widget.onOpenTodoApprovals,
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 6),
               Expanded(
                 child: _FocusMetricTile(
                   label: '待办任务',
@@ -946,7 +941,7 @@ class _MineHubOverviewSectionState extends State<MineHubOverviewSection> {
                   onTap: widget.onOpenTasks,
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 6),
               Expanded(
                 child: _FocusMetricTile(
                   label: '我发起的',
@@ -955,128 +950,6 @@ class _MineHubOverviewSectionState extends State<MineHubOverviewSection> {
                   onTap: widget.onOpenInitiated,
                 ),
               ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// 模块 D：小饕每日智能简报卡
-  Widget _buildXiaoTaoBriefCard(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    const prompts = <(String, String)>[
-      ('总结今日待办', '帮我总结一下今天的待办任务和重点工作'),
-      ('梳理未处理审批', '帮我梳理目前待我审批和待办理的事项'),
-      ('回顾会议要点', '帮我回顾最近一次会议纪要的核心要点与待办'),
-    ];
-
-    return _AppleBentoCard(
-      radius: 20,
-      tinted: true,
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 34,
-                height: 34,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: DunesColors.brandPurple.withValues(alpha: 0.28),
-                    width: 1.2,
-                  ),
-                ),
-                child: const ClipOval(
-                  child: NovaPersonAvatarImage(width: 34, height: 34),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '小饕 · 每日简报',
-                      style: DunesTypography.sans(
-                        fontSize: 14.5,
-                        fontWeight: FontWeight.w700,
-                        color: DunesColors.resolve(context, MinePalette.ink),
-                        context: context,
-                      ),
-                    ),
-                    Text(
-                      '一键直达 AI 梳理今日工作',
-                      style: DunesTypography.sans(
-                        fontSize: 11.5,
-                        color: DunesColors.resolve(context, MinePalette.ink2),
-                        context: context,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Icon(
-                Icons.auto_awesome_rounded,
-                size: 17,
-                color: DunesColors.brandPurple.withValues(alpha: 0.8),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              for (final (label, prompt) in prompts)
-                _AppleTactile(
-                  onTap: () => widget.onAskXiaoTao(prompt),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 11,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: isDark
-                          ? Colors.white.withValues(alpha: 0.08)
-                          : Colors.white,
-                      borderRadius: BorderRadius.circular(99),
-                      border: Border.all(
-                        color: DunesColors.brandPurple.withValues(
-                          alpha: isDark ? 0.28 : 0.18,
-                        ),
-                        width: 0.75,
-                      ),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          label,
-                          style: DunesTypography.sans(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: DunesColors.resolve(
-                              context,
-                              DunesColors.brandPurple,
-                            ),
-                            context: context,
-                          ),
-                        ),
-                        const SizedBox(width: 3),
-                        const Icon(
-                          Icons.arrow_forward_rounded,
-                          size: 12.5,
-                          color: DunesColors.brandPurple,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
             ],
           ),
         ],
@@ -1100,35 +973,40 @@ class _MineHubOverviewSectionState extends State<MineHubOverviewSection> {
         children: [
           Row(
             children: [
-              Container(
-                padding: const EdgeInsets.all(3),
-                decoration: BoxDecoration(
-                  color: isDark
-                      ? Colors.white.withValues(alpha: 0.06)
-                      : const Color(0xFFF3F2F8),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    _SegmentedTab(
-                      label: _recentMeetings.isNotEmpty
-                          ? '最近会议 (${_recentMeetings.length})'
-                          : '最近会议',
-                      active: _recentTab == 0,
-                      onTap: () => setState(() => _recentTab = 0),
+              Flexible(
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Container(
+                    padding: const EdgeInsets.all(3),
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? Colors.white.withValues(alpha: 0.06)
+                          : const Color(0xFFF3F2F8),
+                      borderRadius: BorderRadius.circular(10),
                     ),
-                    _SegmentedTab(
-                      label: _recentKbDocs.isNotEmpty
-                          ? '知识库文档 (${_recentKbDocs.length})'
-                          : '知识库文档',
-                      active: _recentTab == 1,
-                      onTap: () => setState(() => _recentTab = 1),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _SegmentedTab(
+                          label: _recentMeetings.isNotEmpty
+                              ? '最近会议 (${_recentMeetings.length})'
+                              : '最近会议',
+                          active: _recentTab == 0,
+                          onTap: () => setState(() => _recentTab = 0),
+                        ),
+                        _SegmentedTab(
+                          label: _recentKbDocs.isNotEmpty
+                              ? '知识库文档 (${_recentKbDocs.length})'
+                              : '知识库文档',
+                          active: _recentTab == 1,
+                          onTap: () => setState(() => _recentTab = 1),
+                        ),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
               ),
-              const Spacer(),
+              const SizedBox(width: 6),
               _AppleTactile(
                 onTap: _recentTab == 0
                     ? widget.onOpenMeetings
@@ -1435,15 +1313,19 @@ class _CompactQuickButtonState extends State<_CompactQuickButton> {
     final item = widget.item;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return MouseRegion(
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
+      onEnter: (_) {
+        if (mounted) setState(() => _hovered = true);
+      },
+      onExit: (_) {
+        if (mounted) setState(() => _hovered = false);
+      },
       child: _AppleTactile(
         onTap: item.onTap,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 140),
           padding: EdgeInsets.symmetric(
-            horizontal: widget.compact ? 11 : 10,
-            vertical: widget.compact ? 8 : 9,
+            horizontal: widget.compact ? 11 : 6,
+            vertical: widget.compact ? 8 : 10,
           ),
           decoration: BoxDecoration(
             color: _hovered
@@ -1453,7 +1335,7 @@ class _CompactQuickButtonState extends State<_CompactQuickButton> {
                 : (isDark
                       ? Colors.white.withValues(alpha: 0.06)
                       : Colors.white.withValues(alpha: 0.85)),
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(13),
             border: Border.all(
               color: _hovered
                   ? item.color.withValues(alpha: 0.45)
@@ -1472,42 +1354,76 @@ class _CompactQuickButtonState extends State<_CompactQuickButton> {
                   ]
                 : const [],
           ),
-          child: Row(
-            mainAxisSize: widget.compact ? MainAxisSize.min : MainAxisSize.max,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                width: 24,
-                height: 24,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      Color.lerp(item.color, Colors.white, 0.22)!,
-                      item.color,
-                    ],
-                  ),
-                  borderRadius: BorderRadius.circular(7),
+          child: widget.compact
+              ? Row(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      width: 24,
+                      height: 24,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            Color.lerp(item.color, Colors.white, 0.22)!,
+                            item.color,
+                          ],
+                        ),
+                        borderRadius: BorderRadius.circular(7),
+                      ),
+                      child: Icon(item.icon, size: 13.5, color: Colors.white),
+                    ),
+                    const SizedBox(width: 7),
+                    Text(
+                      item.label,
+                      maxLines: 1,
+                      style: DunesTypography.sans(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                        color: DunesColors.resolve(context, MinePalette.ink),
+                        context: context,
+                      ),
+                    ),
+                  ],
+                )
+              : Column(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            Color.lerp(item.color, Colors.white, 0.22)!,
+                            item.color,
+                          ],
+                        ),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Icon(item.icon, size: 17, color: Colors.white),
+                    ),
+                    const SizedBox(height: 6),
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        item.label,
+                        maxLines: 1,
+                        style: DunesTypography.sans(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: DunesColors.resolve(context, MinePalette.ink),
+                          context: context,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-                child: Icon(item.icon, size: 13.5, color: Colors.white),
-              ),
-              const SizedBox(width: 7),
-              Flexible(
-                child: Text(
-                  item.label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: DunesTypography.sans(
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w600,
-                    color: DunesColors.resolve(context, MinePalette.ink),
-                    context: context,
-                  ),
-                ),
-              ),
-            ],
-          ),
         ),
       ),
     );
@@ -1578,13 +1494,17 @@ class _FocusMetricTileState extends State<_FocusMetricTile> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return MouseRegion(
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
+      onEnter: (_) {
+        if (mounted) setState(() => _hovered = true);
+      },
+      onExit: (_) {
+        if (mounted) setState(() => _hovered = false);
+      },
       child: _AppleTactile(
         onTap: widget.onTap,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 140),
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
           decoration: BoxDecoration(
             color: _hovered
                 ? widget.color.withValues(alpha: isDark ? 0.16 : 0.07)
@@ -1614,15 +1534,17 @@ class _FocusMetricTileState extends State<_FocusMetricTile> {
                 ),
               ),
               const SizedBox(height: 3),
-              Text(
-                widget.label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: DunesTypography.sans(
-                  fontSize: 11.5,
-                  fontWeight: FontWeight.w500,
-                  color: DunesColors.resolve(context, MinePalette.ink2),
-                  context: context,
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  widget.label,
+                  maxLines: 1,
+                  style: DunesTypography.sans(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w500,
+                    color: DunesColors.resolve(context, MinePalette.ink2),
+                    context: context,
+                  ),
                 ),
               ),
             ],

@@ -172,66 +172,96 @@ class HrConfigSection extends StatelessWidget {
   final Widget? action;
   final Widget child;
   @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.all(20),
-    decoration: BoxDecoration(
-      color: hrConfigSurface(context, Colors.white),
-      borderRadius: BorderRadius.circular(16),
-      border: Border.all(
-        color: hrConfigBorder(context, const Color(0xFFECE7F3)),
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final hairline = (1 / MediaQuery.devicePixelRatioOf(context)).clamp(
+      0.33,
+      0.6,
+    );
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1F1D2C) : Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.08)
+              : Colors.black.withValues(alpha: 0.055),
+          width: hairline,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: isDark
+                ? const Color(0x1E000000)
+                : const Color(0x083D2C7A),
+            blurRadius: 14,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
-    ),
-    child: LayoutBuilder(
-      builder: (context, constraints) {
-        final inlineAction = action != null && constraints.maxWidth >= 560;
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                Icon(
-                  icon,
-                  size: 18,
-                  color: hrConfigColor(context, hrConfigPurple),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final inlineAction = action != null && constraints.maxWidth >= 560;
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 30,
+                    height: 30,
+                    decoration: BoxDecoration(
+                      color: hrConfigPurple.withValues(
+                        alpha: isDark ? 0.22 : 0.10,
+                      ),
+                      borderRadius: BorderRadius.circular(9),
+                    ),
+                    child: Icon(
+                      icon,
+                      size: 16.5,
+                      color: hrConfigColor(context, hrConfigPurple),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      title,
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: -0.15,
+                        color: hrConfigColor(context, const Color(0xFF30263E)),
+                      ),
+                    ),
+                  ),
+                  if (inlineAction) action!,
+                ],
+              ),
+              if (!inlineAction && action != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 12),
+                  child: Align(alignment: Alignment.centerLeft, child: action),
                 ),
-                const SizedBox(width: 9),
-                Expanded(
+              if (subtitle != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 7),
                   child: Text(
-                    title,
+                    subtitle!,
                     style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                      color: hrConfigColor(context, const Color(0xFF30263E)),
+                      fontSize: 12,
+                      height: 1.5,
+                      color: hrConfigColor(context, const Color(0xFF8C8298)),
                     ),
                   ),
                 ),
-                if (inlineAction) action!,
-              ],
-            ),
-            if (!inlineAction && action != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 12),
-                child: Align(alignment: Alignment.centerLeft, child: action),
-              ),
-            if (subtitle != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 7),
-                child: Text(
-                  subtitle!,
-                  style: TextStyle(
-                    fontSize: 12,
-                    height: 1.5,
-                    color: hrConfigColor(context, const Color(0xFF8C8298)),
-                  ),
-                ),
-              ),
-            const SizedBox(height: 18),
-            child,
-          ],
-        );
-      },
-    ),
-  );
+              const SizedBox(height: 18),
+              child,
+            ],
+          );
+        },
+      ),
+    );
+  }
 }
 
 class HrConfigLabel extends StatelessWidget {
@@ -281,24 +311,40 @@ Future<T?> showHrConfigPanel<T>(
   if (MediaQuery.sizeOf(context).width >= 640) {
     return showDialog<T>(
       context: context,
-      builder: (ctx) => Theme(
-        data: theme,
-        child: Dialog(
-          backgroundColor: hrConfigSurface(ctx, Colors.white),
-          surfaceTintColor: Colors.transparent,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          insetPadding: const EdgeInsets.all(24),
-          child: ConstrainedBox(
-            constraints: BoxConstraints(
-              maxWidth: maxWidth,
-              maxHeight: MediaQuery.sizeOf(ctx).height * .86,
+      barrierColor: Colors.black.withValues(alpha: 0.34),
+      builder: (ctx) {
+        final isDark = Theme.of(ctx).brightness == Brightness.dark;
+        final hairline = (1 / MediaQuery.devicePixelRatioOf(ctx)).clamp(
+          0.33,
+          0.6,
+        );
+        return Theme(
+          data: theme,
+          child: Dialog(
+            backgroundColor: isDark ? const Color(0xFF1F1D2C) : Colors.white,
+            surfaceTintColor: Colors.transparent,
+            elevation: 16,
+            shadowColor: const Color(0x283D2C7A),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(22),
+              side: BorderSide(
+                color: isDark
+                    ? Colors.white.withValues(alpha: 0.10)
+                    : Colors.black.withValues(alpha: 0.06),
+                width: hairline,
+              ),
             ),
-            child: panel,
+            insetPadding: const EdgeInsets.all(24),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxWidth: maxWidth,
+                maxHeight: MediaQuery.sizeOf(ctx).height * .86,
+              ),
+              child: panel,
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
   return showModalBottomSheet<T>(
@@ -306,34 +352,37 @@ Future<T?> showHrConfigPanel<T>(
     isScrollControlled: true,
     useSafeArea: true,
     backgroundColor: Colors.transparent,
-    builder: (ctx) => Theme(
-      data: theme,
-      child: Padding(
-        padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(ctx).bottom),
-        child: Material(
-          color: hrConfigSurface(ctx, Colors.white),
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-          clipBehavior: Clip.antiAlias,
-          child: fitContent
-              ? ConstrainedBox(
-                  constraints: BoxConstraints(
-                    maxHeight:
+    builder: (ctx) {
+      final isDark = Theme.of(ctx).brightness == Brightness.dark;
+      return Theme(
+        data: theme,
+        child: Padding(
+          padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(ctx).bottom),
+          child: Material(
+            color: isDark ? const Color(0xFF1F1D2C) : Colors.white,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
+            clipBehavior: Clip.antiAlias,
+            child: fitContent
+                ? ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxHeight:
+                          (MediaQuery.sizeOf(ctx).height -
+                              MediaQuery.viewInsetsOf(ctx).bottom) *
+                          .88,
+                    ),
+                    child: panel,
+                  )
+                : SizedBox(
+                    height:
                         (MediaQuery.sizeOf(ctx).height -
                             MediaQuery.viewInsetsOf(ctx).bottom) *
                         .88,
+                    child: panel,
                   ),
-                  child: panel,
-                )
-              : SizedBox(
-                  height:
-                      (MediaQuery.sizeOf(ctx).height -
-                          MediaQuery.viewInsetsOf(ctx).bottom) *
-                      .88,
-                  child: panel,
-                ),
+          ),
         ),
-      ),
-    ),
+      );
+    },
   );
 }
 

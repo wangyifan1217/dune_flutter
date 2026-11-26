@@ -500,8 +500,19 @@ class _HrPerformanceDetailState extends State<HrPerformanceDetail> {
     child: Builder(builder: (context) => _buildDetail(context)),
   );
 
-  Widget _summaryValue(String label, String value, {bool highlight = false}) =>
-      Row(
+  Widget _summaryValue(String label, String value, {bool highlight = false}) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: highlight
+            ? DunesColors.brandPurple.withValues(alpha: isDark ? 0.22 : 0.10)
+            : (isDark
+                  ? Colors.white.withValues(alpha: 0.06)
+                  : const Color(0xFFF6F4FB)),
+        borderRadius: BorderRadius.circular(9),
+      ),
+      child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
@@ -514,16 +525,18 @@ class _HrPerformanceDetailState extends State<HrPerformanceDetail> {
           Text(
             value,
             style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
+              fontSize: 13.5,
+              fontWeight: FontWeight.w700,
               color: DunesColors.resolve(
                 context,
-                highlight ? DunesColors.brandPurpleDeep : DunesColors.text,
+                highlight ? DunesColors.brandPurple : DunesColors.text,
               ),
             ),
           ),
         ],
-      );
+      ),
+    );
+  }
 
   String? _hrScoreAvailability(HrPerformanceRecord record, bool started) {
     if (!widget.hrAccess ||
@@ -557,61 +570,106 @@ class _HrPerformanceDetailState extends State<HrPerformanceDetail> {
       'confirm_result',
       'complete_interview',
     };
+    final isWide = MediaQuery.sizeOf(context).width >= 760;
+    final initial = r.name.trim().isEmpty
+        ? '绩'
+        : r.name.trim().characters.first;
     return Material(
       color: DunesColors.resolve(
         context,
-        const Color(0xFFF7F4FC),
+        const Color(0xFFF5F5F7),
         role: DunesColorRole.surface,
       ),
       child: Column(
         children: [
           Expanded(
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
-              children: [
-                _HrPanel(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 1040),
+                child: ListView(
+                  padding: EdgeInsets.fromLTRB(
+                    isWide ? 24 : 14,
+                    14,
+                    isWide ? 24 : 14,
+                    28,
+                  ),
+                  children: [
+                    _HrPanel(
+                      child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  r.name,
-                                  key: const ValueKey('hr-detail-name'),
-                                  style: const TextStyle(
-                                    fontSize: 16,
-                                    height: 1.3,
-                                    fontWeight: FontWeight.w600,
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              Container(
+                                width: 42,
+                                height: 42,
+                                alignment: Alignment.center,
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                    colors: [
+                                      DunesColors.brandPurple.withValues(
+                                        alpha: 0.18,
+                                      ),
+                                      const Color(0xFF9C7CF4).withValues(
+                                        alpha: 0.08,
+                                      ),
+                                    ],
                                   ),
+                                  borderRadius: BorderRadius.circular(13),
                                 ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  '${_hrMonthLabel(r.month)} · ${r.department.isEmpty ? '未分配部门' : r.department} · ${r.position.isEmpty ? '未配置岗位' : r.position}',
+                                child: Text(
+                                  initial,
                                   style: TextStyle(
-                                    fontSize: 12,
+                                    fontSize: 17,
+                                    fontWeight: FontWeight.w700,
                                     color: DunesColors.resolve(
                                       context,
-                                      DunesColors.text2,
+                                      DunesColors.brandPurple,
                                     ),
                                   ),
                                 ),
-                              ],
-                            ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      r.name,
+                                      key: const ValueKey('hr-detail-name'),
+                                      style: const TextStyle(
+                                        fontSize: 17,
+                                        height: 1.3,
+                                        fontWeight: FontWeight.w700,
+                                        letterSpacing: -0.2,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 3),
+                                    Text(
+                                      '${_hrMonthLabel(r.month)} · ${r.department.isEmpty ? '未分配部门' : r.department} · ${r.position.isEmpty ? '未配置岗位' : r.position}',
+                                      style: TextStyle(
+                                        fontSize: 12.5,
+                                        color: DunesColors.resolve(
+                                          context,
+                                          DunesColors.text2,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              _HrTag(label: r.stageLabel),
+                            ],
                           ),
-                          const SizedBox(width: 8),
-                          _HrTag(label: r.stageLabel),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Wrap(
-                        spacing: 16,
-                        runSpacing: 6,
-                        children: [
+                          const SizedBox(height: 12),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: [
                           if (r.snapshot['selfTotal'] != null)
                             _summaryValue('自评', '${r.snapshot['selfTotal']}'),
                           if (r.scoresVisible &&
@@ -1264,6 +1322,8 @@ class _HrPerformanceDetailState extends State<HrPerformanceDetail> {
                 ),
               ],
             ),
+              ),
+            ),
           ),
         ],
       ),
@@ -1388,28 +1448,34 @@ class _HrPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = DunesColors.resolve(
-      context,
-      Colors.white,
-      role: DunesColorRole.surface,
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final hairline = (1 / MediaQuery.devicePixelRatioOf(context)).clamp(
+      0.33,
+      0.6,
     );
-    return SizedBox(
+    return Container(
       width: double.infinity,
-      child: Material(
-        color: color,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-          side: BorderSide(
-            color: DunesColors.resolve(
-              context,
-              const Color(0xFFECE7F3),
-              role: DunesColorRole.border,
-            ),
-          ),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1F1D2C) : Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.08)
+              : Colors.black.withValues(alpha: 0.055),
+          width: hairline,
         ),
-        clipBehavior: Clip.antiAlias,
-        child: Padding(padding: padding, child: child),
+        boxShadow: [
+          BoxShadow(
+            color: isDark
+                ? const Color(0x1E000000)
+                : const Color(0x083D2C7A),
+            blurRadius: 12,
+            offset: const Offset(0, 3),
+          ),
+        ],
       ),
+      clipBehavior: Clip.antiAlias,
+      child: Padding(padding: padding, child: child),
     );
   }
 }
@@ -1420,13 +1486,27 @@ class _HrSectionTitle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Text(
-      text,
-      style: TextStyle(
-        fontSize: 13,
-        fontWeight: FontWeight.w600,
-        color: DunesColors.resolve(context, DunesColors.text),
-      ),
+    return Row(
+      children: [
+        Container(
+          width: 3.5,
+          height: 14,
+          decoration: BoxDecoration(
+            color: DunesColors.brandPurple,
+            borderRadius: BorderRadius.circular(2),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          text,
+          style: TextStyle(
+            fontSize: 13.5,
+            fontWeight: FontWeight.w700,
+            letterSpacing: -0.1,
+            color: DunesColors.resolve(context, DunesColors.text),
+          ),
+        ),
+      ],
     );
   }
 }

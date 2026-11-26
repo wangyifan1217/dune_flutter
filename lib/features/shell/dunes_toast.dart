@@ -18,7 +18,9 @@ OverlayEntry? _activeDunesActionToast;
 OverlayEntry? _activeDunesProgressIsland;
 
 bool dunesToastLooksLikeError(String message) {
-  return RegExp(r'失败|无法|错误|无效|不能|为空|缺少|未就绪|不支持|未允许').hasMatch(message);
+  return RegExp(r'失败|无法|错误|无效|不能|为空|缺少|未就绪|不支持|未允许|冲突|锁定|超限').hasMatch(
+    message,
+  );
 }
 
 /// APP 端统一以顶部「灵动岛」形态展示；PC 端保留原有位置与样式。
@@ -131,13 +133,12 @@ void dismissDunesActionToast() {
   _activeDunesActionToast = null;
 }
 
-/// 展示后台任务（文件/录音/知识库上传等）实时进度灵动岛（仅 APP 端生效）。
+/// 展示后台任务（文件/录音/知识库/绩效导出等）实时进度灵动岛（PC 与 APP 端均生效）。
 void showDunesProgressIsland(
   BuildContext context, {
   required String title,
   double? progress,
 }) {
-  if (isDesktopCommOnly) return;
   final overlay = Overlay.maybeOf(context, rootOverlay: true);
   if (overlay == null) return;
 
@@ -208,8 +209,10 @@ class _DunesToastOverlayState extends State<_DunesToastOverlay>
 
   Timer? _dismissTimer;
   bool _closing = false;
+  bool _hovered = false;
 
-  bool get _useDynamicIsland => !isDesktopCommOnly;
+  // PC 与 APP 端统一升级为顶部 Apple 风格「提示灵动岛」，PC 端额外支持悬停暂停与点击关闭。
+  bool get _useDynamicIsland => true;
   bool get _isCenter => isDesktopCommOnly && widget.alignment == Alignment.center;
 
   @override
@@ -221,7 +224,14 @@ class _DunesToastOverlayState extends State<_DunesToastOverlay>
     } else {
       HapticFeedback.lightImpact();
     }
-    _dismissTimer = Timer(widget.duration, _dismiss);
+    _scheduleDismiss();
+  }
+
+  void _scheduleDismiss([Duration? custom]) {
+    _dismissTimer?.cancel();
+    _dismissTimer = Timer(custom ?? widget.duration, () {
+      if (!_hovered) unawaited(_dismiss());
+    });
   }
 
   Future<void> _dismiss() async {
@@ -245,14 +255,18 @@ class _DunesToastOverlayState extends State<_DunesToastOverlay>
       widget.kind == DunesToastKind.error ||
       dunesToastLooksLikeError(widget.message);
 
-  bool get _isSuccess =>
-      !_isError &&
-      RegExp(r'已|成功|完成|通过|同步|刷新|复制|保存').hasMatch(widget.message);
-
   bool get _isWarning =>
       !_isError &&
-      !_isSuccess &&
-      RegExp(r'请|暂|注意|确认|稍后|超时|敬请').hasMatch(widget.message);
+      RegExp(r'请|暂|注意|确认|稍后|超时|敬请|须为|必须|驳回|预览|未配置').hasMatch(
+        widget.message,
+      );
+
+  bool get _isSuccess =>
+      !_isError &&
+      !_isWarning &&
+      RegExp(
+        r'已|成功|完成|通过|同步|刷新|复制|保存|发起|转发|导出|下发|归档|终审|调整|提交',
+      ).hasMatch(widget.message);
 
   IconData _toastIcon() {
     if (_isError) return Icons.error_rounded;
@@ -292,81 +306,101 @@ class _DunesToastOverlayState extends State<_DunesToastOverlay>
     final isError = _isError;
 
     if (_useDynamicIsland) {
-      final islandTop = topInset > 14 ? topInset - 2.0 : 10.0;
-      final maxIslandWidth = (screenWidth - 28).clamp(220.0, 380.0);
+      final isDesktop = isDesktopCommOnly;
+      final islandTop = isDesktop
+          ? 14.0
+          : (topInset > 14 ? topInset - 2.0 : 10.0);
+      final maxIslandWidth = (screenWidth - 28).clamp(
+        220.0,
+        isDesktop ? 440.0 : 380.0,
+      );
       return Positioned(
         top: islandTop,
         left: 14,
         right: 14,
         child: Align(
           alignment: Alignment.topCenter,
-          child: GestureDetector(
-            onVerticalDragEnd: (details) {
-              if ((details.primaryVelocity ?? 0) < -120) {
-                unawaited(_dismiss());
-              }
+          child: MouseRegion(
+            cursor: isDesktop ? SystemMouseCursors.click : MouseCursor.defer,
+            onEnter: (_) {
+              if (!mounted) return;
+              _hovered = true;
+              _dismissTimer?.cancel();
             },
-            child: AnimatedBuilder(
-              animation: _controller,
-              builder: (context, child) {
-                if (reduceMotion) return child!;
-                final t = _expand.value;
-                final sx = (0.48 + t * 0.52).clamp(0.45, 1.06);
-                final sy = (0.76 + t * 0.24).clamp(0.72, 1.04);
-                final dy = (1.0 - t.clamp(0.0, 1.0)) * -18.0;
-                return Opacity(
-                  opacity: _fade.value.clamp(0.0, 1.0),
-                  child: Transform.translate(
-                    offset: Offset(0, dy),
-                    child: Transform(
-                      alignment: Alignment.topCenter,
-                      transform: Matrix4.diagonal3Values(sx, sy, 1.0),
-                      child: child,
-                    ),
-                  ),
-                );
+            onExit: (_) {
+              if (!mounted) return;
+              _hovered = false;
+              _scheduleDismiss(const Duration(milliseconds: 1100));
+            },
+            child: GestureDetector(
+              onTap: () => unawaited(_dismiss()),
+              onVerticalDragEnd: (details) {
+                if ((details.primaryVelocity ?? 0) < -120) {
+                  unawaited(_dismiss());
+                }
               },
-              child: _DynamicIslandShell(
-                borderRadius: 24,
-                accentColor: iconColor,
-                isError: isError,
-                bgColor: _shellBgColor(),
-                padding: const EdgeInsets.fromLTRB(11, 9, 15, 9),
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(
-                    minHeight: 24,
-                    maxWidth: maxIslandWidth,
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      Container(
-                        width: 24,
-                        height: 24,
-                        decoration: BoxDecoration(
-                          color: iconColor.withValues(alpha: 0.18),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(_toastIcon(), size: 15, color: iconColor),
+              child: AnimatedBuilder(
+                animation: _controller,
+                builder: (context, child) {
+                  if (reduceMotion) return child!;
+                  final t = _expand.value;
+                  final sx = (0.48 + t * 0.52).clamp(0.45, 1.05);
+                  final sy = (0.76 + t * 0.24).clamp(0.72, 1.03);
+                  final dy = (1.0 - t.clamp(0.0, 1.0)) * -18.0;
+                  return Opacity(
+                    opacity: _fade.value.clamp(0.0, 1.0),
+                    child: Transform.translate(
+                      offset: Offset(0, dy),
+                      child: Transform(
+                        alignment: Alignment.topCenter,
+                        transform: Matrix4.diagonal3Values(sx, sy, 1.0),
+                        child: child,
                       ),
-                      const SizedBox(width: 9),
-                      Flexible(
-                        child: Text(
-                          widget.message,
-                          textAlign: TextAlign.left,
-                          softWrap: true,
-                          style: TextStyle(
-                            color: textColor,
-                            fontSize: 13,
-                            height: 1.38,
-                            fontWeight: FontWeight.w500,
-                            letterSpacing: -0.1,
-                            decoration: TextDecoration.none,
+                    ),
+                  );
+                },
+                child: _DynamicIslandShell(
+                  borderRadius: 24,
+                  accentColor: iconColor,
+                  isError: isError,
+                  bgColor: _shellBgColor(),
+                  padding: const EdgeInsets.fromLTRB(11, 9, 15, 9),
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      minHeight: 24,
+                      maxWidth: maxIslandWidth,
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Container(
+                          width: 24,
+                          height: 24,
+                          decoration: BoxDecoration(
+                            color: iconColor.withValues(alpha: 0.18),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(_toastIcon(), size: 15, color: iconColor),
+                        ),
+                        const SizedBox(width: 9),
+                        Flexible(
+                          child: Text(
+                            widget.message,
+                            textAlign: TextAlign.left,
+                            softWrap: true,
+                            style: TextStyle(
+                              color: textColor,
+                              fontSize: 13,
+                              height: 1.38,
+                              fontWeight: FontWeight.w500,
+                              letterSpacing: -0.1,
+                              decoration: TextDecoration.none,
+                            ),
                           ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),

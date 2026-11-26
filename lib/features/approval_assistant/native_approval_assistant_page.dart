@@ -8,6 +8,7 @@ import '../../core/util/friendly_error.dart';
 import '../../core/widgets/dunes_motion_kit.dart';
 import '../auth/auth_session.dart';
 import '../chat/assistant_transcript_support.dart';
+import '../chat/assistant_ui_kit.dart';
 import '../chat/chat_widgets.dart';
 import '../conversation/conversation_models.dart';
 import '../conversation/conversation_realtime_hub.dart';
@@ -406,20 +407,42 @@ class _NativeApprovalAssistantPageState
                 ),
               ],
             ),
-            Expanded(child: _buildBody()),
-            _BottomActions(
-              onPending: () => widget.onOpenPendingList?.call(
-                ApprovalAssistantPickMode.browse,
-              ),
-              onSalesProposals: () => widget.onOpenProposals?.call('sales'),
-              onPurchaseProposals: () =>
-                  widget.onOpenProposals?.call('purchase'),
-              onExplain: () => widget.onOpenPendingList?.call(
-                ApprovalAssistantPickMode.explain,
-              ),
-              onUrge: () => widget.onOpenPendingList?.call(
-                ApprovalAssistantPickMode.urge,
-              ),
+            Expanded(child: AssistantFeedFrame(child: _buildBody())),
+            AssistantDockBar(
+              actions: [
+                AssistantDockAction(
+                  label: '今日待审',
+                  icon: Icons.inbox_rounded,
+                  primary: true,
+                  onTap: () => widget.onOpenPendingList?.call(
+                    ApprovalAssistantPickMode.browse,
+                  ),
+                ),
+                AssistantDockAction(
+                  label: '销售提案',
+                  icon: Icons.assignment_rounded,
+                  onTap: () => widget.onOpenProposals?.call('sales'),
+                ),
+                AssistantDockAction(
+                  label: '采购提案',
+                  icon: Icons.shopping_bag_rounded,
+                  onTap: () => widget.onOpenProposals?.call('purchase'),
+                ),
+                AssistantDockAction(
+                  label: '解释内容',
+                  icon: Icons.menu_book_rounded,
+                  onTap: () => widget.onOpenPendingList?.call(
+                    ApprovalAssistantPickMode.explain,
+                  ),
+                ),
+                AssistantDockAction(
+                  label: '催办进度',
+                  icon: Icons.campaign_rounded,
+                  onTap: () => widget.onOpenPendingList?.call(
+                    ApprovalAssistantPickMode.urge,
+                  ),
+                ),
+              ],
             ),
           ],
         ),
@@ -432,42 +455,20 @@ class _NativeApprovalAssistantPageState
       return const DunesListSkeleton();
     }
     if (_error != null && _messages.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                _error!,
-                textAlign: TextAlign.center,
-                style: DunesTypography.sans(
-                  fontSize: 13,
-                  color: DunesColors.resolve(context, DunesColors.text2),
-                  context: context,
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextButton(onPressed: _bootstrap, child: const Text('重试')),
-            ],
-          ),
-        ),
+      return AssistantEmptyCard(
+        icon: Icons.cloud_off_rounded,
+        title: '审批消息加载失败',
+        subtitle: _error!,
+        accent: const Color(0xFFFF5B61),
+        actionLabel: '重试',
+        onAction: _bootstrap,
       );
     }
     if (_messages.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Text(
-            '每天上午 9 点会推送简报（待我审批 + 我发起进行中）。\n也可点下方按钮查看待办、解释或催办。',
-            textAlign: TextAlign.center,
-            style: DunesTypography.sans(
-              fontSize: 13,
-              color: DunesColors.resolve(context, DunesColors.text3),
-              context: context,
-            ),
-          ),
-        ),
+      return const AssistantEmptyCard(
+        icon: Icons.fact_check_rounded,
+        title: '暂无审批通知',
+        subtitle: '每天上午 9 点会推送简报（待我审批 + 我发起进行中），也可点击下方按钮快速办理或催办。',
       );
     }
 

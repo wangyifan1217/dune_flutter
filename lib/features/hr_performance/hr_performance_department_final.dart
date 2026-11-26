@@ -309,28 +309,37 @@ class _DepartmentFinalDialogState extends State<_DepartmentFinalDialog> {
                             '已下发',
                             '免考核',
                           ].contains(entry.key))
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: hrConfigSurface(
-                              context,
-                              const Color(0xFFF4EFFB),
-                            ),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            '${entry.key} ${entry.value}',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: hrConfigColor(
-                                context,
-                                DunesColors.brandPurpleDeep,
+                        Builder(
+                          builder: (ctx) {
+                            final isDark =
+                                Theme.of(ctx).brightness == Brightness.dark;
+                            final tone = switch (entry.key) {
+                              '已下发' => const Color(0xFF1F9D76),
+                              '待终审（可办理）' => DunesColors.brandPurple,
+                              '前序环节' => const Color(0xFFD97706),
+                              _ => const Color(0xFF64748B),
+                            };
+                            return Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 9,
+                                vertical: 4,
                               ),
-                            ),
-                          ),
+                              decoration: BoxDecoration(
+                                color: tone.withValues(
+                                  alpha: isDark ? 0.20 : 0.10,
+                                ),
+                                borderRadius: BorderRadius.circular(999),
+                              ),
+                              child: Text(
+                                '${entry.key} ${entry.value}',
+                                style: TextStyle(
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: DunesColors.resolve(ctx, tone),
+                                ),
+                              ),
+                            );
+                          },
                         ),
                   ],
                 ),

@@ -806,39 +806,52 @@ class _AuthCodeBox extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final disableAnim = MediaQuery.disableAnimationsOf(context);
     final Color borderColor = hasError
         ? DunesColors.resolve(context, DunesColors.coral)
         : active
         ? DunesColors.resolve(context, authBlue)
-        : DunesColors.resolve(
-            context,
-            const Color(0xFFE8ECF2),
-            role: DunesColorRole.border,
-          );
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 120),
-      width: 48,
-      height: 56,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: DunesColors.resolveNullable(
-          context,
-          authSurface,
-          role: DunesColorRole.surface,
+        : (isDark
+              ? Colors.white.withValues(alpha: 0.14)
+              : Colors.black.withValues(alpha: 0.10));
+    return AnimatedScale(
+      scale: active && !disableAnim ? 1.04 : 1.0,
+      duration: const Duration(milliseconds: 140),
+      curve: Curves.easeOutCubic,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 140),
+        curve: Curves.easeOutCubic,
+        width: 48,
+        height: 56,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: isDark
+              ? Colors.white.withValues(alpha: active ? 0.12 : 0.06)
+              : Colors.white.withValues(alpha: active ? 0.96 : 0.78),
+          borderRadius: BorderRadius.circular(15),
+          border: Border.all(
+            color: borderColor,
+            width: active || hasError ? 1.6 : 0.8,
+          ),
+          boxShadow: active
+              ? [
+                  BoxShadow(
+                    color: authBlue.withValues(alpha: isDark ? 0.28 : 0.16),
+                    blurRadius: 12,
+                    offset: const Offset(0, 3),
+                  ),
+                ]
+              : const [],
         ),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: borderColor,
-          width: active || hasError ? 1.5 : 1,
-        ),
-      ),
-      child: Text(
-        char,
-        style: DunesTypography.sans(
-          fontSize: 24,
-          fontWeight: FontWeight.w600,
-          color: DunesColors.resolve(context, DunesColors.text),
-          context: context,
+        child: Text(
+          char,
+          style: DunesTypography.sans(
+            fontSize: 24,
+            fontWeight: FontWeight.w700,
+            color: DunesColors.resolve(context, DunesColors.text),
+            context: context,
+          ),
         ),
       ),
     );

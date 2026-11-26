@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/theme/dunes_theme.dart';
+import 'assistant_ui_kit.dart';
 import '../conversation/conversation_models.dart';
 
 /// 助手会话（非 reverse 列表）：顶部加载更早消息时，保持当前阅读位置。
@@ -79,65 +80,6 @@ class AssistantBackToLatestChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(999),
-          child: Ink(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(999),
-              color: DunesColors.resolve(
-                context,
-                Colors.white,
-                role: DunesColorRole.surface,
-              ),
-              border: Border.all(
-                color: DunesColors.resolve(
-                  context,
-                  DunesColors.borderSoft,
-                  role: DunesColorRole.border,
-                ),
-              ),
-              boxShadow: const [
-                BoxShadow(
-                  color: Color(0x1A000000),
-                  blurRadius: 8,
-                  offset: Offset(0, 2),
-                ),
-              ],
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  Icons.keyboard_arrow_down_rounded,
-                  size: 16,
-                  color: DunesColors.resolve(
-                    context,
-                    DunesColors.brandPurpleDeep,
-                  ),
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  '回到最新',
-                  style: DunesTypography.sans(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: DunesColors.resolve(
-                      context,
-                      DunesColors.brandPurpleDeep,
-                    ),
-                    context: context,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
+    return Center(child: AssistantJumpLatestPill(onTap: onTap));
   }
 }

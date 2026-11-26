@@ -534,11 +534,30 @@ class _PhoneStep extends StatefulWidget {
 
 class _PhoneStepState extends State<_PhoneStep> {
   final _phone = TextEditingController();
+  final _phoneFocus = FocusNode();
   bool _submitting = false;
   String? _error;
 
   @override
+  void initState() {
+    super.initState();
+    _phoneFocus.addListener(_onFocusChanged);
+    _phone.addListener(_onPhoneChanged);
+  }
+
+  void _onFocusChanged() {
+    if (mounted) setState(() {});
+  }
+
+  void _onPhoneChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
   void dispose() {
+    _phoneFocus.removeListener(_onFocusChanged);
+    _phone.removeListener(_onPhoneChanged);
+    _phoneFocus.dispose();
     _phone.dispose();
     super.dispose();
   }
@@ -584,91 +603,119 @@ class _PhoneStepState extends State<_PhoneStep> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final accent = isDark ? const Color(0xFFC5B0FF) : DunesColors.brandPurple;
+    final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 40;
+    final focused = _phoneFocus.hasFocus;
+    final hasText = _phone.text.isNotEmpty;
+    final hasError = _error != null && _error!.isNotEmpty;
+    final lineColor = hasError
+        ? const Color(0xFFFF4D57)
+        : focused
+        ? accent
+        : (isDark
+              ? Colors.white.withValues(alpha: 0.16)
+              : Colors.black.withValues(alpha: 0.12));
 
     return AuthScaffold(
+      showLogo: !keyboardOpen,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          // 顶部品牌区：无框大气舒展排版，键盘弹起时平滑微缩让位
           AuthEntranceSlide(
             delayMs: 0,
-            child: Column(
-              children: [
-                const AuthAppLogo(size: 92),
-                const SizedBox(height: 22),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Text(
-                      '沙丘',
-                      style: DunesTypography.sans(
-                        fontSize: 32,
-                        fontWeight: FontWeight.w800,
-                        color: DunesColors.resolve(
-                          context,
-                          const Color(0xFF1D1D1F),
-                        ),
-                        letterSpacing: 1.0,
-                        context: context,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 3,
-                      ),
-                      decoration: BoxDecoration(
-                        color: accent.withValues(alpha: isDark ? 0.18 : 0.11),
-                        borderRadius: BorderRadius.circular(999),
-                        border: Border.all(
-                          color: accent.withValues(alpha: isDark ? 0.34 : 0.22),
-                          width: 0.7,
-                        ),
-                      ),
-                      child: Text(
-                        'DUNES',
+            child: AnimatedPadding(
+              duration: const Duration(milliseconds: 220),
+              curve: Curves.easeOutCubic,
+              padding: EdgeInsets.only(bottom: keyboardOpen ? 20 : 44),
+              child: Column(
+                children: [
+                  AnimatedScale(
+                    scale: keyboardOpen ? 0.78 : 1.0,
+                    duration: const Duration(milliseconds: 220),
+                    curve: Curves.easeOutCubic,
+                    child: const AuthAppLogo(size: 88),
+                  ),
+                  SizedBox(height: keyboardOpen ? 10 : 20),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Text(
+                        '沙丘',
                         style: DunesTypography.sans(
-                          fontSize: 10.5,
-                          fontWeight: FontWeight.w700,
-                          color: accent,
-                          letterSpacing: 1.6,
+                          fontSize: keyboardOpen ? 26 : 34,
+                          fontWeight: FontWeight.w800,
+                          color: DunesColors.resolve(
+                            context,
+                            const Color(0xFF1D1D1F),
+                          ),
+                          letterSpacing: 1.2,
                           context: context,
                         ),
                       ),
+                      const SizedBox(width: 9),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 9,
+                          vertical: 3,
+                        ),
+                        decoration: BoxDecoration(
+                          color: accent.withValues(alpha: isDark ? 0.18 : 0.11),
+                          borderRadius: BorderRadius.circular(999),
+                          border: Border.all(
+                            color: accent.withValues(
+                              alpha: isDark ? 0.34 : 0.22,
+                            ),
+                            width: 0.7,
+                          ),
+                        ),
+                        child: Text(
+                          'DUNES',
+                          style: DunesTypography.sans(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w700,
+                            color: accent,
+                            letterSpacing: 1.6,
+                            context: context,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (!keyboardOpen) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      '企业协作 · 智能审批 · 即时通讯',
+                      textAlign: TextAlign.center,
+                      style: DunesTypography.sans(
+                        fontSize: 13.5,
+                        color: DunesColors.resolve(
+                          context,
+                          const Color(0xFF6E6E73),
+                        ),
+                        letterSpacing: 0.8,
+                        height: 1.5,
+                        context: context,
+                      ),
                     ),
                   ],
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  '企业协作 · 智能审批 · 即时通讯',
-                  textAlign: TextAlign.center,
-                  style: DunesTypography.sans(
-                    fontSize: 13.5,
-                    color: DunesColors.resolve(
-                      context,
-                      const Color(0xFF6E6E73),
-                    ),
-                    letterSpacing: 0.6,
-                    height: 1.5,
-                    context: context,
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
-          const SizedBox(height: 36),
+
+          // 无外框开放式输入区：直接铺展在氛围画布上，视野通透大气
           AuthEntranceSlide(
-            delayMs: 90,
-            child: AuthFormCard(
-              padding: const EdgeInsets.fromLTRB(24, 24, 24, 24),
+            delayMs: 80,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 6),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Text(
-                    '欢迎回来',
+                    '手机号登录',
                     style: DunesTypography.sans(
-                      fontSize: 20,
+                      fontSize: 22,
                       fontWeight: FontWeight.w700,
                       color: DunesColors.resolve(
                         context,
@@ -678,11 +725,11 @@ class _PhoneStepState extends State<_PhoneStep> {
                       context: context,
                     ),
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 6),
                   Text(
-                    '使用手机号验证码快速进入工作台',
+                    '未注册或新成员请联系管理员开通后验证登录',
                     style: DunesTypography.sans(
-                      fontSize: 12.5,
+                      fontSize: 13,
                       color: DunesColors.resolve(
                         context,
                         const Color(0xFF86868B),
@@ -690,50 +737,146 @@ class _PhoneStepState extends State<_PhoneStep> {
                       context: context,
                     ),
                   ),
-                  const SizedBox(height: 20),
-                  TextField(
-                    controller: _phone,
-                    keyboardType: TextInputType.phone,
-                    inputFormatters: [
-                      FilteringTextInputFormatter.digitsOnly,
-                      LengthLimitingTextInputFormatter(11),
-                    ],
-                    style: DunesTypography.sans(
-                      fontSize: 17,
-                      fontWeight: FontWeight.w500,
-                      color: DunesColors.resolve(
-                        context,
-                        const Color(0xFF1D1D1F),
-                      ),
-                      letterSpacing: 1.0,
-                      context: context,
-                    ),
-                    decoration:
-                        authInputDecoration(
-                          context: context,
-                          hintText: '请输入手机号',
-                          errorText: _error,
-                        ).copyWith(
-                          prefixIcon: const AuthPhonePrefix(),
-                          prefixIconConstraints: const BoxConstraints(
-                            minWidth: 0,
-                            minHeight: 0,
+                  const SizedBox(height: 28),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Text(
+                        '+86',
+                        style: DunesTypography.sans(
+                          fontSize: 19,
+                          fontWeight: FontWeight.w700,
+                          color: DunesColors.resolve(
+                            context,
+                            const Color(0xFF1D1D1F),
                           ),
-                          contentPadding: const EdgeInsets.fromLTRB(
-                            0,
-                            15,
-                            16,
-                            15,
+                          context: context,
+                        ),
+                      ),
+                      Container(
+                        width: 1,
+                        height: 18,
+                        margin: const EdgeInsets.symmetric(horizontal: 14),
+                        color: isDark
+                            ? Colors.white.withValues(alpha: 0.16)
+                            : Colors.black.withValues(alpha: 0.12),
+                      ),
+                      Expanded(
+                        child: TextField(
+                          controller: _phone,
+                          focusNode: _phoneFocus,
+                          keyboardType: TextInputType.phone,
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly,
+                            LengthLimitingTextInputFormatter(11),
+                          ],
+                          style: DunesTypography.sans(
+                            fontSize: 21,
+                            fontWeight: FontWeight.w600,
+                            color: DunesColors.resolve(
+                              context,
+                              const Color(0xFF1D1D1F),
+                            ),
+                            letterSpacing: 1.5,
+                            context: context,
+                          ),
+                          decoration: InputDecoration(
+                            hintText: '请输入 11 位手机号',
+                            hintStyle: DunesTypography.sans(
+                              fontSize: 17,
+                              fontWeight: FontWeight.w400,
+                              color: DunesColors.resolve(
+                                context,
+                                const Color(0xFFA8A8B3),
+                              ),
+                              letterSpacing: 0.4,
+                              context: context,
+                            ),
+                            border: InputBorder.none,
+                            enabledBorder: InputBorder.none,
+                            focusedBorder: InputBorder.none,
+                            isDense: true,
+                            contentPadding: const EdgeInsets.symmetric(
+                              vertical: 12,
+                            ),
+                          ),
+                          onChanged: (_) {
+                            if (_error != null) setState(() => _error = null);
+                          },
+                          onTapOutside: (_) =>
+                              FocusManager.instance.primaryFocus?.unfocus(),
+                          onSubmitted: (_) => _next(),
+                        ),
+                      ),
+                      if (hasText)
+                        GestureDetector(
+                          onTap: () {
+                            HapticFeedback.selectionClick();
+                            _phone.clear();
+                            if (_error != null) setState(() => _error = null);
+                          },
+                          child: Container(
+                            width: 24,
+                            height: 24,
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color: isDark
+                                  ? Colors.white.withValues(alpha: 0.12)
+                                  : Colors.black.withValues(alpha: 0.08),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              Icons.close_rounded,
+                              size: 14,
+                              color: DunesColors.resolve(
+                                context,
+                                const Color(0xFF6E6E73),
+                              ),
+                            ),
                           ),
                         ),
-                    onChanged: (_) {
-                      if (_error != null) setState(() => _error = null);
-                    },
-                    onTapOutside: (_) =>
-                        FocusManager.instance.primaryFocus?.unfocus(),
-                    onSubmitted: (_) => _next(),
+                    ],
                   ),
-                  const SizedBox(height: 22),
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    curve: Curves.easeOutCubic,
+                    height: focused || hasError ? 2.0 : 1.0,
+                    decoration: BoxDecoration(
+                      color: lineColor,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  AnimatedSize(
+                    duration: const Duration(milliseconds: 160),
+                    curve: Curves.easeOutCubic,
+                    child: hasError
+                        ? Padding(
+                            padding: const EdgeInsets.only(top: 10),
+                            child: Row(
+                              children: [
+                                const Icon(
+                                  Icons.error_outline_rounded,
+                                  size: 14.5,
+                                  color: Color(0xFFFF4D57),
+                                ),
+                                const SizedBox(width: 5),
+                                Expanded(
+                                  child: Text(
+                                    _error!,
+                                    style: DunesTypography.sans(
+                                      fontSize: 12.5,
+                                      fontWeight: FontWeight.w500,
+                                      color: const Color(0xFFFF4D57),
+                                      context: context,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                        : const SizedBox.shrink(),
+                  ),
+                  const SizedBox(height: 30),
                   AuthPrimaryButton(
                     label: '获取验证码',
                     loading: _submitting,
@@ -743,9 +886,9 @@ class _PhoneStepState extends State<_PhoneStep> {
               ),
             ),
           ),
-          const SizedBox(height: 26),
+          SizedBox(height: keyboardOpen ? 18 : 34),
           AuthEntranceSlide(
-            delayMs: 160,
+            delayMs: 150,
             offsetY: 10,
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,

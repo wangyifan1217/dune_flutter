@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../core/theme/dunes_theme.dart';
+import '../../core/widgets/dunes_motion_kit.dart';
+import '../chat/assistant_ui_kit.dart';
 import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
 import '../shell/dunes_toast.dart';
@@ -757,34 +759,16 @@ class _NativeContactsPageState extends State<NativeContactsPage> {
 
   Widget _buildBody() {
     if (_loading) {
-      return const Center(child: CircularProgressIndicator(strokeWidth: 2));
+      return const DunesListSkeleton();
     }
     if (_error != null) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              '通讯录加载失败',
-              style: DunesTypography.sans(
-                fontSize: 15,
-                color: DunesColors.resolve(context, DunesColors.text2),
-                context: context,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              _error!,
-              style: DunesTypography.sans(
-                fontSize: 12,
-                color: DunesColors.resolve(context, DunesColors.text3),
-                context: context,
-              ),
-            ),
-            const SizedBox(height: 10),
-            OutlinedButton(onPressed: _load, child: const Text('重试')),
-          ],
-        ),
+      return AssistantEmptyCard(
+        icon: Icons.cloud_off_rounded,
+        title: '通讯录加载失败',
+        subtitle: _error!,
+        accent: const Color(0xFFFF5B61),
+        actionLabel: '重试',
+        onAction: _load,
       );
     }
 

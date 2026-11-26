@@ -8,6 +8,8 @@ import 'package:flutter/rendering.dart';
 
 import '../../core/platform/desktop_features.dart';
 import '../../core/theme/dunes_theme.dart';
+import '../../core/widgets/dunes_motion_kit.dart';
+import '../chat/assistant_ui_kit.dart';
 import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
 import '../chat/assistant_transcript_support.dart';
@@ -275,33 +277,25 @@ class _NativeWeeklySummaryPageState extends State<NativeWeeklySummaryPage> {
               showBackButton: widget.showBackButton,
             ),
             Expanded(
-              child: _loading
-                  ? const Center(child: CircularProgressIndicator())
-                  : _error != null
-                  ? Center(
-                      child: Text(
-                        _error!,
-                        style: TextStyle(
-                          color: DunesColors.resolve(
-                            context,
-                            DunesColors.text2,
-                          ),
-                        ),
-                      ),
-                    )
-                  : _messages.isEmpty
-                  ? Center(
-                      child: Text(
-                        '周五下午 6 点会送达本周小结',
-                        style: TextStyle(
-                          color: DunesColors.resolve(
-                            context,
-                            DunesColors.text3,
-                          ),
-                        ),
-                      ),
-                    )
-                  : Stack(
+              child: AssistantFeedFrame(
+                child: _loading
+                    ? const DunesListSkeleton()
+                    : _error != null
+                    ? AssistantEmptyCard(
+                        icon: Icons.cloud_off_rounded,
+                        title: '一周小结加载失败',
+                        subtitle: _error!,
+                        accent: const Color(0xFFFF5B61),
+                        actionLabel: '重试',
+                        onAction: () => unawaited(_bootstrap()),
+                      )
+                    : _messages.isEmpty
+                    ? const AssistantEmptyCard(
+                        icon: Icons.auto_stories_rounded,
+                        title: '暂无一周小结',
+                        subtitle: '每周五下午 6 点会自动为你汇总送达本周工作小结',
+                      )
+                    : Stack(
                       children: [
                         ListView.builder(
                           controller: _scroll,
@@ -383,6 +377,7 @@ class _NativeWeeklySummaryPageState extends State<NativeWeeklySummaryPage> {
                           ),
                       ],
                     ),
+              ),
             ),
           ],
         ),

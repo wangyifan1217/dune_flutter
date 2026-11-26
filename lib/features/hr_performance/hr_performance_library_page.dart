@@ -1,6 +1,7 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
+import '../../core/theme/dunes_page_transition.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../auth/auth_session.dart';
 import '../shell/dunes_toast.dart';
@@ -568,21 +569,33 @@ class _HrPerformanceLibraryPageState extends State<HrPerformanceLibraryPage> {
   Widget build(BuildContext context) {
     final text = DunesColors.resolve(context, DunesColors.text);
     final muted = DunesColors.resolve(context, DunesColors.text3);
-    if (_showTemplates) {
-      return HrPerformanceTemplatesPage(
-        session: widget.session,
-        service: _service,
-        listBackTooltip: widget.showTemplates ? '返回工作台' : '返回指标库',
-        onBack: () {
-          if (widget.showTemplates) {
-            widget.onClose?.call();
-            return;
-          }
-          setState(() => _showTemplates = false);
-          _load();
-        },
-      );
-    }
+    return DunesBlurExpandSwitcher(
+      isBack: !_showTemplates,
+      child: _showTemplates
+          ? KeyedSubtree(
+              key: const ValueKey('hr-templates-pane'),
+              child: HrPerformanceTemplatesPage(
+                session: widget.session,
+                service: _service,
+                listBackTooltip: widget.showTemplates ? '返回工作台' : '返回指标库',
+                onBack: () {
+                  if (widget.showTemplates) {
+                    widget.onClose?.call();
+                    return;
+                  }
+                  setState(() => _showTemplates = false);
+                  _load();
+                },
+              ),
+            )
+          : KeyedSubtree(
+              key: const ValueKey('hr-library-pane'),
+              child: _buildLibraryContent(context, text, muted),
+            ),
+    );
+  }
+
+  Widget _buildLibraryContent(BuildContext context, Color text, Color muted) {
     if (_loading) {
       return const Center(child: CircularProgressIndicator());
     }

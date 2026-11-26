@@ -34,12 +34,19 @@ class HrAssessmentSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final hairline = (1 / MediaQuery.devicePixelRatioOf(context)).clamp(
+      0.33,
+      0.6,
+    );
     final border = DunesColors.resolve(
       context,
       const Color(0xFFE4DCEC),
       role: DunesColorRole.border,
     );
-    final headerBg = DunesColors.resolve(context, const Color(0xFFD9E7F5));
+    final headerBg = isDark
+        ? DunesColors.brandPurple.withValues(alpha: 0.22)
+        : const Color(0xFFF2EEFA);
     final text = DunesColors.resolve(context, DunesColors.text);
     final muted = DunesColors.resolve(context, DunesColors.text3);
     final groups = _groups(lines);
@@ -73,37 +80,50 @@ class HrAssessmentSheet extends StatelessWidget {
     final heading = headingParts.join('    ');
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: DunesColors.resolve(
-          context,
-          Colors.white,
-          role: DunesColorRole.surface,
+        color: isDark ? const Color(0xFF1F1D2C) : Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.08)
+              : Colors.black.withValues(alpha: 0.06),
+          width: hairline,
         ),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: border),
       ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             if (heading.isNotEmpty ||
                 (!forceTable && MediaQuery.sizeOf(context).width < 640))
               Padding(
-                padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+                padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
                 child: Row(
                   children: [
                     Expanded(
                       child: Wrap(
-                        spacing: 16,
-                        runSpacing: 4,
+                        spacing: 8,
+                        runSpacing: 6,
                         children: [
                           for (final part in headingParts)
-                            Text(
-                              part,
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: text,
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 9,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: isDark
+                                    ? Colors.white.withValues(alpha: 0.06)
+                                    : const Color(0xFFF6F4FB),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                part,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: text,
+                                ),
                               ),
                             ),
                         ],

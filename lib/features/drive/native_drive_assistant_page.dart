@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../core/theme/dunes_theme.dart';
+import '../../core/widgets/dunes_motion_kit.dart';
+import '../chat/assistant_ui_kit.dart';
 import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
 import '../chat/chat_file_type_icon.dart';
@@ -197,7 +199,7 @@ class _NativeDriveAssistantPageState extends State<NativeDriveAssistantPage> {
                 ),
               ],
             ),
-            Expanded(child: _buildBody()),
+            Expanded(child: AssistantFeedFrame(child: _buildBody())),
           ],
         ),
       ),
@@ -205,20 +207,23 @@ class _NativeDriveAssistantPageState extends State<NativeDriveAssistantPage> {
   }
 
   Widget _buildBody() {
-    if (_loading) return const Center(child: CircularProgressIndicator());
+    if (_loading) return const DunesListSkeleton();
     if (_error != null) {
-      return Center(
-        child: TextButton(onPressed: _load, child: Text('重试：$_error')),
+      return AssistantEmptyCard(
+        icon: Icons.cloud_off_rounded,
+        title: '企业微盘通知加载失败',
+        subtitle: _error!,
+        accent: const Color(0xFFFF5B61),
+        actionLabel: '重试',
+        onAction: _load,
       );
     }
     if (_messages.isEmpty) {
-      return Center(
-        child: Text(
-          '共享空间中的文件变化会在这里提醒你',
-          style: TextStyle(
-            color: DunesColors.resolve(context, DunesColors.text3),
-          ),
-        ),
+      return const AssistantEmptyCard(
+        icon: Icons.cloud_done_rounded,
+        title: '暂无文件动态',
+        subtitle: '共享空间中的文件上传、更新与权限变动会及时在这里提醒你',
+        accent: Color(0xFF3B82F6),
       );
     }
     return RefreshIndicator(
@@ -274,7 +279,7 @@ class DriveAssistantAvatar extends StatelessWidget {
         borderRadius: BorderRadius.circular(size * .18),
       ),
       child: Icon(
-        Icons.cloud_outlined,
+        Icons.cloud_rounded,
         color: DunesColors.resolve(context, Colors.white),
         size: size * .48,
       ),
@@ -290,29 +295,19 @@ class _DriveEventCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final card = Container(
-      constraints: const BoxConstraints(maxWidth: 340),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: DunesColors.resolve(
-          context,
-          Colors.white,
-          role: DunesColorRole.surface,
-        ),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: DunesColors.resolve(
-            context,
-            DunesColors.borderSoft,
-            role: DunesColorRole.border,
-          ),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            event.displayText,
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 380),
+      child: AssistantCardShell(
+        onTap: onTap,
+        accent: const Color(0xFF3B82F6),
+        margin: EdgeInsets.zero,
+        padding: const EdgeInsets.all(14),
+        radius: 16,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              event.displayText,
             style: TextStyle(
               fontSize: 14,
               color: DunesColors.resolve(context, DunesColors.text),
@@ -355,14 +350,6 @@ class _DriveEventCard extends StatelessWidget {
           ),
         ],
       ),
-    );
-    if (onTap == null) return card;
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: onTap,
-        child: card,
       ),
     );
   }

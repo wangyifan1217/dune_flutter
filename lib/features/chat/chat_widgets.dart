@@ -596,6 +596,7 @@ class ChatInputBar extends StatelessWidget {
     this.inputHeight,
     this.onInputHeightDrag,
     this.showTopBorder = true,
+    this.includeBottomSafeArea = true,
     this.onKeyIntercept,
   });
 
@@ -649,13 +650,19 @@ class ChatInputBar extends StatelessWidget {
   /// 上方已有引用条时去掉顶部分割线，和输入区连成一块。
   final bool showTopBorder;
 
+  /// 是否由输入栏自行承接底部系统安全区（IM 聊天页已由 `_ChatKeyboardSpacer`
+  /// 统一承接安全区与键盘高度，传 false 避免双重叠加导致输入栏高悬）。
+  final bool includeBottomSafeArea;
+
   /// 先于「Enter 发送」处理按键（如 @ 浮层的上下选择 / 回车确认）；IME 组字中不会调用。
   final KeyEventResult Function(KeyEvent event)? onKeyIntercept;
 
   @override
   Widget build(BuildContext context) {
     final wide = isWideChatLayout(context);
-    final bottomInset = MediaQuery.paddingOf(context).bottom;
+    final bottomInset = includeBottomSafeArea
+        ? MediaQuery.paddingOf(context).bottom
+        : 0.0;
     final canResize = wide && onInputHeightDrag != null && inputHeight != null;
     return ListenableBuilder(
       listenable: controller,

@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/theme/dunes_theme.dart';
+import '../../core/widgets/dunes_motion_kit.dart';
+import 'assistant_ui_kit.dart';
 import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
 import '../conversation/conversation_models.dart';
@@ -143,34 +145,27 @@ class _NativeBroadcastPageState extends State<NativeBroadcastPage> {
       crumb: '公司广播',
       title: '广播历史',
       onBack: widget.onBack,
-      body: _buildBody(),
+      body: AssistantFeedFrame(child: _buildBody()),
     );
   }
 
   Widget _buildBody() {
     if (_loading) {
-      return const Center(child: CircularProgressIndicator(strokeWidth: 2));
+      return const DunesListSkeleton();
     }
     if (_error != null) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              _error!,
-              style: TextStyle(
-                color: DunesColors.resolve(context, DunesColors.text3),
-              ),
-            ),
-            const SizedBox(height: 10),
-            OutlinedButton(onPressed: _load, child: const Text('重试')),
-          ],
-        ),
+      return AssistantEmptyCard(
+        icon: Icons.cloud_off_rounded,
+        title: '广播历史加载失败',
+        subtitle: _error!,
+        accent: const Color(0xFFFF5B61),
+        actionLabel: '重试',
+        onAction: _load,
       );
     }
     if (_messages.isEmpty) {
-      return const ImEmptyState(
-        icon: Icons.campaign_outlined,
+      return const AssistantEmptyCard(
+        icon: Icons.campaign_rounded,
         title: '暂无广播消息',
         subtitle: '全员公告或重要广播会第一时间同步于此',
       );

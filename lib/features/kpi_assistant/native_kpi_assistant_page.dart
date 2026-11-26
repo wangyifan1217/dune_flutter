@@ -5,7 +5,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 
 import '../../core/navigation/navigation_controller.dart';
+import '../../core/theme/dunes_page_transition.dart';
 import '../../core/theme/dunes_theme.dart';
+import '../../core/widgets/dunes_motion_kit.dart';
+import '../chat/assistant_ui_kit.dart';
 import '../auth/auth_session.dart';
 import '../chat/assistant_transcript_support.dart';
 import '../chat/chat_widgets.dart';
@@ -454,81 +457,90 @@ class _NativeKpiAssistantPageState extends State<NativeKpiAssistantPage> {
   @override
   Widget build(BuildContext context) {
     final detailMonth = _detailMonth;
-    if (detailMonth != null) {
-      return NativeWorkProfilePerfPage(
-        session: widget.session,
-        initialMonth: parseKpiMonth(
-          detailMonth,
-          kpiDefaultScoreMonth(DateTime.now()),
-        ),
-        onBack: _closeDetail,
-      );
-    }
-
-    return Scaffold(
-      backgroundColor: DunesColors.resolve(
-        context,
-        DunesColors.imSurface,
-        role: DunesColorRole.surface,
-      ),
-      body: SafeArea(
-        bottom: false,
-        child: Column(
-          children: [
-            ChatConvHeader(
-              title: '绩效助手',
-              subtitle: _loading ? '加载中…' : '写分后请在卡片上确认已知悉',
-              onBack: widget.onBack ?? () => Navigator.maybePop(context),
-              showBackButton: widget.showBackButton,
-              leadingAvatar: const KpiAssistantAvatar(size: 45),
-              actions: [
-                IconButton(
-                  tooltip: '清空通知记录',
-                  onPressed: _clearing ? null : _clearHistory,
-                  icon: _clearing
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : Icon(
-                          Icons.delete_sweep_outlined,
-                          size: 22,
-                          color: DunesColors.resolve(
-                            context,
-                            DunesColors.text2,
-                          ),
-                        ),
+    return DunesBlurExpandSwitcher(
+      isBack: detailMonth == null,
+      child: detailMonth != null
+          ? KeyedSubtree(
+              key: ValueKey('kpi-detail-$detailMonth'),
+              child: NativeWorkProfilePerfPage(
+                session: widget.session,
+                initialMonth: parseKpiMonth(
+                  detailMonth,
+                  kpiDefaultScoreMonth(DateTime.now()),
                 ),
-              ],
+                onBack: _closeDetail,
+              ),
+            )
+          : KeyedSubtree(
+              key: const ValueKey('kpi-feed'),
+              child: Scaffold(
+                backgroundColor: DunesColors.resolve(
+                  context,
+                  DunesColors.imSurface,
+                  role: DunesColorRole.surface,
+                ),
+                body: SafeArea(
+                  bottom: false,
+                  child: Column(
+                    children: [
+                      ChatConvHeader(
+                        title: '绩效助手',
+                        subtitle: _loading ? '加载中…' : '写分后请在卡片上确认已知悉',
+                        onBack:
+                            widget.onBack ?? () => Navigator.maybePop(context),
+                        showBackButton: widget.showBackButton,
+                        leadingAvatar: const KpiAssistantAvatar(size: 45),
+                        actions: [
+                          IconButton(
+                            tooltip: '清空通知记录',
+                            onPressed: _clearing ? null : _clearHistory,
+                            icon: _clearing
+                                ? const SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : Icon(
+                                    Icons.delete_sweep_rounded,
+                                    size: 21,
+                                    color: DunesColors.resolve(
+                                      context,
+                                      DunesColors.text2,
+                                    ),
+                                  ),
+                          ),
+                        ],
+                      ),
+                      Expanded(
+                        child: AssistantFeedFrame(child: _buildMessages()),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             ),
-            Expanded(child: _buildMessages()),
-          ],
-        ),
-      ),
     );
   }
 
   Widget _buildMessages() {
-    if (_loading) return const Center(child: CircularProgressIndicator());
+    if (_loading) return const DunesListSkeleton();
     if (_error != null) {
-      return Center(
-        child: TextButton(onPressed: _loadMessages, child: Text('重试：$_error')),
+      return AssistantEmptyCard(
+        icon: Icons.cloud_off_rounded,
+        title: '绩效通知加载失败',
+        subtitle: _error!,
+        accent: const Color(0xFFFF5B61),
+        actionLabel: '重试',
+        onAction: _loadMessages,
       );
     }
     if (_messages.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: EdgeInsets.symmetric(horizontal: 28),
-          child: Text(
-            '考核人发布本月结果后，绩效会发到这里。点卡片可看分项、等级和考核人，并确认已知悉。',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: DunesColors.resolve(context, DunesColors.text3),
-              height: 1.5,
-            ),
-          ),
-        ),
+      return const AssistantEmptyCard(
+        icon: Icons.insights_rounded,
+        title: '暂无绩效通知',
+        subtitle: '考核人发布本月结果后，绩效会发到这里。点卡片可查看分项、等级和考核人，并确认已知悉。',
       );
     }
     return Stack(

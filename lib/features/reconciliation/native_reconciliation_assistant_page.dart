@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 
+import '../../core/theme/dunes_page_transition.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
 import '../../core/widgets/cached_network_image.dart';
@@ -1182,30 +1183,8 @@ class _NativeReconciliationAssistantPageState
 
   @override
   Widget build(BuildContext context) {
-    if (widget.desktopMode) {
-      return _showDetails
-          ? _buildDetailScaffold()
-          : _buildConversationScaffold();
-    }
-    return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 280),
-      switchInCurve: Curves.easeOutCubic,
-      switchOutCurve: Curves.easeInCubic,
-      layoutBuilder: (currentChild, previousChildren) => Stack(
-        fit: StackFit.expand,
-        children: [...previousChildren, ?currentChild],
-      ),
-      transitionBuilder: (child, animation) {
-        final isDetail =
-            child.key == const ValueKey<String>('reconciliation-detail');
-        final begin = isDetail ? const Offset(1, 0) : const Offset(-0.16, 0);
-        return SlideTransition(
-          position: Tween<Offset>(begin: begin, end: Offset.zero).animate(
-            CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
-          ),
-          child: child,
-        );
-      },
+    return DunesBlurExpandSwitcher(
+      isBack: !_showDetails,
       child: KeyedSubtree(
         key: ValueKey<String>(
           _showDetails ? 'reconciliation-detail' : 'reconciliation-chat',

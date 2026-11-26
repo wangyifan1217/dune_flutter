@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/theme/dunes_theme.dart';
+import '../../core/widgets/dunes_motion_kit.dart';
+import '../chat/assistant_ui_kit.dart';
 import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
 import '../chat/chat_widgets.dart';
@@ -415,19 +417,16 @@ class _NativeXrxsAssistantPageState extends State<NativeXrxsAssistantPage> {
                 ),
               ],
             ),
-            Expanded(child: _buildBody()),
-            SafeArea(
-              top: false,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-                child: SizedBox(
-                  width: double.infinity,
-                  child: FilledButton(
-                    onPressed: _opening ? null : widget.onOpenHome,
-                    child: const Text('打开薪人薪事'),
-                  ),
+            Expanded(child: AssistantFeedFrame(child: _buildBody())),
+            AssistantDockBar(
+              actions: [
+                AssistantDockAction(
+                  label: _opening ? '正在打开…' : '打开薪人薪事',
+                  icon: Icons.open_in_new_rounded,
+                  primary: true,
+                  onTap: _opening ? () {} : widget.onOpenHome,
                 ),
-              ),
+              ],
             ),
           ],
         ),
@@ -437,20 +436,22 @@ class _NativeXrxsAssistantPageState extends State<NativeXrxsAssistantPage> {
 
   Widget _buildBody() {
     if (_opening) return const XrxsOpeningIndicator();
-    if (_loading) return const Center(child: CircularProgressIndicator());
+    if (_loading) return const DunesListSkeleton();
     if (_error != null) {
-      return Center(
-        child: TextButton(onPressed: _load, child: Text('重试：$_error')),
+      return AssistantEmptyCard(
+        icon: Icons.cloud_off_rounded,
+        title: '薪人薪事通知加载失败',
+        subtitle: _error!,
+        accent: const Color(0xFFFF5B61),
+        actionLabel: '重试',
+        onAction: _load,
       );
     }
     if (_messages.isEmpty) {
-      return Center(
-        child: Text(
-          '薪人薪事的审批和考勤确认会显示在这里',
-          style: TextStyle(
-            color: DunesColors.resolve(context, DunesColors.text3),
-          ),
-        ),
+      return const AssistantEmptyCard(
+        icon: Icons.badge_rounded,
+        title: '暂无审批与考勤通知',
+        subtitle: '薪人薪事的审批提醒和考勤确认会第一时间推送到这里',
       );
     }
     return RefreshIndicator(

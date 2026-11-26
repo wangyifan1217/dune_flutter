@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/platform/desktop_features.dart';
+import '../../core/theme/dunes_page_transition.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../../core/widgets/desktop_feedback_surface.dart';
 import '../../core/widgets/desktop_status_surface.dart';
@@ -387,12 +388,8 @@ class _NativeGlobalSearchPageState extends State<NativeGlobalSearchPage> {
                 if (_snap?.slowHint == true) _buildSlowHint(),
                 if ((_snap?.queryHint ?? '').isNotEmpty) _buildQueryHint(),
                 Expanded(
-                  child: AnimatedSwitcher(
-                    duration: MediaQuery.disableAnimationsOf(context)
-                        ? Duration.zero
-                        : const Duration(milliseconds: 180),
-                    switchInCurve: Curves.easeOutCubic,
-                    switchOutCurve: Curves.easeInCubic,
+                  child: DunesBlurExpandSwitcher(
+                    isBack: _thread == null,
                     child: KeyedSubtree(
                       key: ValueKey(
                         q.isEmpty
@@ -1708,8 +1705,12 @@ class _HoverSurfaceState extends State<_HoverSurface> {
       );
     }
     return MouseRegion(
-      onEnter: (_) => setState(() => _hover = true),
-      onExit: (_) => setState(() => _hover = false),
+      onEnter: (_) {
+        if (mounted) setState(() => _hover = true);
+      },
+      onExit: (_) {
+        if (mounted) setState(() => _hover = false);
+      },
       cursor: SystemMouseCursors.click,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,

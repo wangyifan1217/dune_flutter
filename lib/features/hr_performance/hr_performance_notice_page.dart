@@ -180,16 +180,29 @@ class _HrPerformanceNoticePageState extends State<HrPerformanceNoticePage> {
               child: Container(
                 height: 52,
                 decoration: BoxDecoration(
-                  border: Border(bottom: BorderSide(color: border)),
+                  border: Border(
+                    bottom: BorderSide(
+                      color: border,
+                      width: (1 / MediaQuery.devicePixelRatioOf(context))
+                          .clamp(0.33, 0.6),
+                    ),
+                  ),
                 ),
-                padding: const EdgeInsets.symmetric(horizontal: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 6),
                 child: Row(
                   children: [
                     if (widget.showBackButton)
                       IconButton(
                         tooltip: '返回',
                         onPressed: widget.onBack,
-                        icon: Icon(Icons.arrow_back, color: text, size: 20),
+                        icon: Icon(
+                          Icons.arrow_back_ios_new_rounded,
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.brandPurple,
+                          ),
+                          size: 18,
+                        ),
                       )
                     else
                       const SizedBox(width: 12),
@@ -199,7 +212,8 @@ class _HrPerformanceNoticePageState extends State<HrPerformanceNoticePage> {
                         style: TextStyle(
                           color: text,
                           fontSize: 16,
-                          fontWeight: FontWeight.w600,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: -0.2,
                         ),
                       ),
                     ),
@@ -207,7 +221,7 @@ class _HrPerformanceNoticePageState extends State<HrPerformanceNoticePage> {
                       onPressed: _messages.isEmpty || _clearing
                           ? null
                           : _clearHistory,
-                      icon: const Icon(Icons.delete_outline, size: 16),
+                      icon: const Icon(Icons.delete_outline_rounded, size: 16),
                       label: const Text('清空'),
                       style: TextButton.styleFrom(
                         foregroundColor: DunesColors.resolve(
@@ -221,7 +235,14 @@ class _HrPerformanceNoticePageState extends State<HrPerformanceNoticePage> {
                     IconButton(
                       tooltip: '刷新',
                       onPressed: _busy ? null : () => _load(),
-                      icon: Icon(Icons.refresh, color: text3, size: 20),
+                      icon: Icon(
+                        Icons.refresh_rounded,
+                        color: DunesColors.resolve(
+                          context,
+                          DunesColors.brandPurple,
+                        ),
+                        size: 20,
+                      ),
                     ),
                   ],
                 ),
@@ -260,7 +281,7 @@ class _HrPerformanceNoticePageState extends State<HrPerformanceNoticePage> {
     return Align(
       alignment: Alignment.topCenter,
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 640),
+        constraints: const BoxConstraints(maxWidth: 760),
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
           children: [

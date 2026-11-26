@@ -57,9 +57,11 @@ Future<Map<String, dynamic>?> hrFormSheet(
   String? message,
   bool confirmSubmission = true,
   String Function()? confirmationMessage,
+  Future<void> Function(Map<String, dynamic>)? submitInSheet,
   double maxWidth = 520,
 }) {
   String? error;
+  var submitting = false;
   return showHrConfigPanel<Map<String, dynamic>>(
     context,
     Theme(
@@ -83,7 +85,9 @@ Future<Map<String, dynamic>?> hrFormSheet(
                         ),
                       ),
                       IconButton(
-                        onPressed: () => Navigator.pop(context),
+                        onPressed: submitting
+                            ? null
+                            : () => Navigator.pop(context),
                         icon: const Icon(Icons.close),
                       ),
                     ],
@@ -102,7 +106,7 @@ Future<Map<String, dynamic>?> hrFormSheet(
                             child: Text(message),
                           ),
                         ...fields(values, update),
-                        if (error != null)
+                        if (error != null && submitInSheet == null)
                           Padding(
                             padding: const EdgeInsets.all(12),
                             child: Text(
@@ -116,32 +120,63 @@ Future<Map<String, dynamic>?> hrFormSheet(
                     ),
                   ),
                 ),
+                if (error != null && submitInSheet != null)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+                    child: Text(
+                      error!,
+                      key: const ValueKey('hr-sheet-submit-error'),
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                    ),
+                  ),
                 Padding(
                   padding: const EdgeInsets.all(16),
                   child: FilledButton(
                     key: const ValueKey('hr-sheet-submit'),
-                    onPressed: () async {
-                      try {
-                        final result = submit(values);
-                        if (confirmSubmission &&
-                            !await hrConfirmAction(
-                              context,
-                              title: title,
-                              message:
-                                  confirmationMessage?.call() ??
-                                  '$title\n${message ?? '请核对填写的内容，确认后提交。'}${hrText(result['reason']).isEmpty ? '' : '\n原因：${result['reason']}'}${hrText(result['target']).isEmpty ? '' : '\n目标阶段：${hrPerformanceStageLabels[hrText(result['target'])] ?? result['target']}'}',
-                            )) {
-                          return;
-                        }
-                        if (!context.mounted) return;
-                        Navigator.pop(context, result);
-                      } on FormatException catch (e) {
-                        update(() => error = e.message);
-                      } catch (e) {
-                        update(() => error = '$e');
-                      }
-                    },
-                    child: Text(submitLabel),
+                    onPressed: submitting
+                        ? null
+                        : () async {
+                            try {
+                              final result = submit(values);
+                              if (submitInSheet != null) {
+                                update(() {
+                                  submitting = true;
+                                  error = null;
+                                });
+                              }
+                              if (confirmSubmission &&
+                                  !await hrConfirmAction(
+                                    context,
+                                    title: title,
+                                    message:
+                                        confirmationMessage?.call() ??
+                                        '$title\n${message ?? '请核对填写的内容，确认后提交。'}${hrText(result['reason']).isEmpty ? '' : '\n原因：${result['reason']}'}${hrText(result['target']).isEmpty ? '' : '\n目标阶段：${hrPerformanceStageLabels[hrText(result['target'])] ?? result['target']}'}',
+                                  )) {
+                                return;
+                              }
+                              if (!context.mounted) return;
+                              if (submitInSheet != null) {
+                                await submitInSheet(result);
+                              }
+                              if (!context.mounted) return;
+                              Navigator.pop(context, result);
+                            } on FormatException catch (e) {
+                              if (context.mounted) {
+                                update(() => error = e.message);
+                              }
+                            } catch (e) {
+                              if (context.mounted) update(() => error = '$e');
+                            } finally {
+                              if (context.mounted && submitting) {
+                                update(() => submitting = false);
+                              }
+                            }
+                          },
+                    child: Text(submitting ? '提交中…' : submitLabel),
                   ),
                 ),
               ],
@@ -290,6 +325,7 @@ Future<Map<String, dynamic>?> showHrScoreSheet(
   required bool initial,
   bool self = false,
   bool hrEdit = false,
+  Future<void> Function(Map<String, dynamic>)? submitInSheet,
 }) {
   final lines = [
     for (final line in record.lines)
@@ -338,6 +374,7 @@ Future<Map<String, dynamic>?> showHrScoreSheet(
     maxWidth: 760,
     values: {'lines': lines, 'reason': ''},
     submitLabel: self ? '提交自评' : (initial ? '提交初评' : '保存并提交'),
+    submitInSheet: submitInSheet,
     message: hrEdit
         ? '请逐项核对得分并填写改分理由。${hrScoreEditImpact(record)}'
         : initial
@@ -379,7 +416,9 @@ Future<Map<String, dynamic>?> showHrScoreSheet(
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '权重 ${line['weight']}% · 建议分 ${line['suggestedScore'] ?? '无'}',
+                  self && line['directScore'] == true
+                      ? '本项满分 ${line['weight']} 分 · 建议分 ${line['suggestedScore'] ?? '无'}'
+                      : '权重 ${line['weight']}% · 建议分 ${line['suggestedScore'] ?? '无'}',
                   style: const TextStyle(
                     fontSize: 12,
                     color: Color(0xFF827A8C),

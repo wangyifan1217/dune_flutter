@@ -44,8 +44,8 @@ class ReturnScopeService extends fixtures.FakeHR {
   }
 }
 
-class TemplateSwitchService extends fixtures.FakeHR {
-  TemplateSwitchService(super.session, super.rows) : super(hr: true);
+class AssignmentService extends fixtures.FakeHR {
+  AssignmentService(super.session, super.rows) : super(hr: true);
 
   Map<String, dynamic>? assignment;
 
@@ -54,6 +54,9 @@ class TemplateSwitchService extends fixtures.FakeHR {
     ...await super.options(id),
     'assignmentTemplates': [
       {'id': 'ui', 'name': 'UI设计师考核表'},
+    ],
+    'users': [
+      {'id': 20, 'name': '新主管', 'department': '研发部'},
     ],
   };
 
@@ -66,17 +69,92 @@ class TemplateSwitchService extends fixtures.FakeHR {
     return HrPerformanceRecord.fromJson({
       ...rows.single,
       'version': record.version + 1,
-      'snapshot': {...record.snapshot, 'templateName': 'UI设计师考核表'},
+      'snapshot': {
+        ...record.snapshot,
+        if (values.containsKey('templateId')) 'templateName': 'UI设计师考核表',
+        if (values.containsKey('directSupervisorId'))
+          'directSupervisorName': '新主管',
+      },
+    });
+  }
+}
+
+class SelfReviewRetryService extends fixtures.FakeHR {
+  SelfReviewRetryService(super.session, super.rows);
+  int attempts = 0;
+
+  @override
+  Future<HrPerformanceRecord> action(
+    HrPerformanceRecord record,
+    Map<String, dynamic> command,
+  ) async {
+    attempts++;
+    if (attempts == 1) throw const FormatException('提交暂时失败，请重试');
+    lastCommand = command;
+    return HrPerformanceRecord.fromJson({
+      ...rows.single,
+      'version': record.version + 1,
+      'stage': 'calibration',
+      'actions': <String>[],
     });
   }
 }
 
 void main() {
+  testWidgets(
+    'self review keeps scores visible and editable after a failed submit',
+    (tester) async {
+      final row = fixtures.sample(stage: 'self', actions: ['submit_self']);
+      final service = SelfReviewRetryService(fixtures.testSession(1), [row]);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: HrPerformanceDetail(
+              session: service.session,
+              service: service,
+              record: HrPerformanceRecord.fromJson(row),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('hr-action-submit_self')));
+      await tester.pumpAndSettle();
+      final score = find.byKey(const ValueKey('hr-score-target'));
+      final remark = find.byKey(const ValueKey('hr-remark-target'));
+      final submit = find.byKey(const ValueKey('hr-sheet-submit'));
+      final confirm = find.byKey(const ValueKey('hr-confirm-action'));
+      final error = find.byKey(const ValueKey('hr-sheet-submit-error'));
+      await tester.enterText(score, '85');
+      await tester.tap(submit);
+      await tester.pumpAndSettle();
+      expect(error.hitTestable(), findsOneWidget);
+      expect(service.attempts, 0);
+
+      await tester.enterText(remark, '已完成任务');
+      await tester.tap(submit);
+      await tester.pumpAndSettle();
+      await tester.tap(confirm);
+      await tester.pumpAndSettle();
+      expect(find.text('提交暂时失败，请重试'), findsOneWidget);
+      expect(find.text('85'), findsOneWidget);
+      expect(find.text('已完成任务'), findsOneWidget);
+
+      await tester.tap(submit);
+      await tester.pumpAndSettle();
+      await tester.tap(confirm);
+      await tester.pumpAndSettle();
+      expect(service.attempts, 2);
+      expect(service.lastCommand?['action'], 'submit_self');
+      expect(submit, findsNothing);
+    },
+  );
+
   testWidgets('HR switches an initial review to a current template', (
     tester,
   ) async {
     final row = fixtures.sample(stage: 'review', actions: ['switch_template']);
-    final service = TemplateSwitchService(fixtures.testSession(4), [row]);
+    final service = AssignmentService(fixtures.testSession(4), [row]);
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -105,6 +183,87 @@ void main() {
     expect(service.assignment?['templateId'], 'ui');
     expect(service.assignment?['reason'], '切换岗位模板');
     expect(find.textContaining('考核指标 · UI设计师考核表'), findsOneWidget);
+  });
+
+  testWidgets('HR can assign or restore each supervisor on the record', (
+    tester,
+  ) async {
+    final row = fixtures.sample(stage: 'review', actions: ['hr_assign']);
+    final service = AssignmentService(fixtures.testSession(4), [row]);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: HrPerformanceDetail(
+            session: service.session,
+            service: service,
+            record: HrPerformanceRecord.fromJson(row),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('hr-action-hr_assign')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(HrSelect<int>).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('新主管 · 研发部 · #20'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(HrSelect<int>).last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('恢复跟随组织主管'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const ValueKey('hr-reason')), '本表调整');
+    await tester.tap(find.byKey(const ValueKey('hr-sheet-submit')));
+    await tester.pumpAndSettle();
+    expect(service.assignment, isNull);
+    await tester.tap(find.byKey(const ValueKey('hr-confirm-action')));
+    await tester.pumpAndSettle();
+    expect(service.assignment, {
+      'directSupervisorId': 20,
+      'resetDivisionSupervisor': true,
+      'reason': '本表调整',
+    });
+  });
+
+  testWidgets('HR can pick the employee as direct supervisor only', (
+    tester,
+  ) async {
+    final row = fixtures.sample(
+      name: '被考核员工',
+      stage: 'review',
+      actions: ['hr_assign'],
+    );
+    final service = AssignmentService(fixtures.testSession(4), [row]);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: HrPerformanceDetail(
+            session: service.session,
+            service: service,
+            record: HrPerformanceRecord.fromJson(row),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('hr-action-hr_assign')));
+    await tester.pumpAndSettle();
+    final self = find.text('本人自评 · 被考核员工');
+    await tester.tap(find.byType(HrSelect<int>).last);
+    await tester.pumpAndSettle();
+    expect(self, findsNothing);
+    await tester.tap(find.text('恢复跟随组织主管'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(HrSelect<int>).first);
+    await tester.pumpAndSettle();
+    await tester.tap(self);
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const ValueKey('hr-reason')), '本人自评');
+    await tester.tap(find.byKey(const ValueKey('hr-sheet-submit')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('hr-confirm-action')));
+    await tester.pumpAndSettle();
+    expect(service.assignment?['directSupervisorId'], 1);
   });
 
   testWidgets(

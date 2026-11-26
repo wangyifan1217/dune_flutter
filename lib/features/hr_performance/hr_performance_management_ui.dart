@@ -3,6 +3,84 @@ import 'package:flutter/material.dart';
 import 'hr_performance_service.dart';
 import 'hr_performance_sheets.dart';
 
+Future<Map<String, dynamic>?> showHrSupervisorSheet(
+  BuildContext context,
+  HrPerformanceRecord record,
+  List<Map<String, dynamic>> users,
+) {
+  final choices = <DropdownMenuItem<int>>[
+    const DropdownMenuItem(value: 0, child: Text('恢复跟随组织主管')),
+    for (final user in users)
+      if (user['id'] is num)
+        DropdownMenuItem(
+          value: (user['id'] as num).toInt(),
+          child: Text(
+            [
+              hrText(user['name']),
+              if (hrText(user['department']).isNotEmpty)
+                hrText(user['department']),
+              if (hrText(user['position']).isNotEmpty) hrText(user['position']),
+              '#${user['id']}',
+            ].join(' · '),
+          ),
+        ),
+  ];
+  return hrFormSheet(
+    context,
+    title: '调整考核主管',
+    message: '仅调整 ${record.name} 的这张考核表。直属主管设为本人后，待初评的考核改为本人自评。已完成审批会保留。',
+    values: {'reason': ''},
+    fields: (values, update) => [
+      for (final direct in [true, false])
+        HrSelect<int>(
+          decoration: InputDecoration(
+            labelText: direct ? '直接主管' : '分管主管',
+            helperText: () {
+              final role = direct ? 'direct' : 'division';
+              final name = hrText(record.snapshot['${role}SupervisorName']);
+              final isAssigned =
+                  record.snapshot['${role}SupervisorOverrideId'] != null;
+              return '当前：${name.isEmpty ? '未配置' : name} · ${isAssigned ? '本表指定' : '跟随组织'}';
+            }(),
+          ),
+          searchHint: '搜索姓名、部门、岗位或编号',
+          items: direct
+              ? [
+                  DropdownMenuItem(
+                    value: record.userId,
+                    child: Text('本人自评 · ${record.name}'),
+                  ),
+                  ...choices,
+                ]
+              : choices,
+          onChanged: (id) {
+            final selectedKey = direct
+                ? 'directSupervisorId'
+                : 'divisionSupervisorId';
+            final resetKey = direct
+                ? 'resetDirectSupervisor'
+                : 'resetDivisionSupervisor';
+            values.remove(selectedKey);
+            values.remove(resetKey);
+            if (id == 0) {
+              values[resetKey] = true;
+            } else if (id != null) {
+              values[selectedKey] = id;
+            }
+          },
+        ),
+      hrReasonField(values),
+    ],
+    submit: (values) {
+      if (hrText(values['reason']).isEmpty) {
+        throw const FormatException('请填写修改原因');
+      }
+      if (values.length == 1) throw const FormatException('请选择要调整的主管');
+      return values;
+    },
+  );
+}
+
 Future<Map<String, dynamic>?> showHrExportSheet(
   BuildContext context, {
   required List<HrPerformanceRecord> records,

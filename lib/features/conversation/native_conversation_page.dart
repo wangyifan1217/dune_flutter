@@ -862,7 +862,10 @@ class _NativeConversationPageState extends State<NativeConversationPage>
                         ? Icons.mark_chat_read_outlined
                         : Icons.mark_chat_unread_outlined,
                     size: 20,
-                    color: DunesColors.resolve(sheetCtx, const Color(0xFF3478F6)),
+                    color: DunesColors.resolve(
+                      sheetCtx,
+                      DunesColors.brandPurple,
+                    ),
                   ),
                   title: Text(isUnread ? '标为已读' : '标为未读'),
                   onTap: () {

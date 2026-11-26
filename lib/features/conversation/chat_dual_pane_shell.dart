@@ -404,10 +404,67 @@ class ChatDualPaneEmpty extends StatelessWidget {
                     context: context,
                   ),
                 ),
+                const SizedBox(height: 18),
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 8,
+                  alignment: WrapAlignment.center,
+                  children: const [
+                    _DualPaneShortcutHint(keys: 'Ctrl + K', label: '全局搜索'),
+                    _DualPaneShortcutHint(keys: 'Ctrl + 1~4', label: '切换板块'),
+                  ],
+                ),
               ],
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _DualPaneShortcutHint extends StatelessWidget {
+  const _DualPaneShortcutHint({required this.keys, required this.label});
+
+  final String keys;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = ImVisualTokens.accent(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: ImVisualTokens.accentSoftSurface(context),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(
+          color: accent.withValues(alpha: 0.22),
+          width: 0.7,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            keys,
+            style: DunesTypography.sans(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: accent,
+              context: context,
+            ),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: DunesTypography.sans(
+              fontSize: 11,
+              fontWeight: FontWeight.w500,
+              color: DunesColors.resolve(context, DunesColors.text2),
+              context: context,
+            ),
+          ),
+        ],
       ),
     );
   }

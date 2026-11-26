@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 
 import '../../auth/auth_session.dart';
+import '../nova_background_coordinator.dart';
+import '../nova_icon.dart';
 import 'nova_presence_model.dart';
 
 class NovaPresenceTurn {
@@ -481,23 +483,33 @@ class NovaPresenceAvatar extends StatelessWidget {
   final double size;
 
   @override
-  Widget build(BuildContext context) => Container(
-    width: size,
-    height: size,
-    decoration: BoxDecoration(
-      shape: BoxShape.circle,
-      gradient: const LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [Color(0xFFF6F0FF), Color(0xFFEAE7F7), Color(0xFFE8F0FF)],
-      ),
-      border: Border.all(color: Colors.white.withValues(alpha: 0.8)),
-    ),
-    child: Image.asset(
-      'assets/images/ai_tab_avatar.png',
-      width: size,
-      height: size,
-      fit: BoxFit.contain,
-    ),
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: NovaBackgroundCoordinator.instance,
+    builder: (context, _) {
+      final thinking = NovaBackgroundCoordinator.instance.isThinking;
+      final unread = NovaBackgroundCoordinator.instance.hasUnreadReply;
+      return Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFFF6F0FF), Color(0xFFEAE7F7), Color(0xFFE8F0FF)],
+          ),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.85)),
+        ),
+        child: ClipOval(
+          child: NovaAnimated3DAvatar(
+            width: size,
+            height: size,
+            thinking: thinking,
+            happy: unread && !thinking,
+            fit: BoxFit.cover,
+          ),
+        ),
+      );
+    },
   );
 }

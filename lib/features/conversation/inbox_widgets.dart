@@ -194,7 +194,8 @@ class ChatInboxHeader extends StatelessWidget {
   }
 }
 
-/// 消息页左上角的「快速开会」胶囊。会议进行中时变成「会议中」红点提示。
+/// 消息页左上角的「快速开会 / 会议纪要」入口。
+/// APP 端为纯图标圆钮，录音中带声纹律动与脉冲光环，暂停时带琥珀呼吸环；PC 端保留原胶囊。
 class _QuickMeetingButton extends StatelessWidget {
   const _QuickMeetingButton({required this.onTap});
 
@@ -202,9 +203,138 @@ class _QuickMeetingButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder<bool>(
-      valueListenable: MeetingLiveController.instance.active,
-      builder: (context, live, _) {
+    final controller = MeetingLiveController.instance;
+    return ListenableBuilder(
+      listenable: Listenable.merge([
+        controller.active,
+        controller.paused,
+        controller.recovering,
+        controller.saveFailed,
+      ]),
+      builder: (context, _) {
+        final live = controller.active.value;
+        final paused = controller.paused.value;
+        final failed = controller.saveFailed.value;
+        final recovering = controller.recovering.value;
+
+        if (!isDesktopCommOnly) {
+          final isRecording = live && !paused && !failed;
+          final isPaused = live && (paused || failed);
+          final semanticsLabel = isRecording
+              ? '会议录音中，点击回到会议'
+              : isPaused
+              ? '会议录音已暂停，点击处理'
+              : '会议纪要';
+          final gradientColors = isRecording
+              ? const [Color(0xFFFF6B6B), Color(0xFFE04848)]
+              : isPaused
+              ? const [Color(0xFFFFC25C), Color(0xFFE08E26)]
+              : const [Color(0xFF9D84EC), Color(0xFF6E52CC)];
+          final ringColor = isRecording
+              ? const Color(0xFFFF5B61)
+              : isPaused
+              ? const Color(0xFFFFB340)
+              : const Color(0xFF7B5CD8);
+
+          return Semantics(
+            button: true,
+            label: semanticsLabel,
+            child: Tooltip(
+              message: semanticsLabel,
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  key: const Key('inbox-quick-meeting'),
+                  onTap: () {
+                    HapticFeedback.selectionClick();
+                    onTap();
+                  },
+                  customBorder: const CircleBorder(),
+                  child: SizedBox(
+                    width: 38,
+                    height: 38,
+                    child: Stack(
+                      alignment: Alignment.center,
+                      clipBehavior: Clip.none,
+                      children: [
+                        if (live)
+                          _MeetingIconPulseRing(
+                            color: ringColor,
+                            paused: isPaused,
+                          ),
+                        AnimatedContainer(
+                          duration: const Duration(milliseconds: 220),
+                          curve: Curves.easeOutCubic,
+                          width: 30,
+                          height: 30,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            gradient: LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: gradientColors,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: ringColor.withValues(
+                                  alpha: live ? 0.36 : 0.24,
+                                ),
+                                blurRadius: live ? 10 : 8,
+                                offset: const Offset(0, 3),
+                              ),
+                            ],
+                          ),
+                          alignment: Alignment.center,
+                          child: recovering
+                              ? const SizedBox(
+                                  width: 14,
+                                  height: 14,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 1.8,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : isRecording
+                              ? const _MiniMeetingWaveIcon()
+                              : Icon(
+                                  isPaused
+                                      ? Icons.pause_rounded
+                                      : Icons.mic_rounded,
+                                  size: 16,
+                                  color: Colors.white,
+                                ),
+                        ),
+                        if (live)
+                          Positioned(
+                            top: 2,
+                            right: 2,
+                            child: Container(
+                              width: 8,
+                              height: 8,
+                              decoration: BoxDecoration(
+                                color: isPaused
+                                    ? const Color(0xFFFFB340)
+                                    : const Color(0xFFFF3B30),
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: Theme.of(context).brightness ==
+                                          Brightness.dark
+                                      ? const Color(0xFF1A1924)
+                                      : Colors.white,
+                                  width: 1.5,
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          );
+        }
+
         final fg = live
             ? DunesColors.resolve(context, const Color(0xFFBC5C40))
             : DunesColors.resolve(context, const Color(0xFF7B5CD8));
@@ -286,6 +416,146 @@ class _QuickMeetingButton extends StatelessWidget {
               ),
             ),
           ),
+        );
+      },
+    );
+  }
+}
+
+/// 录音中向外扩散的柔和脉冲光环；暂停时变为缓慢呼吸光圈（仅在录音活跃时挂载）。
+class _MeetingIconPulseRing extends StatefulWidget {
+  const _MeetingIconPulseRing({required this.color, required this.paused});
+
+  final Color color;
+  final bool paused;
+
+  @override
+  State<_MeetingIconPulseRing> createState() => _MeetingIconPulseRingState();
+}
+
+class _MeetingIconPulseRingState extends State<_MeetingIconPulseRing>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl = AnimationController(
+    vsync: this,
+    duration: Duration(milliseconds: widget.paused ? 1800 : 1250),
+  )..repeat(reverse: widget.paused);
+
+  @override
+  void didUpdateWidget(covariant _MeetingIconPulseRing oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.paused != widget.paused) {
+      _ctrl.duration = Duration(milliseconds: widget.paused ? 1800 : 1250);
+      _ctrl
+        ..reset()
+        ..repeat(reverse: widget.paused);
+    }
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (MediaQuery.disableAnimationsOf(context)) {
+      return Container(
+        width: 36,
+        height: 36,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(
+            color: widget.color.withValues(alpha: 0.45),
+            width: 1.5,
+          ),
+        ),
+      );
+    }
+    return AnimatedBuilder(
+      animation: _ctrl,
+      builder: (context, _) {
+        final t = Curves.easeOutCubic.transform(_ctrl.value);
+        if (widget.paused) {
+          return Container(
+            width: 34 + t * 4,
+            height: 34 + t * 4,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: widget.color.withValues(alpha: 0.28 + t * 0.34),
+                width: 1.6,
+              ),
+            ),
+          );
+        }
+        return Opacity(
+          opacity: (1.0 - t).clamp(0.0, 1.0) * 0.65,
+          child: Transform.scale(
+            scale: 0.92 + t * 0.46,
+            child: Container(
+              width: 30,
+              height: 30,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(color: widget.color, width: 2.0),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// 录音图标内部 3 柱迷你声纹律动（仅录音活跃时挂载，暂停/结束自动销毁）。
+class _MiniMeetingWaveIcon extends StatefulWidget {
+  const _MiniMeetingWaveIcon();
+
+  @override
+  State<_MiniMeetingWaveIcon> createState() => _MiniMeetingWaveIconState();
+}
+
+class _MiniMeetingWaveIconState extends State<_MiniMeetingWaveIcon>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 760),
+  )..repeat(reverse: true);
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (MediaQuery.disableAnimationsOf(context)) {
+      return const Icon(Icons.graphic_eq_rounded, size: 16, color: Colors.white);
+    }
+    return AnimatedBuilder(
+      animation: _ctrl,
+      builder: (context, _) {
+        final t = _ctrl.value;
+        final h1 = 5.5 + 7.5 * ((t + 0.15) % 1.0);
+        final h2 = 7.0 + 8.5 * (1.0 - t);
+        final h3 = 5.5 + 7.0 * ((t + 0.55) % 1.0);
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            for (final h in [h1, h2, h3])
+              Container(
+                width: 2.4,
+                height: h,
+                margin: const EdgeInsets.symmetric(horizontal: 1.1),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(1.5),
+                ),
+              ),
+          ],
         );
       },
     );
@@ -1878,7 +2148,7 @@ class ChatInboxRow extends StatelessWidget {
     final rowSurface = DesktopFeedbackSurface(
       onTap: onTap,
       selected: selected,
-      showSelectionIndicator: true,
+      showSelectionIndicator: false,
       visualInset: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       backgroundColor: rowBg,
       child: Padding(
@@ -2457,7 +2727,7 @@ class _Avatar extends StatelessWidget {
             ),
             boxShadow: const [
               BoxShadow(
-                color: Color(0x182E75FF),
+                color: Color(0x1E7B5CD8),
                 blurRadius: 6,
                 offset: Offset(0, 2),
               ),
@@ -2970,7 +3240,7 @@ class _NovaEyesButton extends StatelessWidget {
                           ),
                           boxShadow: const [
                             BoxShadow(
-                              color: Color(0x222E75FF),
+                              color: Color(0x247B5CD8),
                               blurRadius: 5,
                               offset: Offset(0, 1.5),
                             ),
@@ -3207,7 +3477,7 @@ class _SwipeableChatInboxRowState extends State<SwipeableChatInboxRow> {
                     if (widget.onMarkUnread != null)
                       _swipeAction(
                         label: widget.markUnreadLabel,
-                        color: const Color(0xFF3478F6),
+                        color: DunesColors.brandPurple,
                         onTap: widget.onMarkUnread!,
                       ),
                     if (widget.onToggleMute != null)

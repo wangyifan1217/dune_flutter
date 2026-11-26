@@ -5,6 +5,7 @@ import 'package:flutter_markdown/flutter_markdown.dart';
 import '../../core/layout/chat_layout.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
+import '../../core/widgets/dunes_motion_kit.dart';
 import '../auth/auth_session.dart';
 import '../chat/assistant_transcript_support.dart';
 import '../chat/chat_widgets.dart';
@@ -428,7 +429,7 @@ class _NativeApprovalAssistantPageState
 
   Widget _buildBody() {
     if (_loading) {
-      return const Center(child: CircularProgressIndicator(strokeWidth: 2));
+      return const DunesListSkeleton();
     }
     if (_error != null && _messages.isEmpty) {
       return Center(

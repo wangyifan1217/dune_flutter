@@ -436,13 +436,18 @@ class _DunesResultOverlayCardState extends State<_DunesResultOverlayCard>
                             ),
                           ),
                           const SizedBox(width: 9),
-                          Text(
-                            widget.message,
-                            style: const TextStyle(
-                              fontSize: 13.5,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.white,
-                              decoration: TextDecoration.none,
+                          Flexible(
+                            child: Text(
+                              widget.message,
+                              softWrap: true,
+                              style: TextStyle(
+                                fontSize: 13.5,
+                                fontWeight: FontWeight.w600,
+                                color: widget.isSuccess
+                                    ? const Color(0xFFC8F7D6)
+                                    : const Color(0xFFFFB8BC),
+                                decoration: TextDecoration.none,
+                              ),
                             ),
                           ),
                         ],

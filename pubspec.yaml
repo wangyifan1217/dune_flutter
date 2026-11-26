@@ -109,6 +109,8 @@ flutter:
     - assets/images/ai_avatar_pc_hd.png
     - assets/images/ai_avatar_open.png
     - assets/images/ai_avatar_wink.png
+    - assets/images/ai_avatar_blink.png
+    - assets/images/ai_avatar_thinking.png
     - assets/images/ai_avatar_blink.gif
     - assets/images/ai_avatar_gemini.png
     - assets/images/lighthouse_logo.png

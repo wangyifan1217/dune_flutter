@@ -2195,7 +2195,13 @@ class NovaC4MessageRow extends StatelessWidget {
           ),
         ],
       ),
-      child: ClipOval(child: NovaPersonAvatarImage(width: 38, height: 38)),
+      child: ClipOval(
+        child: NovaPersonAvatarImage(
+          width: 38,
+          height: 38,
+          thinking: thinking,
+        ),
+      ),
     );
   }
 

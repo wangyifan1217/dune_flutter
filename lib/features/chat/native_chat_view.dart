@@ -117,8 +117,8 @@ const double _kChatMessageRowHeight = 76;
 
 /// 会话列表滚动/分页参数，按列表可视高度自适应（Android / iOS、大小屏通用）。
 /// 独立承接键盘高度与底部安全区的占位条：
-/// 用 max(viewInsets.bottom, viewPadding.bottom) 保证键盘从 0 升至 34+ 时高度单调平滑，
-/// 消除 SafeArea(bottom: true) 在安全区临界点跳变，同时把 MediaQuery 订阅隔离在本叶节点内。
+/// 键盘收起时对 iOS（34px）和全面屏手势条适度收敛留白，让输入框贴合底部又不遮挡 Home Indicator；
+/// 键盘弹起时单调平滑跟手，且把 MediaQuery 订阅隔离在本叶节点内避免整页重建。
 class _ChatKeyboardSpacer extends StatelessWidget {
   const _ChatKeyboardSpacer();
 
@@ -126,10 +126,17 @@ class _ChatKeyboardSpacer extends StatelessWidget {
   Widget build(BuildContext context) {
     final inset = MediaQuery.viewInsetsOf(context).bottom;
     final safeBottom = MediaQuery.viewPaddingOf(context).bottom;
-    final height = inset > safeBottom ? inset : safeBottom;
+    // iOS Home Indicator 实际仅占底部 ~13px，加上输入栏自身 6px padding，
+    // 收敛到 safeBottom - 14（约 20px，总计 26px）既不碰指示条又不再高悬。
+    final restingBottom = safeBottom > 14 ? safeBottom - 14.0 : safeBottom;
+    final height = inset > restingBottom ? inset : restingBottom;
     if (height <= 0) return const SizedBox.shrink();
     return ColoredBox(
-      color: ImVisualTokens.cardSurface(context),
+      color: DunesColors.resolve(
+        context,
+        DunesColors.imSurface,
+        role: DunesColorRole.surface,
+      ),
       child: SizedBox(width: double.infinity, height: height),
     );
   }
@@ -2869,24 +2876,6 @@ class _NativeChatViewState extends State<NativeChatView>
     return count;
   }
 
-  /// KakaoTalk 风格极简未读人数：私聊未读为 1、已读为 0；群聊为剩余未读人数。
-  int? _unreadCountForMessage(
-    NativeChatMessage message, {
-    required bool mine,
-    required bool peerRead,
-  }) {
-    if (!mine || message.id <= 0 || _isSystemKind(message.kind)) return null;
-    if (_isPrivate) {
-      if (_conversation?.isSelfMemo == true) return null;
-      return peerRead ? 0 : 1;
-    }
-    final peers = _groupReadPeers();
-    if (peers.isEmpty) return null;
-    final readCount = _groupReadCountForMessage(message.id);
-    final unread = peers.length - readCount;
-    return unread < 0 ? 0 : unread;
-  }
-
   /// PC 端气泡悬停快捷磨砂浮条（引用 / 复制 / 转发 / 更多），一步直达高频操作。
   Widget _buildDesktopHoverActions(
     NativeChatMessage m,
@@ -3090,9 +3079,9 @@ class _NativeChatViewState extends State<NativeChatView>
     return entries;
   }
 
-  /// 自己刚发出（服务端时间 8 秒内）的消息播放弹性入场动效（APP 与 PC 双端生效）。
+  /// 刚发出或刚收到的实时新消息（服务端时间 8 秒内）播放柔和入场动效（APP 与 PC 双端生效）。
   DateTime? _sendEnterStartFor(NativeChatMessage m, {required bool mine}) {
-    if (!mine || m.id <= 0) return null;
+    if (m.id <= 0 || _isSystemKind(m.kind)) return null;
     final known = _sendEnterStartedAt[m.id];
     if (known != null) return known;
     final created = m.createdAt;
@@ -11999,12 +11988,6 @@ class _NativeChatViewState extends State<NativeChatView>
                                                       entry.groupedWithPrev,
                                                   groupedWithNext:
                                                       entry.groupedWithNext,
-                                                  unreadCount:
-                                                      _unreadCountForMessage(
-                                                        m,
-                                                        mine: mine,
-                                                        peerRead: peerRead,
-                                                      ),
                                                   hoverActions:
                                                       desktop &&
                                                           canShowActions &&
@@ -12112,6 +12095,7 @@ class _NativeChatViewState extends State<NativeChatView>
                                                 if (enterAt != null) {
                                                   row = _ChatSendEnter(
                                                     startedAt: enterAt,
+                                                    fromRight: mine,
                                                     child: row,
                                                   );
                                                 }
@@ -12129,34 +12113,8 @@ class _NativeChatViewState extends State<NativeChatView>
                                                 }
                                               }
                                               var rowWidget = highlighted
-                                                  ? AnimatedContainer(
+                                                  ? _ChatLocateHighlightPulse(
                                                       key: _messageRowKey(m.id),
-                                                      duration: const Duration(
-                                                        milliseconds: 220,
-                                                      ),
-                                                      decoration: BoxDecoration(
-                                                        color: ImVisualTokens
-                                                            .accent(context)
-                                                            .withValues(
-                                                              alpha: 0.12,
-                                                            ),
-                                                        border: Border.all(
-                                                          color: ImVisualTokens
-                                                              .accent(context)
-                                                              .withValues(
-                                                                alpha: 0.28,
-                                                              ),
-                                                        ),
-                                                        borderRadius:
-                                                            BorderRadius.circular(
-                                                              14,
-                                                            ),
-                                                      ),
-                                                      padding:
-                                                          const EdgeInsets.symmetric(
-                                                            horizontal: 4,
-                                                            vertical: 3,
-                                                          ),
                                                       child: row,
                                                     )
                                                   : KeyedSubtree(
@@ -13927,12 +13885,17 @@ class _ChatSwipeToQuoteState extends State<_ChatSwipeToQuote>
   }
 }
 
-/// 自己发出的消息从右下（输入框方向）轻滑入并淡入。
+/// 自己发出（右下）或对方实时发来（左下）的新消息柔和弹性入场。
 class _ChatSendEnter extends StatefulWidget {
-  const _ChatSendEnter({required this.startedAt, required this.child});
+  const _ChatSendEnter({
+    required this.startedAt,
+    required this.child,
+    this.fromRight = true,
+  });
 
   final DateTime startedAt;
   final Widget child;
+  final bool fromRight;
 
   @override
   State<_ChatSendEnter> createState() => _ChatSendEnterState();
@@ -13940,7 +13903,7 @@ class _ChatSendEnter extends StatefulWidget {
 
 class _ChatSendEnterState extends State<_ChatSendEnter>
     with SingleTickerProviderStateMixin {
-  static const _duration = Duration(milliseconds: 280);
+  static const _duration = Duration(milliseconds: 260);
 
   late final AnimationController _controller = AnimationController(
     vsync: this,
@@ -13976,6 +13939,11 @@ class _ChatSendEnterState extends State<_ChatSendEnter>
   @override
   Widget build(BuildContext context) {
     if (MediaQuery.disableAnimationsOf(context)) return widget.child;
+    final dx = widget.fromRight ? 10.0 : -10.0;
+    final dy = widget.fromRight ? 16.0 : 12.0;
+    final align = widget.fromRight
+        ? Alignment.bottomRight
+        : Alignment.bottomLeft;
     return AnimatedBuilder(
       animation: _controller,
       child: widget.child,
@@ -13985,13 +13953,75 @@ class _ChatSendEnterState extends State<_ChatSendEnter>
         return Opacity(
           opacity: (0.15 + 0.85 * t).clamp(0.0, 1.0),
           child: Transform.translate(
-            offset: Offset(10 * (1 - t), 18 * (1 - t)),
+            offset: Offset(dx * (1 - t), dy * (1 - t)),
             child: Transform.scale(
-              scale: (0.90 + 0.10 * s).clamp(0.88, 1.04),
-              alignment: Alignment.bottomRight,
+              scale: (0.92 + 0.08 * s).clamp(0.90, 1.03),
+              alignment: align,
               child: child,
             ),
           ),
+        );
+      },
+    );
+  }
+}
+
+/// 引用跳转 / 历史搜索定位目标消息时的 2 次品牌紫呼吸高亮脉冲。
+class _ChatLocateHighlightPulse extends StatefulWidget {
+  const _ChatLocateHighlightPulse({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  State<_ChatLocateHighlightPulse> createState() =>
+      _ChatLocateHighlightPulseState();
+}
+
+class _ChatLocateHighlightPulseState extends State<_ChatLocateHighlightPulse>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1100),
+  )..forward();
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = ImVisualTokens.accent(context);
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    if (reduceMotion) {
+      return Container(
+        decoration: BoxDecoration(
+          color: accent.withValues(alpha: 0.12),
+          border: Border.all(color: accent.withValues(alpha: 0.28)),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+        child: widget.child,
+      );
+    }
+    return AnimatedBuilder(
+      animation: _ctrl,
+      child: widget.child,
+      builder: (context, child) {
+        // 两次柔和呼吸波峰（0.25 与 0.75），最后稳态保持轻微底色便于定位。
+        final v = _ctrl.value;
+        final pulse = (math.sin(v * math.pi * 4 - math.pi / 2) + 1) * 0.5;
+        final bgAlpha = 0.08 + pulse * 0.12;
+        final borderAlpha = 0.18 + pulse * 0.30;
+        return Container(
+          decoration: BoxDecoration(
+            color: accent.withValues(alpha: bgAlpha),
+            border: Border.all(color: accent.withValues(alpha: borderAlpha)),
+            borderRadius: BorderRadius.circular(14),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+          child: child,
         );
       },
     );

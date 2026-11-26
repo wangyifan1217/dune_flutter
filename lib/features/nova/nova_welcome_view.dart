@@ -549,7 +549,7 @@ class NovaBlinkingAvatar extends StatelessWidget {
         ],
       ),
       child: ClipOval(
-        child: NovaPersonAvatarImage(width: size, height: size, wink: true),
+        child: NovaPersonAvatarImage(width: size, height: size, animate: true),
       ),
     );
   }

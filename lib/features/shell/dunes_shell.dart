@@ -145,7 +145,84 @@ class _DunesShellState extends State<DunesShell> with WidgetsBindingObserver {
                 SystemNavigator.pop();
               }
             },
-            child: Scaffold(
+            child: CallbackShortcuts(
+              bindings: isDesktopCommOnly
+                  ? <ShortcutActivator, VoidCallback>{
+                      const SingleActivator(
+                        LogicalKeyboardKey.keyK,
+                        control: true,
+                      ): () {
+                        if (_navigation.currentScreen != 'Z4') {
+                          _navigation.go('Z4');
+                        }
+                      },
+                      const SingleActivator(
+                        LogicalKeyboardKey.keyK,
+                        meta: true,
+                      ): () {
+                        if (_navigation.currentScreen != 'Z4') {
+                          _navigation.go('Z4');
+                        }
+                      },
+                      const SingleActivator(
+                        LogicalKeyboardKey.digit1,
+                        control: true,
+                      ): () => _navigation.switchMainTab('C1'),
+                      const SingleActivator(
+                        LogicalKeyboardKey.digit1,
+                        meta: true,
+                      ): () => _navigation.switchMainTab('C1'),
+                      const SingleActivator(
+                        LogicalKeyboardKey.digit2,
+                        control: true,
+                      ): () {
+                        if (!widget.session.isExternalUser) {
+                          _navigation.switchMainTab('QJ');
+                        }
+                      },
+                      const SingleActivator(
+                        LogicalKeyboardKey.digit2,
+                        meta: true,
+                      ): () {
+                        if (!widget.session.isExternalUser) {
+                          _navigation.switchMainTab('QJ');
+                        }
+                      },
+                      const SingleActivator(
+                        LogicalKeyboardKey.digit3,
+                        control: true,
+                      ): () {
+                        if (!widget.session.isExternalUser) {
+                          _navigation.switchMainTab('LH');
+                        }
+                      },
+                      const SingleActivator(
+                        LogicalKeyboardKey.digit3,
+                        meta: true,
+                      ): () {
+                        if (!widget.session.isExternalUser) {
+                          _navigation.switchMainTab('LH');
+                        }
+                      },
+                      const SingleActivator(
+                        LogicalKeyboardKey.digit4,
+                        control: true,
+                      ): () {
+                        if (!widget.session.isExternalUser) {
+                          _navigation.switchMainTab('QJA');
+                        }
+                      },
+                      const SingleActivator(
+                        LogicalKeyboardKey.digit4,
+                        meta: true,
+                      ): () {
+                        if (!widget.session.isExternalUser) {
+                          _navigation.switchMainTab('QJA');
+                        }
+                      },
+                    }
+                  : const <ShortcutActivator, VoidCallback>{},
+              child: Scaffold(
               // 由各子页面自身 Scaffold 管理键盘避让；外层壳不随键盘缩放，
               // 避免从 IM 会话收键盘返回列表时触发整页与毛玻璃底栏逐帧重排卡顿。
               resizeToAvoidBottomInset: false,
@@ -249,6 +326,7 @@ class _DunesShellState extends State<DunesShell> with WidgetsBindingObserver {
                   ),
                 ],
               ),
+            ),
             ),
           ),
         );

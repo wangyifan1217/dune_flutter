@@ -241,37 +241,63 @@ class _DunesToastOverlayState extends State<_DunesToastOverlay>
     super.dispose();
   }
 
+  bool get _isError =>
+      widget.kind == DunesToastKind.error ||
+      dunesToastLooksLikeError(widget.message);
+
+  bool get _isSuccess =>
+      !_isError &&
+      RegExp(r'已|成功|完成|通过|同步|刷新|复制|保存').hasMatch(widget.message);
+
+  bool get _isWarning =>
+      !_isError &&
+      !_isSuccess &&
+      RegExp(r'请|暂|注意|确认|稍后|超时|敬请').hasMatch(widget.message);
+
   IconData _toastIcon() {
-    if (widget.kind == DunesToastKind.error) return Icons.error_rounded;
-    final msg = widget.message;
-    if (RegExp(r'已|成功|完成|通过|同步|刷新|复制|保存').hasMatch(msg)) {
-      return Icons.check_circle_rounded;
-    }
+    if (_isError) return Icons.error_rounded;
+    if (_isSuccess) return Icons.check_circle_rounded;
+    if (_isWarning) return Icons.info_rounded;
     return Icons.auto_awesome_rounded;
   }
 
   Color _iconColor() {
-    if (widget.kind == DunesToastKind.error) return const Color(0xFFFF5B61);
-    final msg = widget.message;
-    if (RegExp(r'已|成功|完成|通过|同步|刷新|复制|保存').hasMatch(msg)) {
-      return const Color(0xFF34C759);
-    }
+    if (_isError) return const Color(0xFFFF5B61);
+    if (_isSuccess) return const Color(0xFF34C759);
+    if (_isWarning) return const Color(0xFFFFB340);
     return const Color(0xFFB69BFF);
+  }
+
+  Color _textColor() {
+    if (_isError) return const Color(0xFFFFB8BC);
+    if (_isSuccess) return const Color(0xFFC8F7D6);
+    if (_isWarning) return const Color(0xFFFFE4B5);
+    return const Color(0xFFF2EEFF);
+  }
+
+  Color _shellBgColor() {
+    if (_isError) return const Color(0xF5240E10);
+    if (_isSuccess) return const Color(0xF50C1A12);
+    if (_isWarning) return const Color(0xF51D150A);
+    return const Color(0xF50D0C14);
   }
 
   @override
   Widget build(BuildContext context) {
     final topInset = MediaQuery.paddingOf(context).top;
+    final screenWidth = MediaQuery.sizeOf(context).width;
     final reduceMotion = MediaQuery.disableAnimationsOf(context);
     final iconColor = _iconColor();
-    final isError = widget.kind == DunesToastKind.error;
+    final textColor = _textColor();
+    final isError = _isError;
 
     if (_useDynamicIsland) {
       final islandTop = topInset > 14 ? topInset - 2.0 : 10.0;
+      final maxIslandWidth = (screenWidth - 28).clamp(220.0, 380.0);
       return Positioned(
         top: islandTop,
-        left: 16,
-        right: 16,
+        left: 14,
+        right: 14,
         child: Align(
           alignment: Alignment.topCenter,
           child: GestureDetector(
@@ -301,17 +327,19 @@ class _DunesToastOverlayState extends State<_DunesToastOverlay>
                 );
               },
               child: _DynamicIslandShell(
-                borderRadius: 999,
+                borderRadius: 24,
                 accentColor: iconColor,
                 isError: isError,
-                padding: const EdgeInsets.fromLTRB(10, 8, 15, 8),
+                bgColor: _shellBgColor(),
+                padding: const EdgeInsets.fromLTRB(11, 9, 15, 9),
                 child: ConstrainedBox(
-                  constraints: const BoxConstraints(
+                  constraints: BoxConstraints(
                     minHeight: 24,
-                    maxWidth: 320,
+                    maxWidth: maxIslandWidth,
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
                       Container(
                         width: 24,
@@ -327,12 +355,11 @@ class _DunesToastOverlayState extends State<_DunesToastOverlay>
                         child: Text(
                           widget.message,
                           textAlign: TextAlign.left,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Colors.white,
+                          softWrap: true,
+                          style: TextStyle(
+                            color: textColor,
                             fontSize: 13,
-                            height: 1.32,
+                            height: 1.38,
                             fontWeight: FontWeight.w500,
                             letterSpacing: -0.1,
                             decoration: TextDecoration.none,
@@ -437,6 +464,7 @@ class _DynamicIslandShell extends StatelessWidget {
     required this.accentColor,
     required this.isError,
     required this.padding,
+    this.bgColor,
   });
 
   final Widget child;
@@ -444,6 +472,7 @@ class _DynamicIslandShell extends StatelessWidget {
   final Color accentColor;
   final bool isError;
   final EdgeInsetsGeometry padding;
+  final Color? bgColor;
 
   @override
   Widget build(BuildContext context) {
@@ -458,7 +487,7 @@ class _DynamicIslandShell extends StatelessWidget {
             offset: const Offset(0, 10),
           ),
           BoxShadow(
-            color: accentColor.withValues(alpha: isError ? 0.28 : 0.18),
+            color: accentColor.withValues(alpha: isError ? 0.28 : 0.20),
             blurRadius: 18,
             spreadRadius: -6,
             offset: const Offset(0, 4),
@@ -474,15 +503,15 @@ class _DynamicIslandShell extends StatelessWidget {
             child: Container(
               padding: padding,
               decoration: BoxDecoration(
-                color: isError
-                    ? const Color(0xF5210D0E)
-                    : const Color(0xF50B0B10),
+                color:
+                    bgColor ??
+                    (isError
+                        ? const Color(0xF5240E10)
+                        : const Color(0xF50D0C14)),
                 borderRadius: BorderRadius.circular(borderRadius),
                 border: Border.all(
-                  color: isError
-                      ? accentColor.withValues(alpha: 0.36)
-                      : Colors.white.withValues(alpha: 0.13),
-                  width: 0.75,
+                  color: accentColor.withValues(alpha: isError ? 0.38 : 0.26),
+                  width: 0.8,
                 ),
               ),
               child: child,
@@ -659,7 +688,9 @@ class _DunesActionToastOverlayState extends State<_DunesActionToastOverlay>
                 decoration: BoxDecoration(
                   color: DunesColors.resolve(
                     context,
-                    isError ? const Color(0xFFFDECEC) : const Color(0xFFEAF2FF),
+                    isError
+                        ? const Color(0xFFFDECEC)
+                        : DunesColors.brandPurpleSoft,
                     role: DunesColorRole.surface,
                   ),
                   borderRadius: BorderRadius.circular(11),
@@ -669,7 +700,9 @@ class _DunesActionToastOverlayState extends State<_DunesActionToastOverlay>
                   size: 21,
                   color: DunesColors.resolve(
                     context,
-                    isError ? const Color(0xFFC43D3D) : const Color(0xFF176CE5),
+                    isError
+                        ? const Color(0xFFC43D3D)
+                        : DunesColors.brandPurple,
                   ),
                 ),
               ),
@@ -750,12 +783,13 @@ class _DunesActionToastOverlayState extends State<_DunesActionToastOverlay>
                           Expanded(
                             child: Text(
                               widget.message,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                color: Colors.white,
+                              softWrap: true,
+                              style: TextStyle(
+                                color: isError
+                                    ? const Color(0xFFFFB8BC)
+                                    : const Color(0xFFF2EEFF),
                                 fontSize: 13,
-                                height: 1.35,
+                                height: 1.38,
                                 fontWeight: FontWeight.w500,
                                 decoration: TextDecoration.none,
                               ),

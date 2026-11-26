@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../core/platform/desktop_features.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
+import '../../core/widgets/dunes_motion_kit.dart';
 import '../../core/widgets/org_folder_bar.dart';
 import '../auth/auth_session.dart';
 import 'meeting_list_cache.dart';
@@ -810,9 +811,9 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
         ),
         const SizedBox(height: 14),
         if (_loading && _visibleRows.isEmpty)
-          const Padding(
-            padding: EdgeInsets.only(top: 80),
-            child: Center(child: CircularProgressIndicator()),
+          const SizedBox(
+            height: 460,
+            child: DunesListSkeleton(itemCount: 4),
           )
         else if (_error != null && _visibleRows.isEmpty)
           _buildMessageCard(

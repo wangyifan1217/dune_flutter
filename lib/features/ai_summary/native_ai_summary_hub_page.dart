@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
+import '../../core/widgets/dunes_motion_kit.dart';
 import '../auth/auth_session.dart';
 import '../conversation/conversation_models.dart';
 import '../conversation/conversation_realtime_hub.dart';
@@ -524,7 +525,7 @@ class _NativeAiSummaryHubPageState extends State<NativeAiSummaryHubPage> {
 
   Widget _buildBody() {
     if (_loading) {
-      return const Center(child: CircularProgressIndicator(strokeWidth: 2));
+      return const DunesListSkeleton();
     }
     if (_error != null) {
       return Center(

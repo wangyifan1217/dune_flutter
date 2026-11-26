@@ -700,7 +700,7 @@ class ChatInputBar extends StatelessWidget {
               wide ? 12 : 6,
               bottomInset > 0
                   ? bottomInset + (wide ? 6 : 4)
-                  : (wide ? 12.0 : 8.0),
+                  : (wide ? 12.0 : 6.0),
             ),
             decoration: BoxDecoration(
               color:

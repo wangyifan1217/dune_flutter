@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import '../../core/platform/desktop_features.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
+import '../../core/widgets/dunes_motion_kit.dart';
 import '../auth/auth_session.dart';
 import '../chat/chat_file_type_icon.dart';
 import '../chat/user_avatar_widget.dart';
@@ -1141,7 +1142,7 @@ class _NativeDrivePageState extends State<NativeDrivePage> {
       return [
         const SliverFillRemaining(
           hasScrollBody: false,
-          child: Center(child: CircularProgressIndicator(color: _driveBlue)),
+          child: DunesListSkeleton(),
         ),
       ];
     }

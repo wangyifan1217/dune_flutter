@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../nova/presence/nova_presence_host.dart';
 import '../nova/nova_background_coordinator.dart';
+import '../nova/nova_icon.dart';
 
 import '../../core/navigation/navigation_controller.dart';
 import '../../core/platform/desktop_features.dart';
@@ -471,13 +472,12 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
                                 child: ExcludeSemantics(
                                   child: Center(
                                     child: ClipOval(
-                                      child: Image.asset(
-                                        'assets/images/ai_tab_avatar.png',
-                                        width: 46,
-                                        height: 46,
-                                        fit: BoxFit.contain,
-                                        filterQuality: FilterQuality.high,
-                                        isAntiAlias: true,
+                                      child: NovaAnimated3DAvatar(
+                                        width: 48,
+                                        height: 48,
+                                        thinking: thinking,
+                                        happy: unread && !thinking,
+                                        fit: BoxFit.cover,
                                       ),
                                     ),
                                   ),
@@ -666,26 +666,52 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
                   builder: (context, _) {
                     final unread =
                         NovaBackgroundCoordinator.instance.hasUnreadReply;
+                    final thinking =
+                        NovaBackgroundCoordinator.instance.isThinking;
+                    final reduceMotion =
+                        MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+                    final isDark =
+                        Theme.of(context).brightness == Brightness.dark;
                     return Semantics(
-                      label: unread ? '小饕，有未读回复' : '小饕',
+                      label: thinking
+                          ? '小饕，正在生成回复'
+                          : (unread ? '小饕，有未读回复' : '小饕'),
                       child: SizedBox(
                         width: 34,
-                        height: 30,
+                        height: 32,
                         child: Stack(
                           clipBehavior: Clip.none,
                           children: [
                             Align(
                               alignment: Alignment.bottomCenter,
-                              child: ClipOval(
-                                child: Image.asset(
-                                  'assets/images/ai_tab_avatar.png',
-                                  width: 28,
-                                  height: 28,
-                                  fit: BoxFit.cover,
+                              child: SizedBox.square(
+                                dimension: 30,
+                                child: Stack(
+                                  clipBehavior: Clip.none,
+                                  alignment: Alignment.center,
+                                  children: [
+                                    ClipOval(
+                                      child: NovaAnimated3DAvatar(
+                                        width: 30,
+                                        height: 30,
+                                        thinking: thinking,
+                                        happy: unread && !thinking,
+                                        fit: BoxFit.cover,
+                                      ),
+                                    ),
+                                    if (thinking && !reduceMotion)
+                                      Positioned.fill(
+                                        child: IgnorePointer(
+                                          child: _AiOrbGeneratingRing(
+                                            isDark: isDark,
+                                          ),
+                                        ),
+                                      ),
+                                  ],
                                 ),
                               ),
                             ),
-                            if (unread)
+                            if (unread && !thinking)
                               Positioned(
                                 top: 0,
                                 right: 0,

@@ -9,6 +9,7 @@ import '../../core/navigation/navigation_controller.dart';
 import '../../core/platform/desktop_features.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
+import '../../core/widgets/dunes_motion_kit.dart';
 import '../../core/widgets/org_folder_bar.dart';
 import '../auth/auth_session.dart';
 import '../chat/chat_file_preview_page.dart';
@@ -1074,9 +1075,7 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
             ),
             child: SafeArea(
               child: _loading
-                  ? const Center(
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
+                  ? const DunesListSkeleton()
                   : _error != null
                   ? _buildError()
                   : RefreshIndicator(

@@ -2875,7 +2875,7 @@ class _NativeChatViewState extends State<NativeChatView>
     required bool mine,
     required bool peerRead,
   }) {
-    if (!mine || message.id <= 0 || message.recalled) return null;
+    if (!mine || message.id <= 0 || _isSystemKind(message.kind)) return null;
     if (_isPrivate) {
       if (_conversation?.isSelfMemo == true) return null;
       return peerRead ? 0 : 1;
@@ -2893,7 +2893,7 @@ class _NativeChatViewState extends State<NativeChatView>
     bool mine,
     void Function(Offset anchor) onOpenMore,
   ) {
-    final canCopy = m.kind.toUpperCase() == 'TEXT' && !m.recalled;
+    final canCopy = m.kind.toUpperCase() == 'TEXT' && !_isSystemKind(m.kind);
     final iconColor = DunesColors.resolve(context, DunesColors.text2);
     final accent = ImVisualTokens.accent(context);
 
@@ -3043,7 +3043,7 @@ class _NativeChatViewState extends State<NativeChatView>
     for (var i = 0; i < entries.length; i++) {
       final cur = entries[i];
       final curMsg = cur.message;
-      if (curMsg == null || _isSystemKind(curMsg.kind) || curMsg.recalled) {
+      if (curMsg == null || _isSystemKind(curMsg.kind)) {
         continue;
       }
       var withPrev = false;
@@ -3051,7 +3051,6 @@ class _NativeChatViewState extends State<NativeChatView>
         final prevMsg = entries[i - 1].message;
         if (prevMsg != null &&
             !_isSystemKind(prevMsg.kind) &&
-            !prevMsg.recalled &&
             prevMsg.senderUserId == curMsg.senderUserId &&
             prevMsg.createdAt != null &&
             curMsg.createdAt != null &&
@@ -3065,7 +3064,6 @@ class _NativeChatViewState extends State<NativeChatView>
         final nextMsg = entries[i + 1].message;
         if (nextMsg != null &&
             !_isSystemKind(nextMsg.kind) &&
-            !nextMsg.recalled &&
             nextMsg.senderUserId == curMsg.senderUserId &&
             nextMsg.createdAt != null &&
             curMsg.createdAt != null &&
@@ -12380,11 +12378,21 @@ class _NativeChatViewState extends State<NativeChatView>
                                                   final rawPreview =
                                                       latestPeer == null
                                                       ? ''
-                                                      : compactMessagePushPreview(
-                                                          kind: latestPeer.kind,
-                                                          body: latestPeer
-                                                              .bodyText,
-                                                        );
+                                                      : switch (latestPeer.kind
+                                                            .toUpperCase()) {
+                                                          'IMAGE' => '[图片]',
+                                                          'VIDEO' => '[视频]',
+                                                          'VOICE' ||
+                                                          'AUDIO' => '[语音]',
+                                                          'FILE' => '[文件]',
+                                                          _ => latestPeer
+                                                              .bodyText
+                                                              .replaceAll(
+                                                                RegExp(r'\s+'),
+                                                                ' ',
+                                                              )
+                                                              .trim(),
+                                                        };
                                                   final countLabel =
                                                       _pendingNewMessageCount >
                                                           99
@@ -12439,9 +12447,6 @@ class _NativeChatViewState extends State<NativeChatView>
                                                               avatarObjectKey:
                                                                   latestPeer
                                                                       .senderAvatarObjectKey,
-                                                              avatarUrl:
-                                                                  latestPeer
-                                                                      .senderAvatarUrl,
                                                               avatarService:
                                                                   _service,
                                                             ),

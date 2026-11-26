@@ -10,19 +10,17 @@ abstract final class NovaIcon {
   static const tabAssetPath = 'assets/images/tau_tab_icon.png';
 }
 
-/// 小饕 3D 拟人形象资源（状态驱动 4 表情帧：open / blink / thinking / wink）。
+/// 小饕原版 3D 拟人形象资源（open / wink 静帧切换，画面完全稳定不晃动）。
 abstract final class NovaPersonAvatar {
   static const openAsset = 'assets/images/ai_avatar_open.png';
   static const winkAsset = 'assets/images/ai_avatar_wink.png';
-  static const blinkPngAsset = 'assets/images/ai_avatar_blink.png';
-  static const thinkingAsset = 'assets/images/ai_avatar_thinking.png';
   static const blinkAsset = 'assets/images/ai_avatar_blink.gif';
   static const asset = winkAsset;
 }
 
 /// 按设备像素把 512 原图解到足够清晰的缓存，避免会话头像发糊。
-/// 默认用于列表/消息流静帧；传入 [animate] = true 或 [thinking] = true 时
-/// 自动启用轻量状态驱动 3D 动效（眨眼 / 呼吸 / 思考歪头 / 点击 Wink / PC 3D 悬停视差）。
+/// 默认用于列表/消息流静帧；传入 [animate] = true 时仅做轻柔的「眼神眨眼/Wink」切换，
+/// 头像整体完全静止不晃动、不旋转、不缩放。
 class NovaPersonAvatarImage extends StatelessWidget {
   const NovaPersonAvatarImage({
     super.key,
@@ -31,10 +29,6 @@ class NovaPersonAvatarImage extends StatelessWidget {
     this.wink = false,
     this.thinking = false,
     this.animate = false,
-    this.enableBlink = true,
-    this.enableBreath = true,
-    this.enableHoverTilt = true,
-    this.enableTapReaction = true,
     this.fit = BoxFit.cover,
   });
 
@@ -43,53 +37,37 @@ class NovaPersonAvatarImage extends StatelessWidget {
   final bool wink;
   final bool thinking;
   final bool animate;
-  final bool enableBlink;
-  final bool enableBreath;
-  final bool enableHoverTilt;
-  final bool enableTapReaction;
   final BoxFit fit;
 
   static const nativePx = 512;
 
-  static int resolveDecodePx(BuildContext context, double? width, double? height) {
-    final dpr = MediaQuery.maybeDevicePixelRatioOf(context) ?? 2.0;
-    final logical = math.max(width ?? 0, height ?? 0);
-    return logical <= 0
-        ? nativePx
-        : (logical * dpr * 2).round().clamp(192, nativePx);
-  }
-
   @override
   Widget build(BuildContext context) {
-    if (animate || thinking) {
+    if (animate) {
       return NovaAnimated3DAvatar(
         width: width,
         height: height,
         thinking: thinking,
         happy: wink,
-        enableBlink: enableBlink,
-        enableBreath: enableBreath,
-        enableHoverTilt: enableHoverTilt,
-        enableTapReaction: enableTapReaction,
         fit: fit,
       );
     }
-    final decode = resolveDecodePx(context, width, height);
     return Image.asset(
       wink ? NovaPersonAvatar.winkAsset : NovaPersonAvatar.openAsset,
       width: width,
       height: height,
       fit: fit,
-      filterQuality: FilterQuality.high,
+      filterQuality: FilterQuality.medium,
       isAntiAlias: true,
       gaplessPlayback: true,
-      cacheWidth: decode,
-      cacheHeight: decode,
     );
   }
 }
 
-/// 小饕状态驱动 3D 动态头像（零死循环 GIF，页面隐藏 / 减弱动态时自动停帧）。
+/// 小饕克制灵动头像（沿用原版形象）：
+/// - 整体画面 100% 静止锐利（无晃动、无旋转、无呼吸缩放）
+/// - 仅在待机偶发（每 5~7 秒轻轻 Wink 一下）、PC 悬停、点击或有未读回复时，
+///   自然切到原版 `ai_avatar_wink.png` 眨眼微笑；思考态交由外圈流光环表达。
 class NovaAnimated3DAvatar extends StatefulWidget {
   const NovaAnimated3DAvatar({
     super.key,
@@ -98,9 +76,8 @@ class NovaAnimated3DAvatar extends StatefulWidget {
     this.thinking = false,
     this.happy = false,
     this.enableBlink = true,
-    this.enableBreath = true,
-    this.enableHoverTilt = true,
-    this.enableTapReaction = true,
+    this.enableHoverWink = true,
+    this.enableTapWink = true,
     this.fit = BoxFit.cover,
   });
 
@@ -109,67 +86,40 @@ class NovaAnimated3DAvatar extends StatefulWidget {
   final bool thinking;
   final bool happy;
   final bool enableBlink;
-  final bool enableBreath;
-  final bool enableHoverTilt;
-  final bool enableTapReaction;
+  final bool enableHoverWink;
+  final bool enableTapWink;
   final BoxFit fit;
 
   @override
   State<NovaAnimated3DAvatar> createState() => _NovaAnimated3DAvatarState();
 }
 
-class _NovaAnimated3DAvatarState extends State<NovaAnimated3DAvatar>
-    with TickerProviderStateMixin {
+class _NovaAnimated3DAvatarState extends State<NovaAnimated3DAvatar> {
   static final math.Random _rng = math.Random();
 
-  late final AnimationController _breathController;
-  late final AnimationController _tapController;
-  Timer? _blinkTimer;
-  Timer? _blinkCloseTimer;
+  Timer? _winkScheduleTimer;
+  Timer? _winkHoldTimer;
   Timer? _tapWinkTimer;
 
-  bool _isBlinking = false;
-  bool _tapWinkActive = false;
+  bool _idleWinking = false;
   bool _isHovered = false;
-  Offset _hoverNormalized = Offset.zero;
+  bool _tapWinking = false;
   bool _precached = false;
 
-  @override
-  void initState() {
-    super.initState();
-    _breathController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 3400),
-    );
-    _tapController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 320),
-    );
-  }
+  bool get _reduceMotion =>
+      MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+
+  bool get _tickerEnabled => TickerMode.of(context);
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _syncAnimations();
     if (!_precached) {
       _precached = true;
-      final decode = NovaPersonAvatarImage.resolveDecodePx(
-        context,
-        widget.width,
-        widget.height,
-      );
-      for (final asset in const [
-        NovaPersonAvatar.openAsset,
-        NovaPersonAvatar.blinkPngAsset,
-        NovaPersonAvatar.thinkingAsset,
-        NovaPersonAvatar.winkAsset,
-      ]) {
-        precacheImage(
-          ResizeImage(AssetImage(asset), width: decode, height: decode),
-          context,
-        );
-      }
+      precacheImage(const AssetImage(NovaPersonAvatar.openAsset), context);
+      precacheImage(const AssetImage(NovaPersonAvatar.winkAsset), context);
     }
+    _syncSchedule();
   }
 
   @override
@@ -177,232 +127,132 @@ class _NovaAnimated3DAvatarState extends State<NovaAnimated3DAvatar>
     super.didUpdateWidget(oldWidget);
     if (oldWidget.thinking != widget.thinking ||
         oldWidget.happy != widget.happy ||
-        oldWidget.enableBlink != widget.enableBlink ||
-        oldWidget.enableBreath != widget.enableBreath) {
-      _syncAnimations();
+        oldWidget.enableBlink != widget.enableBlink) {
+      _syncSchedule();
     }
   }
 
-  bool get _reduceMotion =>
-      MediaQuery.maybeDisableAnimationsOf(context) ?? false;
-
-  bool get _tickerEnabled => TickerMode.of(context);
-
-  void _syncAnimations() {
-    final active = _tickerEnabled && !_reduceMotion;
-
-    if (active && (widget.enableBreath || widget.thinking)) {
-      if (!_breathController.isAnimating) {
-        _breathController.repeat(reverse: true);
+  void _syncSchedule() {
+    final active = _tickerEnabled &&
+        !_reduceMotion &&
+        widget.enableBlink &&
+        !widget.thinking &&
+        !widget.happy;
+    if (active) {
+      if (_winkScheduleTimer == null || !_winkScheduleTimer!.isActive) {
+        _scheduleNextWink();
       }
     } else {
-      _breathController.stop();
-    }
-
-    if (active && widget.enableBlink && !widget.thinking && !widget.happy) {
-      if (_blinkTimer == null || !_blinkTimer!.isActive) {
-        _scheduleNextBlink();
-      }
-    } else {
-      _cancelBlinkTimers();
-      if (_isBlinking && mounted) {
-        setState(() => _isBlinking = false);
+      _winkScheduleTimer?.cancel();
+      _winkScheduleTimer = null;
+      _winkHoldTimer?.cancel();
+      _winkHoldTimer = null;
+      if (_idleWinking && mounted) {
+        setState(() => _idleWinking = false);
       }
     }
   }
 
-  void _cancelBlinkTimers() {
-    _blinkTimer?.cancel();
-    _blinkTimer = null;
-    _blinkCloseTimer?.cancel();
-    _blinkCloseTimer = null;
-  }
-
-  void _scheduleNextBlink() {
-    _blinkTimer?.cancel();
-    final delayMs = 3600 + _rng.nextInt(2400);
-    _blinkTimer = Timer(Duration(milliseconds: delayMs), () {
+  void _scheduleNextWink() {
+    _winkScheduleTimer?.cancel();
+    final delayMs = 4800 + _rng.nextInt(2600);
+    _winkScheduleTimer = Timer(Duration(milliseconds: delayMs), () {
       if (!mounted ||
           !_tickerEnabled ||
           _reduceMotion ||
           widget.thinking ||
           widget.happy ||
-          _tapWinkActive) {
+          _isHovered ||
+          _tapWinking) {
         return;
       }
-      _performBlink(doubleBlink: _rng.nextInt(5) == 0);
-    });
-  }
-
-  void _performBlink({required bool doubleBlink}) {
-    if (!mounted) return;
-    setState(() => _isBlinking = true);
-    _blinkCloseTimer?.cancel();
-    _blinkCloseTimer = Timer(const Duration(milliseconds: 145), () {
-      if (!mounted) return;
-      setState(() => _isBlinking = false);
-      if (doubleBlink) {
-        _blinkCloseTimer = Timer(const Duration(milliseconds: 110), () {
-          if (!mounted || widget.thinking || widget.happy || _tapWinkActive) {
-            return;
-          }
-          setState(() => _isBlinking = true);
-          _blinkCloseTimer = Timer(const Duration(milliseconds: 130), () {
-            if (!mounted) return;
-            setState(() => _isBlinking = false);
-            _scheduleNextBlink();
-          });
-        });
-      } else {
-        _scheduleNextBlink();
-      }
-    });
-  }
-
-  void _triggerTapReaction() {
-    if (!widget.enableTapReaction || _reduceMotion) return;
-    _tapController.forward(from: 0);
-    _tapWinkTimer?.cancel();
-    if (!widget.thinking) {
-      setState(() {
-        _tapWinkActive = true;
-        _isBlinking = false;
-      });
-      _tapWinkTimer = Timer(const Duration(milliseconds: 560), () {
+      setState(() => _idleWinking = true);
+      _winkHoldTimer?.cancel();
+      _winkHoldTimer = Timer(const Duration(milliseconds: 240), () {
         if (!mounted) return;
-        setState(() => _tapWinkActive = false);
+        setState(() => _idleWinking = false);
+        _scheduleNextWink();
       });
-    }
+    });
   }
 
-  String _currentAsset() {
-    if (widget.thinking) return NovaPersonAvatar.thinkingAsset;
-    if (widget.happy || _tapWinkActive) return NovaPersonAvatar.winkAsset;
-    if (_isBlinking) return NovaPersonAvatar.blinkPngAsset;
-    return NovaPersonAvatar.openAsset;
+  void _triggerTapWink() {
+    if (!widget.enableTapWink || _reduceMotion || widget.thinking) return;
+    _tapWinkTimer?.cancel();
+    setState(() => _tapWinking = true);
+    _tapWinkTimer = Timer(const Duration(milliseconds: 420), () {
+      if (!mounted) return;
+      setState(() => _tapWinking = false);
+    });
   }
 
   @override
   void dispose() {
-    _cancelBlinkTimers();
+    _winkScheduleTimer?.cancel();
+    _winkHoldTimer?.cancel();
     _tapWinkTimer?.cancel();
-    _breathController.dispose();
-    _tapController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final decode = NovaPersonAvatarImage.resolveDecodePx(
-      context,
-      widget.width,
-      widget.height,
+    final showWink = !widget.thinking &&
+        (widget.happy || _isHovered || _tapWinking || _idleWinking);
+
+    Widget content = ExcludeSemantics(
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          Image.asset(
+            NovaPersonAvatar.openAsset,
+            width: widget.width,
+            height: widget.height,
+            fit: widget.fit,
+            filterQuality: FilterQuality.medium,
+            isAntiAlias: true,
+            gaplessPlayback: true,
+          ),
+          AnimatedOpacity(
+            opacity: showWink ? 1.0 : 0.0,
+            duration: Duration(
+              milliseconds: _reduceMotion ? 0 : (showWink ? 90 : 120),
+            ),
+            curve: Curves.easeOut,
+            child: Image.asset(
+              NovaPersonAvatar.winkAsset,
+              width: widget.width,
+              height: widget.height,
+              fit: widget.fit,
+              filterQuality: FilterQuality.medium,
+              isAntiAlias: true,
+              gaplessPlayback: true,
+            ),
+          ),
+        ],
+      ),
     );
-    final reduceMotion = _reduceMotion;
-    final asset = _currentAsset();
 
-    final image = Image.asset(
-      asset,
-      key: ValueKey<String>(asset),
-      width: widget.width,
-      height: widget.height,
-      fit: widget.fit,
-      filterQuality: FilterQuality.high,
-      isAntiAlias: true,
-      gaplessPlayback: true,
-      cacheWidth: decode,
-      cacheHeight: decode,
-    );
-
-    Widget content = reduceMotion
-        ? image
-        : AnimatedSwitcher(
-            duration: Duration(milliseconds: _isBlinking ? 55 : 135),
-            switchInCurve: Curves.easeOut,
-            switchOutCurve: Curves.easeIn,
-            child: image,
-          );
-
-    if (!reduceMotion) {
-      content = AnimatedBuilder(
-        animation: Listenable.merge([_breathController, _tapController]),
-        builder: (context, child) {
-          final breathT = Curves.easeInOutSine.transform(_breathController.value);
-          // 柔和呼吸微浮（~2.6% 缩放 + 0.9px 上下浮动）
-          final breathScale = widget.enableBreath ? 1.0 + breathT * 0.026 : 1.0;
-          final breathDy = widget.enableBreath ? (0.5 - breathT) * 1.4 : 0.0;
-
-          // 思考时轻缓 3D 歪头摆动
-          final thinkingTiltZ = widget.thinking
-              ? (breathT - 0.5) * 0.11
-              : 0.0;
-
-          // 点击弹性微弹
-          final tapT = _tapController.value;
-          final tapBump = tapT > 0 && tapT < 1
-              ? math.sin(tapT * math.pi) * 0.085
-              : 0.0;
-
-          // PC 鼠标悬停微幅 3D 倾斜视差
-          final hoverScale = _isHovered ? 1.045 : 1.0;
-          final tiltX = _isHovered ? -_hoverNormalized.dy * 0.16 : 0.0;
-          final tiltY = _isHovered ? _hoverNormalized.dx * 0.18 : 0.0;
-
-          final matrix = Matrix4.identity()
-            ..setEntry(3, 2, 0.0018)
-            ..translate(0.0, breathDy)
-            ..rotateX(tiltX)
-            ..rotateY(tiltY)
-            ..rotateZ(thinkingTiltZ)
-            ..scale(breathScale * hoverScale + tapBump);
-
-          return Transform(
-            alignment: Alignment.center,
-            transform: matrix,
-            child: child,
-          );
-        },
-        child: content,
-      );
-    }
-
-    if (widget.enableHoverTilt && !reduceMotion) {
+    if (widget.enableHoverWink && !_reduceMotion) {
       content = MouseRegion(
         opaque: false,
         onEnter: (_) => setState(() => _isHovered = true),
-        onExit: (_) => setState(() {
-          _isHovered = false;
-          _hoverNormalized = Offset.zero;
-        }),
-        onHover: (event) {
-          final box = context.findRenderObject() as RenderBox?;
-          if (box == null || !box.hasSize) return;
-          final size = box.size;
-          if (size.width <= 0 || size.height <= 0) return;
-          final nx = ((event.localPosition.dx / size.width) * 2 - 1)
-              .clamp(-1.0, 1.0);
-          final ny = ((event.localPosition.dy / size.height) * 2 - 1)
-              .clamp(-1.0, 1.0);
-          setState(() => _hoverNormalized = Offset(nx, ny));
-        },
+        onExit: (_) => setState(() => _isHovered = false),
         child: content,
       );
     }
 
-    if (widget.enableTapReaction && !reduceMotion) {
+    if (widget.enableTapWink && !_reduceMotion) {
       content = Listener(
         behavior: HitTestBehavior.translucent,
-        onPointerDown: (_) => _triggerTapReaction(),
+        onPointerDown: (_) => _triggerTapWink(),
         child: content,
       );
     }
 
-    return RepaintBoundary(
-      child: SizedBox(
-        width: widget.width,
-        height: widget.height,
-        child: content,
-      ),
+    return SizedBox(
+      width: widget.width,
+      height: widget.height,
+      child: content,
     );
   }
 }

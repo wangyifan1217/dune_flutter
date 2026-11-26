@@ -138,47 +138,44 @@ class _ChatDualPaneShellState extends State<ChatDualPaneShell> {
             ? _preferredWidth.clamp(minWidth, maxWidth)
             : widget.listPaneWidth;
         final active = _hovered || _dragging || _dividerFocus.hasFocus;
-        return ColoredBox(
-          color: DunesColors.resolve(
-            context,
-            DunesColors.imSurface,
-            role: DunesColorRole.surface,
-          ),
-          child: Stack(
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  widget.sideRail,
-                  SizedBox(
-                    width: width,
-                    child: DesktopSectionTransition(
-                      token: widget.transitionToken,
-                      child: widget.listPane,
-                    ),
-                  ),
-                  VerticalDivider(
-                    width: 1,
-                    thickness: 1,
-                    color: DunesColors.resolve(
-                      context,
-                      DunesColors.borderSoft,
-                      role: DunesColorRole.border,
-                    ),
-                  ),
-                  Expanded(
-                    child: DesktopSectionTransition(
-                      token: widget.transitionToken,
-                      child: widget.chatPane,
-                    ),
-                  ),
-                ],
+        final isDark = Theme.of(context).brightness == Brightness.dark;
+        final hairline = (1 / MediaQuery.devicePixelRatioOf(context))
+            .clamp(0.33, 0.5);
+        final dividerColor = isDark
+            ? Colors.white.withValues(alpha: 0.06)
+            : Colors.black.withValues(alpha: 0.05);
+
+        final dualPaneContent = Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SizedBox(
+              width: width,
+              child: DesktopSectionTransition(
+                token: widget.transitionToken,
+                child: widget.listPane,
               ),
-              if (desktop)
-                Positioned(
+            ),
+            SizedBox(
+              width: hairline,
+              child: ColoredBox(color: dividerColor),
+            ),
+            Expanded(
+              child: DesktopSectionTransition(
+                token: widget.transitionToken,
+                child: widget.chatPane,
+              ),
+            ),
+          ],
+        );
+
+        return DunesDesktopTranslucentFrame(
+          sideRail: widget.sideRail,
+          floating: desktop,
+          overlay: desktop
+              ? Positioned(
                   left: kDunesMainSideRailWidth + width - 6,
-                  top: 0,
-                  bottom: 0,
+                  top: 8,
+                  bottom: 8,
                   width: 13,
                   child: MouseRegion(
                     cursor: SystemMouseCursors.resizeLeftRight,
@@ -289,10 +286,82 @@ class _ChatDualPaneShellState extends State<ChatDualPaneShell> {
                       ),
                     ),
                   ),
+                )
+              : null,
+          child: dualPaneContent,
+        );
+  }
+}
+
+/// PC 端通透雾感外框 + 悬浮圆角主画布（参考微信 4.0 桌面端层次，原生兼容 Windows & macOS）。
+class DunesDesktopTranslucentFrame extends StatelessWidget {
+  const DunesDesktopTranslucentFrame({
+    super.key,
+    required this.sideRail,
+    required this.child,
+    this.floating = true,
+    this.overlay,
+  });
+
+  final Widget sideRail;
+  final Widget child;
+  final bool floating;
+  final Widget? overlay;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final outerGradient = LinearGradient(
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+      colors: isDark
+          ? const [Color(0xFF12101B), Color(0xFF181524), Color(0xFF12111C)]
+          : const [Color(0xFFECE8F7), Color(0xFFF4F1FB), Color(0xFFEBE8F5)],
+    );
+
+    final Widget mainCanvas = floating
+        ? Container(
+            margin: const EdgeInsets.fromLTRB(0, 8, 8, 8),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: isDark
+                    ? Colors.white.withValues(alpha: 0.08)
+                    : Colors.white.withValues(alpha: 0.92),
+                width: 1,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: isDark
+                      ? const Color(0x38000000)
+                      : const Color(0x124B348A),
+                  blurRadius: 18,
+                  offset: const Offset(0, 4),
                 ),
+              ],
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(13),
+              child: child,
+            ),
+          )
+        : child;
+
+    return DecoratedBox(
+      decoration: BoxDecoration(gradient: outerGradient),
+      child: Stack(
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              sideRail,
+              Expanded(child: mainCanvas),
             ],
           ),
-        );
+          if (overlay != null) overlay!,
+        ],
+      ),
+    );
   }
 }
 

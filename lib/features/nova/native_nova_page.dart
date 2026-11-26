@@ -12,6 +12,7 @@ import 'package:mime/mime.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../../core/config/nova_config.dart';
+import '../../core/platform/desktop_features.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
 import '../../core/util/native_permissions.dart';
@@ -171,6 +172,7 @@ class _NativeNovaPageState extends State<NativeNovaPage>
   String _userAvatarUrl = '';
   String _userAvatarSignature = '';
   int _userAvatarRefreshVersion = 0;
+  bool _desktopHistorySidebarOpen = false;
 
   String get _userName => (widget.session.displayName ?? '').trim().isNotEmpty
       ? widget.session.displayName!.trim()
@@ -4593,32 +4595,49 @@ class _NativeNovaPageState extends State<NativeNovaPage>
         ),
         body: SafeArea(
           bottom: false,
-          child: GestureDetector(
-            behavior: HitTestBehavior.translucent,
-            onTap: () => FocusScope.of(context).unfocus(),
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
+          child: Builder(
+            builder: (context) {
+              final showDesktopSidebar =
+                  isDesktopCommOnly &&
+                  MediaQuery.sizeOf(context).width >= 960;
+              final isDark = Theme.of(context).brightness == Brightness.dark;
+              final mainColumn = GestureDetector(
+                behavior: HitTestBehavior.translucent,
+                onTap: () => FocusScope.of(context).unfocus(),
+                child: Stack(
+                  fit: StackFit.expand,
                   children: [
-                    ValueListenableBuilder<bool>(
-                      valueListenable: MeetingLiveController.instance.active,
-                      builder: (context, meetingLive, _) {
-                        return NovaPageHeader(
-                          tabController: _tabController,
-                          onBack: _handleBack,
-                          onNewChat: _novaReady ? _startNewChat : null,
-                          onHistory: widget.onHistory,
-                          onOpenKb: widget.onOpenKb,
-                          onVoiceCall: _novaReady ? _openTauVoiceCall : null,
-                          onOpenDrawer: () =>
-                              _scaffoldKey.currentState?.openDrawer(),
-                          actionsEnabled: true,
-                          voiceCallBlocked: meetingLive,
-                        );
-                      },
-                    ),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        ValueListenableBuilder<bool>(
+                          valueListenable:
+                              MeetingLiveController.instance.active,
+                          builder: (context, meetingLive, _) {
+                            return NovaPageHeader(
+                              tabController: _tabController,
+                              onBack: _handleBack,
+                              onNewChat: _novaReady ? _startNewChat : null,
+                              onHistory: widget.onHistory,
+                              onOpenKb: widget.onOpenKb,
+                              onVoiceCall: _novaReady
+                                  ? _openTauVoiceCall
+                                  : null,
+                              onOpenDrawer: () {
+                                if (showDesktopSidebar) {
+                                  setState(
+                                    () => _desktopHistorySidebarOpen =
+                                        !_desktopHistorySidebarOpen,
+                                  );
+                                } else {
+                                  _scaffoldKey.currentState?.openDrawer();
+                                }
+                              },
+                              actionsEnabled: true,
+                              voiceCallBlocked: meetingLive,
+                            );
+                          },
+                        ),
                     Expanded(
                       child: TabBarView(
                         controller: _tabController,
@@ -4737,15 +4756,68 @@ class _NativeNovaPageState extends State<NativeNovaPage>
                     ],
                   ],
                 ),
-                if (_recording)
-                  VoiceRecordingOverlay(
-                    durationMs: _recordDurationMs,
-                    action: _recordAction,
-                    transcribeEnabled: false,
-                    focalPoint: _recordFocalPoint,
+                  if (_recording)
+                    VoiceRecordingOverlay(
+                      durationMs: _recordDurationMs,
+                      action: _recordAction,
+                      transcribeEnabled: false,
+                      focalPoint: _recordFocalPoint,
+                    ),
+                ],
+              ),
+            );
+              if (!showDesktopSidebar) return mainColumn;
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  AnimatedContainer(
+                    duration: MediaQuery.disableAnimationsOf(context)
+                        ? Duration.zero
+                        : const Duration(milliseconds: 220),
+                    curve: Curves.easeOutCubic,
+                    width: _desktopHistorySidebarOpen ? 276 : 0,
+                    clipBehavior: Clip.hardEdge,
+                    decoration: BoxDecoration(
+                      border: _desktopHistorySidebarOpen
+                          ? Border(
+                              right: BorderSide(
+                                color: isDark
+                                    ? Colors.white.withValues(alpha: 0.08)
+                                    : const Color(0xFFECE8F6),
+                              ),
+                            )
+                          : null,
+                    ),
+                    child: _desktopHistorySidebarOpen
+                        ? SizedBox(
+                            width: 276,
+                            child: NovaSideDrawer(
+                              embedded: true,
+                              session: widget.session,
+                              userName: _userName,
+                              userAvatarUrl: _userAvatarUrl,
+                              currentConversationId: _conversationId,
+                              onNewChat: () {
+                                if (_novaReady) _startNewChat();
+                              },
+                              onOpenConversation: (cid, mid, title, preview) {
+                                _openConversationFromDrawer(cid);
+                              },
+                              onOpenHistoryAll: () {
+                                widget.onHistory?.call();
+                              },
+                              onOpenKb: widget.onOpenKb,
+                              onCurrentConversationDeleted: () {
+                                if (_novaReady) _startNewChat();
+                              },
+                            ),
+                          )
+                        : const SizedBox.shrink(),
                   ),
-              ],
-            ),
+                  Expanded(child: mainColumn),
+                ],
+              );
+            },
           ),
         ),
       ),
@@ -4811,28 +4883,38 @@ class _NativeNovaPageState extends State<NativeNovaPage>
     final items = _messageListItems();
     final bannerOffset = _banner != null ? 1 : 0;
     final scopeOffset = _analysisSources.isNotEmpty ? 1 : 0;
+    final isWide = MediaQuery.sizeOf(context).width > 820;
     return ListView.builder(
       key: const ValueKey('nova-messages'),
       controller: _scrollController,
       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-      padding: const EdgeInsets.fromLTRB(14, 12, 14, 28),
+      padding: EdgeInsets.fromLTRB(isWide ? 24 : 14, 14, isWide ? 24 : 14, 28),
       addAutomaticKeepAlives: false,
       itemCount: bannerOffset + scopeOffset + items.length,
       itemBuilder: (context, index) {
+        Widget row;
         if (_banner != null && index == 0) {
-          return NovaStatusBanner(message: _banner!, onRetry: _load);
-        }
-        if (_analysisSources.isNotEmpty && index == bannerOffset) {
-          return NovaConversationScopeCard(
+          row = NovaStatusBanner(message: _banner!, onRetry: _load);
+        } else if (_analysisSources.isNotEmpty && index == bannerOffset) {
+          row = NovaConversationScopeCard(
             sources: _analysisSources,
             margin: const EdgeInsets.only(bottom: 12),
           );
+        } else {
+          final item = items[index - bannerOffset - scopeOffset];
+          if (item.dividerLabel != null) {
+            row = NovaMsgDateDivider(label: item.dividerLabel!);
+          } else {
+            row = _buildMessageRow(item.message!);
+          }
         }
-        final item = items[index - bannerOffset - scopeOffset];
-        if (item.dividerLabel != null) {
-          return NovaMsgDateDivider(label: item.dividerLabel!);
-        }
-        return _buildMessageRow(item.message!);
+        if (!isWide) return row;
+        return Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 820),
+            child: row,
+          ),
+        );
       },
     );
   }
@@ -4988,6 +5070,10 @@ class _NativeNovaPageState extends State<NativeNovaPage>
               : null,
           onCopyReply: !mine && !thinking
               ? () => unawaited(_copyAssistantReply(m))
+              : null,
+          onRegenerateReply:
+              !mine && !thinking && !_isGenerating && _questionOf(m) != null
+              ? () => unawaited(_resendUserMessage(_questionOf(m)!))
               : null,
           onForwardReply: !mine && !thinking
               ? () => unawaited(_forwardAssistantReply(m))

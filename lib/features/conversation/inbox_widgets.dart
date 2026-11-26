@@ -1741,7 +1741,12 @@ class ChatInboxSegmentedFilter extends StatelessWidget {
           Colors.white,
           role: DunesColorRole.surface,
         ),
-        border: Border(bottom: BorderSide(color: dividerColor, width: 0.8)),
+        border: Border(
+          bottom: BorderSide(
+            color: dividerColor,
+            width: (1 / MediaQuery.devicePixelRatioOf(context)).clamp(0.33, 0.5),
+          ),
+        ),
       ),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
@@ -2421,26 +2426,16 @@ class ChatInboxRow extends StatelessWidget {
                 left: desktop ? 67 : 76,
                 right: desktop ? 16 : 0,
               ),
-              child: desktop
-                  ? Divider(
-                      height: 1,
-                      thickness: 1,
-                      color: DunesColors.resolve(
-                        context,
-                        DunesColors.borderSoft,
-                        role: DunesColorRole.border,
-                      ),
-                    )
-                  : SizedBox(
-                      height: (1 / MediaQuery.devicePixelRatioOf(context))
-                          .clamp(0.33, 0.5),
-                      width: double.infinity,
-                      child: ColoredBox(
-                        color: isDark
-                            ? Colors.white.withValues(alpha: 0.065)
-                            : Colors.black.withValues(alpha: 0.048),
-                      ),
-                    ),
+              child: SizedBox(
+                height: (1 / MediaQuery.devicePixelRatioOf(context))
+                    .clamp(0.33, 0.5),
+                width: double.infinity,
+                child: ColoredBox(
+                  color: isDark
+                      ? Colors.white.withValues(alpha: 0.06)
+                      : Colors.black.withValues(alpha: desktop ? 0.042 : 0.048),
+                ),
+              ),
             ),
           ),
       ],

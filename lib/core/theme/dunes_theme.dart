@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../platform/desktop_features.dart';
+import 'dunes_page_transition.dart';
 
 enum DunesColorRole { foreground, surface, border }
 
@@ -473,6 +474,7 @@ abstract final class DunesTheme {
     return base.copyWith(
       extensions: const <ThemeExtension<dynamic>>[DunesPalette.day],
       textTheme: _textTheme(base.textTheme, DunesPalette.day),
+      pageTransitionsTheme: DunesBlurExpandPageTransitionsBuilder.theme,
       appBarTheme: AppBarTheme(
         elevation: 0,
         scrolledUnderElevation: 0,
@@ -601,6 +603,7 @@ abstract final class DunesTheme {
     return base.copyWith(
       extensions: <ThemeExtension<dynamic>>[palette],
       textTheme: _textTheme(base.textTheme, palette),
+      pageTransitionsTheme: DunesBlurExpandPageTransitionsBuilder.theme,
       appBarTheme: AppBarTheme(
         elevation: 0,
         scrolledUnderElevation: 0,

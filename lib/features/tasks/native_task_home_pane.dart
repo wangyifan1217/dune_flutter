@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../core/theme/dunes_page_transition.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
 import '../../core/widgets/dunes_motion_kit.dart';
@@ -103,6 +104,8 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
   String? _goalSource;
   TaskAssignee? _ownerFilter;
   DateTime? _completedMonth;
+  bool _advancedFiltersOpen = false;
+  bool _pcGridMode = true;
 
   /// 主目标列表的状态。除「我负责」外默认进行中。
   String? _goalStatus = 'active';
@@ -241,43 +244,67 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
   }
 
   Widget _wideListActions() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final hairline = (1 / MediaQuery.devicePixelRatioOf(context)).clamp(
+      0.33,
+      0.6,
+    );
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        IconButton(
-          tooltip: '任务功能',
-          onPressed: _openManagement,
-          icon: Icon(
-            Icons.widgets_outlined,
-            color: DunesColors.resolve(context, DunesColors.text2),
+        Container(
+          height: 36,
+          padding: const EdgeInsets.symmetric(horizontal: 3),
+          decoration: BoxDecoration(
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.06)
+                : const Color(0xFFF3F1FA),
+            borderRadius: BorderRadius.circular(11),
+            border: Border.all(
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.08)
+                  : Colors.black.withValues(alpha: 0.045),
+              width: hairline,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _TaskTopActionBtn(
+                tooltip: '任务功能',
+                icon: Icons.grid_view_rounded,
+                onTap: _openManagement,
+              ),
+              if (widget.onOpenSummary != null)
+                _TaskTopActionBtn(
+                  tooltip: '任务汇总',
+                  icon: Icons.bar_chart_rounded,
+                  onTap: widget.onOpenSummary!,
+                ),
+              _TaskTopActionBtn(
+                tooltip: '使用指引',
+                icon: Icons.help_outline_rounded,
+                onTap: () => unawaited(_showGuide(force: true)),
+              ),
+            ],
           ),
         ),
-        const SizedBox(width: 2),
-        IconButton(
-          tooltip: '使用指引',
-          onPressed: () => unawaited(_showGuide(force: true)),
-          icon: Icon(
-            Icons.help_outline,
-            color: DunesColors.resolve(context, DunesColors.text2),
-          ),
-        ),
-        if (widget.onOpenSummary != null)
-          _toolIcon(
-            tooltip: '任务汇总',
-            icon: Icons.analytics_outlined,
-            onPressed: widget.onOpenSummary!,
-          ),
         if (_canCreateTasks) ...[
-          _toolIcon(
+          const SizedBox(width: 8),
+          _TaskTopPillButton(
             tooltip: '快速新建',
-            icon: Icons.flash_on_outlined,
-            onPressed: () => unawaited(_openQuickCreate()),
+            icon: Icons.bolt_rounded,
+            label: '快速',
+            primary: false,
+            onTap: () => unawaited(_openQuickCreate()),
           ),
-          _toolIcon(
+          const SizedBox(width: 6),
+          _TaskTopPillButton(
             tooltip: '完整创建',
-            icon: Icons.add,
-            filled: true,
-            onPressed: () => unawaited(_openCreate()),
+            icon: Icons.add_rounded,
+            label: '新建任务',
+            primary: true,
+            onTap: () => unawaited(_openCreate()),
           ),
         ],
       ],
@@ -332,13 +359,13 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
         if (widget.onOpenSummary != null)
           _taskActionMenuItem(
             value: 'summary',
-            icon: Icons.analytics_outlined,
+            icon: Icons.bar_chart_rounded,
             label: '任务汇总',
           ),
         if (_canCreateTasks) ...[
           _taskActionMenuItem(
             value: 'quick',
-            icon: Icons.flash_on_outlined,
+            icon: Icons.bolt_rounded,
             label: '快速新建',
           ),
           _taskActionMenuItem(
@@ -949,147 +976,206 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
       child: TaskCopyableScope(child: _pageBody()),
     );
     return TaskTheme(
-      child: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 280),
-        reverseDuration: const Duration(milliseconds: 240),
-        switchInCurve: Curves.easeOutCubic,
-        switchOutCurve: Curves.easeInCubic,
-        layoutBuilder: (currentChild, previousChildren) {
-          return Stack(
-            fit: StackFit.expand,
-            clipBehavior: Clip.hardEdge,
-            children: isBack
-                ? [?currentChild, ...previousChildren]
-                : [...previousChildren, ?currentChild],
-          );
-        },
-        transitionBuilder: (transitionChild, animation) {
-          final isIncoming = transitionChild.key == child.key;
-          final begin = isIncoming
-              ? (isBack ? const Offset(-0.18, 0) : const Offset(1, 0))
-              : (isBack ? const Offset(1, 0) : const Offset(-0.18, 0));
-          return SlideTransition(
-            position: Tween<Offset>(
-              begin: begin,
-              end: Offset.zero,
-            ).animate(animation),
-            child: transitionChild,
-          );
-        },
+      child: DunesBlurExpandSwitcher(
+        isBack: isBack,
         child: child,
       ),
     );
   }
 
   Widget _buildList() {
+    final screenW = MediaQuery.sizeOf(context).width;
+    final isWide = screenW >= 780;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final scopeHint = switch (_scope) {
+      'goals' => switch (_goalRole) {
+        'reports' => '任务流下级负责的主目标，点击卡片查看子目标',
+        'owned' => '本人负责的主目标，点击卡片查看子目标',
+        'assigned' => '本人分派的主目标，点击卡片查看子目标',
+        _ => '本人负责、分派、下级及关联的主目标',
+      },
+      'actionable' => '今天要执行的子目标、未拆解的主目标和待确认子目标',
+      _ => '先处理待你决定的事，再看逾期、今天截止和今日执行',
+    };
+
+    final inboxBadge =
+        (_inbox?.decisions.fold<int>(0, (s, sec) => s + sec.items.length) ??
+            0) +
+        (_inbox?.attention.fold<int>(0, (s, sec) => s + sec.items.length) ?? 0);
+
     return ColoredBox(
       color: DunesColors.resolve(
         context,
         const Color(0xFFF5F5F7),
         role: DunesColorRole.surface,
       ),
-      child: RefreshIndicator(
-        onRefresh: _reload,
-        color: kTaskPurple,
-        child: CustomScrollView(
-          key: const PageStorageKey('task-list-scroll'),
-          controller: _scrollController,
-          physics: const AlwaysScrollableScrollPhysics(),
-          slivers: [
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
-              sliver: SliverToBoxAdapter(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Row(
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 1140),
+          child: RefreshIndicator(
+            onRefresh: _reload,
+            color: kTaskPurple,
+            child: CustomScrollView(
+              key: const PageStorageKey('task-list-scroll'),
+              controller: _scrollController,
+              physics: const AlwaysScrollableScrollPhysics(),
+              slivers: [
+                SliverPadding(
+                  padding: EdgeInsets.fromLTRB(
+                    isWide ? 24 : 16,
+                    14,
+                    isWide ? 24 : 16,
+                    12,
+                  ),
+                  sliver: SliverToBoxAdapter(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        _tabChip('goals', '主目标'),
-                        const SizedBox(width: 8),
-                        _tabChip('inbox', '待办'),
-                        const SizedBox(width: 8),
-                        _tabChip('actionable', '今日'),
-                        if (MediaQuery.sizeOf(context).width < 720) ...[
-                          const SizedBox(width: 4),
-                          _toolIcon(
-                            tooltip: '任务功能',
-                            icon: Icons.widgets_outlined,
-                            onPressed: _openManagement,
-                          ),
-                          _toolIcon(
-                            tooltip: '使用指引',
-                            icon: Icons.help_outline,
-                            onPressed: () => unawaited(_showGuide(force: true)),
-                          ),
-                        ],
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      switch (_scope) {
-                        'goals' => switch (_goalRole) {
-                          'reports' => '任务流下级负责的主目标。进入详情后再看子目标。',
-                          'owned' => '本人负责的主目标。进入详情后再看子目标。',
-                          'assigned' => '本人分派的主目标。进入详情后再看子目标。',
-                          _ => '本人负责、分派、下级负责，以及子目标关联到自己的主目标。进入详情后再看子目标。',
-                        },
-                        'actionable' => '今天要执行的子目标、未拆解的主目标和待确认子目标。',
-                        _ => '先处理待你决定的事，再看逾期、今天截止和今日执行。',
-                      },
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: DunesColors.resolve(context, DunesColors.text3),
-                        height: 1.3,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    _dailyStatusChip(),
-                    if (_scope == 'goals') ...[
-                      const SizedBox(height: 10),
-                      SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: Row(
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
-                            _roleChip(null, '全部'),
-                            const SizedBox(width: 8),
-                            _roleChip('owned', '我负责'),
-                            const SizedBox(width: 8),
-                            _roleChip('assigned', '我分派'),
-                            const SizedBox(width: 8),
-                            _roleChip('participant', '我参与'),
-                            const SizedBox(width: 8),
-                            _roleChip('reports', '下级'),
+                            Expanded(
+                              flex: isWide ? 0 : 1,
+                              child: _TaskScopeSegmentedControl(
+                                value: _scope,
+                                expand: !isWide,
+                                inboxBadgeCount: inboxBadge,
+                                onChanged: (value) {
+                                  if (_scope == value) return;
+                                  setState(() {
+                                    _scope = value;
+                                    _inboxFocus = null;
+                                  });
+                                  unawaited(_reload());
+                                },
+                              ),
+                            ),
+                            if (isWide) ...[
+                              const SizedBox(width: 14),
+                              Expanded(
+                                child: AnimatedSwitcher(
+                                  duration: const Duration(milliseconds: 220),
+                                  switchInCurve: Curves.easeOutCubic,
+                                  switchOutCurve: Curves.easeInCubic,
+                                  transitionBuilder: (child, anim) =>
+                                      FadeTransition(
+                                        opacity: anim,
+                                        child: SlideTransition(
+                                          position: Tween<Offset>(
+                                            begin: const Offset(0, 0.14),
+                                            end: Offset.zero,
+                                          ).animate(anim),
+                                          child: child,
+                                        ),
+                                      ),
+                                  child: Align(
+                                    key: ValueKey('$_scope-$_goalRole'),
+                                    alignment: Alignment.centerLeft,
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Container(
+                                          width: 6,
+                                          height: 6,
+                                          decoration: BoxDecoration(
+                                            color: kTaskPurple.withValues(
+                                              alpha: isDark ? 0.8 : 0.65,
+                                            ),
+                                            shape: BoxShape.circle,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Flexible(
+                                          child: Text(
+                                            scopeHint,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TextStyle(
+                                              fontSize: 12.5,
+                                              fontWeight: FontWeight.w500,
+                                              color: DunesColors.resolve(
+                                                context,
+                                                DunesColors.text3,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              _dailyStatusChip(compact: true),
+                            ],
+                            if (screenW < 720) ...[
+                              const SizedBox(width: 6),
+                              _TaskTopActionBtn(
+                                tooltip: '任务功能',
+                                icon: Icons.grid_view_rounded,
+                                onTap: _openManagement,
+                              ),
+                              _TaskTopActionBtn(
+                                tooltip: scopeHint,
+                                icon: Icons.help_outline_rounded,
+                                onTap: () =>
+                                    unawaited(_showGuide(force: true)),
+                              ),
+                            ],
                           ],
                         ),
-                      ),
-                    ],
-                    const SizedBox(height: 12),
-                    if (_scope == 'inbox')
-                      _buildInboxSearch()
-                    else
-                      _buildToolbar(),
-                  ],
-                ),
-              ),
-            ),
-            ..._buildBodySlivers(),
-            if (_loadingMore)
-              const SliverToBoxAdapter(
-                child: Padding(
-                  padding: EdgeInsets.fromLTRB(20, 0, 20, 24),
-                  child: Center(
-                    child: SizedBox(
-                      width: 22,
-                      height: 22,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2.4,
-                        color: kTaskPurple,
-                      ),
+                        if (!isWide) ...[
+                          const SizedBox(height: 10),
+                          _dailyStatusChip(compact: false),
+                        ],
+                        if (_scope == 'goals') ...[
+                          const SizedBox(height: 10),
+                          SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: Row(
+                              children: [
+                                _roleChip(null, '全部'),
+                                const SizedBox(width: 6),
+                                _roleChip('owned', '我负责'),
+                                const SizedBox(width: 6),
+                                _roleChip('assigned', '我分派'),
+                                const SizedBox(width: 6),
+                                _roleChip('participant', '我参与'),
+                                const SizedBox(width: 6),
+                                _roleChip('reports', '下级'),
+                              ],
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 10),
+                        if (_scope == 'inbox')
+                          _buildInboxSearch()
+                        else
+                          _buildToolbar(),
+                      ],
                     ),
                   ),
                 ),
-              ),
-          ],
+                ..._buildBodySlivers(),
+                if (_loadingMore)
+                  const SliverToBoxAdapter(
+                    child: Padding(
+                      padding: EdgeInsets.fromLTRB(20, 0, 20, 24),
+                      child: Center(
+                        child: SizedBox(
+                          width: 22,
+                          height: 22,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.4,
+                            color: kTaskPurple,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -1097,145 +1183,97 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
 
   Widget _roleChip(String? value, String label) {
     final on = _goalRole == value;
-    return Material(
-      color: on
-          ? DunesColors.resolve(
-              context,
-              kTaskPurple,
-              role: DunesColorRole.surface,
-            ).withValues(alpha: 0.12)
-          : DunesColors.resolve(
-              context,
-              Colors.white,
-              role: DunesColorRole.surface,
-            ),
-      borderRadius: BorderRadius.circular(8),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(8),
-        onTap: () {
-          if (_goalRole == value) return;
-          setState(() {
-            final wasUnfiltered = _goalRole == 'owned' || _goalRole == 'assigned';
-            _goalRole = value;
-            if (value == 'owned' || value == 'assigned') {
-              if (_completedMonth == null) _goalStatus = null;
-            } else if (wasUnfiltered) {
-              if (_completedMonth == null) _goalStatus = 'active';
-            }
-          });
-          unawaited(_reload());
-        },
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-          child: Text(
-            label,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: on
-                  ? DunesColors.resolve(context, kTaskPurple)
-                  : DunesColors.resolve(context, DunesColors.text2),
-            ),
-          ),
-        ),
-      ),
+    return _TaskTactilePill(
+      label: label,
+      active: on,
+      height: 31,
+      radius: 10,
+      onTap: () {
+        if (_goalRole == value) return;
+        setState(() {
+          final wasUnfiltered = _goalRole == 'owned' || _goalRole == 'assigned';
+          _goalRole = value;
+          if (value == 'owned' || value == 'assigned') {
+            if (_completedMonth == null) _goalStatus = null;
+          } else if (wasUnfiltered) {
+            if (_completedMonth == null) _goalStatus = 'active';
+          }
+        });
+        unawaited(_reload());
+      },
     );
   }
 
-  Widget _dailyStatusChip() {
-    return Material(
-      color: DunesColors.resolve(
-        context,
-        Colors.white,
-        role: DunesColorRole.surface,
-      ),
-      borderRadius: BorderRadius.circular(12),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: _openDaily,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          child: Row(
-            children: [
-              Icon(
-                _dailyPending ? Icons.edit_calendar_outlined : Icons.task_alt,
-                size: 18,
-                color: _dailyPending
-                    ? DunesColors.resolve(context, const Color(0xFFB45309))
-                    : DunesColors.resolve(context, const Color(0xFF1F9D76)),
-              ),
-              const SizedBox(width: 8),
+  Widget _dailyStatusChip({bool compact = false}) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final hairline = (1 / MediaQuery.devicePixelRatioOf(context)).clamp(
+      0.33,
+      0.6,
+    );
+    final accent = _dailyPending
+        ? const Color(0xFFD97706)
+        : const Color(0xFF1F9D76);
+    return _TaskInteractiveSurface(
+      borderRadius: BorderRadius.circular(compact ? 11 : 14),
+      hoverColor: accent.withValues(alpha: isDark ? 0.14 : 0.08),
+      baseColor: isDark ? const Color(0xFF1F1D2C) : Colors.white,
+      borderColor: _dailyPending
+          ? accent.withValues(alpha: 0.35)
+          : (isDark
+                ? Colors.white.withValues(alpha: 0.08)
+                : Colors.black.withValues(alpha: 0.055)),
+      hoverBorderColor: accent.withValues(alpha: 0.45),
+      borderWidth: hairline,
+      onTap: _openDaily,
+      child: Padding(
+        padding: EdgeInsets.symmetric(
+          horizontal: compact ? 12 : 14,
+          vertical: compact ? 8 : 11,
+        ),
+        child: Row(
+          mainAxisSize: compact ? MainAxisSize.min : MainAxisSize.max,
+          children: [
+            Icon(
+              _dailyPending
+                  ? Icons.edit_calendar_rounded
+                  : Icons.task_alt_rounded,
+              size: compact ? 16 : 18,
+              color: DunesColors.resolve(context, accent),
+            ),
+            const SizedBox(width: 7),
+            if (compact)
+              Text(
+                _dailyPending ? '今日日报待填' : '今日日报',
+                style: const TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600,
+                ),
+              )
+            else
               Expanded(
                 child: Text(
                   _dailyPending ? '今日日报待填' : '打开日报',
                   style: const TextStyle(fontWeight: FontWeight.w600),
                 ),
               ),
-              if (_dailyPending)
-                Container(
-                  width: 8,
-                  height: 8,
-                  decoration: BoxDecoration(
-                    color: DunesColors.resolveNullable(
-                      context,
-                      Color(0xFFE11D48),
-                      role: DunesColorRole.surface,
-                    ),
-                    shape: BoxShape.circle,
-                  ),
-                ),
+            if (_dailyPending) ...[
               const SizedBox(width: 6),
-              Icon(
-                Icons.chevron_right,
-                color: DunesColors.resolve(context, DunesColors.text3),
+              Container(
+                width: 7,
+                height: 7,
+                decoration: const BoxDecoration(
+                  color: Color(0xFFFF5B61),
+                  shape: BoxShape.circle,
+                ),
               ),
             ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _tabChip(String value, String label) {
-    final on = _scope == value;
-    return Expanded(
-      child: Material(
-        color: on
-            ? DunesColors.resolve(
-                context,
-                kTaskPurple,
-                role: DunesColorRole.surface,
-              )
-            : DunesColors.resolve(
-                context,
-                Colors.white,
-                role: DunesColorRole.surface,
-              ),
-        borderRadius: BorderRadius.circular(10),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(10),
-          onTap: () {
-            if (_scope == value) return;
-            setState(() {
-              _scope = value;
-              _inboxFocus = null;
-            });
-            unawaited(_reload());
-          },
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 10),
-            child: Text(
-              label,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w700,
-                color: on
-                    ? DunesColors.resolve(context, Colors.white)
-                    : DunesColors.resolve(context, DunesColors.text2),
-              ),
+            const SizedBox(width: 4),
+            Icon(
+              Icons.chevron_right_rounded,
+              size: 16,
+              color: DunesColors.resolve(context, DunesColors.text3),
             ),
-          ),
+          ],
         ),
       ),
     );
@@ -1249,125 +1287,264 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
     );
   }
 
+  int get _activeAdvancedFilterCount {
+    var n = 0;
+    if (_goalSource != null) n++;
+    if (_ownerFilter != null) n++;
+    if (_completedMonth != null) n++;
+    if (_dateFrom != null || _dateTo != null) n++;
+    return n;
+  }
+
   Widget _buildToolbar() {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-      decoration: BoxDecoration(
-        color: DunesColors.resolve(
-          context,
-          Colors.white,
-          role: DunesColorRole.surface,
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isWide = MediaQuery.sizeOf(context).width >= 780;
+    final hairline = (1 / MediaQuery.devicePixelRatioOf(context)).clamp(
+      0.33,
+      0.6,
+    );
+    final advCount = _activeAdvancedFilterCount;
+
+    final statusDropdown = TaskFilterChipDropdown<String?>(
+      value: _status,
+      label: _statusLabel,
+      items: const [
+        (null, '全部状态'),
+        ('active', '进行中'),
+        ('pending_approval', '待确认'),
+        ('completed', '已完成'),
+        ('rejected', '已驳回'),
+      ],
+      onChanged: (v) {
+        HapticFeedback.selectionClick();
+        setState(() => _setStatus(v));
+        unawaited(_reload());
+      },
+      minMenuWidth: 156,
+    );
+
+    final filterToggle = _uniformFilterPill(
+      label: advCount > 0 ? '筛选 ($advCount)' : '筛选',
+      active: _advancedFiltersOpen || advCount > 0,
+      onTap: () => setState(
+        () => _advancedFiltersOpen = !_advancedFiltersOpen,
+      ),
+    );
+
+    final viewToggle = isWide
+        ? Tooltip(
+            message: _pcGridMode ? '切换为紧凑单列' : '切换为双列网格',
+            child: InkWell(
+              borderRadius: BorderRadius.circular(9),
+              onTap: () {
+                HapticFeedback.selectionClick();
+                setState(() => _pcGridMode = !_pcGridMode);
+              },
+              child: Container(
+                width: 34,
+                height: 34,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: isDark
+                      ? Colors.white.withValues(alpha: 0.06)
+                      : const Color(0xFFF3F2F8),
+                  borderRadius: BorderRadius.circular(9),
+                ),
+                child: Icon(
+                  _pcGridMode
+                      ? Icons.view_agenda_rounded
+                      : Icons.grid_view_rounded,
+                  size: 17,
+                  color: DunesColors.resolve(context, kTaskPurple),
+                ),
+              ),
+            ),
+          )
+        : const SizedBox.shrink();
+
+    final refreshBtn = Tooltip(
+      message: '刷新',
+      child: InkWell(
+        borderRadius: BorderRadius.circular(9),
+        onTap: () {
+          HapticFeedback.selectionClick();
+          unawaited(_reload());
+        },
+        child: Container(
+          width: 34,
+          height: 34,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.06)
+                : const Color(0xFFF3F2F8),
+            borderRadius: BorderRadius.circular(9),
+          ),
+          child: Icon(
+            Icons.refresh_rounded,
+            size: 17.5,
+            color: DunesColors.resolve(context, kTaskPurple),
+          ),
         ),
+      ),
+    );
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 11, 14, 11),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1F1D2C) : Colors.white,
         borderRadius: BorderRadius.circular(18),
         border: Border.all(
-          color: DunesColors.resolve(
-            context,
-            const Color(0xFFE5E5EA),
-            role: DunesColorRole.border,
-          ),
-          width: 0.8,
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.08)
+              : Colors.black.withValues(alpha: 0.055),
+          width: hairline,
         ),
-        boxShadow: const [
+        boxShadow: [
           BoxShadow(
-            color: Color(0x05000000),
-            blurRadius: 10,
-            offset: Offset(0, 2),
+            color: isDark
+                ? const Color(0x1C000000)
+                : const Color(0x083D2C7A),
+            blurRadius: 12,
+            offset: const Offset(0, 3),
           ),
         ],
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          TaskSearchField(
-            controller: _search,
-            hintText: '搜索标题或负责人',
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              _dateRangeChip(),
-              const SizedBox(width: 8),
-              TaskFilterChipDropdown<String?>(
-                value: _status,
-                label: _statusLabel,
-                items: const [
-                  (null, '全部状态'),
-                  ('active', '进行中'),
-                  ('pending_approval', '待确认'),
-                  ('completed', '已完成'),
-                  ('rejected', '已驳回'),
-                ],
-                onChanged: (v) {
-                  HapticFeedback.selectionClick();
-                  setState(() => _setStatus(v));
-                  unawaited(_reload());
-                },
-                minMenuWidth: 160,
-              ),
-              const Spacer(),
-              IconButton(
-                tooltip: '刷新',
-                onPressed: () {
-                  HapticFeedback.selectionClick();
-                  unawaited(_reload());
-                },
-                icon: Icon(
-                  Icons.refresh_rounded,
-                  color: DunesColors.resolve(context, kTaskPurple),
+          if (isWide)
+            Row(
+              children: [
+                Expanded(
+                  child: TaskSearchField(
+                    controller: _search,
+                    hintText: '搜索标题或负责人',
+                  ),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: [
-              if (_scope == 'goals')
-                TaskFilterChipDropdown<String?>(
-                  value: _goalSource,
-                  label: switch (_goalSource) {
-                    'regular' => '常规',
-                    'probation' => '试用期',
-                    _ => '全部来源',
-                  },
-                  items: const [
-                    (null, '全部来源'),
-                    ('regular', '常规'),
-                    ('probation', '试用期'),
-                  ],
-                  onChanged: (source) {
-                    setState(() => _goalSource = source);
-                    unawaited(_reload());
-                  },
+                const SizedBox(width: 10),
+                statusDropdown,
+                const SizedBox(width: 6),
+                _listFocusChip('overdue', '逾期'),
+                const SizedBox(width: 6),
+                _listFocusChip('dueToday', '今天截止'),
+                const SizedBox(width: 6),
+                _listFocusChip('high', '高优'),
+                const SizedBox(width: 6),
+                filterToggle,
+                const SizedBox(width: 6),
+                viewToggle,
+                const SizedBox(width: 6),
+                refreshBtn,
+              ],
+            )
+          else ...[
+            TaskSearchField(
+              controller: _search,
+              hintText: '搜索标题或负责人',
+            ),
+            const SizedBox(height: 9),
+            Row(
+              children: [
+                Expanded(
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        statusDropdown,
+                        const SizedBox(width: 6),
+                        _listFocusChip('overdue', '逾期'),
+                        const SizedBox(width: 6),
+                        _listFocusChip('dueToday', '今天截止'),
+                        const SizedBox(width: 6),
+                        _listFocusChip('high', '高优'),
+                        const SizedBox(width: 6),
+                        filterToggle,
+                      ],
+                    ),
+                  ),
                 ),
-              _listFocusChip('overdue', '逾期'),
-              _listFocusChip('dueToday', '今天截止'),
-              _listFocusChip('high', '高优先级'),
-              _uniformFilterPill(
-                label: _ownerFilter?.displayName ?? '负责人',
-                active: _ownerFilter != null,
-                onTap: _filterByOwner,
-              ),
-              _uniformFilterPill(
-                label: _completedMonth == null
-                    ? '完成月份'
-                    : '${_completedMonth!.year}年${_completedMonth!.month}月',
-                active: _completedMonth != null,
-                onTap: _filterByCompletedMonth,
-              ),
-              if (_ownerFilter != null || _completedMonth != null)
-                _uniformFilterPill(
-                  label: '清除筛选',
-                  active: false,
-                  onTap: () {
-                    setState(() {
-                      _ownerFilter = null;
-                      _completedMonth = null;
-                    });
-                    unawaited(_reload());
-                  },
-                ),
-            ],
+                const SizedBox(width: 6),
+                refreshBtn,
+              ],
+            ),
+          ],
+          AnimatedSize(
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOutCubic,
+            alignment: Alignment.topCenter,
+            child: _advancedFiltersOpen
+                ? Padding(
+                    padding: const EdgeInsets.only(top: 10),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        SizedBox(
+                          height: hairline,
+                          child: ColoredBox(
+                            color: isDark
+                                ? Colors.white.withValues(alpha: 0.06)
+                                : Colors.black.withValues(alpha: 0.045),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 6,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            _dateRangeChip(),
+                            if (_scope == 'goals')
+                              TaskFilterChipDropdown<String?>(
+                                value: _goalSource,
+                                label: switch (_goalSource) {
+                                  'regular' => '常规',
+                                  'probation' => '试用期',
+                                  _ => '全部来源',
+                                },
+                                items: const [
+                                  (null, '全部来源'),
+                                  ('regular', '常规'),
+                                  ('probation', '试用期'),
+                                ],
+                                onChanged: (source) {
+                                  setState(() => _goalSource = source);
+                                  unawaited(_reload());
+                                },
+                              ),
+                            _uniformFilterPill(
+                              label: _ownerFilter?.displayName ?? '负责人',
+                              active: _ownerFilter != null,
+                              onTap: _filterByOwner,
+                            ),
+                            _uniformFilterPill(
+                              label: _completedMonth == null
+                                  ? '完成月份'
+                                  : '${_completedMonth!.year}年${_completedMonth!.month}月',
+                              active: _completedMonth != null,
+                              onTap: _filterByCompletedMonth,
+                            ),
+                            if (advCount > 0)
+                              _uniformFilterPill(
+                                label: '清除筛选',
+                                active: false,
+                                onTap: () {
+                                  setState(() {
+                                    _goalSource = null;
+                                    _ownerFilter = null;
+                                    _completedMonth = null;
+                                    _dateFrom = null;
+                                    _dateTo = null;
+                                  });
+                                  unawaited(_reload());
+                                },
+                              ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  )
+                : const SizedBox.shrink(),
           ),
         ],
       ),
@@ -1411,46 +1588,12 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
     required bool active,
     required VoidCallback onTap,
   }) {
-    return Material(
-      color: active
-          ? DunesColors.resolve(
-              context,
-              DunesColors.brandPurpleSoft,
-              role: DunesColorRole.surface,
-            )
-          : DunesColors.resolve(
-              context,
-              const Color(0xFFF2F2F7),
-              role: DunesColorRole.surface,
-            ),
-      shape: const StadiumBorder(),
-      child: InkWell(
-        customBorder: const StadiumBorder(),
-        hoverColor: Colors.transparent,
-        onTap: () {
-          HapticFeedback.selectionClick();
-          onTap();
-        },
-        child: SizedBox(
-          height: 34,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: Center(
-              widthFactor: 1,
-              child: Text(
-                label,
-                style: TextStyle(
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w600,
-                  color: active
-                      ? DunesColors.resolve(context, kTaskPurple)
-                      : DunesColors.resolve(context, const Color(0xFF1D1D1F)),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
+    return _TaskTactilePill(
+      label: label,
+      active: active,
+      height: 34,
+      radius: 999,
+      onTap: onTap,
     );
   }
 
@@ -1494,7 +1637,7 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
     if (_loading) {
       return [
         const SliverFillRemaining(
-          hasScrollBody: false,
+          hasScrollBody: true,
           child: DunesListSkeleton(),
         ),
       ];
@@ -1545,14 +1688,30 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
         return [
           SliverFillRemaining(
             hasScrollBody: false,
-            child: Center(
-              child: Text(
-                '没有符合条件的结果',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: DunesColors.resolve(context, DunesColors.text3),
-                ),
-              ),
+            child: _buildEmptyCard(
+              icon: Icons.filter_alt_off_rounded,
+              title: '没有符合条件的结果',
+              subtitle: '试试调整筛选条件或清空搜索关键词',
+              actionLabel: '重置筛选',
+              actionIcon: Icons.refresh_rounded,
+              onAction: () {
+                setState(() {
+                  _search.clear();
+                  _listFocus = null;
+                  _priority = null;
+                  _goalSource = null;
+                  _ownerFilter = null;
+                  _completedMonth = null;
+                  _dateFrom = null;
+                  _dateTo = null;
+                  if (_scope == 'goals') {
+                    _goalStatus = _goalRole == 'owned' ? null : 'active';
+                  } else {
+                    _setStatus(null);
+                  }
+                });
+                unawaited(_reload());
+              },
             ),
           ),
         ];
@@ -1560,97 +1719,17 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
       return [
         SliverFillRemaining(
           hasScrollBody: false,
-          child: Center(
-            child: Container(
-              width: 380,
-              padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 40),
-              decoration: BoxDecoration(
-                color: DunesColors.resolve(
-                  context,
-                  Colors.white,
-                  role: DunesColorRole.surface,
-                ),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: DunesColors.resolve(
-                    context,
-                    const Color(0xFFE8EAED),
-                    role: DunesColorRole.border,
-                  ),
-                ),
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 64,
-                    height: 64,
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          DunesColors.resolve(
-                            context,
-                            kTaskPurple,
-                            role: DunesColorRole.surface,
-                          ).withValues(alpha: 0.18),
-                          DunesColors.resolve(
-                            context,
-                            kTaskPurple,
-                            role: DunesColorRole.surface,
-                          ).withValues(alpha: 0.06),
-                        ],
-                      ),
-                      borderRadius: BorderRadius.circular(18),
-                    ),
-                    child: Icon(
-                      Icons.task_alt_outlined,
-                      color: DunesColors.resolveNullable(context, kTaskPurple),
-                      size: 30,
-                    ),
-                  ),
-                  const SizedBox(height: 18),
-                  Text(
-                    _scope == 'goals' ? '还没有主目标' : '还没有待处理的子目标',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 17,
-                      fontWeight: FontWeight.w700,
-                      color: DunesColors.resolve(context, DunesColors.text),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    _scope == 'goals'
-                        ? '点右上角完整创建，可以同时填写主目标和子任务'
-                        : '今天要做的子目标会列在这里',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: DunesColors.resolve(context, DunesColors.text3),
-                      height: 1.4,
-                    ),
-                  ),
-                  if (_canCreateTasks) ...[
-                    const SizedBox(height: 20),
-                    FilledButton.icon(
-                      onPressed: () => _openCreate(),
-                      icon: const Icon(Icons.add, size: 18),
-                      label: const Text('完整创建'),
-                      style: FilledButton.styleFrom(
-                        backgroundColor: kTaskPurple,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 20,
-                          vertical: 12,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
+          child: _buildEmptyCard(
+            icon: _scope == 'goals'
+                ? Icons.flag_rounded
+                : Icons.wb_sunny_rounded,
+            title: _scope == 'goals' ? '还没有主目标' : '今日暂无待执行任务',
+            subtitle: _scope == 'goals'
+                ? '点击右上角「新建任务」，可同时规划主目标与子任务'
+                : '今天需要执行的子目标和待确认任务会展示在这里',
+            actionLabel: _canCreateTasks ? '新建任务' : null,
+            actionIcon: Icons.add_rounded,
+            onAction: _canCreateTasks ? () => unawaited(_openCreate()) : null,
           ),
         ),
       ];
@@ -1659,17 +1738,120 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
     if (_scope == 'goals') {
       return _goalGroupSlivers(
         items,
-        wide: MediaQuery.sizeOf(context).width >= 720,
+        wide: MediaQuery.sizeOf(context).width >= 780 && _pcGridMode,
       );
     }
+    final horiz = MediaQuery.sizeOf(context).width >= 780 ? 24.0 : 16.0;
     return [
       SliverPadding(
-        padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+        padding: EdgeInsets.fromLTRB(horiz, 0, horiz, 24),
         sliver: SliverList(
           delegate: SliverChildListDelegate(_buildItemCards(items)),
         ),
       ),
     ];
+  }
+
+  Widget _buildEmptyCard({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    String? actionLabel,
+    IconData? actionIcon,
+    VoidCallback? onAction,
+  }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final hairline = (1 / MediaQuery.devicePixelRatioOf(context)).clamp(
+      0.33,
+      0.6,
+    );
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 28),
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 400),
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 36),
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF1F1D2C) : Colors.white,
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.08)
+                  : Colors.black.withValues(alpha: 0.055),
+              width: hairline,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: isDark
+                    ? const Color(0x22000000)
+                    : const Color(0x0A3D2C7A),
+                blurRadius: 18,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 60,
+                height: 60,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      kTaskPurple.withValues(alpha: isDark ? 0.24 : 0.14),
+                      const Color(
+                        0xFF9C7CF4,
+                      ).withValues(alpha: isDark ? 0.10 : 0.05),
+                    ],
+                  ),
+                  borderRadius: BorderRadius.circular(18),
+                ),
+                child: Icon(
+                  icon,
+                  color: DunesColors.resolveNullable(context, kTaskPurple),
+                  size: 28,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                title,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 16.5,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: -0.2,
+                  color: DunesColors.resolve(context, DunesColors.text),
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                subtitle,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 13,
+                  color: DunesColors.resolve(context, DunesColors.text3),
+                  height: 1.45,
+                ),
+              ),
+              if (actionLabel != null && onAction != null) ...[
+                const SizedBox(height: 20),
+                _TaskTopPillButton(
+                  tooltip: actionLabel,
+                  icon: actionIcon ?? Icons.add_rounded,
+                  label: actionLabel,
+                  primary: true,
+                  onTap: onAction,
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   List<({String title, List<TaskItem> items})> _goalGroups(
@@ -1721,25 +1903,73 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
     return groups;
   }
 
+  Widget _sectionHeaderBar(String title, {int? count, Color? accent}) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final tone = accent ?? kTaskPurple;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        children: [
+          Container(
+            width: 4,
+            height: 14,
+            decoration: BoxDecoration(
+              color: tone,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 13.5,
+              fontWeight: FontWeight.w700,
+              letterSpacing: -0.1,
+              color: DunesColors.resolve(context, DunesColors.text),
+            ),
+          ),
+          if (count != null) ...[
+            const SizedBox(width: 7),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 1.5),
+              decoration: BoxDecoration(
+                color: tone.withValues(alpha: isDark ? 0.20 : 0.11),
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: Text(
+                '$count',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: DunesColors.resolve(context, tone),
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   List<Widget> _goalGroupSlivers(List<TaskItem> items, {required bool wide}) {
     final groups = _goalGroups(items);
+    final horiz = MediaQuery.sizeOf(context).width >= 780 ? 24.0 : 16.0;
     final slivers = <Widget>[];
     for (var i = 0; i < groups.length; i++) {
       final group = groups[i];
+      final accent = group.title == '已逾期'
+          ? const Color(0xFFFF4D57)
+          : group.title == '进行中'
+          ? kTaskPurple
+          : const Color(0xFF1F9D76);
       slivers.add(
         SliverPadding(
-          padding: EdgeInsets.fromLTRB(20, i == 0 ? 0 : 8, 20, 0),
+          padding: EdgeInsets.fromLTRB(horiz, i == 0 ? 2 : 10, horiz, 0),
           sliver: SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Text(
-                group.title,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  color: DunesColors.resolve(context, DunesColors.text3),
-                ),
-              ),
+            child: _sectionHeaderBar(
+              group.title,
+              count: group.items.length,
+              accent: accent,
             ),
           ),
         ),
@@ -1747,7 +1977,7 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
       if (wide) {
         slivers.add(
           SliverPadding(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+            padding: EdgeInsets.fromLTRB(horiz, 0, horiz, 12),
             sliver: SliverLayoutBuilder(
               builder: (context, constraints) {
                 final columns = (constraints.crossAxisExtent / 340)
@@ -1786,7 +2016,7 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
       } else {
         slivers.add(
           SliverPadding(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+            padding: EdgeInsets.fromLTRB(horiz, 0, horiz, 12),
             sliver: SliverList(
               delegate: SliverChildListDelegate([
                 for (final task in group.items) ...[
@@ -1884,19 +2114,7 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
     final pending = items.where((t) => t.isPending).toList(growable: false);
     final out = <Widget>[];
     if (work.isNotEmpty) {
-      out.add(
-        Padding(
-          padding: EdgeInsets.only(bottom: 8),
-          child: Text(
-            '今天要做',
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-              color: DunesColors.resolve(context, DunesColors.text3),
-            ),
-          ),
-        ),
-      );
+      out.add(_sectionHeaderBar('今天要做', count: work.length));
       for (final t in work) {
         out.add(
           TaskWorkbenchCard(
@@ -1916,14 +2134,11 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
     if (pending.isNotEmpty) {
       out.add(
         Padding(
-          padding: EdgeInsets.only(top: 4, bottom: 8),
-          child: Text(
+          padding: const EdgeInsets.only(top: 6),
+          child: _sectionHeaderBar(
             '待我审核',
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-              color: DunesColors.resolve(context, DunesColors.text3),
-            ),
+            count: pending.length,
+            accent: const Color(0xFFD97706),
           ),
         ),
       );
@@ -1968,24 +2183,32 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
       _inboxCountRow(snapshot),
       const SizedBox(height: 12),
     ];
+    final horiz = MediaQuery.sizeOf(context).width >= 780 ? 24.0 : 16.0;
     if (snapshot.isEmpty && snapshot.plannedCount == 0) {
       children.add(
-        Padding(
-          padding: const EdgeInsets.only(top: 48),
-          child: Center(
-            child: Text(
-              searching ? '没有符合条件的结果' : '现在没有待你处理的事',
-              style: TextStyle(
-                fontSize: 14,
-                color: DunesColors.resolve(context, DunesColors.text3),
-              ),
-            ),
-          ),
+        _buildEmptyCard(
+          icon: searching
+              ? Icons.search_off_rounded
+              : Icons.check_circle_outline_rounded,
+          title: searching ? '没有符合条件的结果' : '当前待办已全部清空',
+          subtitle: searching
+              ? '试试更换搜索关键词'
+              : '待你确认、审批、逾期或今日截止的任务都会集中在这里',
+          actionLabel: searching
+              ? '清空搜索'
+              : (_canCreateTasks ? '新建任务' : null),
+          actionIcon: searching ? Icons.clear_rounded : Icons.add_rounded,
+          onAction: searching
+              ? () {
+                  _search.clear();
+                  unawaited(_reload());
+                }
+              : (_canCreateTasks ? () => unawaited(_openCreate()) : null),
         ),
       );
       return [
         SliverPadding(
-          padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+          padding: EdgeInsets.fromLTRB(horiz, 0, horiz, 24),
           sliver: SliverList(delegate: SliverChildListDelegate(children)),
         ),
       ];
@@ -2000,7 +2223,7 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
 
     return [
       SliverPadding(
-        padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+        padding: EdgeInsets.fromLTRB(horiz, 0, horiz, 24),
         sliver: SliverList(delegate: SliverChildListDelegate(children)),
       ),
     ];
@@ -2024,7 +2247,7 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
       if (snapshot.today.isNotEmpty) (TaskInboxBucket.today, false),
     ];
     return SizedBox(
-      height: 40,
+      height: 36,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         itemCount: chips.length,
@@ -2034,51 +2257,17 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
           final emphasis = chips[index].$2;
           final selected = _inboxFocus == bucket;
           final count = snapshot.countOf(bucket);
-          return Material(
-            color: selected
-                ? DunesColors.resolve(
-                    context,
-                    kTaskPurple,
-                    role: DunesColorRole.surface,
-                  )
-                : emphasis
-                ? DunesColors.resolve(
-                    context,
-                    const Color(0xFFF3EEFA),
-                    role: DunesColorRole.surface,
-                  )
-                : DunesColors.resolve(
-                    context,
-                    Colors.white,
-                    role: DunesColorRole.surface,
-                  ),
-            borderRadius: BorderRadius.circular(999),
-            child: InkWell(
-              borderRadius: BorderRadius.circular(999),
-              onTap: () {
-                setState(() {
-                  _inboxFocus = selected ? null : bucket;
-                });
-              },
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 8,
-                ),
-                child: Text(
-                  '${taskInboxBucketTitle(bucket)} $count',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    color: selected
-                        ? DunesColors.resolve(context, Colors.white)
-                        : emphasis
-                        ? DunesColors.resolve(context, kTaskPurple)
-                        : DunesColors.resolve(context, DunesColors.text2),
-                  ),
-                ),
-              ),
-            ),
+          return _TaskTactilePill(
+            label: '${taskInboxBucketTitle(bucket)} $count',
+            active: selected,
+            emphasized: emphasis && !selected,
+            height: 34,
+            radius: 999,
+            onTap: () {
+              setState(() {
+                _inboxFocus = selected ? null : bucket;
+              });
+            },
           );
         },
       ),
@@ -2393,5 +2582,627 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
     } catch (e) {
       if (mounted) showDunesCenterToast(context, '$e');
     }
+  }
+}
+
+/// Apple 风格真滑动分段胶囊：主目标 / 待办 / 今日
+class _TaskScopeSegmentedControl extends StatefulWidget {
+  const _TaskScopeSegmentedControl({
+    required this.value,
+    required this.expand,
+    required this.inboxBadgeCount,
+    required this.onChanged,
+  });
+
+  final String value;
+  final bool expand;
+  final int inboxBadgeCount;
+  final ValueChanged<String> onChanged;
+
+  @override
+  State<_TaskScopeSegmentedControl> createState() =>
+      _TaskScopeSegmentedControlState();
+}
+
+class _TaskScopeSegmentedControlState
+    extends State<_TaskScopeSegmentedControl> {
+  static const _tabs = [
+    (value: 'goals', label: '主目标', icon: Icons.flag_rounded),
+    (value: 'inbox', label: '待办', icon: Icons.inbox_rounded),
+    (value: 'actionable', label: '今日', icon: Icons.wb_sunny_rounded),
+  ];
+
+  int? _hoveredIndex;
+  int? _pressedIndex;
+
+  int get _selectedIndex {
+    final idx = _tabs.indexWhere((t) => t.value == widget.value);
+    return idx < 0 ? 0 : idx;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final disableAnim = MediaQuery.disableAnimationsOf(context);
+    final hairline = (1 / MediaQuery.devicePixelRatioOf(context)).clamp(
+      0.33,
+      0.6,
+    );
+    const pad = 3.0;
+    final trackColor = isDark
+        ? Colors.white.withValues(alpha: 0.07)
+        : const Color(0xFFEBE8F4);
+    final thumbColor = isDark ? const Color(0xFF2D2942) : Colors.white;
+    final selectedIdx = _selectedIndex;
+
+    Widget buildTrack(double totalWidth) {
+      final segWidth = (totalWidth - pad * 2) / _tabs.length;
+      return Container(
+        height: 40,
+        width: totalWidth,
+        padding: const EdgeInsets.all(pad),
+        decoration: BoxDecoration(
+          color: trackColor,
+          borderRadius: BorderRadius.circular(13),
+          border: Border.all(
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.07)
+                : Colors.black.withValues(alpha: 0.045),
+            width: hairline,
+          ),
+        ),
+        child: Stack(
+          children: [
+            // 真滑动白色胶囊滑块
+            AnimatedPositioned(
+              duration: disableAnim
+                  ? Duration.zero
+                  : const Duration(milliseconds: 240),
+              curve: Curves.easeOutCubic,
+              left: selectedIdx * segWidth,
+              top: 0,
+              bottom: 0,
+              width: segWidth,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: thumbColor,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: isDark
+                        ? Colors.white.withValues(alpha: 0.10)
+                        : Colors.black.withValues(alpha: 0.04),
+                    width: hairline,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: isDark
+                          ? const Color(0x38000000)
+                          : const Color(0x143D2C7A),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            Row(
+              children: [
+                for (var i = 0; i < _tabs.length; i++)
+                  _buildSegment(
+                    index: i,
+                    selected: i == selectedIdx,
+                    isDark: isDark,
+                    disableAnim: disableAnim,
+                  ),
+              ],
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (!widget.expand) {
+      return buildTrack(294);
+    }
+    return LayoutBuilder(
+      builder: (context, constraints) => buildTrack(constraints.maxWidth),
+    );
+  }
+
+  Widget _buildSegment({
+    required int index,
+    required bool selected,
+    required bool isDark,
+    required bool disableAnim,
+  }) {
+    final tab = _tabs[index];
+    final hovered = _hoveredIndex == index && !selected;
+    final pressed = _pressedIndex == index;
+    final showBadge = tab.value == 'inbox' && widget.inboxBadgeCount > 0;
+    final textColor = selected
+        ? DunesColors.resolve(context, kTaskPurple)
+        : hovered
+        ? DunesColors.resolve(context, DunesColors.text)
+        : DunesColors.resolve(context, DunesColors.text2);
+
+    return Expanded(
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        onEnter: (_) {
+          if (mounted) setState(() => _hoveredIndex = index);
+        },
+        onExit: (_) {
+          if (mounted && _hoveredIndex == index) {
+            setState(() => _hoveredIndex = null);
+          }
+        },
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTapDown: (_) => setState(() => _pressedIndex = index),
+          onTapUp: (_) => setState(() => _pressedIndex = null),
+          onTapCancel: () => setState(() => _pressedIndex = null),
+          onTap: () {
+            HapticFeedback.selectionClick();
+            widget.onChanged(tab.value);
+          },
+          child: AnimatedScale(
+            scale: pressed && !disableAnim ? 0.95 : 1.0,
+            duration: const Duration(milliseconds: 110),
+            curve: Curves.easeOutCubic,
+            child: AnimatedContainer(
+              duration: disableAnim
+                  ? Duration.zero
+                  : const Duration(milliseconds: 150),
+              decoration: BoxDecoration(
+                color: hovered
+                    ? (isDark
+                          ? Colors.white.withValues(alpha: 0.05)
+                          : Colors.black.withValues(alpha: 0.035))
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              alignment: Alignment.center,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    tab.icon,
+                    size: 14.5,
+                    color: textColor,
+                  ),
+                  const SizedBox(width: 5),
+                  Text(
+                    tab.label,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
+                      color: textColor,
+                    ),
+                  ),
+                  if (showBadge) ...[
+                    const SizedBox(width: 4),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 5,
+                        vertical: 0.5,
+                      ),
+                      decoration: BoxDecoration(
+                        color: selected
+                            ? kTaskPurple.withValues(alpha: isDark ? 0.28 : 0.14)
+                            : const Color(0xFFFF4D57),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Text(
+                        widget.inboxBadgeCount > 99
+                            ? '99+'
+                            : '${widget.inboxBadgeCount}',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          color: selected
+                              ? DunesColors.resolve(context, kTaskPurple)
+                              : Colors.white,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 顶栏分组工具图标按钮（带悬停高光与轻弹按压）
+class _TaskTopActionBtn extends StatefulWidget {
+  const _TaskTopActionBtn({
+    required this.tooltip,
+    required this.icon,
+    required this.onTap,
+  });
+
+  final String tooltip;
+  final IconData icon;
+  final VoidCallback onTap;
+
+  @override
+  State<_TaskTopActionBtn> createState() => _TaskTopActionBtnState();
+}
+
+class _TaskTopActionBtnState extends State<_TaskTopActionBtn> {
+  bool _hovered = false;
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final disableAnim = MediaQuery.disableAnimationsOf(context);
+    return Tooltip(
+      message: widget.tooltip,
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        onEnter: (_) {
+          if (mounted) setState(() => _hovered = true);
+        },
+        onExit: (_) {
+          if (mounted) setState(() => _hovered = false);
+        },
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTapDown: (_) => setState(() => _pressed = true),
+          onTapUp: (_) => setState(() => _pressed = false),
+          onTapCancel: () => setState(() => _pressed = false),
+          onTap: () {
+            HapticFeedback.selectionClick();
+            widget.onTap();
+          },
+          child: AnimatedScale(
+            scale: _pressed && !disableAnim ? 0.90 : 1.0,
+            duration: const Duration(milliseconds: 110),
+            curve: Curves.easeOutCubic,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 150),
+              width: 32,
+              height: 30,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: _hovered
+                    ? (isDark
+                          ? Colors.white.withValues(alpha: 0.11)
+                          : Colors.white)
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(8),
+                boxShadow: _hovered && !isDark
+                    ? const [
+                        BoxShadow(
+                          color: Color(0x103D2C7A),
+                          blurRadius: 4,
+                          offset: Offset(0, 1),
+                        ),
+                      ]
+                    : const [],
+              ),
+              child: Icon(
+                widget.icon,
+                size: 18,
+                color: _hovered
+                    ? DunesColors.resolve(context, kTaskPurple)
+                    : DunesColors.resolve(context, DunesColors.text2),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 顶栏 / 空态 触感胶囊按钮（支持品牌紫渐变主按钮 & 轻紫次按钮）
+class _TaskTopPillButton extends StatefulWidget {
+  const _TaskTopPillButton({
+    required this.tooltip,
+    required this.icon,
+    required this.label,
+    required this.primary,
+    required this.onTap,
+  });
+
+  final String tooltip;
+  final IconData icon;
+  final String label;
+  final bool primary;
+  final VoidCallback onTap;
+
+  @override
+  State<_TaskTopPillButton> createState() => _TaskTopPillButtonState();
+}
+
+class _TaskTopPillButtonState extends State<_TaskTopPillButton> {
+  bool _hovered = false;
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final disableAnim = MediaQuery.disableAnimationsOf(context);
+    final hairline = (1 / MediaQuery.devicePixelRatioOf(context)).clamp(
+      0.33,
+      0.6,
+    );
+    return Tooltip(
+      message: widget.tooltip,
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        onEnter: (_) {
+          if (mounted) setState(() => _hovered = true);
+        },
+        onExit: (_) {
+          if (mounted) setState(() => _hovered = false);
+        },
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTapDown: (_) => setState(() => _pressed = true),
+          onTapUp: (_) => setState(() => _pressed = false),
+          onTapCancel: () => setState(() => _pressed = false),
+          onTap: () {
+            HapticFeedback.selectionClick();
+            widget.onTap();
+          },
+          child: AnimatedScale(
+            scale: _pressed && !disableAnim ? 0.95 : 1.0,
+            duration: const Duration(milliseconds: 110),
+            curve: Curves.easeOutCubic,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 160),
+              height: 36,
+              padding: EdgeInsets.symmetric(
+                horizontal: widget.primary ? 13 : 11,
+              ),
+              decoration: BoxDecoration(
+                gradient: widget.primary
+                    ? LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: _hovered
+                            ? const [Color(0xFF8C6CE6), Color(0xFF6B4BC7)]
+                            : const [Color(0xFF8363DF), kTaskPurple],
+                      )
+                    : null,
+                color: widget.primary
+                    ? null
+                    : (_hovered
+                          ? kTaskPurple.withValues(alpha: isDark ? 0.22 : 0.14)
+                          : kTaskPurple.withValues(
+                              alpha: isDark ? 0.14 : 0.08,
+                            )),
+                borderRadius: BorderRadius.circular(11),
+                border: widget.primary
+                    ? null
+                    : Border.all(
+                        color: kTaskPurple.withValues(
+                          alpha: _hovered ? 0.32 : 0.18,
+                        ),
+                        width: hairline,
+                      ),
+                boxShadow: widget.primary
+                    ? [
+                        BoxShadow(
+                          color: kTaskPurple.withValues(
+                            alpha: _hovered ? 0.34 : 0.22,
+                          ),
+                          blurRadius: _hovered ? 12 : 8,
+                          offset: const Offset(0, 3),
+                        ),
+                      ]
+                    : const [],
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    widget.icon,
+                    size: 16.5,
+                    color: widget.primary
+                        ? Colors.white
+                        : DunesColors.resolve(context, kTaskPurple),
+                  ),
+                  const SizedBox(width: 5),
+                  Text(
+                    widget.label,
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w700,
+                      color: widget.primary
+                          ? Colors.white
+                          : DunesColors.resolve(context, kTaskPurple),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 统一触感筛选胶囊（带悬停边界高光 + 轻弹按压）
+class _TaskTactilePill extends StatefulWidget {
+  const _TaskTactilePill({
+    required this.label,
+    required this.active,
+    required this.onTap,
+    this.emphasized = false,
+    this.height = 34,
+    this.radius = 999,
+  });
+
+  final String label;
+  final bool active;
+  final bool emphasized;
+  final double height;
+  final double radius;
+  final VoidCallback onTap;
+
+  @override
+  State<_TaskTactilePill> createState() => _TaskTactilePillState();
+}
+
+class _TaskTactilePillState extends State<_TaskTactilePill> {
+  bool _hovered = false;
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final disableAnim = MediaQuery.disableAnimationsOf(context);
+    final hairline = (1 / MediaQuery.devicePixelRatioOf(context)).clamp(
+      0.33,
+      0.6,
+    );
+    final bg = widget.active
+        ? (isDark
+              ? kTaskPurple.withValues(alpha: 0.26)
+              : DunesColors.brandPurpleSoft)
+        : widget.emphasized
+        ? (isDark
+              ? kTaskPurple.withValues(alpha: 0.14)
+              : const Color(0xFFF3EEFA))
+        : _hovered
+        ? (isDark
+              ? Colors.white.withValues(alpha: 0.11)
+              : const Color(0xFFEBE8F4))
+        : (isDark
+              ? Colors.white.withValues(alpha: 0.06)
+              : const Color(0xFFF2F2F7));
+    final borderColor = widget.active
+        ? kTaskPurple.withValues(alpha: isDark ? 0.55 : 0.35)
+        : _hovered
+        ? kTaskPurple.withValues(alpha: 0.25)
+        : Colors.transparent;
+    final fg = widget.active || widget.emphasized
+        ? DunesColors.resolve(context, kTaskPurple)
+        : DunesColors.resolve(context, DunesColors.text);
+
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) {
+        if (mounted) setState(() => _hovered = true);
+      },
+      onExit: (_) {
+        if (mounted) setState(() => _hovered = false);
+      },
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTapDown: (_) => setState(() => _pressed = true),
+        onTapUp: (_) => setState(() => _pressed = false),
+        onTapCancel: () => setState(() => _pressed = false),
+        onTap: () {
+          HapticFeedback.selectionClick();
+          widget.onTap();
+        },
+        child: AnimatedScale(
+          scale: _pressed && !disableAnim ? 0.95 : 1.0,
+          duration: const Duration(milliseconds: 110),
+          curve: Curves.easeOutCubic,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            height: widget.height,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: bg,
+              borderRadius: BorderRadius.circular(widget.radius),
+              border: Border.all(color: borderColor, width: hairline),
+            ),
+            child: Text(
+              widget.label,
+              style: TextStyle(
+                fontSize: 12.5,
+                fontWeight: widget.active ? FontWeight.w700 : FontWeight.w600,
+                color: fg,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 通用触感卡片/胶囊容器（悬停边框提亮 + 轻弹按压）
+class _TaskInteractiveSurface extends StatefulWidget {
+  const _TaskInteractiveSurface({
+    required this.borderRadius,
+    required this.baseColor,
+    required this.hoverColor,
+    required this.borderColor,
+    required this.hoverBorderColor,
+    required this.borderWidth,
+    required this.onTap,
+    required this.child,
+  });
+
+  final BorderRadius borderRadius;
+  final Color baseColor;
+  final Color hoverColor;
+  final Color borderColor;
+  final Color hoverBorderColor;
+  final double borderWidth;
+  final VoidCallback onTap;
+  final Widget child;
+
+  @override
+  State<_TaskInteractiveSurface> createState() =>
+      _TaskInteractiveSurfaceState();
+}
+
+class _TaskInteractiveSurfaceState extends State<_TaskInteractiveSurface> {
+  bool _hovered = false;
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final disableAnim = MediaQuery.disableAnimationsOf(context);
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) {
+        if (mounted) setState(() => _hovered = true);
+      },
+      onExit: (_) {
+        if (mounted) setState(() => _hovered = false);
+      },
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTapDown: (_) => setState(() => _pressed = true),
+        onTapUp: (_) => setState(() => _pressed = false),
+        onTapCancel: () => setState(() => _pressed = false),
+        onTap: () {
+          HapticFeedback.selectionClick();
+          widget.onTap();
+        },
+        child: AnimatedScale(
+          scale: _pressed && !disableAnim ? 0.97 : 1.0,
+          duration: const Duration(milliseconds: 110),
+          curve: Curves.easeOutCubic,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 160),
+            decoration: BoxDecoration(
+              color: _hovered ? widget.hoverColor : widget.baseColor,
+              borderRadius: widget.borderRadius,
+              border: Border.all(
+                color: _hovered ? widget.hoverBorderColor : widget.borderColor,
+                width: widget.borderWidth,
+              ),
+            ),
+            child: widget.child,
+          ),
+        ),
+      ),
+    );
   }
 }

@@ -211,10 +211,19 @@ bool isNovaTransientErrorReply(String text) {
 }
 
 /// 比较两条消息的时间先后；同一时刻 user 必须在 assistant 之前。
+/// 优先尊重服务端真实自增 ID 的严格先后，避免客户端与服务端时钟偏差导致问答倒挂；
 /// 能够正确处理客户端 13 位毫秒临时 ID 与服务端较小自增 ID 混合的情况。
 int compareNovaMessageTimes(NativeNovaMessage a, NativeNovaMessage b) {
   if (a.isWelcome && !b.isWelcome) return -1;
   if (b.isWelcome && !a.isWelcome) return 1;
+
+  // 若两条消息均为服务端真实自增 ID（非本地 13 位临时时间戳 ID），直接按服务端 ID 严格排序，
+  // 彻底杜绝时钟偏差或同秒落库导致 AI 回复跑到提问上方。
+  final aServer = a.id > 0 && !isNovaClientTempMessageId(a.id);
+  final bServer = b.id > 0 && !isNovaClientTempMessageId(b.id);
+  if (aServer && bServer && a.id != b.id) {
+    return a.id.compareTo(b.id);
+  }
 
   final at = novaMessageSortMillis(a);
   final bt = novaMessageSortMillis(b);
@@ -591,44 +600,31 @@ List<NativeNovaMessage> repairNovaConversationMessages(
     for (final u in users) u.id: <NativeNovaMessage>[],
   };
 
-  // 回复优先留给时间上刚问完的那一句。前面还有没回复的提问时，
-  // 只有这条回复紧挨着当前提问（4 秒内，灯塔/任务是立刻回的）才留在当前句。
-  // 两条回复都晚于后面的提问时，仍按先后拉链，避免变成 U1 U2 A1 A2。
+  // 每条 AI 回复严格归属「紧邻其前的那一条提问」，绝不跨轮强行塞到更早的未回复提问里
+  // （避免旧的停止/失败提问把最新回复抢走，导致刚发出的提问掉到回复下方）。
   for (final assistant in assistants) {
     NativeNovaMessage? open;
-    var openIndex = -1;
     for (var i = 0; i < users.length; i++) {
       if (compareNovaMessageTimes(users[i], assistant) <= 0) {
         open = users[i];
-        openIndex = i;
       } else {
         break;
       }
     }
     if (open == null) {
-      buckets[users.first.id]!.add(assistant);
+      // 极端时钟偏差（本地时间快于服务端，导致仅有一轮或最新一轮回复时间戳早于提问）：
+      // 优先归属最近一条尚无回复的提问，避免新回复被塞到历史第一条上方。
+      NativeNovaMessage? target;
+      for (var i = users.length - 1; i >= 0; i--) {
+        if (buckets[users[i].id]!.isEmpty) {
+          target = users[i];
+          break;
+        }
+      }
+      buckets[(target ?? users.last).id]!.add(assistant);
       continue;
     }
-    final earlierWaiting = <NativeNovaMessage>[
-      for (var i = 0; i < openIndex; i++)
-        if (buckets[users[i].id]!.isEmpty) users[i],
-    ];
-    if (earlierWaiting.isEmpty) {
-      buckets[open.id]!.add(assistant);
-      continue;
-    }
-    final openMs = novaMessageSortMillis(open);
-    final assistantMs = novaMessageSortMillis(assistant);
-    final closeToOpen =
-        openMs != null &&
-        assistantMs != null &&
-        assistantMs >= openMs - 1000 &&
-        assistantMs - openMs <= 4000;
-    if (closeToOpen && buckets[open.id]!.isEmpty) {
-      buckets[open.id]!.add(assistant);
-      continue;
-    }
-    buckets[earlierWaiting.first.id]!.add(assistant);
+    buckets[open.id]!.add(assistant);
   }
 
   // 用单调递增时间戳保证 U1→A1→U2→A2… 严格按轮次前后排列，

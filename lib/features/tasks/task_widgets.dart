@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/theme/dunes_theme.dart';
+import '../../core/widgets/dunes_motion_kit.dart';
 import '../../core/widgets/dunes_text_selection_toolbar.dart';
 import '../auth/auth_session.dart';
 import 'task_avatar.dart';
@@ -9,21 +10,19 @@ import 'task_models.dart';
 
 const kTaskPurple = Color(0xFF7B5CD8);
 
-/// 按进度分段取色：低→红橙、中→琥珀、高→青绿；办结→翠绿；逾期未办结偏琥珀棕。
-/// 填报 100% 不等于办结，逾期时即使进度拉满也走逾期色。
+/// 按进度分段取色：统一收口到沙丘品牌紫 + 语义色体系（办结翠绿 / 逾期珊瑚橙 / 正常品牌紫）。
 Color taskProgressTone(
   num progressPct, {
   bool overdue = false,
   bool completed = false,
 }) {
   if (completed) return const Color(0xFF1F9D76);
-  if (overdue) return const Color(0xFFB45309);
+  if (overdue) return const Color(0xFFD97706);
   final p = progressPct.toDouble().clamp(0, 100);
-  if (p >= 100) return const Color(0xFF2F8F7E);
+  if (p >= 100) return const Color(0xFF1F9D76);
   if (p < 30) return const Color(0xFFE35D4C);
-  if (p < 60) return const Color(0xFFE0A020);
-  if (p < 85) return const Color(0xFF4C7FD4);
-  return const Color(0xFF2F8F7E);
+  if (p < 60) return const Color(0xFFD98A1A);
+  return kTaskPurple;
 }
 
 List<Color> taskProgressGradientColors(
@@ -32,17 +31,16 @@ List<Color> taskProgressGradientColors(
   bool completed = false,
 }) {
   if (completed) {
-    return const [Color(0xFF1F9D76), Color(0xFF6ED4B0)];
+    return const [Color(0xFF1F9D76), Color(0xFF5CD6A8)];
   }
   if (overdue) {
-    return const [Color(0xFFB45309), Color(0xFFE8A868)];
+    return const [Color(0xFFD97706), Color(0xFFF3B266)];
   }
   final p = progressPct.toDouble().clamp(0, 100);
-  if (p >= 100) return const [Color(0xFF2F8F7E), Color(0xFF7BCFBC)];
-  if (p < 30) return const [Color(0xFFE35D4C), Color(0xFFF0A08A)];
-  if (p < 60) return const [Color(0xFFE0A020), Color(0xFFF5D08A)];
-  if (p < 85) return const [Color(0xFF4C7FD4), Color(0xFF9BB8F0)];
-  return const [Color(0xFF2F8F7E), Color(0xFF7BCFBC)];
+  if (p >= 100) return const [Color(0xFF1F9D76), Color(0xFF5CD6A8)];
+  if (p < 30) return const [Color(0xFFE35D4C), Color(0xFFF29688)];
+  if (p < 60) return const [Color(0xFFD98A1A), Color(0xFFF4C56D)];
+  return const [Color(0xFF7B5CD8), Color(0xFFB095F6)];
 }
 
 class TaskProgressBar extends StatelessWidget {
@@ -441,32 +439,32 @@ class TaskSummaryRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final cards = [
       _SummaryCard(
-        icon: Icons.task_alt_outlined,
+        icon: Icons.task_alt_rounded,
         title: '任务总数',
-        value: '$total',
+        count: total,
         subtitle: '我的任务',
         valueColor: kTaskPurple,
       ),
       _SummaryCard(
-        icon: Icons.timelapse_outlined,
+        icon: Icons.timelapse_rounded,
         title: '进行中',
-        value: '$active',
+        count: active,
         subtitle: '执行中',
-        valueColor: DunesColors.resolve(context, const Color(0xFFE8A838)),
+        valueColor: DunesColors.resolve(context, const Color(0xFFD98A1A)),
       ),
       _SummaryCard(
-        icon: Icons.hourglass_top_outlined,
+        icon: Icons.hourglass_top_rounded,
         title: '待审核',
-        value: '$pending',
+        count: pending,
         subtitle: '需处理',
-        valueColor: DunesColors.resolve(context, const Color(0xFF5B8DEF)),
+        valueColor: DunesColors.resolve(context, const Color(0xFF3880FF)),
       ),
       _SummaryCard(
-        icon: Icons.check_circle_outline,
+        icon: Icons.check_circle_rounded,
         title: '已完成',
-        value: '$done',
+        count: done,
         subtitle: '已闭环',
-        valueColor: DunesColors.resolve(context, const Color(0xFF3CBFA9)),
+        valueColor: DunesColors.resolve(context, const Color(0xFF1F9D76)),
       ),
     ];
 
@@ -510,41 +508,42 @@ class _SummaryCard extends StatelessWidget {
   const _SummaryCard({
     required this.icon,
     required this.title,
-    required this.value,
+    required this.count,
     required this.subtitle,
     required this.valueColor,
   });
 
   final IconData icon;
   final String title;
-  final String value;
+  final int count;
   final String subtitle;
   final Color valueColor;
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final hairline = (1 / MediaQuery.devicePixelRatioOf(context)).clamp(
+      0.33,
+      0.6,
+    );
     return Container(
-      padding: const EdgeInsets.fromLTRB(13, 11, 13, 11),
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
       decoration: BoxDecoration(
-        color: DunesColors.resolve(
-          context,
-          Colors.white,
-          role: DunesColorRole.surface,
-        ),
+        color: isDark ? const Color(0xFF1F1D2C) : Colors.white,
         borderRadius: BorderRadius.circular(18),
         border: Border.all(
-          color: DunesColors.resolve(
-            context,
-            const Color(0xFFE5E5EA),
-            role: DunesColorRole.border,
-          ),
-          width: 0.8,
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.08)
+              : Colors.black.withValues(alpha: 0.055),
+          width: hairline,
         ),
-        boxShadow: const [
+        boxShadow: [
           BoxShadow(
-            color: Color(0x06000000),
+            color: isDark
+                ? const Color(0x20000000)
+                : const Color(0x0A3D2C7A),
             blurRadius: 12,
-            offset: Offset(0, 3),
+            offset: const Offset(0, 3),
           ),
         ],
       ),
@@ -555,28 +554,28 @@ class _SummaryCard extends StatelessWidget {
           Row(
             children: [
               Container(
-                width: 24,
-                height: 24,
+                width: 26,
+                height: 26,
                 decoration: BoxDecoration(
-                  color: valueColor.withValues(alpha: 0.14),
-                  borderRadius: BorderRadius.circular(7),
+                  color: valueColor.withValues(alpha: isDark ? 0.22 : 0.12),
+                  borderRadius: BorderRadius.circular(8),
                 ),
                 alignment: Alignment.center,
                 child: Icon(
                   icon,
-                  size: 13.5,
+                  size: 14.5,
                   color: DunesColors.resolveNullable(context, valueColor),
                 ),
               ),
-              const SizedBox(width: 6),
+              const SizedBox(width: 7),
               Flexible(
                 child: Text(
                   title,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.w500,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
                     color: DunesColors.resolve(
                       context,
                       const Color(0xFF6E6E73),
@@ -587,24 +586,30 @@ class _SummaryCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 8),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.w700,
-              letterSpacing: -0.4,
-              fontFeatures: const [FontFeature.tabularFigures()],
-              color: DunesColors.resolveNullable(context, valueColor),
-              height: 1.05,
-            ),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            subtitle,
-            style: TextStyle(
-              fontSize: 11,
-              color: DunesColors.resolve(context, const Color(0xFF8E8E93)),
-            ),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              DunesAnimatedCounter(
+                value: count,
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: -0.4,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                  color: DunesColors.resolveNullable(context, valueColor),
+                  height: 1.05,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                subtitle,
+                style: TextStyle(
+                  fontSize: 11,
+                  color: DunesColors.resolve(context, const Color(0xFF8E8E93)),
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -931,108 +936,89 @@ class TaskWorkbenchCard extends StatelessWidget {
 
   Widget _compactGoal(BuildContext context) {
     final color = DunesColors.resolve(context, _statusColor);
-    return Material(
-      color: DunesColors.resolve(
-        context,
-        Colors.white,
-        role: DunesColorRole.surface,
-      ),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(
-          color: DunesColors.resolve(
-            context,
-            const Color(0xFFE5E5EA),
-            role: DunesColorRole.border,
-          ),
-          width: 0.8,
-        ),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        hoverColor: DunesColors.resolve(
-          context,
-          const Color(0xFFF9F9FB),
-          role: DunesColorRole.surface,
-        ),
-        onTap: () {
-          HapticFeedback.selectionClick();
-          onTap();
-        },
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    width: 3,
-                    height: 22,
-                    decoration: BoxDecoration(
-                      color: color,
-                      borderRadius: BorderRadius.circular(3),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      task.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  TaskMetaChip(
-                    text: task.overdue ? '已逾期' : taskStatusLabel(task.status),
+    return _TaskHoverCardShell(
+      accentColor: color,
+      borderRadius: 18,
+      onTap: () {
+        HapticFeedback.selectionClick();
+        onTap();
+      },
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 13, 14, 13),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 3.5,
+                  height: 20,
+                  decoration: BoxDecoration(
                     color: color,
+                    borderRadius: BorderRadius.circular(99),
                   ),
-                  if (onShare != null)
-                    IconButton(
-                      tooltip: '转发到 IM',
-                      onPressed: onShare,
-                      visualDensity: VisualDensity.compact,
-                      constraints: const BoxConstraints.tightFor(
-                        width: 32,
-                        height: 32,
-                      ),
-                      padding: EdgeInsets.zero,
-                      icon: const Icon(Icons.ios_share_rounded, size: 17),
-                    ),
-                ],
-              ),
-              if (task.hasPendingChange || task.transferStatusLabel != null)
-                Padding(
-                  padding: const EdgeInsets.only(top: 5),
-                  child: TaskMetaChip(
-                    text: task.transferStatusLabel ?? taskPendingChangeLabel(task.pendingChangeKind),
-                    color: DunesColors.resolve(
-                      context,
-                      const Color(0xFFB45309),
+                ),
+                const SizedBox(width: 9),
+                Expanded(
+                  child: Text(
+                    task.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: -0.2,
                     ),
                   ),
                 ),
-              const SizedBox(height: 7),
-              Wrap(
-                spacing: 12,
-                runSpacing: 4,
-                children: [
-                  if (task.ownerName.isNotEmpty)
-                    _TaskInfoItem(
-                      icon: Icons.person_outline,
-                      text: '负责人 ${task.ownerName}',
+                const SizedBox(width: 6),
+                TaskMetaChip(
+                  text: task.overdue ? '已逾期' : taskStatusLabel(task.status),
+                  color: color,
+                ),
+                if (onShare != null)
+                  IconButton(
+                    tooltip: '转发到 IM',
+                    onPressed: onShare,
+                    visualDensity: VisualDensity.compact,
+                    constraints: const BoxConstraints.tightFor(
+                      width: 30,
+                      height: 30,
                     ),
-                  if (task.creatorName.isNotEmpty)
-                    _TaskInfoItem(
-                      icon: Icons.edit_note_rounded,
-                      text: '创建人 ${task.creatorName}',
+                    padding: EdgeInsets.zero,
+                    icon: Icon(
+                      Icons.ios_share_rounded,
+                      size: 16,
+                      color: DunesColors.resolve(context, DunesColors.text3),
                     ),
-                ],
+                  ),
+              ],
+            ),
+            if (task.hasPendingChange || task.transferStatusLabel != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: TaskMetaChip(
+                  text:
+                      task.transferStatusLabel ??
+                      taskPendingChangeLabel(task.pendingChangeKind),
+                  color: DunesColors.resolve(context, const Color(0xFFB45309)),
+                ),
+              ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 12,
+              runSpacing: 4,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                if (task.ownerName.isNotEmpty)
+                  _TaskOwnerBadge(name: task.ownerName, rolePrefix: '负责人'),
+                if (task.creatorName.isNotEmpty)
+                  _TaskInfoItem(
+                    icon: Icons.edit_note_rounded,
+                    text: '创建人 ${task.creatorName}',
+                  ),
+              ],
               ),
               if (_period != null)
                 Padding(
@@ -1104,8 +1090,7 @@ class TaskWorkbenchCard extends StatelessWidget {
             ],
           ),
         ),
-      ),
-    );
+      );
   }
 
   String? get _period {
@@ -1138,70 +1123,53 @@ class TaskWorkbenchCard extends StatelessWidget {
     if (groupMode && !pending && onApprove == null && onReject == null) {
       return _compactGoal(context);
     }
-    return Material(
-      color: DunesColors.resolve(
-        context,
-        Colors.white,
-        role: DunesColorRole.surface,
-      ),
-      borderRadius: BorderRadius.circular(14),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(14),
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.fromLTRB(14, 13, 14, 12),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: DunesColors.resolve(
-                context,
-                const Color(0xFFE3E5EA),
-                role: DunesColorRole.border,
-              ),
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.025),
-                blurRadius: 10,
-                offset: const Offset(0, 3),
-              ),
-            ],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    width: 4,
-                    height: 38,
-                    decoration: BoxDecoration(
-                      color: DunesColors.resolveNullable(
-                        context,
-                        statusColor,
-                        role: DunesColorRole.surface,
-                      ),
-                      borderRadius: BorderRadius.circular(4),
+    return _TaskHoverCardShell(
+      accentColor: statusColor,
+      borderRadius: 18,
+      onTap: () {
+        HapticFeedback.selectionClick();
+        onTap();
+      },
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(15, 14, 15, 13),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 3.5,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: DunesColors.resolveNullable(
+                      context,
+                      statusColor,
+                      role: DunesColorRole.surface,
                     ),
+                    borderRadius: BorderRadius.circular(99),
                   ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          task.title,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
-                            height: 1.3,
-                          ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        task.title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 15.5,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: -0.2,
+                          height: 1.32,
                         ),
-                        if (!groupMode && belong.isNotEmpty)
-                          Text(
+                      ),
+                      if (!groupMode && belong.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 2),
+                          child: Text(
                             '所属主目标：$belong',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
@@ -1213,6 +1181,7 @@ class TaskWorkbenchCard extends StatelessWidget {
                               ),
                             ),
                           ),
+                        ),
                         if (statusHint != null && statusHint!.trim().isNotEmpty)
                           Padding(
                             padding: const EdgeInsets.only(top: 4),
@@ -1485,7 +1454,144 @@ class TaskWorkbenchCard extends StatelessWidget {
             ],
           ),
         ),
+      );
+  }
+}
+
+class _TaskHoverCardShell extends StatefulWidget {
+  const _TaskHoverCardShell({
+    required this.accentColor,
+    required this.borderRadius,
+    required this.onTap,
+    required this.child,
+  });
+
+  final Color accentColor;
+  final double borderRadius;
+  final VoidCallback onTap;
+  final Widget child;
+
+  @override
+  State<_TaskHoverCardShell> createState() => _TaskHoverCardShellState();
+}
+
+class _TaskHoverCardShellState extends State<_TaskHoverCardShell> {
+  bool _hovered = false;
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final reduceMotion = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+    final hairline = (1 / MediaQuery.devicePixelRatioOf(context)).clamp(
+      0.33,
+      0.6,
+    );
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) {
+        if (mounted) setState(() => _hovered = true);
+      },
+      onExit: (_) {
+        if (mounted) setState(() => _hovered = false);
+      },
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTapDown: (_) => setState(() => _pressed = true),
+        onTapUp: (_) => setState(() => _pressed = false),
+        onTapCancel: () => setState(() => _pressed = false),
+        onTap: widget.onTap,
+        child: AnimatedSlide(
+          offset: !reduceMotion && _hovered && !_pressed
+              ? const Offset(0, -0.025)
+              : Offset.zero,
+          duration: const Duration(milliseconds: 140),
+          curve: Curves.easeOutCubic,
+          child: AnimatedScale(
+            scale: reduceMotion ? 1.0 : (_pressed ? 0.985 : 1.0),
+            duration: const Duration(milliseconds: 110),
+            curve: Curves.easeOutCubic,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 150),
+              curve: Curves.easeOutCubic,
+              decoration: BoxDecoration(
+                color: _hovered
+                    ? (isDark
+                          ? const Color(0xFF252236)
+                          : const Color(0xFFFCFBFF))
+                    : (isDark ? const Color(0xFF1F1D2C) : Colors.white),
+                borderRadius: BorderRadius.circular(widget.borderRadius),
+                border: Border.all(
+                  color: _hovered
+                      ? widget.accentColor.withValues(alpha: 0.42)
+                      : (isDark
+                            ? Colors.white.withValues(alpha: 0.08)
+                            : Colors.black.withValues(alpha: 0.055)),
+                  width: _hovered ? 0.95 : hairline,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: _hovered
+                        ? widget.accentColor.withValues(
+                            alpha: isDark ? 0.18 : 0.11,
+                          )
+                        : (isDark
+                              ? const Color(0x1E000000)
+                              : const Color(0x093D2C7A)),
+                    blurRadius: _hovered ? 16 : 11,
+                    offset: Offset(0, _hovered ? 5 : 3),
+                  ),
+                ],
+              ),
+              child: widget.child,
+            ),
+          ),
+        ),
       ),
+    );
+  }
+}
+
+class _TaskOwnerBadge extends StatelessWidget {
+  const _TaskOwnerBadge({required this.name, this.rolePrefix = ''});
+
+  final String name;
+  final String rolePrefix;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final initial = name.trim().isNotEmpty ? name.trim().characters.first : '?';
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 18,
+          height: 18,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: kTaskPurple.withValues(alpha: isDark ? 0.28 : 0.14),
+            shape: BoxShape.circle,
+          ),
+          child: Text(
+            initial,
+            style: const TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              color: kTaskPurple,
+            ),
+          ),
+        ),
+        const SizedBox(width: 5),
+        Text(
+          rolePrefix.isNotEmpty ? '$rolePrefix $name' : name,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
+            color: DunesColors.resolve(context, DunesColors.text2),
+          ),
+        ),
+      ],
     );
   }
 }

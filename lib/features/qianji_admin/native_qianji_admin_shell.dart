@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/navigation/navigation_controller.dart';
+import '../../core/theme/dunes_page_transition.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../auth/auth_session.dart';
 import '../auth/auth_session_coordinator.dart';
@@ -113,6 +114,8 @@ enum _WorkbenchView {
 
 class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
   final ScrollController _overviewScroll = ScrollController();
+  final TextEditingController _overviewSearchCtrl = TextEditingController();
+  String _overviewSearchQuery = '';
   late AuthSession _session;
   int _pageIndex = 0;
   double _syncTurns = 0;
@@ -515,6 +518,7 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
   void dispose() {
     userAvatarRefresh.removeListener(_onAvatarRefresh);
     _clearBackInterceptor();
+    _overviewSearchCtrl.dispose();
     _overviewScroll.dispose();
     super.dispose();
   }
@@ -857,19 +861,18 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
               ),
             Expanded(
               key: const ValueKey('workbench-pager-slot'),
-              // 不用 PageView。那一层会在 Windows 上接走滚轮，总览就滑不动，点击也会被拖拽抢走。
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  Offstage(
-                    offstage: _pageIndex != 0,
-                    child: TickerMode(
-                      enabled: _pageIndex == 0,
-                      child: _buildOverviewPage(),
-                    ),
-                  ),
-                  if (_pageIndex != 0) _buildContentPage(),
-                ],
+              // 统一虚化展开/收起转场，同时不抢占 Windows 滚轮事件。
+              child: DunesBlurExpandSwitcher(
+                isBack: _pageIndex == 0,
+                child: _pageIndex == 0
+                    ? KeyedSubtree(
+                        key: const ValueKey('workbench-overview'),
+                        child: _buildOverviewPage(),
+                      )
+                    : KeyedSubtree(
+                        key: ValueKey('workbench-module-$_contentView'),
+                        child: _buildContentPage(),
+                      ),
               ),
             ),
           ],
@@ -1270,19 +1273,36 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
         ),
         child: Center(
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 1180),
+            constraints: const BoxConstraints(maxWidth: 1140),
             child: LayoutBuilder(
               builder: (context, outer) {
-                final pcBento = outer.maxWidth >= 840;
+                final q = _overviewSearchQuery.trim().toLowerCase();
+                List<_WorkbenchTile> filterTiles(List<_WorkbenchTile> list) {
+                  if (q.isEmpty) return list;
+                  return list
+                      .where(
+                        (t) =>
+                            t.title.toLowerCase().contains(q) ||
+                            t.subtitle.toLowerCase().contains(q),
+                      )
+                      .toList(growable: false);
+                }
+
+                final fCollab = filterTiles(collabTiles);
+                final fTool = filterTiles(toolTiles);
+                final fBusiness = filterTiles(businessTiles);
+                final fPeople = filterTiles(peopleTiles);
+
                 final sections = <Widget>[
-                  if (collabTiles.isNotEmpty)
+                  if (fCollab.isNotEmpty)
                     _WorkbenchSection(
                       title: '协同办公',
                       subtitle: '任务流转 · 文件共享',
                       accent: _themePurple,
-                      children: collabTiles,
+                      featured: q.isEmpty && fCollab.length <= 2,
+                      children: fCollab,
                     ),
-                  if (toolTiles.isNotEmpty)
+                  if (fTool.isNotEmpty)
                     _WorkbenchSection(
                       title: '企业应用',
                       subtitle: '高频直达 · 单点免登',
@@ -1290,9 +1310,9 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
                         context,
                         const Color(0xFF3880FF),
                       ),
-                      children: toolTiles,
+                      children: fTool,
                     ),
-                  if (businessTiles.isNotEmpty)
+                  if (fBusiness.isNotEmpty)
                     _WorkbenchSection(
                       title: '业务与财务',
                       subtitle: '提案 · 合同 · 发票 · 对账',
@@ -1300,9 +1320,9 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
                         context,
                         const Color(0xFF0F766E),
                       ),
-                      children: businessTiles,
+                      children: fBusiness,
                     ),
-                  if (peopleTiles.isNotEmpty)
+                  if (fPeople.isNotEmpty)
                     _WorkbenchSection(
                       title: '行政人事',
                       subtitle: '通告 · 绩效 · 薪酬 · 差旅',
@@ -1310,30 +1330,9 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
                         context,
                         const Color(0xFF3D7A8C),
                       ),
-                      children: peopleTiles,
+                      children: fPeople,
                     ),
                 ];
-
-                final bentoRows = <Widget>[];
-                if (pcBento) {
-                  for (var i = 0; i < sections.length; i += 2) {
-                    if (i > 0) bentoRows.add(const SizedBox(height: 16));
-                    bentoRows.add(
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(child: sections[i]),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: i + 1 < sections.length
-                                ? sections[i + 1]
-                                : const SizedBox.shrink(),
-                          ),
-                        ],
-                      ),
-                    );
-                  }
-                }
 
                 return ListView(
                   controller: _overviewScroll,
@@ -1341,9 +1340,9 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
                   physics: const ClampingScrollPhysics(),
                   padding: EdgeInsets.fromLTRB(
                     isDesktopCommOnly ? 24 : 16,
-                    14,
+                    16,
                     isDesktopCommOnly ? 24 : 16,
-                    40,
+                    44,
                   ),
                   children: [
                     _buildSuperHeroCard(
@@ -1351,12 +1350,72 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
                       toolCount: toolTiles.length,
                       adminCount: businessTiles.length + peopleTiles.length,
                     ),
-                    const SizedBox(height: 16),
-                    if (pcBento)
-                      ...bentoRows
+                    const SizedBox(height: 20),
+                    if (sections.isEmpty && q.isNotEmpty)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 24,
+                          vertical: 42,
+                        ),
+                        decoration: BoxDecoration(
+                          color: DunesColors.resolve(
+                            context,
+                            Colors.white,
+                            role: DunesColorRole.surface,
+                          ),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: DunesColors.resolve(
+                              context,
+                              const Color(0xFFEAE7F5),
+                              role: DunesColorRole.border,
+                            ),
+                            width: 0.8,
+                          ),
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.search_off_rounded,
+                              size: 36,
+                              color: DunesColors.resolve(
+                                context,
+                                const Color(0xFFA0A0B0),
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            Text(
+                              '未找到与「$_overviewSearchQuery」相关的应用',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500,
+                                color: DunesColors.resolve(
+                                  context,
+                                  const Color(0xFF6E6E73),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            TextButton(
+                              onPressed: () {
+                                _overviewSearchCtrl.clear();
+                                setState(() => _overviewSearchQuery = '');
+                              },
+                              child: Text(
+                                '清空搜索',
+                                style: TextStyle(
+                                  color: DunesColors.brandPurple,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
                     else
                       for (var i = 0; i < sections.length; i++) ...[
-                        if (i > 0) const SizedBox(height: 14),
+                        if (i > 0) const SizedBox(height: 18),
                         sections[i],
                       ],
                   ],
@@ -1404,7 +1463,20 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
     if (avatarPreset.isEmpty) avatarPreset = _session.avatarPreset.trim();
     final initial = name.characters.isNotEmpty ? name.characters.first : '沙';
 
-    Widget statColumn(String label, int count) {
+    final now = DateTime.now();
+    final hour = now.hour;
+    final greeting = hour < 6
+        ? '夜深了'
+        : hour < 12
+        ? '上午好'
+        : hour < 18
+        ? '下午好'
+        : '晚上好';
+    const weekdays = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
+    final dateBadge = '${now.month}月${now.day}日 · ${weekdays[now.weekday - 1]}';
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    Widget statColumn(String label, int count, Color dotColor) {
       return Expanded(
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 2),
@@ -1414,20 +1486,38 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
               Text(
                 '$count',
                 style: TextStyle(
-                  fontSize: 17,
+                  fontSize: 19,
                   fontWeight: FontWeight.w700,
-                  letterSpacing: -0.3,
+                  letterSpacing: -0.4,
                   color: DunesColors.resolve(context, const Color(0xFF1D1D1F)),
                 ),
               ),
-              const SizedBox(height: 2),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 11.5,
-                  fontWeight: FontWeight.w500,
-                  color: DunesColors.resolve(context, const Color(0xFF8E8E93)),
-                ),
+              const SizedBox(height: 3),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 6,
+                    height: 6,
+                    decoration: BoxDecoration(
+                      color: dotColor,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 5),
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w500,
+                      color: DunesColors.resolve(
+                        context,
+                        const Color(0xFF8E8E93),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -1435,235 +1525,352 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
       );
     }
 
-    return Container(
+    final searchField = Container(
+      height: 38,
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(22),
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            DunesColors.resolve(
-              context,
-              Colors.white,
-              role: DunesColorRole.surface,
-            ),
-            DunesColors.resolve(
-              context,
-              const Color(0xFFF9F7FD),
-              role: DunesColorRole.surface,
+        color: isDark
+            ? Colors.white.withValues(alpha: 0.06)
+            : const Color(0xFFF4F2FA),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.08)
+              : const Color(0xFFE7E2F6),
+          width: 0.8,
+        ),
+      ),
+      child: TextField(
+        controller: _overviewSearchCtrl,
+        onChanged: (v) => setState(() => _overviewSearchQuery = v),
+        style: TextStyle(
+          fontSize: 13,
+          color: DunesColors.resolve(context, const Color(0xFF1D1D1F)),
+        ),
+        decoration: InputDecoration(
+          hintText: '搜索应用、审批、工具…',
+          hintStyle: TextStyle(
+            fontSize: 13,
+            color: DunesColors.resolve(context, const Color(0xFF8E8E93)),
+          ),
+          prefixIcon: Icon(
+            Icons.search_rounded,
+            size: 17,
+            color: DunesColors.resolve(context, const Color(0xFF8E8E93)),
+          ),
+          suffixIcon: _overviewSearchQuery.isNotEmpty
+              ? IconButton(
+                  icon: const Icon(Icons.close_rounded, size: 15),
+                  splashRadius: 14,
+                  onPressed: () {
+                    _overviewSearchCtrl.clear();
+                    setState(() => _overviewSearchQuery = '');
+                  },
+                )
+              : null,
+          border: InputBorder.none,
+          isDense: true,
+          contentPadding: const EdgeInsets.symmetric(vertical: 10),
+        ),
+      ),
+    );
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(22),
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(22),
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: isDark
+                ? const [Color(0xFF232033), Color(0xFF1B1928)]
+                : const [Colors.white, Color(0xFFF6F2FE)],
+          ),
+          border: Border.all(
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.08)
+                : const Color(0xFFE7E2F6),
+            width: 0.8,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: isDark
+                  ? const Color(0x28000000)
+                  : const Color(0x0E583EA8),
+              blurRadius: 22,
+              offset: const Offset(0, 6),
             ),
           ],
         ),
-        border: Border.all(
-          color: DunesColors.resolve(
-            context,
-            const Color(0xFFE5E5EA),
-            role: DunesColorRole.border,
-          ),
-          width: 0.8,
-        ),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x0A000000),
-            blurRadius: 20,
-            offset: Offset(0, 6),
-          ),
-        ],
-      ),
-      padding: const EdgeInsets.fromLTRB(18, 16, 18, 14),
-      child: LayoutBuilder(
-        builder: (context, heroConstraints) {
-          final isWideHero = heroConstraints.maxWidth >= 680;
-          final syncButton = InkWell(
-            onTap: () async {
-              HapticFeedback.selectionClick();
-              setState(() => _syncTurns += 1);
-              await _refreshSessionOnEnter();
-              if (!context.mounted) return;
-              showDunesToast(context, '工作台权限与应用已同步');
-            },
-            borderRadius: BorderRadius.circular(18),
-            child: Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 12,
-                vertical: 7,
-              ),
-              decoration: BoxDecoration(
-                color: DunesColors.resolve(
-                  context,
-                  DunesColors.brandPurpleSoft,
-                  role: DunesColorRole.surface,
-                ),
-                borderRadius: BorderRadius.circular(18),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  AnimatedRotation(
-                    turns: _syncTurns,
-                    duration: const Duration(milliseconds: 600),
-                    curve: Curves.easeOutCubic,
-                    child: Icon(
-                      Icons.sync_rounded,
-                      size: 14,
-                      color: DunesColors.resolve(
-                        context,
-                        DunesColors.brandPurple,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    '同步',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: DunesColors.resolve(
-                        context,
-                        DunesColors.brandPurple,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-
-          final profileRow = Row(
-            children: [
-              NativeAvatarCircle(
-                size: 48,
-                avatarPreset: avatarPreset,
-                avatarUrl: avatarUrl,
-                fallbackText: initial,
-                borderColor: DunesColors.resolve(
-                  context,
-                  DunesColors.brandPurpleLine,
-                  role: DunesColorRole.border,
-                ),
-                borderWidth: 1.5,
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: DunesColors.resolve(
-                          context,
-                          const Color(0xFF1D1D1F),
+        child: Stack(
+          children: [
+            // 右上角极柔和品牌紫光晕，消除白板空洞感
+            Positioned(
+              right: -40,
+              top: -48,
+              child: IgnorePointer(
+                child: Container(
+                  width: 220,
+                  height: 220,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: RadialGradient(
+                      colors: [
+                        DunesColors.brandPurple.withValues(
+                          alpha: isDark ? 0.16 : 0.10,
                         ),
-                        fontSize: 18,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: -0.3,
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      identityLine,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: DunesColors.resolve(
-                          context,
-                          const Color(0xFF6E6E73),
-                        ),
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w400,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              if (isWideHero) ...[
-                const SizedBox(width: 16),
-                SizedBox(
-                  width: 300,
-                  child: IntrinsicHeight(
-                    child: Row(
-                      children: [
-                        statColumn('协同业务', collaborationCount),
-                        VerticalDivider(
-                          width: 0.6,
-                          thickness: 0.6,
-                          color: DunesColors.resolve(
-                            context,
-                            const Color(0xFFEFEFF4),
-                            role: DunesColorRole.border,
-                          ),
-                        ),
-                        statColumn('便捷工具', toolCount),
-                        VerticalDivider(
-                          width: 0.6,
-                          thickness: 0.6,
-                          color: DunesColors.resolve(
-                            context,
-                            const Color(0xFFEFEFF4),
-                            role: DunesColorRole.border,
-                          ),
-                        ),
-                        statColumn('管理赋能', adminCount),
+                        Colors.transparent,
                       ],
                     ),
                   ),
                 ),
-                const SizedBox(width: 16),
-              ] else
-                const SizedBox(width: 8),
-              syncButton,
-            ],
-          );
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
+              child: LayoutBuilder(
+                builder: (context, heroConstraints) {
+                  final isWideHero = heroConstraints.maxWidth >= 680;
+                  final syncButton = InkWell(
+                    onTap: () async {
+                      HapticFeedback.selectionClick();
+                      setState(() => _syncTurns += 1);
+                      await _refreshSessionOnEnter();
+                      if (!context.mounted) return;
+                      showDunesToast(context, '工作台权限与应用已同步');
+                    },
+                    borderRadius: BorderRadius.circular(18),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 7,
+                      ),
+                      decoration: BoxDecoration(
+                        color: DunesColors.resolve(
+                          context,
+                          DunesColors.brandPurpleSoft,
+                          role: DunesColorRole.surface,
+                        ),
+                        borderRadius: BorderRadius.circular(18),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          AnimatedRotation(
+                            turns: _syncTurns,
+                            duration: const Duration(milliseconds: 600),
+                            curve: Curves.easeOutCubic,
+                            child: Icon(
+                              Icons.sync_rounded,
+                              size: 14,
+                              color: DunesColors.resolve(
+                                context,
+                                DunesColors.brandPurple,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            '同步',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: DunesColors.resolve(
+                                context,
+                                DunesColors.brandPurple,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
 
-          if (isWideHero) return profileRow;
-          return Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              profileRow,
-              const SizedBox(height: 14),
-              Divider(
-                height: 0.6,
-                thickness: 0.6,
-                color: DunesColors.resolve(
-                  context,
-                  const Color(0xFFEFEFF4),
-                  role: DunesColorRole.border,
-                ),
-              ),
-              const SizedBox(height: 10),
-              IntrinsicHeight(
-                child: Row(
-                  children: [
-                    statColumn('协同业务', collaborationCount),
-                    VerticalDivider(
-                      width: 0.6,
-                      thickness: 0.6,
-                      color: DunesColors.resolve(
-                        context,
-                        const Color(0xFFEFEFF4),
-                        role: DunesColorRole.border,
+                  final profileRow = Row(
+                    children: [
+                      NativeAvatarCircle(
+                        size: 50,
+                        avatarPreset: avatarPreset,
+                        avatarUrl: avatarUrl,
+                        fallbackText: initial,
+                        borderColor: DunesColors.resolve(
+                          context,
+                          DunesColors.brandPurpleLine,
+                          role: DunesColorRole.border,
+                        ),
+                        borderWidth: 1.5,
                       ),
-                    ),
-                    statColumn('便捷工具', toolCount),
-                    VerticalDivider(
-                      width: 0.6,
-                      thickness: 0.6,
-                      color: DunesColors.resolve(
-                        context,
-                        const Color(0xFFEFEFF4),
-                        role: DunesColorRole.border,
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 4,
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              children: [
+                                Text(
+                                  '$greeting，$name',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    color: DunesColors.resolve(
+                                      context,
+                                      const Color(0xFF1D1D1F),
+                                    ),
+                                    fontSize: 18.5,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: -0.3,
+                                  ),
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: DunesColors.brandPurple.withValues(
+                                      alpha: isDark ? 0.22 : 0.09,
+                                    ),
+                                    borderRadius: BorderRadius.circular(99),
+                                  ),
+                                  child: Text(
+                                    dateBadge,
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                      color: DunesColors.resolve(
+                                        context,
+                                        DunesColors.brandPurple,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              identityLine,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: DunesColors.resolve(
+                                  context,
+                                  const Color(0xFF6E6E73),
+                                ),
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w400,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                    statColumn('管理赋能', adminCount),
-                  ],
-                ),
+                      if (isWideHero) ...[
+                        const SizedBox(width: 16),
+                        SizedBox(
+                          width: 288,
+                          child: IntrinsicHeight(
+                            child: Row(
+                              children: [
+                                statColumn(
+                                  '协同业务',
+                                  collaborationCount,
+                                  DunesColors.brandPurple,
+                                ),
+                                VerticalDivider(
+                                  width: 0.5,
+                                  thickness: 0.5,
+                                  color: DunesColors.resolve(
+                                    context,
+                                    const Color(0xFFE6E3F0),
+                                    role: DunesColorRole.border,
+                                  ),
+                                ),
+                                statColumn(
+                                  '企业应用',
+                                  toolCount,
+                                  const Color(0xFF3880FF),
+                                ),
+                                VerticalDivider(
+                                  width: 0.5,
+                                  thickness: 0.5,
+                                  color: DunesColors.resolve(
+                                    context,
+                                    const Color(0xFFE6E3F0),
+                                    role: DunesColorRole.border,
+                                  ),
+                                ),
+                                statColumn(
+                                  '管理赋能',
+                                  adminCount,
+                                  const Color(0xFF0F766E),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 14),
+                      ] else
+                        const SizedBox(width: 8),
+                      syncButton,
+                    ],
+                  );
+
+                  if (isWideHero) {
+                    return Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        profileRow,
+                        const SizedBox(height: 14),
+                        SizedBox(width: 340, child: searchField),
+                      ],
+                    );
+                  }
+                  return Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      profileRow,
+                      const SizedBox(height: 12),
+                      searchField,
+                      const SizedBox(height: 12),
+                      Divider(
+                        height: 0.5,
+                        thickness: 0.5,
+                        color: DunesColors.resolve(
+                          context,
+                          const Color(0xFFEFEFF4),
+                          role: DunesColorRole.border,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          statColumn(
+                            '协同业务',
+                            collaborationCount,
+                            DunesColors.brandPurple,
+                          ),
+                          statColumn(
+                            '企业应用',
+                            toolCount,
+                            const Color(0xFF3880FF),
+                          ),
+                          statColumn(
+                            '管理赋能',
+                            adminCount,
+                            const Color(0xFF0F766E),
+                          ),
+                        ],
+                      ),
+                    ],
+                  );
+                },
               ),
-            ],
-          );
-        },
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1745,105 +1952,118 @@ class _WorkbenchSection extends StatelessWidget {
     required this.subtitle,
     required this.accent,
     required this.children,
+    this.featured = false,
   });
 
   final String title;
   final String subtitle;
   final Color accent;
   final List<_WorkbenchTile> children;
+  final bool featured;
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(6, 2, 6, 8),
+          padding: const EdgeInsets.fromLTRB(4, 2, 4, 10),
           child: Row(
             children: [
-              Expanded(
+              Container(
+                width: 3.5,
+                height: 15,
+                decoration: BoxDecoration(
+                  color: accent,
+                  borderRadius: BorderRadius.circular(99),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                title,
+                style: TextStyle(
+                  fontSize: 15.5,
+                  fontWeight: FontWeight.w700,
+                  color: DunesColors.resolve(
+                    context,
+                    const Color(0xFF1D1D1F),
+                  ),
+                  letterSpacing: -0.2,
+                ),
+              ),
+              if (subtitle.isNotEmpty) ...[
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    subtitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w400,
+                      color: DunesColors.resolve(
+                        context,
+                        const Color(0xFF8E8E93),
+                      ),
+                    ),
+                  ),
+                ),
+              ] else
+                const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: isDark
+                      ? Colors.white.withValues(alpha: 0.06)
+                      : const Color(0xFFF1EEF9),
+                  borderRadius: BorderRadius.circular(99),
+                ),
                 child: Text(
-                  title,
+                  '${children.length} 项',
                   style: TextStyle(
-                    fontSize: 15,
+                    fontSize: 11.5,
                     fontWeight: FontWeight.w600,
                     color: DunesColors.resolve(
                       context,
-                      const Color(0xFF1D1D1F),
+                      const Color(0xFF7A788B),
                     ),
-                    letterSpacing: -0.2,
-                  ),
-                ),
-              ),
-              Text(
-                '${children.length}项',
-                style: TextStyle(
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w500,
-                  color: DunesColors.resolve(
-                    context,
-                    const Color(0xFF8E8E93),
                   ),
                 ),
               ),
             ],
           ),
         ),
-        Container(
-          width: double.infinity,
-          decoration: BoxDecoration(
-            color: DunesColors.resolve(
-              context,
-              Colors.white,
-              role: DunesColorRole.surface,
-            ),
-            borderRadius: BorderRadius.circular(22),
-            border: Border.all(
-              color: DunesColors.resolve(
-                context,
-                const Color(0xFFE5E5EA),
-                role: DunesColorRole.border,
-              ),
-              width: 0.8,
-            ),
-            boxShadow: const [
-              BoxShadow(
-                color: Color(0x07000000),
-                blurRadius: 16,
-                offset: Offset(0, 4),
-              ),
-            ],
-          ),
-          padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
-          child: LayoutBuilder(
-            builder: (context, c) {
-              final width = c.maxWidth;
-              final int perRow;
-              const double gap = 10.0;
-              if (width < 560) {
-                perRow = 2;
-              } else if (width < 880) {
-                perRow = 3;
-              } else {
-                perRow = 4;
-              }
+        LayoutBuilder(
+          builder: (context, c) {
+            final width = c.maxWidth;
+            final int perRow;
+            const double gap = 12.0;
+            if (featured) {
+              perRow = width < 520 ? 1 : 2;
+            } else if (width < 560) {
+              perRow = 2;
+            } else if (width < 920 || children.length <= 3 || children.length == 6) {
+              perRow = 3;
+            } else {
+              perRow = 4;
+            }
 
-              final tileWidth = ((width - gap * (perRow - 1)) / perRow)
-                  .floorToDouble();
+            final tileWidth = ((width - gap * (perRow - 1)) / perRow)
+                .floorToDouble();
 
-              return Wrap(
-                spacing: gap,
-                runSpacing: gap,
-                children: [
-                  for (final tile in children)
-                    SizedBox(
-                      width: tileWidth,
-                      child: _WorkbenchCard(tile: tile),
-                    ),
-                ],
-              );
-            },
-          ),
+            return Wrap(
+              spacing: gap,
+              runSpacing: gap,
+              children: [
+                for (final tile in children)
+                  SizedBox(
+                    width: tileWidth,
+                    child: _WorkbenchCard(tile: tile, featured: featured),
+                  ),
+              ],
+            );
+          },
         ),
       ],
     );
@@ -1869,9 +2089,10 @@ class _WorkbenchTile {
 }
 
 class _WorkbenchCard extends StatefulWidget {
-  const _WorkbenchCard({required this.tile});
+  const _WorkbenchCard({required this.tile, this.featured = false});
 
   final _WorkbenchTile tile;
+  final bool featured;
 
   @override
   State<_WorkbenchCard> createState() => _WorkbenchCardState();
@@ -1884,174 +2105,244 @@ class _WorkbenchCardState extends State<_WorkbenchCard> {
   @override
   Widget build(BuildContext context) {
     final tile = widget.tile;
+    final featured = widget.featured;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final opacity = tile.enabled ? 1.0 : 0.45;
+    final iconSize = featured ? 44.0 : 40.0;
 
     return MouseRegion(
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
+      onEnter: (_) {
+        if (mounted) setState(() => _hovered = true);
+      },
+      onExit: (_) {
+        if (mounted) setState(() => _hovered = false);
+      },
       cursor: tile.enabled
           ? SystemMouseCursors.click
           : SystemMouseCursors.basic,
       child: Opacity(
         opacity: opacity,
-        child: AnimatedScale(
-          scale: _pressed ? 0.91 : (_hovered ? 1.03 : 1.0),
-          duration: const Duration(milliseconds: 120),
+        child: AnimatedSlide(
+          offset: _hovered && !_pressed
+              ? const Offset(0, -0.04)
+              : Offset.zero,
+          duration: const Duration(milliseconds: 140),
           curve: Curves.easeOutCubic,
-          child: Material(
-            color: Colors.transparent,
-            child: InkWell(
-              borderRadius: BorderRadius.circular(14),
-              hoverColor: Colors.transparent,
-              splashColor: Colors.transparent,
-              highlightColor: Colors.transparent,
-              onTap: tile.enabled
-                  ? () {
-                      HapticFeedback.selectionClick();
-                      tile.onTap?.call();
-                    }
-                  : null,
-              onTapDown: tile.enabled
-                  ? (_) => setState(() => _pressed = true)
-                  : null,
-              onTapUp: tile.enabled
-                  ? (_) => setState(() => _pressed = false)
-                  : null,
-              onTapCancel: tile.enabled
-                  ? () => setState(() => _pressed = false)
-                  : null,
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 140),
-              curve: Curves.easeOutCubic,
-              padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 10),
-              decoration: BoxDecoration(
-                color: _hovered
-                    ? DunesColors.resolve(
-                        context,
-                        const Color(0xFFF2F2F7),
-                        role: DunesColorRole.surface,
-                      )
-                    : DunesColors.resolve(
-                        context,
-                        const Color(0xFFF9F9FB),
-                        role: DunesColorRole.surface,
-                      ),
-                borderRadius: BorderRadius.circular(15),
-                border: Border.all(
-                  color: _hovered
-                      ? tile.color.withValues(alpha: 0.30)
-                      : DunesColors.resolve(
-                          context,
-                          const Color(0xFFEAEAEF),
-                          role: DunesColorRole.border,
-                        ),
-                  width: 0.7,
-                ),
-              ),
-              child: Row(
-                children: [
-                  AnimatedContainer(
-                    duration: const Duration(milliseconds: 140),
-                    curve: Curves.easeOutCubic,
-                    width: 38,
-                    height: 38,
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [
-                          Color.lerp(tile.color, Colors.white, 0.24)!,
-                          tile.color,
-                          Color.lerp(tile.color, Colors.black, 0.14)!,
-                        ],
-                        stops: const [0.0, 0.58, 1.0],
-                      ),
-                      borderRadius: BorderRadius.circular(11),
-                      border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.36),
-                        width: 0.7,
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: tile.color.withValues(
-                            alpha: _hovered ? 0.32 : 0.22,
-                          ),
-                          blurRadius: _hovered ? 10 : 7,
-                          offset: Offset(0, _hovered ? 4 : 3),
-                        ),
-                      ],
+          child: AnimatedScale(
+            scale: _pressed ? 0.97 : 1.0,
+            duration: const Duration(milliseconds: 110),
+            curve: Curves.easeOutCubic,
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(18),
+                hoverColor: Colors.transparent,
+                splashColor: Colors.transparent,
+                highlightColor: Colors.transparent,
+                onTap: tile.enabled
+                    ? () {
+                        HapticFeedback.selectionClick();
+                        tile.onTap?.call();
+                      }
+                    : null,
+                onTapDown: tile.enabled
+                    ? (_) => setState(() => _pressed = true)
+                    : null,
+                onTapUp: tile.enabled
+                    ? (_) => setState(() => _pressed = false)
+                    : null,
+                onTapCancel: tile.enabled
+                    ? () => setState(() => _pressed = false)
+                    : null,
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 150),
+                  curve: Curves.easeOutCubic,
+                  padding: EdgeInsets.symmetric(
+                    horizontal: featured ? 16 : 14,
+                    vertical: featured ? 15 : 13,
+                  ),
+                  decoration: BoxDecoration(
+                    gradient: featured
+                        ? LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: isDark
+                                ? [
+                                    const Color(0xFF232032),
+                                    tile.color.withValues(alpha: 0.14),
+                                  ]
+                                : [
+                                    Colors.white,
+                                    tile.color.withValues(alpha: 0.06),
+                                  ],
+                          )
+                        : null,
+                    color: featured
+                        ? null
+                        : (_hovered
+                              ? (isDark
+                                    ? const Color(0xFF262336)
+                                    : const Color(0xFFFAF8FF))
+                              : (isDark
+                                    ? const Color(0xFF1F1D2C)
+                                    : Colors.white)),
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(
+                      color: _hovered
+                          ? tile.color.withValues(alpha: 0.42)
+                          : (isDark
+                                ? Colors.white.withValues(alpha: 0.07)
+                                : const Color(0xFFEBE8F4)),
+                      width: _hovered ? 1.0 : 0.75,
                     ),
-                    child: Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        Positioned(
-                          top: 0,
-                          left: 0,
-                          right: 0,
-                          height: 18,
-                          child: DecoratedBox(
-                            decoration: BoxDecoration(
-                              borderRadius: const BorderRadius.vertical(
-                                top: Radius.circular(10),
-                              ),
-                              gradient: LinearGradient(
-                                begin: Alignment.topCenter,
-                                end: Alignment.bottomCenter,
-                                colors: [
-                                  Colors.white.withValues(alpha: 0.28),
-                                  Colors.white.withValues(alpha: 0.0),
-                                ],
-                              ),
-                            ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: _hovered
+                            ? tile.color.withValues(
+                                alpha: isDark ? 0.18 : 0.12,
+                              )
+                            : (isDark
+                                  ? const Color(0x20000000)
+                                  : const Color(0x09583EA8)),
+                        blurRadius: _hovered ? 16 : 10,
+                        offset: Offset(0, _hovered ? 5 : 3),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    children: [
+                      AnimatedContainer(
+                        duration: const Duration(milliseconds: 140),
+                        curve: Curves.easeOutCubic,
+                        width: iconSize,
+                        height: iconSize,
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [
+                              Color.lerp(tile.color, Colors.white, 0.24)!,
+                              tile.color,
+                              Color.lerp(tile.color, Colors.black, 0.14)!,
+                            ],
+                            stops: const [0.0, 0.58, 1.0],
                           ),
-                        ),
-                        Icon(
-                          tile.icon,
-                          color: Colors.white,
-                          size: 20,
-                          shadows: [
-                            Shadow(
-                              color: Colors.black.withValues(alpha: 0.16),
-                              blurRadius: 3,
-                              offset: const Offset(0, 1),
+                          borderRadius: BorderRadius.circular(
+                            featured ? 13 : 12,
+                          ),
+                          border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.36),
+                            width: 0.7,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: tile.color.withValues(
+                                alpha: _hovered ? 0.34 : 0.22,
+                              ),
+                              blurRadius: _hovered ? 12 : 8,
+                              offset: Offset(0, _hovered ? 4 : 3),
                             ),
                           ],
                         ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      tile.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 13.5,
-                        height: 1.2,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: -0.2,
-                        color: DunesColors.resolve(
-                          context,
-                          const Color(0xFF1D1D1F),
+                        child: Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            Positioned(
+                              top: 0,
+                              left: 0,
+                              right: 0,
+                              height: 18,
+                              child: DecoratedBox(
+                                decoration: BoxDecoration(
+                                  borderRadius: const BorderRadius.vertical(
+                                    top: Radius.circular(11),
+                                  ),
+                                  gradient: LinearGradient(
+                                    begin: Alignment.topCenter,
+                                    end: Alignment.bottomCenter,
+                                    colors: [
+                                      Colors.white.withValues(alpha: 0.28),
+                                      Colors.white.withValues(alpha: 0.0),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                            Icon(
+                              tile.icon,
+                              color: Colors.white,
+                              size: featured ? 22 : 20,
+                              shadows: [
+                                Shadow(
+                                  color: Colors.black.withValues(alpha: 0.16),
+                                  blurRadius: 3,
+                                  offset: const Offset(0, 1),
+                                ),
+                              ],
+                            ),
+                          ],
                         ),
                       ),
-                    ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              tile.title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: featured ? 15 : 14,
+                                height: 1.25,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: -0.2,
+                                color: DunesColors.resolve(
+                                  context,
+                                  const Color(0xFF1D1D1F),
+                                ),
+                              ),
+                            ),
+                            if (tile.subtitle.trim().isNotEmpty) ...[
+                              const SizedBox(height: 3),
+                              Text(
+                                tile.subtitle,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: featured ? 12 : 11.5,
+                                  height: 1.25,
+                                  color: DunesColors.resolve(
+                                    context,
+                                    const Color(0xFF8E8E93),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      AnimatedSlide(
+                        offset: _hovered ? const Offset(0.18, 0) : Offset.zero,
+                        duration: const Duration(milliseconds: 140),
+                        curve: Curves.easeOutCubic,
+                        child: Icon(
+                          Icons.chevron_right_rounded,
+                          size: 17,
+                          color: _hovered
+                              ? tile.color
+                              : DunesColors.resolve(
+                                  context,
+                                  const Color(0xFFC7C7CC),
+                                ),
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 2),
-                  Icon(
-                    Icons.chevron_right_rounded,
-                    size: 16,
-                    color: _hovered
-                        ? tile.color.withValues(alpha: 0.85)
-                        : DunesColors.resolve(
-                            context,
-                            const Color(0xFFC7C7CC),
-                          ),
-                  ),
-                ],
+                ),
               ),
-            ),
             ),
           ),
         ),

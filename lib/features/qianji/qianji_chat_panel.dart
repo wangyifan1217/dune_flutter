@@ -947,7 +947,9 @@ class _QianjiChatPanelState extends State<QianjiChatPanel>
   Widget _buildConversation() {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final bubbleMax = ((constraints.maxWidth - 32) * 0.8).clamp(
+        final isWide = constraints.maxWidth > 820;
+        final contentMax = isWide ? 800.0 : constraints.maxWidth;
+        final bubbleMax = ((contentMax - 32) * 0.78).clamp(
           180.0,
           620.0,
         );
@@ -957,33 +959,49 @@ class _QianjiChatPanelState extends State<QianjiChatPanel>
             : 0;
         return ListView.builder(
           controller: _scroll,
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+          padding: EdgeInsets.fromLTRB(
+            isWide ? 24 : 16,
+            10,
+            isWide ? 24 : 16,
+            20,
+          ),
           itemCount: olderOffset + _turns.length + tail,
           itemBuilder: (context, index) {
-            if (_hasOlder && index == 0) {
+            Widget wrapCentered(Widget child) {
+              if (!isWide) return child;
               return Center(
-                child: TextButton.icon(
-                  style: TextButton.styleFrom(
-                    foregroundColor: _c(_purple),
-                    textStyle: const TextStyle(fontSize: 12),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 800),
+                  child: child,
+                ),
+              );
+            }
+            if (_hasOlder && index == 0) {
+              return wrapCentered(
+                Center(
+                  child: TextButton.icon(
+                    style: TextButton.styleFrom(
+                      foregroundColor: _c(_purple),
+                      textStyle: const TextStyle(fontSize: 12),
+                    ),
+                    onPressed: _busy ? null : _loadOlder,
+                    icon: _busy
+                        ? SizedBox(
+                            width: 12,
+                            height: 12,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 1.6,
+                              color: _c(_purple),
+                            ),
+                          )
+                        : const Icon(Icons.expand_less_rounded, size: 16),
+                    label: Text(_busy ? '加载中…' : '查看更早的对话'),
                   ),
-                  onPressed: _busy ? null : _loadOlder,
-                  icon: _busy
-                      ? SizedBox(
-                          width: 12,
-                          height: 12,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 1.6,
-                            color: _c(_purple),
-                          ),
-                        )
-                      : const Icon(Icons.expand_less_rounded, size: 16),
-                  label: Text(_busy ? '加载中…' : '查看更早的对话'),
                 ),
               );
             }
             final i = index - olderOffset;
-            final gap = EdgeInsets.only(top: i == 0 ? 4 : 20);
+            final gap = EdgeInsets.only(top: i == 0 ? 4 : 24);
             if (i < _turns.length) {
               final turn = _turns[i] as Map;
               final scope = '${turn['scope'] ?? ''}';
@@ -994,60 +1012,63 @@ class _QianjiChatPanelState extends State<QianjiChatPanel>
               final isLast = i == _turns.length - 1 && tail == 0;
               final fresh =
                   _freshReplyId != null && turn['id'] == _freshReplyId;
-              return Padding(
-                padding: gap,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _Appear(
-                      key: ValueKey('q-${turn['id']}'),
-                      skip: fresh,
-                      child: _QuestionBubble(
-                        text: '${turn['question']}',
-                        maxWidth: bubbleMax,
-                        onCopy: () => _copy('${turn['question']}'),
-                        onResend: _busy
-                            ? null
-                            : () => unawaited(_send('${turn['question']}')),
+              return wrapCentered(
+                Padding(
+                  padding: gap,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _Appear(
+                        key: ValueKey('q-${turn['id']}'),
+                        skip: fresh,
+                        child: _QuestionBubble(
+                          text: '${turn['question']}',
+                          maxWidth: bubbleMax,
+                          onCopy: () => _copy('${turn['question']}'),
+                          onResend: _busy
+                              ? null
+                              : () => unawaited(_send('${turn['question']}')),
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 10),
-                    _Appear(
-                      key: ValueKey('r-${turn['id']}'),
-                      child: _ReplyCard(
-                        scope: scope,
-                        reply: reply,
-                        reveal: fresh,
-                        maxWidth: bubbleMax + 40,
-                        onCopy: () => _copy(reply),
-                        onOpenPage: _scopeActions[scope],
-                        data: turnData,
-                        onExport:
-                            exportable &&
-                                !_busy &&
-                                turnId != null &&
-                                !_exportingTurnIds.contains(turnId)
-                            ? () => unawaited(_exportTurn(turn))
-                            : null,
-                        followUps: isLast && !_busy
-                            ? _followUpsFor(turn)
-                            : const [],
-                        onFollowUp: (q) => unawaited(_send(q)),
-                        onRevealed: _scrollToBottom,
-                        onFeedback: turnId == null
-                            ? null
-                            : (helpful) =>
-                                  unawaited(_sendFeedback(turnId, helpful)),
+                      const SizedBox(height: 14),
+                      _Appear(
+                        key: ValueKey('r-${turn['id']}'),
+                        child: _ReplyCard(
+                          scope: scope,
+                          reply: reply,
+                          reveal: fresh,
+                          maxWidth: isWide ? 760 : bubbleMax + 64,
+                          onCopy: () => _copy(reply),
+                          onOpenPage: _scopeActions[scope],
+                          data: turnData,
+                          onExport:
+                              exportable &&
+                                  !_busy &&
+                                  turnId != null &&
+                                  !_exportingTurnIds.contains(turnId)
+                              ? () => unawaited(_exportTurn(turn))
+                              : null,
+                          followUps: isLast && !_busy
+                              ? _followUpsFor(turn)
+                              : const [],
+                          onFollowUp: (q) => unawaited(_send(q)),
+                          onRevealed: _scrollToBottom,
+                          onFeedback: turnId == null
+                              ? null
+                              : (helpful) =>
+                                    unawaited(_sendFeedback(turnId, helpful)),
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               );
             }
             final failed = _failedQuestion;
-            return Padding(
-              padding: gap,
-              child: Column(
+            return wrapCentered(
+              Padding(
+                padding: gap,
+                child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   _Appear(
@@ -1078,6 +1099,7 @@ class _QianjiChatPanelState extends State<QianjiChatPanel>
                         : const _ThinkingCard(key: ValueKey('thinking')),
                   ),
                 ],
+              ),
               ),
             );
           },
@@ -1423,34 +1445,42 @@ class _QianjiChatPanelState extends State<QianjiChatPanel>
         ? navVisual + recordingExtra + 12
         : MediaQuery.paddingOf(context).bottom + 12;
     final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    final isWide = MediaQuery.sizeOf(context).width > 820;
     return AnimatedPadding(
       key: _composerKey,
       duration: reduceMotion
           ? Duration.zero
           : const Duration(milliseconds: 180),
       curve: Curves.easeOutCubic,
-      padding: EdgeInsets.fromLTRB(14, 4, 14, bottom),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          AnimatedSize(
-            duration: const Duration(milliseconds: 220),
-            curve: Curves.easeOutCubic,
-            alignment: Alignment.bottomCenter,
-            child: _error == null
-                ? const SizedBox(width: double.infinity)
-                : Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: _ErrorBanner(message: _error!),
-                  ),
+      padding: EdgeInsets.fromLTRB(isWide ? 24 : 14, 4, isWide ? 24 : 14, bottom),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxWidth: isWide ? 800 : double.infinity,
           ),
-          _ComposerGlowShell(
-            busy: _busy,
-            focused: _composerFocused,
-            child: _buildComposer(),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              AnimatedSize(
+                duration: const Duration(milliseconds: 220),
+                curve: Curves.easeOutCubic,
+                alignment: Alignment.bottomCenter,
+                child: _error == null
+                    ? const SizedBox(width: double.infinity)
+                    : Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: _ErrorBanner(message: _error!),
+                      ),
+              ),
+              _ComposerGlowShell(
+                busy: _busy,
+                focused: _composerFocused,
+                child: _buildComposer(),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -2408,7 +2438,7 @@ class _BoardTile extends StatelessWidget {
   }
 }
 
-class _QuestionBubble extends StatelessWidget {
+class _QuestionBubble extends StatefulWidget {
   const _QuestionBubble({
     required this.text,
     required this.maxWidth,
@@ -2424,6 +2454,30 @@ class _QuestionBubble extends StatelessWidget {
   final bool failed;
 
   @override
+  State<_QuestionBubble> createState() => _QuestionBubbleState();
+}
+
+class _QuestionBubbleState extends State<_QuestionBubble> {
+  bool _hovered = false;
+  bool _copied = false;
+  Timer? _copiedTimer;
+
+  @override
+  void dispose() {
+    _copiedTimer?.cancel();
+    super.dispose();
+  }
+
+  void _handleCopy() {
+    widget.onCopy();
+    _copiedTimer?.cancel();
+    setState(() => _copied = true);
+    _copiedTimer = Timer(const Duration(milliseconds: 1400), () {
+      if (mounted) setState(() => _copied = false);
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     final dark = ImVisualTokens.isDark(context);
     const radius = BorderRadius.only(
@@ -2434,79 +2488,98 @@ class _QuestionBubble extends StatelessWidget {
     );
     final muted = DunesColors.resolve(context, _muted);
     final faint = DunesColors.resolve(context, _faint);
+    final showActions = !isDesktopCommOnly || _hovered || _copied || widget.failed;
 
-    return Align(
-      alignment: Alignment.centerRight,
-      child: ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: maxWidth),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: dark
-                      ? const [
-                          Color(0xFF9071EB),
-                          Color(0xFF7756D6),
-                          Color(0xFF6343BF),
-                        ]
-                      : const [
-                          Color(0xFF9172EC),
-                          Color(0xFF7B5CD8),
-                          Color(0xFF6848C6),
-                        ],
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: Align(
+        alignment: Alignment.centerRight,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: widget.maxWidth),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 15,
+                  vertical: 10,
                 ),
-                borderRadius: radius,
-                border: Border.all(
-                  color: Colors.white.withValues(alpha: 0.18),
-                  width: 0.6,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: ImVisualTokens.purple.withValues(
-                      alpha: dark ? 0.30 : 0.22,
-                    ),
-                    blurRadius: 16,
-                    spreadRadius: -4,
-                    offset: const Offset(0, 6),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: dark
+                        ? const [
+                            Color(0xFF9071EB),
+                            Color(0xFF7756D6),
+                            Color(0xFF6343BF),
+                          ]
+                        : const [
+                            Color(0xFF9172EC),
+                            Color(0xFF7B5CD8),
+                            Color(0xFF6848C6),
+                          ],
                   ),
-                ],
-              ),
-              foregroundDecoration: failed
-                  ? BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.35),
-                      borderRadius: radius,
-                    )
-                  : null,
-              child: Text(
-                text,
-                style: DunesTypography.sans(
-                  fontSize: 14,
-                  height: 1.48,
-                  color: Colors.white,
-                  context: context,
+                  borderRadius: radius,
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.18),
+                    width: 0.6,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: ImVisualTokens.purple.withValues(
+                        alpha: dark ? 0.30 : 0.22,
+                      ),
+                      blurRadius: 16,
+                      spreadRadius: -4,
+                      offset: const Offset(0, 6),
+                    ),
+                  ],
+                ),
+                foregroundDecoration: widget.failed
+                    ? BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.35),
+                        borderRadius: radius,
+                      )
+                    : null,
+                child: Text(
+                  widget.text,
+                  style: DunesTypography.sans(
+                    fontSize: 14.5,
+                    height: 1.5,
+                    color: Colors.white,
+                    context: context,
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(height: 4),
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _UserBubbleAction(label: '复制', color: muted, onTap: onCopy),
-                const SizedBox(width: 12),
-                _UserBubbleAction(
-                  label: '重发',
-                  color: onResend == null ? faint : muted,
-                  onTap: onResend,
+              const SizedBox(height: 4),
+              AnimatedOpacity(
+                duration: const Duration(milliseconds: 160),
+                opacity: showActions ? 1.0 : 0.0,
+                child: IgnorePointer(
+                  ignoring: !showActions,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _UserBubbleAction(
+                        label: _copied ? '已复制' : '复制',
+                        color: _copied ? DunesColors.brandPurple : muted,
+                        onTap: _handleCopy,
+                      ),
+                      const SizedBox(width: 12),
+                      _UserBubbleAction(
+                        label: '重发',
+                        color: widget.onResend == null ? faint : muted,
+                        onTap: widget.onResend,
+                      ),
+                    ],
+                  ),
                 ),
-              ],
-            ),
-          ],
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -2736,44 +2809,42 @@ class _ReplyCardState extends State<_ReplyCard>
 
     final tailProgress = t >= 1 ? 1.0 : ((t - 0.82) / 0.18).clamp(0.0, 1.0);
     final showScope = scope.isNotEmpty && scope != qianjiAllScopes;
-    final baseStyle = TextStyle(fontSize: 13.5, height: 1.6, color: c(_ink));
+    final baseStyle = TextStyle(fontSize: 14.5, height: 1.66, color: c(_ink));
+    // 无框文档流排版：去掉厚重白盒外框，文本自然呼吸展开；结构化要点/表格/趋势图保留精致内嵌卡片。
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         ConstrainedBox(
           constraints: BoxConstraints(maxWidth: widget.maxWidth),
-          child: Container(
-            padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
-            decoration: BoxDecoration(
-              color: ImVisualTokens.cardSurface(context),
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(6),
-                topRight: Radius.circular(18),
-                bottomLeft: Radius.circular(18),
-                bottomRight: Radius.circular(18),
-              ),
-              border: Border.all(
-                color: ImVisualTokens.hairlineBorder(context),
-                width: 0.75,
-              ),
-              boxShadow: ImVisualTokens.softCardShadow(context),
-            ),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(2, 2, 4, 4),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   children: [
-                    const QianjiTaoMark(size: 20),
+                    const QianjiTaoMark(size: 22),
+                    const SizedBox(width: 8),
+                    Text(
+                      '饕',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: c(_ink),
+                      ),
+                    ),
                     if (showScope) ...[
                       const SizedBox(width: 8),
                       Container(
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 7,
-                          vertical: 2,
+                          horizontal: 8,
+                          vertical: 2.5,
                         ),
                         decoration: BoxDecoration(
-                          color: c(_hoverBg, surface: true),
-                          borderRadius: BorderRadius.circular(6),
+                          color: DunesColors.brandPurple.withValues(
+                            alpha: ImVisualTokens.isDark(context) ? 0.18 : 0.09,
+                          ),
+                          borderRadius: BorderRadius.circular(99),
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
@@ -2781,15 +2852,15 @@ class _ReplyCardState extends State<_ReplyCard>
                             Icon(
                               qianjiScopeIcons[scope] ?? Icons.apps_rounded,
                               size: 11,
-                              color: c(_muted),
+                              color: c(_purple),
                             ),
-                            const SizedBox(width: 3),
+                            const SizedBox(width: 4),
                             Text(
                               scope,
                               style: TextStyle(
-                                fontSize: 10.5,
+                                fontSize: 11,
                                 fontWeight: FontWeight.w600,
-                                color: c(_ink),
+                                color: c(_purple),
                               ),
                             ),
                           ],
@@ -2892,10 +2963,12 @@ class _ReplyCardState extends State<_ReplyCard>
                       ),
                     ),
                 ],
-                const SizedBox(height: 6),
+                const SizedBox(height: 8),
                 Opacity(
                   opacity: tailProgress,
-                  child: Row(
+                  child: Wrap(
+                    spacing: 4,
+                    runSpacing: 4,
                     children: [
                       _MiniAction(
                         icon: Icons.copy_rounded,
@@ -3353,57 +3426,99 @@ class _ThinkingCardState extends State<_ThinkingCard>
   @override
   Widget build(BuildContext context) {
     final dot = DunesColors.resolve(context, _purple);
+    final isDark = ImVisualTokens.isDark(context);
+    final reduceMotion = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
     return Align(
       alignment: Alignment.centerLeft,
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(12, 10, 14, 10),
-        decoration: BoxDecoration(
-          color: ImVisualTokens.cardSurface(context),
-          borderRadius: const BorderRadius.only(
-            topLeft: Radius.circular(6),
-            topRight: Radius.circular(18),
-            bottomLeft: Radius.circular(18),
-            bottomRight: Radius.circular(18),
-          ),
-          border: Border.all(
-            color: ImVisualTokens.hairlineBorder(context),
-            width: 0.75,
-          ),
-          boxShadow: ImVisualTokens.softCardShadow(context),
-        ),
-        child: Row(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(2, 4, 4, 4),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            const QianjiTaoMark(size: 20),
-            const SizedBox(width: 10),
-            for (var i = 0; i < 3; i++)
-              AnimatedBuilder(
-                animation: _controller,
-                builder: (context, _) {
-                  final t = (_controller.value + i * 0.18) % 1.0;
-                  final bounce = (t < 0.5 ? t : 1 - t) * 2;
-                  return Transform.translate(
-                    offset: Offset(0, -3 * Curves.easeOut.transform(bounce)),
-                    child: Container(
-                      width: 6,
-                      height: 6,
-                      margin: EdgeInsets.only(right: i < 2 ? 4 : 8),
-                      decoration: BoxDecoration(
-                        color: dot.withValues(alpha: 0.35 + bounce * 0.65),
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                  );
-                },
-              ),
-            DunesShimmerText(
-              '正在识别问题并查询…',
-              style: TextStyle(
-                fontSize: 11.5,
-                fontWeight: FontWeight.w500,
-                color: DunesColors.resolve(context, _muted),
-              ),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const QianjiTaoMark(size: 22),
+                const SizedBox(width: 10),
+                for (var i = 0; i < 3; i++)
+                  AnimatedBuilder(
+                    animation: _controller,
+                    builder: (context, _) {
+                      final t = (_controller.value + i * 0.18) % 1.0;
+                      final bounce = (t < 0.5 ? t : 1 - t) * 2;
+                      return Transform.translate(
+                        offset: Offset(
+                          0,
+                          reduceMotion
+                              ? 0
+                              : -3 * Curves.easeOut.transform(bounce),
+                        ),
+                        child: Container(
+                          width: 6,
+                          height: 6,
+                          margin: EdgeInsets.only(right: i < 2 ? 4 : 8),
+                          decoration: BoxDecoration(
+                            color: dot.withValues(alpha: 0.35 + bounce * 0.65),
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                DunesShimmerText(
+                  '正在识别问题并查询…',
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w500,
+                    color: DunesColors.resolve(context, _muted),
+                  ),
+                ),
+              ],
             ),
+            if (!reduceMotion) ...[
+              const SizedBox(height: 8),
+              Padding(
+                padding: const EdgeInsets.only(left: 32),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(99),
+                  child: SizedBox(
+                    width: 132,
+                    height: 3,
+                    child: AnimatedBuilder(
+                      animation: _controller,
+                      builder: (_, __) {
+                        final slide = _controller.value * 2.0 - 0.5;
+                        return DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: isDark
+                                ? Colors.white.withValues(alpha: 0.08)
+                                : const Color(0xFFEDE8F8),
+                          ),
+                          child: FractionallySizedBox(
+                            alignment: Alignment(slide.clamp(-1.0, 1.0), 0),
+                            widthFactor: 0.42,
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(99),
+                                gradient: const LinearGradient(
+                                  colors: [
+                                    Color(0x007B5CD8),
+                                    DunesColors.brandPurple,
+                                    Color(0xFFB69BFF),
+                                    Color(0x00B69BFF),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       ),

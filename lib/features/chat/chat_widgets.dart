@@ -83,11 +83,11 @@ class ChatConvHeader extends StatelessWidget {
         border: Border(
           bottom: showBottomBorder
               ? BorderSide(
-                  color: DunesColors.resolve(
-                    context,
-                    DunesColors.borderSoft,
-                    role: DunesColorRole.border,
-                  ),
+                  width: (1 / MediaQuery.devicePixelRatioOf(context))
+                      .clamp(0.33, 0.5),
+                  color: Theme.of(context).brightness == Brightness.dark
+                      ? Colors.white.withValues(alpha: 0.06)
+                      : Colors.black.withValues(alpha: 0.05),
                 )
               : BorderSide.none,
         ),
@@ -352,26 +352,10 @@ class ChatQuickActions extends StatelessWidget {
     ];
     if (wide) {
       // PC：桌面 IM 的紧凑图标栏，靠左排列，名称和快捷键放在悬停提示里；
-      // 上沿兼作输入区高度拖动条，和输入框连成一块。
+      // 上沿兼作输入区高度拖动条，透明融入 PC 悬浮圆角输入卡。
       final heightDrag = onHeightDrag;
-      return Container(
+      return SizedBox(
         width: double.infinity,
-        decoration: BoxDecoration(
-          color: DunesColors.resolve(
-            context,
-            DunesColors.bgApp,
-            role: DunesColorRole.surface,
-          ),
-          border: Border(
-            top: BorderSide(
-              color: DunesColors.resolve(
-                context,
-                DunesColors.borderSoft,
-                role: DunesColorRole.border,
-              ),
-            ),
-          ),
-        ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -690,18 +674,21 @@ class ChatInputBar extends StatelessWidget {
             !effectiveVoiceMode &&
             !wide &&
             (showStop || hasText || showMobilePlusButton);
+        final floatingCardMode = wide && backgroundColor == Colors.transparent;
         return TextFieldTapRegion(
           child: Container(
-            padding: EdgeInsets.fromLTRB(
-              wide ? 12 : 6,
-              canResize
-                  ? 0
-                  : (showTopBorder ? (wide ? 10 : 8) : (wide ? 6 : 4)),
-              wide ? 12 : 6,
-              bottomInset > 0
-                  ? bottomInset + (wide ? 6 : 4)
-                  : (wide ? 12.0 : 6.0),
-            ),
+            padding: floatingCardMode
+                ? const EdgeInsets.fromLTRB(4, 0, 4, 4)
+                : EdgeInsets.fromLTRB(
+                    wide ? 12 : 6,
+                    canResize
+                        ? 0
+                        : (showTopBorder ? (wide ? 10 : 8) : (wide ? 6 : 4)),
+                    wide ? 12 : 6,
+                    bottomInset > 0
+                        ? bottomInset + (wide ? 6 : 4)
+                        : (wide ? 12.0 : 6.0),
+                  ),
             decoration: BoxDecoration(
               color:
                   backgroundColor ??
@@ -834,6 +821,7 @@ class ChatInputBar extends StatelessWidget {
                           : wide
                           ? _PcComposerBox(
                               height: inputHeight ?? 108,
+                              seamless: floatingCardMode,
                               controller: controller,
                               focusNode: focusNode,
                               enabled: enabled && !showStop,
@@ -971,6 +959,7 @@ class ChatInputBar extends StatelessWidget {
 class _PcComposerBox extends StatelessWidget {
   const _PcComposerBox({
     required this.height,
+    this.seamless = false,
     required this.controller,
     required this.focusNode,
     required this.enabled,
@@ -989,6 +978,7 @@ class _PcComposerBox extends StatelessWidget {
   });
 
   final double height;
+  final bool seamless;
   final TextEditingController controller;
   final FocusNode? focusNode;
   final bool enabled;
@@ -1007,43 +997,40 @@ class _PcComposerBox extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: height,
-      child: _ComposerChrome(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Expanded(
-              child: _ChatTextField(
-                controller: controller,
-                focusNode: focusNode,
-                enabled: enabled,
-                minLines: 1,
-                maxLines: null,
-                fillParent: true,
-                showOutline: false,
-                wide: true,
-                fieldPadV: fieldPadV,
-                hintText: hintText,
-                onInputFocused: onInputFocused,
-                onTapOutside: onTapOutside,
-                shouldKeepFocusAfterSend: shouldKeepFocusAfterSend,
-                onSend: onSend,
-                onAttemptPasteImage: onAttemptPasteImage,
-                onKeyIntercept: onKeyIntercept,
-              ),
-            ),
-            Padding(
-              padding: isDesktopCommOnly
-                  ? const EdgeInsets.fromLTRB(12, 0, 12, 10)
-                  : const EdgeInsets.fromLTRB(8, 0, 8, 8),
-              child: Align(
-                alignment: Alignment.centerRight,
-                child: ImTapScale(
-                  borderRadius: BorderRadius.circular(9),
-                  pressedScale: 0.94,
-                  onTap: showStop
-                      ? onStop
+    final inner = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Expanded(
+          child: _ChatTextField(
+            controller: controller,
+            focusNode: focusNode,
+            enabled: enabled,
+            minLines: 1,
+            maxLines: null,
+            fillParent: true,
+            showOutline: false,
+            wide: true,
+            fieldPadV: fieldPadV,
+            hintText: hintText,
+            onInputFocused: onInputFocused,
+            onTapOutside: onTapOutside,
+            shouldKeepFocusAfterSend: shouldKeepFocusAfterSend,
+            onSend: onSend,
+            onAttemptPasteImage: onAttemptPasteImage,
+            onKeyIntercept: onKeyIntercept,
+          ),
+        ),
+        Padding(
+          padding: isDesktopCommOnly
+              ? const EdgeInsets.fromLTRB(12, 0, 12, 8)
+              : const EdgeInsets.fromLTRB(8, 0, 8, 8),
+          child: Align(
+            alignment: Alignment.centerRight,
+            child: ImTapScale(
+              borderRadius: BorderRadius.circular(9),
+              pressedScale: 0.94,
+              onTap: showStop
+                  ? onStop
                       : (interactionLocked ? null : onSend),
                   child: AnimatedContainer(
                       duration: ImVisualTokens.fastAnim,
@@ -1122,9 +1109,11 @@ class _PcComposerBox extends StatelessWidget {
                   ),
                 ),
               ),
-          ],
-        ),
-      ),
+      ],
+    );
+    return SizedBox(
+      height: height,
+      child: seamless ? inner : _ComposerChrome(child: inner),
     );
   }
 }

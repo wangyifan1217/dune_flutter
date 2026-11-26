@@ -7286,127 +7286,183 @@ class _NativeChatViewState extends State<NativeChatView>
               failed: _desktopAttachmentFailed,
               onRetry: locked || _mediaBusy ? null : () => _send(),
             ),
-          // PC：工具栏常显在输入区上方；APP：点「+」后在下方展开宫格。
-          if (wide)
-            ChatQuickActions(
-              onCamera: locked || _mediaBusy
-                  ? () {}
-                  : () => _sendImageFrom(ImageSource.camera, '拍照'),
-              onCameraLongPress: locked || _mediaBusy
-                  ? null
-                  : _recordAndSendVideo,
-              onAlbum: locked || _mediaBusy
-                  ? () {}
-                  : _sendMultiImagesFromGallery,
-              onScreenshot: !isDesktopCommOnly || locked || _mediaBusy
-                  ? null
-                  : _desktopScreenshotAndSend,
-              onFile: locked || _mediaBusy ? () {} : _sendFile,
-              onApproval: locked || _mediaBusy
-                  ? () {}
-                  : () => unawaited(_forwardApprovalToChat()),
-              onAt: locked ? null : _pickAtMember,
-              onCreateTask: canCreateTask ? () => unawaited(_createChatTask(assign: false)) : null,
-              onAssignTask: canCreateTask ? () => unawaited(_createChatTask(assign: true)) : null,
-              onEmoji: locked ? null : _toggleEmojiPicker,
-              onVideo: locked || _mediaBusy ? () {} : _pickAndSendVideo,
-              showAt: !_isPrivate,
-              showVideo: true,
-              onHeightDrag: _dragPcInputHeight,
-            ),
-          if (_quoteDraft != null && !_quoteDraft!.isEmpty && !locked)
-            ChatQuotePreviewBar(
-              quote: _quoteDraft!,
-              onCancel: _clearQuoteDraft,
-            ),
-          if (_desktopComposerAttachments.isNotEmpty)
-            _buildDesktopAttachmentTray(),
-          ValueListenableBuilder<bool>(
-            valueListenable: MeetingLiveController.instance.active,
-            builder: (context, meetingLive, _) {
-              // 录音能力仅移动端可用；Chrome/桌面仍显示语音按钮，点击时提示。
-              final voiceSupported =
-                  !kIsWeb &&
-                  defaultTargetPlatform != TargetPlatform.windows &&
-                  defaultTargetPlatform != TargetPlatform.macOS;
-              final voiceBlocked = !voiceSupported || locked || meetingLive;
-              final effectiveVoiceMode = voiceBlocked ? false : _voiceMode;
-              // PC 不展示语音入口；APP 始终展示（不支持时点按提示）。
-              final showVoice = wide ? voiceSupported : true;
-              final inputBar = ChatInputBar(
-                controller: _inputController,
-                focusNode: _inputFocusNode,
-                onKeyIntercept: wide ? _onComposerKeyIntercept : null,
-                showTopBorder:
-                    !wide &&
-                    (_quoteDraft == null || _quoteDraft!.isEmpty || locked),
-                onInputFocused: () {
-                  if (!wide && _toolsOpen) setState(() => _toolsOpen = false);
-                  _scrollToLatestAfterKeyboard();
-                },
-                onTapOutside: _dismissChatKeyboard,
-                shouldKeepFocusAfterSend: () => _composerKeepFocus,
-                inputHeight: wide ? _pcInputHeight : null,
-                voiceMode: effectiveVoiceMode,
-                voiceEnabled: showVoice,
-                sending: _sending,
-                enabled: !locked,
-                hintText: inputHint,
-                onAttemptPasteImage: locked ? null : _attemptPasteImage,
-                onToggleVoice: () {
-                  if (!wide && _toolsOpen) setState(() => _toolsOpen = false);
-                  if (meetingLive) {
-                    _showToast('会议录音进行中，暂无法发送语音');
-                    return;
-                  }
-                  if (!voiceSupported) {
-                    _showToast('当前环境不支持录音');
-                    return;
-                  }
-                  if (locked) return;
-                  setState(() {
-                    _voiceMode = !_voiceMode;
-                    _emojiOpen = false;
-                  });
-                },
-                onSend: () {
-                  _send();
-                },
-                onPlus: wide || locked || _mediaBusy
-                    ? null
-                    : () => setState(() {
-                        _toolsOpen = !_toolsOpen;
-                        if (_toolsOpen) {
-                          _emojiOpen = false;
-                          FocusScope.of(context).unfocus();
+          // PC：整个输入区（工具栏 + 引用条 + 附件 + 输入框）收口到悬浮圆角白卡片里；
+          // APP：保持原有原生贴底输入栏与下方工具宫格。
+          Builder(
+            builder: (context) {
+              final composerChildren = <Widget>[
+                if (wide)
+                  ChatQuickActions(
+                    onCamera: locked || _mediaBusy
+                        ? () {}
+                        : () => _sendImageFrom(ImageSource.camera, '拍照'),
+                    onCameraLongPress: locked || _mediaBusy
+                        ? null
+                        : _recordAndSendVideo,
+                    onAlbum: locked || _mediaBusy
+                        ? () {}
+                        : _sendMultiImagesFromGallery,
+                    onScreenshot: !isDesktopCommOnly || locked || _mediaBusy
+                        ? null
+                        : _desktopScreenshotAndSend,
+                    onFile: locked || _mediaBusy ? () {} : _sendFile,
+                    onApproval: locked || _mediaBusy
+                        ? () {}
+                        : () => unawaited(_forwardApprovalToChat()),
+                    onAt: locked ? null : _pickAtMember,
+                    onCreateTask: canCreateTask
+                        ? () => unawaited(_createChatTask(assign: false))
+                        : null,
+                    onAssignTask: canCreateTask
+                        ? () => unawaited(_createChatTask(assign: true))
+                        : null,
+                    onEmoji: locked ? null : _toggleEmojiPicker,
+                    onVideo: locked || _mediaBusy ? () {} : _pickAndSendVideo,
+                    showAt: !_isPrivate,
+                    showVideo: true,
+                    onHeightDrag: _dragPcInputHeight,
+                  ),
+                if (_quoteDraft != null && !_quoteDraft!.isEmpty && !locked)
+                  ChatQuotePreviewBar(
+                    quote: _quoteDraft!,
+                    onCancel: _clearQuoteDraft,
+                  ),
+                if (_desktopComposerAttachments.isNotEmpty)
+                  _buildDesktopAttachmentTray(),
+                ValueListenableBuilder<bool>(
+                  valueListenable: MeetingLiveController.instance.active,
+                  builder: (context, meetingLive, _) {
+                    // 录音能力仅移动端可用；Chrome/桌面仍显示语音按钮，点击时提示。
+                    final voiceSupported =
+                        !kIsWeb &&
+                        defaultTargetPlatform != TargetPlatform.windows &&
+                        defaultTargetPlatform != TargetPlatform.macOS;
+                    final voiceBlocked =
+                        !voiceSupported || locked || meetingLive;
+                    final effectiveVoiceMode =
+                        voiceBlocked ? false : _voiceMode;
+                    // PC 不展示语音入口；APP 始终展示（不支持时点按提示）。
+                    final showVoice = wide ? voiceSupported : true;
+                    final inputBar = ChatInputBar(
+                      controller: _inputController,
+                      focusNode: _inputFocusNode,
+                      backgroundColor: wide ? Colors.transparent : null,
+                      onKeyIntercept: wide ? _onComposerKeyIntercept : null,
+                      showTopBorder:
+                          !wide &&
+                          (_quoteDraft == null ||
+                              _quoteDraft!.isEmpty ||
+                              locked),
+                      onInputFocused: () {
+                        if (!wide && _toolsOpen) {
+                          setState(() => _toolsOpen = false);
                         }
-                      }),
-                plusOpen: _toolsOpen,
-                onEmoji: locked
-                    ? null
-                    : () {
-                        if (!wide) setState(() => _toolsOpen = false);
-                        _toggleEmojiPicker();
+                        _scrollToLatestAfterKeyboard();
                       },
-                recording: _recording,
-                recordWillCancel: _recordWillCancel,
-                recordWillTranscribe: _recordWillTranscribe,
-                recordDurationMs: _recordDurationMs,
-                onVoiceHoldStart: voiceBlocked
-                    ? null
-                    : (details) => _startHoldRecord(details.globalPosition),
-                onVoiceHoldMove: _onRecordMove,
-                onVoiceHoldEnd: (_) => _finishHoldRecord(),
-                onVoiceHoldCancel: () =>
-                    _cancelHoldRecordInternal(showHint: false),
-              );
-              // 宽窄屏都包一层，避免跨断点时输入框被重建而丢焦点。
-              return OverlayPortal(
-                controller: _desktopAtPortal,
-                overlayChildBuilder: _buildDesktopAtOverlay,
-                child: CompositedTransformTarget(
-                  link: _composerLayerLink,
-                  child: inputBar,
+                      onTapOutside: _dismissChatKeyboard,
+                      shouldKeepFocusAfterSend: () => _composerKeepFocus,
+                      inputHeight: wide ? _pcInputHeight : null,
+                      voiceMode: effectiveVoiceMode,
+                      voiceEnabled: showVoice,
+                      sending: _sending,
+                      enabled: !locked,
+                      hintText: inputHint,
+                      onAttemptPasteImage: locked ? null : _attemptPasteImage,
+                      onToggleVoice: () {
+                        if (!wide && _toolsOpen) {
+                          setState(() => _toolsOpen = false);
+                        }
+                        if (meetingLive) {
+                          _showToast('会议录音进行中，暂无法发送语音');
+                          return;
+                        }
+                        if (!voiceSupported) {
+                          _showToast('当前环境不支持录音');
+                          return;
+                        }
+                        if (locked) return;
+                        setState(() {
+                          _voiceMode = !_voiceMode;
+                          _emojiOpen = false;
+                        });
+                      },
+                      onSend: () {
+                        _send();
+                      },
+                      onPlus: wide || locked || _mediaBusy
+                          ? null
+                          : () => setState(() {
+                              _toolsOpen = !_toolsOpen;
+                              if (_toolsOpen) {
+                                _emojiOpen = false;
+                                FocusScope.of(context).unfocus();
+                              }
+                            }),
+                      plusOpen: _toolsOpen,
+                      onEmoji: locked
+                          ? null
+                          : () {
+                              if (!wide) setState(() => _toolsOpen = false);
+                              _toggleEmojiPicker();
+                            },
+                      recording: _recording,
+                      recordWillCancel: _recordWillCancel,
+                      recordWillTranscribe: _recordWillTranscribe,
+                      recordDurationMs: _recordDurationMs,
+                      onVoiceHoldStart: voiceBlocked
+                          ? null
+                          : (details) =>
+                              _startHoldRecord(details.globalPosition),
+                      onVoiceHoldMove: _onRecordMove,
+                      onVoiceHoldEnd: (_) => _finishHoldRecord(),
+                      onVoiceHoldCancel: () =>
+                          _cancelHoldRecordInternal(showHint: false),
+                    );
+                    // 宽窄屏都包一层，避免跨断点时输入框被重建而丢焦点。
+                    return OverlayPortal(
+                      controller: _desktopAtPortal,
+                      overlayChildBuilder: _buildDesktopAtOverlay,
+                      child: CompositedTransformTarget(
+                        link: _composerLayerLink,
+                        child: inputBar,
+                      ),
+                    );
+                  },
+                ),
+              ];
+              if (!wide) {
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: composerChildren,
+                );
+              }
+              final isDark = Theme.of(context).brightness == Brightness.dark;
+              return Container(
+                margin: const EdgeInsets.fromLTRB(14, 4, 14, 14),
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF211F2D) : Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: isDark
+                        ? Colors.white.withValues(alpha: 0.08)
+                        : const Color(0xFFE6E1F4),
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: isDark
+                          ? const Color(0x30000000)
+                          : const Color(0x10583EA8),
+                      blurRadius: 16,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(15),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: composerChildren,
+                  ),
                 ),
               );
             },
@@ -8048,54 +8104,175 @@ class _NativeChatViewState extends State<NativeChatView>
   }
 
   Future<String?> _pickForwardMode() async {
-    return showModalBottomSheet<String>(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (_) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-          child: ImFrostedIsland(
-            borderRadius: 22,
-            padding: const EdgeInsets.fromLTRB(12, 14, 12, 8),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: _forwardModeCard(
-                        icon: Icons.splitscreen_outlined,
-                        title: '逐条转发',
-                        subtitle: '每条消息独立发送',
-                        onTap: () => Navigator.of(context).pop('separate'),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: _forwardModeCard(
-                        icon: Icons.view_agenda_outlined,
-                        title: '合并转发',
-                        subtitle: '打包为聊天记录卡片',
-                        onTap: () => Navigator.of(context).pop('merged'),
-                      ),
-                    ),
-                  ],
+    final selectedCount = _multiSelectedMessageIds.length;
+    Widget buildContent(BuildContext sheetCtx, {required bool isDialog}) {
+      final isDark = Theme.of(sheetCtx).brightness == Brightness.dark;
+      final hairline = (1 / MediaQuery.devicePixelRatioOf(sheetCtx))
+          .clamp(0.33, 0.5);
+      return ImFrostedIsland(
+        borderRadius: isDialog ? 20 : 24,
+        padding: EdgeInsets.fromLTRB(16, isDialog ? 16 : 12, 16, 14),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (!isDialog) ...[
+              Center(
+                child: Container(
+                  width: 36,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 12),
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? Colors.white.withValues(alpha: 0.16)
+                        : Colors.black.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(99),
+                  ),
                 ),
-                const SizedBox(height: 10),
-                SizedBox(
-                  width: double.infinity,
-                  child: TextButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    style: TextButton.styleFrom(
-                      foregroundColor: DunesColors.resolve(
-                        context,
-                        DunesColors.text2,
+              ),
+            ],
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '选择转发方式',
+                        style: DunesTypography.sans(
+                          fontSize: 15.5,
+                          fontWeight: FontWeight.w700,
+                          color: DunesColors.resolve(
+                            sheetCtx,
+                            DunesColors.text,
+                          ),
+                          context: sheetCtx,
+                        ),
+                      ),
+                      if (selectedCount > 0) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          '已选 $selectedCount 条消息',
+                          style: DunesTypography.sans(
+                            fontSize: 12,
+                            color: DunesColors.resolve(
+                              sheetCtx,
+                              DunesColors.text3,
+                            ),
+                            context: sheetCtx,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                if (isDialog)
+                  InkWell(
+                    borderRadius: BorderRadius.circular(8),
+                    onTap: () => Navigator.of(sheetCtx).pop(),
+                    child: Padding(
+                      padding: const EdgeInsets.all(6),
+                      child: Icon(
+                        Icons.close_rounded,
+                        size: 18,
+                        color: DunesColors.resolve(
+                          sheetCtx,
+                          DunesColors.text3,
+                        ),
                       ),
                     ),
-                    child: const Text('取消'),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                Expanded(
+                  child: _forwardModeCard(
+                    icon: Icons.format_list_bulleted_rounded,
+                    title: '逐条转发',
+                    subtitle: '每条消息独立发送',
+                    onTap: () => Navigator.of(sheetCtx).pop('separate'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _forwardModeCard(
+                    icon: Icons.layers_outlined,
+                    title: '合并转发',
+                    subtitle: '打包为聊天记录卡片',
+                    onTap: () => Navigator.of(sheetCtx).pop('merged'),
                   ),
                 ),
               ],
+            ),
+            if (!isDialog) ...[
+              const SizedBox(height: 12),
+              SizedBox(
+                height: hairline,
+                child: ColoredBox(
+                  color: isDark
+                      ? Colors.white.withValues(alpha: 0.08)
+                      : Colors.black.withValues(alpha: 0.06),
+                ),
+              ),
+              const SizedBox(height: 6),
+              SizedBox(
+                width: double.infinity,
+                height: 40,
+                child: TextButton(
+                  onPressed: () => Navigator.of(sheetCtx).pop(),
+                  style: TextButton.styleFrom(
+                    foregroundColor: DunesColors.resolve(
+                      sheetCtx,
+                      DunesColors.text2,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: const Text(
+                    '取消',
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      );
+    }
+
+    if (isDesktopCommOnly) {
+      return showDialog<String>(
+        context: context,
+        barrierColor: Colors.black.withValues(alpha: 0.24),
+        builder: (dialogCtx) => Center(
+          child: Material(
+            color: Colors.transparent,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 400),
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: buildContent(dialogCtx, isDialog: true),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (sheetCtx) => SafeArea(
+        child: Center(
+          heightFactor: 1,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 440),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+              child: buildContent(sheetCtx, isDialog: false),
             ),
           ),
         ),
@@ -8110,54 +8287,14 @@ class _NativeChatViewState extends State<NativeChatView>
     required VoidCallback onTap,
   }) {
     final accent = ImVisualTokens.accent(context);
-    return ImTapScale(
-      borderRadius: BorderRadius.circular(14),
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return _ForwardModeOptionCard(
+      icon: icon,
+      accent: accent,
+      isDark: isDark,
+      title: title,
+      subtitle: subtitle,
       onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(12, 12, 12, 14),
-        decoration: BoxDecoration(
-          color: ImVisualTokens.cardSurface(context),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: ImVisualTokens.hairlineBorder(context),
-            width: 0.8,
-          ),
-          boxShadow: ImVisualTokens.softCardShadow(context),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              width: 34,
-              height: 34,
-              decoration: BoxDecoration(
-                color: ImVisualTokens.accentSoftSurface(context),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Icon(icon, size: 18, color: accent),
-            ),
-            const SizedBox(height: 10),
-            Text(
-              title,
-              style: DunesTypography.sans(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: DunesColors.resolve(context, DunesColors.text),
-                context: context,
-              ),
-            ),
-            const SizedBox(height: 3),
-            Text(
-              subtitle,
-              style: DunesTypography.sans(
-                fontSize: 11.5,
-                color: DunesColors.resolve(context, DunesColors.text3),
-                context: context,
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 
@@ -14024,6 +14161,110 @@ class _ChatLocateHighlightPulseState extends State<_ChatLocateHighlightPulse>
           child: child,
         );
       },
+    );
+  }
+}
+
+class _ForwardModeOptionCard extends StatefulWidget {
+  const _ForwardModeOptionCard({
+    required this.icon,
+    required this.accent,
+    required this.isDark,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final Color accent;
+  final bool isDark;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  @override
+  State<_ForwardModeOptionCard> createState() => _ForwardModeOptionCardState();
+}
+
+class _ForwardModeOptionCardState extends State<_ForwardModeOptionCard> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: ImTapScale(
+        borderRadius: BorderRadius.circular(14),
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          curve: Curves.easeOutCubic,
+          width: double.infinity,
+          padding: const EdgeInsets.fromLTRB(14, 14, 14, 15),
+          decoration: BoxDecoration(
+            color: _hovered
+                ? (widget.isDark
+                      ? Colors.white.withValues(alpha: 0.08)
+                      : const Color(0xFFFAF8FF))
+                : ImVisualTokens.cardSurface(context),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: _hovered
+                  ? widget.accent.withValues(alpha: 0.55)
+                  : ImVisualTokens.hairlineBorder(context),
+              width: _hovered ? 1.1 : 0.75,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: _hovered
+                    ? widget.accent.withValues(alpha: widget.isDark ? 0.20 : 0.12)
+                    : (widget.isDark
+                          ? const Color(0x18000000)
+                          : const Color(0x0A583EA8)),
+                blurRadius: _hovered ? 14 : 8,
+                offset: const Offset(0, 3),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: widget.accent.withValues(
+                    alpha: widget.isDark ? 0.20 : 0.10,
+                  ),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(widget.icon, size: 19, color: widget.accent),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                widget.title,
+                style: DunesTypography.sans(
+                  fontSize: 14.5,
+                  fontWeight: FontWeight.w600,
+                  color: DunesColors.resolve(context, DunesColors.text),
+                  context: context,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                widget.subtitle,
+                style: DunesTypography.sans(
+                  fontSize: 11.5,
+                  color: DunesColors.resolve(context, DunesColors.text3),
+                  context: context,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

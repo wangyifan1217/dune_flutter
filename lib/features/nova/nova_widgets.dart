@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -1029,49 +1030,24 @@ class NovaC4AiBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    final screenW = MediaQuery.sizeOf(context).width;
+    final isWide = screenW > 800;
+    // 无框文档流排版：去掉空洞白底大矩形框，无论一句短问候还是长 Markdown 表格都自然舒展。
+    return ConstrainedBox(
       constraints: BoxConstraints(
-        maxWidth: compact && MediaQuery.sizeOf(context).width > 800
-            ? 680
-            : MediaQuery.sizeOf(context).width * 0.88,
+        maxWidth: isWide ? (compact ? 680 : 740) : screenW * 0.88,
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
-      decoration: BoxDecoration(
-        color: DunesColors.resolve(
-          context,
-          DunesColors.imSurface,
-          role: DunesColorRole.surface,
-        ),
-        borderRadius: const BorderRadius.only(
-          topLeft: Radius.circular(6),
-          topRight: Radius.circular(20),
-          bottomLeft: Radius.circular(20),
-          bottomRight: Radius.circular(20),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: DunesColors.text.withValues(alpha: 0.045),
-            blurRadius: 14,
-            offset: const Offset(0, 4),
+      child: Padding(
+        padding: const EdgeInsets.only(top: 2, bottom: 4, right: 8),
+        child: DefaultTextStyle(
+          style: DunesTypography.sans(
+            fontSize: 15,
+            color: DunesColors.resolve(context, DunesColors.text),
+            height: 1.68,
+            context: context,
           ),
-        ],
-        border: Border.all(
-          color: DunesColors.resolve(
-            context,
-            DunesColors.borderSoft,
-            role: DunesColorRole.border,
-          ),
-          width: 0.8,
+          child: child,
         ),
-      ),
-      child: DefaultTextStyle(
-        style: DunesTypography.sans(
-          fontSize: 14.5,
-          color: DunesColors.resolve(context, DunesColors.text),
-          height: 1.58,
-          context: context,
-        ),
-        child: child,
       ),
     );
   }
@@ -1095,62 +1071,88 @@ class NovaC4SentBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final screenW = MediaQuery.sizeOf(context).width;
     return AnimatedContainer(
       duration: const Duration(milliseconds: 200),
       constraints: BoxConstraints(
-        maxWidth: MediaQuery.sizeOf(context).width * 0.78,
+        maxWidth: (screenW * 0.72).clamp(160.0, 540.0),
       ),
       padding: compactMedia
           ? const EdgeInsets.all(4)
-          : const EdgeInsets.symmetric(horizontal: 15, vertical: 10.5),
+          : const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
       decoration: BoxDecoration(
-        color: DunesColors.resolve(
-          context,
-          DunesColors.brandPurpleSoft,
-          role: DunesColorRole.surface,
-        ),
+        gradient: compactMedia
+            ? null
+            : LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: isDark
+                    ? const [
+                        Color(0xFF8E6FEB),
+                        Color(0xFF7655D6),
+                        Color(0xFF6242BE),
+                      ]
+                    : const [
+                        Color(0xFF9172EC),
+                        Color(0xFF7B5CD8),
+                        Color(0xFF6848C6),
+                      ],
+              ),
+        color: compactMedia
+            ? DunesColors.resolve(
+                context,
+                DunesColors.brandPurpleSoft,
+                role: DunesColorRole.surface,
+              )
+            : null,
         borderRadius: const BorderRadius.only(
-          topLeft: Radius.circular(20),
+          topLeft: Radius.circular(18),
           topRight: Radius.circular(6),
-          bottomLeft: Radius.circular(20),
-          bottomRight: Radius.circular(20),
+          bottomLeft: Radius.circular(18),
+          bottomRight: Radius.circular(18),
         ),
         boxShadow: [
           BoxShadow(
-            color: DunesColors.brandPurple.withValues(alpha: 0.07),
-            blurRadius: 10,
-            offset: const Offset(0, 3),
+            color: DunesColors.brandPurple.withValues(
+              alpha: isDark ? 0.28 : 0.20,
+            ),
+            blurRadius: 14,
+            spreadRadius: -3,
+            offset: const Offset(0, 5),
           ),
         ],
         border: highlighted
             ? Border.all(
-                color: DunesColors.resolve(
-                  context,
-                  DunesColors.brandPurple,
-                  role: DunesColorRole.border,
-                ),
+                color: Colors.white.withValues(alpha: 0.85),
                 width: 1.5,
               )
             : Border.all(
-                color: DunesColors.resolve(
-                  context,
-                  DunesColors.brandPurpleLine,
-                  role: DunesColorRole.border,
-                ),
-                width: 0.8,
+                color: Colors.white.withValues(alpha: 0.16),
+                width: 0.6,
               ),
       ),
-      child:
-          child ??
-          Text(
-            text,
-            style: DunesTypography.sans(
-              fontSize: 14.5,
-              color: DunesColors.resolve(context, DunesColors.text),
-              height: 1.48,
-              context: context,
+      child: DefaultTextStyle(
+        style: DunesTypography.sans(
+          fontSize: 14.5,
+          color: compactMedia
+              ? DunesColors.resolve(context, DunesColors.text)
+              : Colors.white,
+          height: 1.5,
+          context: context,
+        ),
+        child:
+            child ??
+            Text(
+              text,
+              style: DunesTypography.sans(
+                fontSize: 14.5,
+                color: Colors.white,
+                height: 1.5,
+                context: context,
+              ),
             ),
-          ),
+      ),
     );
   }
 }
@@ -1185,46 +1187,96 @@ class _NovaC4ThinkingDotsState extends State<NovaC4ThinkingDots>
 
   @override
   Widget build(BuildContext context) {
-    return Row(
+    final reduceMotion = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Column(
       mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        ...List.generate(3, (i) {
-          return AnimatedBuilder(
-            animation: _controller,
-            builder: (_, __) {
-              final t = (_controller.value + i * 0.18) % 1.0;
-              final bounce = (t < 0.5 ? t : 1 - t) * 2;
-              final dy = -3.5 * Curves.easeOut.transform(bounce);
-              final opacity = 0.35 + bounce * 0.65;
-              return Transform.translate(
-                offset: Offset(0, dy),
-                child: Container(
-                  width: 6,
-                  height: 6,
-                  margin: EdgeInsets.only(right: i < 2 ? 5 : 8),
-                  decoration: BoxDecoration(
-                    color: DunesColors.resolve(
-                      context,
-                      const Color(0xFF6B3FE2),
-                      role: DunesColorRole.surface,
-                    ).withValues(alpha: opacity),
-                    shape: BoxShape.circle,
-                  ),
-                ),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ...List.generate(3, (i) {
+              return AnimatedBuilder(
+                animation: _controller,
+                builder: (_, __) {
+                  final t = (_controller.value + i * 0.18) % 1.0;
+                  final bounce = (t < 0.5 ? t : 1 - t) * 2;
+                  final dy = reduceMotion
+                      ? 0.0
+                      : -3.5 * Curves.easeOut.transform(bounce);
+                  final opacity = 0.35 + bounce * 0.65;
+                  return Transform.translate(
+                    offset: Offset(0, dy),
+                    child: Container(
+                      width: 6,
+                      height: 6,
+                      margin: EdgeInsets.only(right: i < 2 ? 5 : 8),
+                      decoration: BoxDecoration(
+                        color: DunesColors.resolve(
+                          context,
+                          DunesColors.brandPurple,
+                          role: DunesColorRole.surface,
+                        ).withValues(alpha: opacity),
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  );
+                },
               );
-            },
-          );
-        }),
-        if (widget.label.trim().isNotEmpty)
-          DunesShimmerText(
-            widget.label,
-            style: DunesTypography.sans(
-              fontSize: 12.5,
-              color: DunesColors.resolve(context, const Color(0xFF86909C)),
-              fontWeight: FontWeight.w500,
-              context: context,
+            }),
+            if (widget.label.trim().isNotEmpty)
+              DunesShimmerText(
+                widget.label,
+                style: DunesTypography.sans(
+                  fontSize: 12.5,
+                  color: DunesColors.resolve(context, const Color(0xFF7B7A8C)),
+                  fontWeight: FontWeight.w500,
+                  context: context,
+                ),
+              ),
+          ],
+        ),
+        if (!reduceMotion) ...[
+          const SizedBox(height: 8),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(99),
+            child: SizedBox(
+              width: 128,
+              height: 3,
+              child: AnimatedBuilder(
+                animation: _controller,
+                builder: (_, __) {
+                  final slide = _controller.value * 2.0 - 0.5;
+                  return DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? Colors.white.withValues(alpha: 0.08)
+                          : const Color(0xFFEDE8F8),
+                    ),
+                    child: FractionallySizedBox(
+                      alignment: Alignment(slide.clamp(-1.0, 1.0), 0),
+                      widthFactor: 0.42,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(99),
+                          gradient: const LinearGradient(
+                            colors: [
+                              Color(0x007B5CD8),
+                              DunesColors.brandPurple,
+                              Color(0xFFB69BFF),
+                              Color(0x00B69BFF),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
             ),
           ),
+        ],
       ],
     );
   }
@@ -1237,23 +1289,15 @@ class NovaC4MessageStream extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return DecoratedBox(
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [
-            DunesColors.resolve(
-              context,
-              const Color(0xFFF9F9FB),
-              role: DunesColorRole.surface,
-            ),
-            DunesColors.resolve(
-              context,
-              const Color(0xFFF5F5F7),
-              role: DunesColorRole.surface,
-            ),
-          ],
+          colors: isDark
+              ? const [Color(0xFF191724), Color(0xFF14121D)]
+              : const [Color(0xFFFCFBFE), Color(0xFFF6F4FB)],
         ),
       ),
       child: child,
@@ -1703,6 +1747,7 @@ class NovaC4MessageRow extends StatelessWidget {
     this.onRetryReply,
     this.onCopyReply,
     this.onForwardReply,
+    this.onRegenerateReply,
   });
 
   final bool mine;
@@ -1731,6 +1776,7 @@ class NovaC4MessageRow extends StatelessWidget {
   final VoidCallback? onRetryReply;
   final VoidCallback? onCopyReply;
   final VoidCallback? onForwardReply;
+  final VoidCallback? onRegenerateReply;
 
   bool _isImageAttachment(NovaMessageAttachment a) {
     final k = a.kind.toUpperCase();
@@ -2111,7 +2157,9 @@ class NovaC4MessageRow extends StatelessWidget {
       !mine &&
       !thinking &&
       _aiCopyText.trim().isNotEmpty &&
-      (onCopyReply != null || onForwardReply != null);
+      (onCopyReply != null ||
+          onForwardReply != null ||
+          onRegenerateReply != null);
 
   Widget _buildUserAvatar(BuildContext context) {
     final initial = userInitial.isNotEmpty
@@ -2199,7 +2247,6 @@ class NovaC4MessageRow extends StatelessWidget {
         child: NovaPersonAvatarImage(
           width: 38,
           height: 38,
-          thinking: thinking,
         ),
       ),
     );
@@ -2281,37 +2328,71 @@ class NovaC4MessageRow extends StatelessWidget {
 
   Widget _buildAiRow(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 7),
+      padding: const EdgeInsets.symmetric(vertical: 10),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _buildAiAvatar(context),
-          Flexible(
+          const SizedBox(width: 4),
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                if (showAiBadge || time.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (showAiBadge)
+                          Text(
+                            '小饕',
+                            style: DunesTypography.sans(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w600,
+                              color: DunesColors.resolve(
+                                context,
+                                DunesColors.text2,
+                              ),
+                              context: context,
+                            ),
+                          ),
+                        if (showAiBadge && time.isNotEmpty)
+                          const SizedBox(width: 8),
+                        if (time.isNotEmpty)
+                          Text(
+                            time,
+                            style: DunesTypography.sans(
+                              fontSize: 11,
+                              color: DunesColors.resolve(
+                                context,
+                                DunesColors.text3,
+                              ),
+                              context: context,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
                 AnimatedContainer(
                   duration: const Duration(milliseconds: 200),
                   decoration: highlighted
                       ? BoxDecoration(
-                          borderRadius: BorderRadius.circular(18),
+                          borderRadius: BorderRadius.circular(14),
+                          color: DunesColors.brandPurple.withValues(alpha: 0.06),
                           border: Border.all(
                             color: DunesColors.resolve(
                               context,
-                              const Color(0xFF6B3FE2),
+                              DunesColors.brandPurple,
                               role: DunesColorRole.border,
                             ),
-                            width: 1.8,
+                            width: 1.4,
                           ),
-                          boxShadow: const [
-                            BoxShadow(
-                              color: Color(0x1F6B3FE2),
-                              blurRadius: 0,
-                              spreadRadius: 3,
-                            ),
-                          ],
                         )
                       : null,
+                  padding: highlighted
+                      ? const EdgeInsets.symmetric(horizontal: 10, vertical: 6)
+                      : EdgeInsets.zero,
                   child: _wrapCopyable(
                     context,
                     NovaC4AiBubble(
@@ -2326,6 +2407,7 @@ class NovaC4MessageRow extends StatelessWidget {
                 if (_showReplyActions)
                   _NovaReplyIconActions(
                     onCopy: onCopyReply,
+                    onRegenerate: onRegenerateReply,
                     onForward: onForwardReply,
                   ),
               ],
@@ -2337,31 +2419,70 @@ class NovaC4MessageRow extends StatelessWidget {
   }
 }
 
-class _NovaReplyIconActions extends StatelessWidget {
-  const _NovaReplyIconActions({this.onCopy, this.onForward});
+class _NovaReplyIconActions extends StatefulWidget {
+  const _NovaReplyIconActions({
+    this.onCopy,
+    this.onRegenerate,
+    this.onForward,
+  });
 
   final VoidCallback? onCopy;
+  final VoidCallback? onRegenerate;
   final VoidCallback? onForward;
+
+  @override
+  State<_NovaReplyIconActions> createState() => _NovaReplyIconActionsState();
+}
+
+class _NovaReplyIconActionsState extends State<_NovaReplyIconActions> {
+  bool _copied = false;
+  Timer? _copiedTimer;
+
+  @override
+  void dispose() {
+    _copiedTimer?.cancel();
+    super.dispose();
+  }
+
+  void _handleCopy() {
+    widget.onCopy?.call();
+    _copiedTimer?.cancel();
+    setState(() => _copied = true);
+    _copiedTimer = Timer(const Duration(milliseconds: 1400), () {
+      if (mounted) setState(() => _copied = false);
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(top: 2),
+      padding: const EdgeInsets.only(top: 4),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (onCopy != null)
+          if (widget.onCopy != null)
             _NovaReplyIconButton(
-              icon: Icons.copy_outlined,
-              tooltip: '复制',
-              onTap: onCopy!,
+              icon: _copied ? Icons.check_rounded : Icons.copy_outlined,
+              tooltip: _copied ? '已复制' : '复制',
+              active: _copied,
+              onTap: _handleCopy,
             ),
-          if (onForward != null)
+          if (widget.onRegenerate != null) ...[
+            const SizedBox(width: 2),
+            _NovaReplyIconButton(
+              icon: Icons.refresh_rounded,
+              tooltip: '重新生成',
+              onTap: widget.onRegenerate!,
+            ),
+          ],
+          if (widget.onForward != null) ...[
+            const SizedBox(width: 2),
             _NovaReplyIconButton(
               icon: Icons.shortcut_outlined,
               tooltip: '转发到 IM',
-              onTap: onForward!,
+              onTap: widget.onForward!,
             ),
+          ],
         ],
       ),
     );
@@ -2373,23 +2494,27 @@ class _NovaReplyIconButton extends StatelessWidget {
     required this.icon,
     required this.tooltip,
     required this.onTap,
+    this.active = false,
   });
 
   final IconData icon;
   final String tooltip;
   final VoidCallback onTap;
+  final bool active;
 
   @override
   Widget build(BuildContext context) {
-    final color = DunesColors.resolve(context, const Color(0xFF86909C));
+    final color = active
+        ? DunesColors.brandPurple
+        : DunesColors.resolve(context, const Color(0xFF86909C));
     return Tooltip(
       message: tooltip,
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(8),
         child: Padding(
-          padding: const EdgeInsets.all(5),
-          child: Icon(icon, size: 16, color: color),
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
+          child: Icon(icon, size: 15.5, color: color),
         ),
       ),
     );
@@ -3020,49 +3145,82 @@ class NovaC4InputBar extends StatelessWidget {
     final showStop = sending && onStop != null;
     final locked = !enabled || (sending && !showStop);
     final bottomInset = MediaQuery.paddingOf(context).bottom;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isWide = MediaQuery.sizeOf(context).width > 820;
 
     return Container(
       color: Colors.transparent,
       padding: EdgeInsets.fromLTRB(
-        14,
+        isWide ? 24 : 14,
         4,
-        14,
-        bottomInset > 0 ? bottomInset + 6 : 10,
+        isWide ? 24 : 14,
+        bottomInset > 0 ? bottomInset + 6 : (isWide ? 14 : 10),
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // 悬浮磨砂药丸输入条（高度自适应，圆角 28）
-          ClipRRect(
-            borderRadius: BorderRadius.circular(28),
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                decoration: BoxDecoration(
-                  color: DunesColors.resolve(
-                    context,
-                    Colors.white,
-                    role: DunesColorRole.surface,
-                  ).withValues(alpha: 0.94),
-                  borderRadius: BorderRadius.circular(28),
-                  boxShadow: const [
-                    BoxShadow(
-                      color: Color(0x0F000000),
-                      blurRadius: 18,
-                      offset: Offset(0, 4),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxWidth: isWide ? 820 : double.infinity,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // 悬浮圆角输入卡（聚焦时品牌紫微光描边，PC 与 APP 统一质感）
+              ListenableBuilder(
+                listenable: focusNode,
+                builder: (context, child) {
+                  final focused = focusNode.hasFocus;
+                  return AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    curve: Curves.easeOutCubic,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(24),
+                      boxShadow: [
+                        BoxShadow(
+                          color: focused
+                              ? DunesColors.brandPurple.withValues(
+                                  alpha: isDark ? 0.24 : 0.14,
+                                )
+                              : (isDark
+                                    ? const Color(0x2A000000)
+                                    : const Color(0x10583EA8)),
+                          blurRadius: focused ? 22 : 16,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
                     ),
-                  ],
-                  border: Border.all(
-                    color: DunesColors.resolve(
-                      context,
-                      const Color(0xFFE5E5EA),
-                      role: DunesColorRole.border,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(24),
+                      child: BackdropFilter(
+                        filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: (isDark
+                                    ? const Color(0xFF222030)
+                                    : Colors.white)
+                                .withValues(alpha: isDark ? 0.92 : 0.96),
+                            borderRadius: BorderRadius.circular(24),
+                            border: Border.all(
+                              color: focused
+                                  ? DunesColors.brandPurple.withValues(
+                                      alpha: 0.65,
+                                    )
+                                  : (isDark
+                                        ? Colors.white.withValues(alpha: 0.09)
+                                        : const Color(0xFFE5E0F4)),
+                              width: focused ? 1.2 : 0.9,
+                            ),
+                          ),
+                          child: child,
+                        ),
+                      ),
                     ),
-                    width: 0.8,
-                  ),
-                ),
-            child: voiceMode
+                  );
+                },
+                child: voiceMode
                 ? Row(
                     children: [
                       if (_hasQuickActions)
@@ -3154,8 +3312,6 @@ class NovaC4InputBar extends StatelessWidget {
                     ],
                   ),
               ),
-            ),
-          ),
           const SizedBox(height: 10),
           _NovaShortcutStrip(
             locked: locked,
@@ -3184,6 +3340,8 @@ class NovaC4InputBar extends StatelessWidget {
                 : const SizedBox.shrink(),
           ),
         ],
+      ),
+        ),
       ),
     );
   }

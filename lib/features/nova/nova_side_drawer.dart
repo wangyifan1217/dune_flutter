@@ -25,6 +25,7 @@ class NovaSideDrawer extends StatefulWidget {
     this.onOpenKb,
     this.currentConversationId = 0,
     this.onCurrentConversationDeleted,
+    this.embedded = false,
   });
 
   final AuthSession session;
@@ -42,6 +43,7 @@ class NovaSideDrawer extends StatefulWidget {
   final VoidCallback? onOpenKb;
   final int currentConversationId;
   final VoidCallback? onCurrentConversationDeleted;
+  final bool embedded;
 
   @override
   State<NovaSideDrawer> createState() => _NovaSideDrawerState();
@@ -134,6 +136,7 @@ class _NovaSideDrawerState extends State<NovaSideDrawer> {
   }
 
   void _safeCloseDrawer() {
+    if (widget.embedded) return;
     final scaffold = Scaffold.maybeOf(context);
     if (scaffold != null && scaffold.isDrawerOpen) {
       scaffold.closeDrawer();

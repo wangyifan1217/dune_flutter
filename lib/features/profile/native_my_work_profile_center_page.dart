@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../core/http/session_http.dart';
 import '../../core/navigation/navigation_controller.dart';
@@ -35,7 +36,9 @@ import '../workbench/workbench_badge_notifier.dart';
 import '../proposal_intake/proposal_intake_models.dart';
 import '../xflow/xflow_models.dart';
 import '../xflow/xflow_service.dart';
+import '../nova/presence/nova_presence_host.dart';
 import 'mine_home.dart';
+import 'mine_hub_modules.dart';
 import 'native_user_work_profile_page.dart';
 import 'work_profile_chat_share.dart';
 import 'work_profile_controls.dart';
@@ -1333,117 +1336,197 @@ class _NativeMyWorkProfileCenterPageState
                             72,
                       ),
                       children: [
-                        // 宽度跟灯塔一致：铺满，左右 22 一条左沿（kMinePageGutter）。
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            MineHomeHeader(
-                              month: _month,
-                              onPickMonth: _pickMonth,
-                              onCurrentMonth: _resetMonth,
-                              // 点头像改头像：右下角铅笔提示可编辑。
-                              avatar: Tooltip(
-                                message: '更换头像',
-                                child: GestureDetector(
-                                  behavior: HitTestBehavior.opaque,
-                                  onTap: _avatarSheetOpen
-                                      ? null
-                                      : _openAvatarEditor,
-                                  child: Stack(
-                                    clipBehavior: Clip.none,
-                                    children: [
-                                      NativeAvatarCircle(
-                                        key: ValueKey<String>(
-                                          '${profile.avatarPreset}|${profile.avatarObjectKey}|${profile.avatarUrl}|$_avatarRefreshVersion',
-                                        ),
-                                        size: 50,
-                                        avatarPreset: profile.avatarPreset,
-                                        avatarUrl: avatarUrl,
-                                        fallbackText: name.characters.first,
-                                        borderWidth: 0,
-                                      ),
-                                      Positioned(
-                                        right: -3,
-                                        bottom: -3,
-                                        child: Container(
-                                          width: 19,
-                                          height: 19,
-                                          decoration: BoxDecoration(
-                                            color: DunesColors.resolve(
-                                              context,
-                                              Colors.white,
-                                              role: DunesColorRole.surface,
-                                            ),
-                                            shape: BoxShape.circle,
-                                            boxShadow: [
-                                              BoxShadow(
-                                                color: Colors.black.withValues(
-                                                  alpha: .18,
-                                                ),
-                                                blurRadius: 4,
-                                                offset: const Offset(0, 1),
+                        Center(
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 1120),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                Padding(
+                                  padding: const EdgeInsets.fromLTRB(
+                                    kMinePageGutter,
+                                    12,
+                                    kMinePageGutter,
+                                    14,
+                                  ),
+                                  child: MineHubOverviewSection(
+                                    session: widget.session,
+                                    avatar: Tooltip(
+                                      message: '更换头像',
+                                      child: GestureDetector(
+                                        behavior: HitTestBehavior.opaque,
+                                        onTap: _avatarSheetOpen
+                                            ? null
+                                            : _openAvatarEditor,
+                                        child: Stack(
+                                          clipBehavior: Clip.none,
+                                          children: [
+                                            NativeAvatarCircle(
+                                              key: ValueKey<String>(
+                                                '${profile.avatarPreset}|${profile.avatarObjectKey}|${profile.avatarUrl}|$_avatarRefreshVersion',
                                               ),
-                                            ],
-                                          ),
-                                          child: Icon(
-                                            _avatarSheetOpen
-                                                ? Icons.more_horiz
-                                                : Icons.edit_rounded,
-                                            size: 11,
-                                            color: DunesColors.resolve(
-                                              context,
-                                              const Color(0xFF65399E),
+                                              size: 48,
+                                              avatarPreset:
+                                                  profile.avatarPreset,
+                                              avatarUrl: avatarUrl,
+                                              fallbackText:
+                                                  name.characters.first,
+                                              borderWidth: 0,
                                             ),
-                                          ),
+                                            Positioned(
+                                              right: -3,
+                                              bottom: -3,
+                                              child: Container(
+                                                width: 18,
+                                                height: 18,
+                                                decoration: BoxDecoration(
+                                                  color: DunesColors.resolve(
+                                                    context,
+                                                    Colors.white,
+                                                    role:
+                                                        DunesColorRole.surface,
+                                                  ),
+                                                  shape: BoxShape.circle,
+                                                  boxShadow: [
+                                                    BoxShadow(
+                                                      color: Colors.black
+                                                          .withValues(
+                                                            alpha: .18,
+                                                          ),
+                                                      blurRadius: 4,
+                                                      offset: const Offset(
+                                                        0,
+                                                        1,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                                child: Icon(
+                                                  _avatarSheetOpen
+                                                      ? Icons.more_horiz
+                                                      : Icons.edit_rounded,
+                                                  size: 10.5,
+                                                  color: DunesColors.resolve(
+                                                    context,
+                                                    const Color(0xFF65399E),
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          ],
                                         ),
                                       ),
-                                    ],
+                                    ),
+                                    name: name,
+                                    subtitle: identityLine,
+                                    counts: counts,
+                                    refreshToken: _mineRefreshToken,
+                                    showProposals: showProposals,
+                                    onOpenPendingApprovals: () =>
+                                        widget.navigation.go('B1'),
+                                    onOpenTodoApprovals: () =>
+                                        widget.navigation.go('B13'),
+                                    onOpenInitiated: () => widget.onOpenB14(),
+                                    onOpenCreateApproval: () =>
+                                        widget.onOpenB3(),
+                                    onOpenMeetings: () =>
+                                        widget.navigation.go('MM-L'),
+                                    onOpenKb: () => widget.navigation.go('K1'),
+                                    onOpenTasks: () {
+                                      final open = widget.onOpenWorkbench;
+                                      if (open != null) {
+                                        open();
+                                      } else {
+                                        widget.navigation.go('QJA');
+                                      }
+                                    },
+                                    onOpenPerformance:
+                                        widget.session.isExternalUser
+                                        ? null
+                                        : () =>
+                                              widget.navigation.go('B2PERF'),
+                                    onOpenWorkbench:
+                                        !isDesktopCommOnly &&
+                                            !widget.session.isExternalUser
+                                        ? () {
+                                            final open =
+                                                widget.onOpenWorkbench;
+                                            if (open != null) {
+                                              open();
+                                            } else {
+                                              widget.navigation.go('QJA');
+                                            }
+                                          }
+                                        : null,
+                                    onOpenNewProposal: showProposals
+                                        ? () => showMineProposalTypePicker(
+                                            context,
+                                            onSales: () =>
+                                                _openProposalIntake('sales'),
+                                            onPurchase: () =>
+                                                _openProposalIntake('purchase'),
+                                            onFunding:
+                                                widget.session.isExternalUser
+                                                ? null
+                                                : _openFundingProposal,
+                                          )
+                                        : null,
+                                    onAskXiaoTao: (prompt) {
+                                      Clipboard.setData(
+                                        ClipboardData(text: prompt),
+                                      );
+                                      showDunesToast(
+                                        context,
+                                        '已为你打开小饕（指令已复制，可直接粘贴发送）',
+                                      );
+                                      final openAi =
+                                          NovaPresenceScope.maybeOf(
+                                            context,
+                                          )?.open;
+                                      if (openAi != null) {
+                                        openAi();
+                                      } else {
+                                        widget.navigation.go('C4');
+                                      }
+                                    },
+                                    onOpenTextScale: _openTextScalePicker,
+                                    onOpenSettings: _openAppSettingsSheet,
+                                    onOpenReleaseHistory:
+                                        widget.onOpenReleaseHistory,
                                   ),
                                 ),
-                              ),
-                              name: name,
-                              subtitle: identityLine,
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: kMinePageGutter,
+                                  ),
+                                  child: MineHomeBody(
+                                    session: widget.session,
+                                    month: _month,
+                                    counts: counts,
+                                    showProposals: showProposals,
+                                    companyView:
+                                        widget.session.mineCompanyView,
+                                    refreshToken: _mineRefreshToken,
+                                    onOpenPendingApprovals: () =>
+                                        widget.navigation.go('B1'),
+                                    onOpenTodoApprovals: () =>
+                                        widget.navigation.go('B13'),
+                                    onOpenInitiated: () => widget.onOpenB14(),
+                                    onOpenCc: () => widget.navigation.go('P1'),
+                                    onOpenRejected: () => widget.onOpenB14(),
+                                    onOpenPendingInitiate: () =>
+                                        widget.onOpenB14(
+                                          filter: 'PENDING_INITIATE',
+                                        ),
+                                    onOpenLighthouse: () =>
+                                        widget.navigation.go('LH'),
+                                    onOpenProposalList: _openProposalIntake,
+                                    onOpenProposalDetail: _openDesktopProposal,
+                                  ),
+                                ),
+                              ],
                             ),
-                            if (!isDesktopCommOnly &&
-                                widget.session.canUseAttendance)
-                              Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: kMinePageGutter,
-                                ),
-                                child: AttendanceSummaryCard(
-                                  session: widget.session,
-                                  refreshToken: _attendanceRefreshToken,
-                                  onTap: _openAttendance,
-                                ),
-                              ),
-                            Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: kMinePageGutter,
-                              ),
-                              child: MineHomeBody(
-                                session: widget.session,
-                                month: _month,
-                                counts: counts,
-                                showProposals: showProposals,
-                                companyView: widget.session.mineCompanyView,
-                                refreshToken: _mineRefreshToken,
-                                onOpenPendingApprovals: () =>
-                                    widget.navigation.go('B1'),
-                                onOpenTodoApprovals: () =>
-                                    widget.navigation.go('B13'),
-                                onOpenInitiated: () => widget.onOpenB14(),
-                                onOpenCc: () => widget.navigation.go('P1'),
-                                onOpenRejected: () => widget.onOpenB14(),
-                                onOpenPendingInitiate: () => widget.onOpenB14(
-                                  filter: 'PENDING_INITIATE',
-                                ),
-                                onOpenLighthouse: () =>
-                                    widget.navigation.go('LH'),
-                                onOpenProposalList: _openProposalIntake,
-                                onOpenProposalDetail: _openDesktopProposal,
-                              ),
-                            ),
-                          ],
+                          ),
                         ),
                       ],
                     ),

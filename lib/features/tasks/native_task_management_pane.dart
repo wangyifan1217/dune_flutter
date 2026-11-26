@@ -4,7 +4,9 @@ import 'dart:typed_data';
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
+import '../../core/theme/dunes_page_transition.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
@@ -586,10 +588,8 @@ class _NativeTaskManagementPaneState extends State<NativeTaskManagementPane> {
             children: [
               _buildHeader(),
               Expanded(
-                child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 200),
-                  switchInCurve: Curves.easeOutCubic,
-                  switchOutCurve: Curves.easeInCubic,
+                child: DunesBlurExpandSwitcher(
+                  isBack: _section == TaskManagementSection.home,
                   child: KeyedSubtree(
                     key: ValueKey(_section),
                     child: _buildBody(),
@@ -721,162 +721,165 @@ class _NativeTaskManagementPaneState extends State<NativeTaskManagementPane> {
   }
 
   Widget _buildHome() {
-    final cards = <Widget>[];
+    final items =
+        <({IconData icon, Color accent, String title, String subtitle, VoidCallback onTap})>[];
     if (_canPending) {
-      cards.add(
-        _sectionCard(
-          icon: Icons.pending_actions_outlined,
-          title: '待我处理',
-          subtitle: '任务变更审批、指派确认和待办操作',
-          onTap: () => _select(TaskManagementSection.pending),
-        ),
-      );
-    }
-    if (_canRecurring) {
-      cards.add(
-        _sectionCard(
-          icon: Icons.repeat_rounded,
-          title: '周期任务',
-          subtitle: '维护周期规则和执行范围',
-          onTap: () => _select(TaskManagementSection.recurring),
-        ),
-      );
-    }
-    if (_canConfig) {
-      cards.add(
-        _sectionCard(
-          icon: Icons.settings_outlined,
-          title: '任务配置',
-          subtitle: '日报提醒、审批和周期任务规则',
-          onTap: () => _select(TaskManagementSection.config),
-        ),
-      );
-    }
-    if (_canCalendar) {
-      cards.add(
-        _sectionCard(
-          icon: Icons.event_available_outlined,
-          title: '节假日日历',
-          subtitle: '同步法定节假日和调休上班日，供任务日报使用',
-          onTap: () => _select(TaskManagementSection.calendar),
-        ),
-      );
-    }
-    if (_canImport) {
-      cards.add(
-        _sectionCard(
-          icon: Icons.track_changes_outlined,
-          title: '试用期目标',
-          subtitle: '查看全员进度、手动指派或批量导入',
-          onTap: () => _select(TaskManagementSection.probation),
-        ),
-      );
-      cards.add(
-        _sectionCard(
-          icon: Icons.file_upload_outlined,
-          title: '任务导入',
-          subtitle: '任务或试用期任务批量导入',
-          onTap: () => _select(TaskManagementSection.import),
-        ),
-      );
-    }
-    if (_canHistory) {
-      cards.add(
-        _sectionCard(
-          icon: Icons.history_rounded,
-          title: '导入记录',
-          subtitle: '查看导入文件、状态和结果',
-          onTap: () => _select(TaskManagementSection.history),
-        ),
-      );
+      items.add((
+        icon: Icons.pending_actions_rounded,
+        accent: const Color(0xFFD97706),
+        title: '待我处理',
+        subtitle: '任务变更审批、指派确认和待办操作',
+        onTap: () => _select(TaskManagementSection.pending),
+      ));
     }
     if (_canTeam) {
-      cards.insert(
-        cards.isEmpty ? 0 : 1,
-        _sectionCard(
-          icon: Icons.groups_outlined,
-          title: '团队任务汇总',
-          subtitle: '部门任务进度和日报完成情况',
-          onTap: () => _select(TaskManagementSection.team),
-        ),
-      );
+      items.add((
+        icon: Icons.groups_rounded,
+        accent: const Color(0xFF2563EB),
+        title: '团队任务汇总',
+        subtitle: '部门任务进度和日报完成情况',
+        onTap: () => _select(TaskManagementSection.team),
+      ));
     }
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 18, 20, 30),
-      children: [
-        Text(
-          '仅展示任务相关的管理和待办功能，不改变原有任务列表、详情和日报流程。',
-          style: TextStyle(
-            fontSize: 13,
-            color: DunesColors.resolve(context, DunesColors.text3),
-            height: 1.4,
-          ),
-        ),
-        const SizedBox(height: 14),
-        ...cards,
-      ],
-    );
-  }
+    if (_canRecurring) {
+      items.add((
+        icon: Icons.repeat_rounded,
+        accent: kTaskPurple,
+        title: '周期任务',
+        subtitle: '维护周期规则与自动生成范围',
+        onTap: () => _select(TaskManagementSection.recurring),
+      ));
+    }
+    if (_canConfig) {
+      items.add((
+        icon: Icons.tune_rounded,
+        accent: const Color(0xFF4F46E5),
+        title: '任务配置',
+        subtitle: '日报提醒、审批和周期任务规则',
+        onTap: () => _select(TaskManagementSection.config),
+      ));
+    }
+    if (_canCalendar) {
+      items.add((
+        icon: Icons.event_available_rounded,
+        accent: const Color(0xFF1F9D76),
+        title: '节假日日历',
+        subtitle: '同步法定节假日与调休上班日',
+        onTap: () => _select(TaskManagementSection.calendar),
+      ));
+    }
+    if (_canImport) {
+      items.add((
+        icon: Icons.track_changes_rounded,
+        accent: const Color(0xFFE11D48),
+        title: '试用期目标',
+        subtitle: '查看全员进度、手动指派或批量导入',
+        onTap: () => _select(TaskManagementSection.probation),
+      ));
+      items.add((
+        icon: Icons.upload_file_rounded,
+        accent: const Color(0xFF0891B2),
+        title: '任务导入',
+        subtitle: '常规任务或试用期目标批量导入',
+        onTap: () => _select(TaskManagementSection.import),
+      ));
+    }
+    if (_canHistory) {
+      items.add((
+        icon: Icons.history_rounded,
+        accent: const Color(0xFF64748B),
+        title: '导入记录',
+        subtitle: '查看导入文件、校验状态与结果',
+        onTap: () => _select(TaskManagementSection.history),
+      ));
+    }
 
-  Widget _sectionCard({
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    required VoidCallback onTap,
-  }) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 10),
-      elevation: 0,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(14),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(15),
-          child: Row(
-            children: [
-              Container(
-                width: 42,
-                height: 42,
-                decoration: BoxDecoration(
-                  color: DunesColors.resolve(
-                    context,
-                    kTaskPurple,
-                    role: DunesColorRole.surface,
-                  ).withValues(alpha: 0.10),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(
-                  icon,
-                  color: DunesColors.resolveNullable(context, kTaskPurple),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: const TextStyle(fontWeight: FontWeight.w700),
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 1080),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final w = constraints.maxWidth;
+            final cols = w >= 860 ? 3 : (w >= 540 ? 2 : 1);
+            final horiz = w >= 720 ? 24.0 : 16.0;
+            return CustomScrollView(
+              slivers: [
+                SliverPadding(
+                  padding: EdgeInsets.fromLTRB(horiz, 20, horiz, 14),
+                  sliver: SliverToBoxAdapter(
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 4,
+                          height: 16,
+                          decoration: BoxDecoration(
+                            color: kTaskPurple,
+                            borderRadius: BorderRadius.circular(2),
+                          ),
+                        ),
+                        const SizedBox(width: 9),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '任务管理与扩展能力',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: -0.2,
+                                  color: DunesColors.resolve(
+                                    context,
+                                    DunesColors.text,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                '集中管理待办审批、团队汇总、周期规则、日历与批量导入',
+                                style: TextStyle(
+                                  fontSize: 12.5,
+                                  color: DunesColors.resolve(
+                                    context,
+                                    DunesColors.text3,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      subtitle,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: DunesColors.resolve(context, DunesColors.text3),
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
-              ),
-              Icon(
-                Icons.chevron_right,
-                color: DunesColors.resolve(context, DunesColors.text3),
-              ),
-            ],
-          ),
+                SliverPadding(
+                  padding: EdgeInsets.fromLTRB(horiz, 0, horiz, 30),
+                  sliver: SliverGrid(
+                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: cols,
+                      crossAxisSpacing: 12,
+                      mainAxisSpacing: 12,
+                      mainAxisExtent: cols == 1 ? 82 : 108,
+                    ),
+                    delegate: SliverChildBuilderDelegate(
+                      (context, index) {
+                        final item = items[index];
+                        return _TaskManagementBentoCard(
+                          icon: item.icon,
+                          accent: item.accent,
+                          title: item.title,
+                          subtitle: item.subtitle,
+                          compact: cols == 1,
+                          onTap: item.onTap,
+                        );
+                      },
+                      childCount: items.length,
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
         ),
       ),
     );
@@ -1787,29 +1790,242 @@ class _NativeTaskManagementPaneState extends State<NativeTaskManagementPane> {
   }
 
   Widget _emptyState(IconData icon, String title, String subtitle) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final hairline = (1 / MediaQuery.devicePixelRatioOf(context)).clamp(
+      0.33,
+      0.6,
+    );
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              icon,
-              size: 42,
-              color: DunesColors.resolveNullable(context, kTaskPurple),
+        padding: const EdgeInsets.all(24),
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 380),
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 34),
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF1F1D2C) : Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.08)
+                  : Colors.black.withValues(alpha: 0.055),
+              width: hairline,
             ),
-            const SizedBox(height: 12),
-            Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
-            const SizedBox(height: 6),
-            Text(
-              subtitle,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 12,
-                color: DunesColors.resolve(context, DunesColors.text3),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 56,
+                height: 56,
+                decoration: BoxDecoration(
+                  color: kTaskPurple.withValues(alpha: isDark ? 0.20 : 0.10),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Icon(
+                  icon,
+                  size: 28,
+                  color: DunesColors.resolveNullable(context, kTaskPurple),
+                ),
+              ),
+              const SizedBox(height: 14),
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 15.5,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                subtitle,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 12.5,
+                  height: 1.45,
+                  color: DunesColors.resolve(context, DunesColors.text3),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _TaskManagementBentoCard extends StatefulWidget {
+  const _TaskManagementBentoCard({
+    required this.icon,
+    required this.accent,
+    required this.title,
+    required this.subtitle,
+    required this.compact,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final Color accent;
+  final String title;
+  final String subtitle;
+  final bool compact;
+  final VoidCallback onTap;
+
+  @override
+  State<_TaskManagementBentoCard> createState() =>
+      _TaskManagementBentoCardState();
+}
+
+class _TaskManagementBentoCardState extends State<_TaskManagementBentoCard> {
+  bool _hovered = false;
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final disableAnim = MediaQuery.disableAnimationsOf(context);
+    final hairline = (1 / MediaQuery.devicePixelRatioOf(context)).clamp(
+      0.33,
+      0.6,
+    );
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) {
+        if (mounted) setState(() => _hovered = true);
+      },
+      onExit: (_) {
+        if (mounted) setState(() => _hovered = false);
+      },
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTapDown: (_) => setState(() => _pressed = true),
+        onTapUp: (_) => setState(() => _pressed = false),
+        onTapCancel: () => setState(() => _pressed = false),
+        onTap: () {
+          HapticFeedback.selectionClick();
+          widget.onTap();
+        },
+        child: AnimatedSlide(
+          offset: _hovered && !_pressed && !disableAnim
+              ? const Offset(0, -0.025)
+              : Offset.zero,
+          duration: const Duration(milliseconds: 160),
+          curve: Curves.easeOutCubic,
+          child: AnimatedScale(
+            scale: _pressed && !disableAnim ? 0.985 : 1.0,
+            duration: const Duration(milliseconds: 110),
+            curve: Curves.easeOutCubic,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 160),
+              padding: EdgeInsets.all(widget.compact ? 14 : 16),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF1F1D2C) : Colors.white,
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(
+                  color: _hovered
+                      ? widget.accent.withValues(alpha: isDark ? 0.45 : 0.35)
+                      : (isDark
+                            ? Colors.white.withValues(alpha: 0.08)
+                            : Colors.black.withValues(alpha: 0.055)),
+                  width: _hovered ? 1.0 : hairline,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: _hovered
+                        ? widget.accent.withValues(
+                            alpha: isDark ? 0.16 : 0.10,
+                          )
+                        : (isDark
+                              ? const Color(0x1C000000)
+                              : const Color(0x083D2C7A)),
+                    blurRadius: _hovered ? 18 : 10,
+                    offset: Offset(0, _hovered ? 6 : 3),
+                  ),
+                ],
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          widget.accent.withValues(
+                            alpha: isDark ? 0.24 : 0.15,
+                          ),
+                          widget.accent.withValues(
+                            alpha: isDark ? 0.10 : 0.06,
+                          ),
+                        ],
+                      ),
+                      borderRadius: BorderRadius.circular(13),
+                    ),
+                    child: Icon(
+                      widget.icon,
+                      size: 22,
+                      color: DunesColors.resolve(context, widget.accent),
+                    ),
+                  ),
+                  const SizedBox(width: 13),
+                  Expanded(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          widget.title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 14.5,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: -0.1,
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.text,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          widget.subtitle,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 12,
+                            height: 1.35,
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.text3,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  AnimatedSlide(
+                    offset: _hovered && !disableAnim
+                        ? const Offset(0.18, 0)
+                        : Offset.zero,
+                    duration: const Duration(milliseconds: 160),
+                    curve: Curves.easeOutCubic,
+                    child: Icon(
+                      Icons.chevron_right_rounded,
+                      size: 18,
+                      color: _hovered
+                          ? DunesColors.resolve(context, widget.accent)
+                          : DunesColors.resolve(context, DunesColors.text3),
+                    ),
+                  ),
+                ],
               ),
             ),
-          ],
+          ),
         ),
       ),
     );

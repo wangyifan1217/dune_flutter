@@ -511,41 +511,18 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
     );
   }
 
-  /// PC 左侧竖栏。标准标题栏下内容区绘制，不与 macOS 红绿灯重叠。
+  /// PC 左侧竖栏：透明融入 L 型通透雾感外框，兼容 Windows 与 macOS 原生标题栏。
   Widget _buildSideRail() {
     final settingsTap = widget.onDesktopSettingsTap;
     final palette =
         Theme.of(context).extension<DunesPalette>() ?? DunesPalette.day;
-    return Container(
+    return SizedBox(
       width: kDunesMainSideRailWidth,
-      color: DunesColors.resolveNullable(
-        context,
-        palette.surfaceRaised,
-        role: DunesColorRole.surface,
-      ),
       child: SafeArea(
         // 保留左右安全区（外接刘海/圆角屏）；顶部由系统标题栏占用，无需再垫。
         top: false,
         bottom: false,
-        child: Container(
-          decoration: BoxDecoration(
-            color: DunesColors.resolveNullable(
-              context,
-              palette.surfaceRaised,
-              role: DunesColorRole.surface,
-            ),
-            border: Border(
-              right: BorderSide(
-                color: DunesColors.resolve(
-                  context,
-                  palette.borderSubtle,
-                  role: DunesColorRole.border,
-                ),
-              ),
-            ),
-          ),
-          child: _sideRailBody(palette: palette, settingsTap: settingsTap),
-        ),
+        child: _sideRailBody(palette: palette, settingsTap: settingsTap),
       ),
     );
   }
@@ -589,16 +566,26 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
                     child: IgnorePointer(
                       child: DecoratedBox(
                         decoration: BoxDecoration(
-                          color: palette.surface,
-                          border: Border.all(color: palette.borderSubtle),
-                          boxShadow: const [
+                          color: Theme.of(context).brightness == Brightness.dark
+                              ? Colors.white.withValues(alpha: 0.11)
+                              : Colors.white.withValues(alpha: 0.88),
+                          border: Border.all(
+                            color: Theme.of(context).brightness ==
+                                    Brightness.dark
+                                ? Colors.white.withValues(alpha: 0.10)
+                                : Colors.white.withValues(alpha: 0.95),
+                          ),
+                          boxShadow: [
                             BoxShadow(
-                              color: Color(0x08000000),
-                              blurRadius: 5,
-                              offset: Offset(0, 2),
+                              color: Theme.of(context).brightness ==
+                                      Brightness.dark
+                                  ? const Color(0x28000000)
+                                  : const Color(0x146E53C6),
+                              blurRadius: 10,
+                              offset: const Offset(0, 3),
                             ),
                           ],
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: BorderRadius.circular(13),
                         ),
                       ),
                     ),
@@ -677,23 +664,23 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
                           ? '小饕，正在生成回复'
                           : (unread ? '小饕，有未读回复' : '小饕'),
                       child: SizedBox(
-                        width: 34,
-                        height: 32,
+                        width: 40,
+                        height: 38,
                         child: Stack(
                           clipBehavior: Clip.none,
                           children: [
                             Align(
                               alignment: Alignment.bottomCenter,
                               child: SizedBox.square(
-                                dimension: 30,
+                                dimension: 36,
                                 child: Stack(
                                   clipBehavior: Clip.none,
                                   alignment: Alignment.center,
                                   children: [
                                     ClipOval(
                                       child: NovaAnimated3DAvatar(
-                                        width: 30,
-                                        height: 30,
+                                        width: 36,
+                                        height: 36,
                                         thinking: thinking,
                                         happy: unread && !thinking,
                                         fit: BoxFit.cover,

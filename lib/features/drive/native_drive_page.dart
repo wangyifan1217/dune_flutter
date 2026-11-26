@@ -1141,7 +1141,7 @@ class _NativeDrivePageState extends State<NativeDrivePage> {
     if (_loading) {
       return [
         const SliverFillRemaining(
-          hasScrollBody: false,
+          hasScrollBody: true,
           child: DunesListSkeleton(),
         ),
       ];

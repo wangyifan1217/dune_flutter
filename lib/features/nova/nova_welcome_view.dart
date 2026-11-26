@@ -131,123 +131,131 @@ class _NovaAiPartnerWelcomeViewState extends State<NovaAiPartnerWelcomeView>
 
   @override
   Widget build(BuildContext context) {
+    final isWide = MediaQuery.sizeOf(context).width > 760;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          const SizedBox(height: 8),
+      padding: EdgeInsets.symmetric(
+        horizontal: isWide ? 24 : 16,
+        vertical: isWide ? 20 : 8,
+      ),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxWidth: isWide ? 640 : double.infinity,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              const SizedBox(height: 8),
 
-          // 1. 头像区：拟人 3D 头像 + 沙丘紫暖金柔光光晕
-          _buildStaggeredItem(
-            start: 0.00,
-            end: 0.40,
-            offsetY: 18.0,
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                Container(
-                  width: 156,
-                  height: 156,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: RadialGradient(
-                      colors: [
-                        DunesColors.resolve(
-                          context,
-                          DunesColors.brandPurpleSoft,
-                          role: DunesColorRole.surface,
+              // 1. 头像区：拟人 3D 头像 + 沙丘紫暖金柔光光晕
+              _buildStaggeredItem(
+                start: 0.00,
+                end: 0.40,
+                offsetY: 18.0,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    Container(
+                      width: 156,
+                      height: 156,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: RadialGradient(
+                          colors: [
+                            DunesColors.resolve(
+                              context,
+                              DunesColors.brandPurpleSoft,
+                              role: DunesColorRole.surface,
+                            ),
+                            DunesColors.resolve(
+                              context,
+                              const Color(0x80F3EEFA),
+                              role: DunesColorRole.surface,
+                            ),
+                            DunesColors.resolve(
+                              context,
+                              const Color(0x00F5F5F7),
+                              role: DunesColorRole.surface,
+                            ),
+                          ],
+                          stops: const [0.22, 0.62, 1.0],
                         ),
-                        DunesColors.resolve(
-                          context,
-                          const Color(0x80F3EEFA),
-                          role: DunesColorRole.surface,
-                        ),
-                        DunesColors.resolve(
-                          context,
-                          const Color(0x00F5F5F7),
-                          role: DunesColorRole.surface,
-                        ),
-                      ],
-                      stops: const [0.22, 0.62, 1.0],
+                      ),
                     ),
-                  ),
+                    const NovaBlinkingAvatar(size: 112),
+                  ],
                 ),
-                const NovaBlinkingAvatar(size: 112),
-              ],
-            ),
-          ),
-          const SizedBox(height: 14),
-
-          // 2. 问候语：“Hi，我是小饕”
-          _buildStaggeredItem(
-            start: 0.10,
-            end: 0.48,
-            offsetY: 20.0,
-            child: Text(
-              'Hi，我是${widget.name}',
-              style: DunesTypography.sans(
-                fontSize: 26,
-                fontWeight: FontWeight.w700,
-                color: DunesColors.resolve(context, DunesColors.text),
-                letterSpacing: -0.5,
-                context: context,
               ),
-            ),
-          ),
-          const SizedBox(height: 6),
+              const SizedBox(height: 14),
 
-          // 3. 副标题 + iOS 胶囊反馈按钮
-          _buildStaggeredItem(
-            start: 0.16,
-            end: 0.54,
-            offsetY: 16.0,
-            child: Column(
-              children: [
-                Text(
-                  widget.subtitle,
-                  textAlign: TextAlign.center,
+              // 2. 问候语：“Hi，我是小饕”
+              _buildStaggeredItem(
+                start: 0.10,
+                end: 0.48,
+                offsetY: 20.0,
+                child: Text(
+                  'Hi，我是${widget.name}',
                   style: DunesTypography.sans(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w400,
-                    color: DunesColors.resolve(context, DunesColors.text2),
+                    fontSize: 26,
+                    fontWeight: FontWeight.w700,
+                    color: DunesColors.resolve(context, DunesColors.text),
+                    letterSpacing: -0.5,
                     context: context,
                   ),
                 ),
-                const SizedBox(height: 10),
-                _FeedbackPillButton(onTap: _showFeedbackDialog),
-              ],
-            ),
-          ),
-          const SizedBox(height: 24),
+              ),
+              const SizedBox(height: 6),
 
-          // 4. iOS Inset Grouped 推荐提问卡片组
-          _buildStaggeredItem(
-            start: 0.24,
-            end: 0.78,
-            offsetY: 26.0,
-            child: Container(
-              decoration: BoxDecoration(
-                color: DunesColors.resolve(
-                  context,
-                  DunesColors.imSurface,
-                  role: DunesColorRole.surface,
+              // 3. 副标题 + iOS 胶囊反馈按钮
+              _buildStaggeredItem(
+                start: 0.16,
+                end: 0.54,
+                offsetY: 16.0,
+                child: Column(
+                  children: [
+                    Text(
+                      widget.subtitle,
+                      textAlign: TextAlign.center,
+                      style: DunesTypography.sans(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w400,
+                        color: DunesColors.resolve(context, DunesColors.text2),
+                        context: context,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    _FeedbackPillButton(onTap: _showFeedbackDialog),
+                  ],
                 ),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: DunesColors.resolve(
-                    context,
-                    DunesColors.borderSoft,
-                    role: DunesColorRole.border,
-                  ),
-                  width: 0.8,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: DunesColors.text.withValues(alpha: 0.04),
-                    offset: const Offset(0, 6),
-                    blurRadius: 20,
+              ),
+              const SizedBox(height: 24),
+
+              // 4. 玻璃通透感推荐提问卡片组
+              _buildStaggeredItem(
+                start: 0.24,
+                end: 0.78,
+                offsetY: 26.0,
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? Colors.white.withValues(alpha: 0.045)
+                        : Colors.white.withValues(alpha: 0.90),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: isDark
+                          ? Colors.white.withValues(alpha: 0.08)
+                          : const Color(0xFFEAE5F7),
+                      width: 0.9,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: isDark
+                            ? const Color(0x22000000)
+                            : const Color(0x0E583EA8),
+                        offset: const Offset(0, 6),
+                        blurRadius: 20,
                   ),
                 ],
               ),
@@ -307,6 +315,8 @@ class _NovaAiPartnerWelcomeViewState extends State<NovaAiPartnerWelcomeView>
           ),
           const SizedBox(height: 12),
         ],
+      ),
+        ),
       ),
     );
   }

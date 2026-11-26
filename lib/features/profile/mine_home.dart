@@ -610,160 +610,354 @@ Future<void> showMineCreateSheet(
   VoidCallback? onHrPerformance,
   bool showProposals = true,
 }) {
-  return showModalBottomSheet<void>(
-    context: context,
-    useRootNavigator: true,
-    isScrollControlled: true,
-    backgroundColor: Colors.transparent,
-    barrierColor: const Color(0xFF1F2421).withValues(alpha: .36),
-    builder: (ctx) {
-      Widget option({
-        required IconData icon,
-        required List<Color> iconGradient,
-        required Color bg,
-        required String title,
-        required String subtitle,
-        required VoidCallback onTap,
-      }) {
-        final gradient = iconGradient
-            .map((color) => DunesColors.resolve(ctx, color))
-            .toList();
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 8),
-          child: Material(
-            color: _r(ctx, bg, DunesColorRole.surface),
+  Widget buildGlassPanel(BuildContext ctx, {required bool isDialog}) {
+    final isDark = Theme.of(ctx).brightness == Brightness.dark;
+    final media = MediaQuery.of(ctx);
+    final maxHeight = media.size.height - media.padding.top - 48;
+
+    Widget sectionTitle(String text) => Padding(
+      padding: const EdgeInsets.fromLTRB(4, 10, 4, 8),
+      child: Text(
+        text,
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0.2,
+          color: _r(ctx, MinePalette.ink2),
+        ),
+      ),
+    );
+
+    Widget proposalCard({
+      required IconData icon,
+      required List<Color> colors,
+      required String title,
+      required String subtitle,
+      required VoidCallback onTap,
+    }) {
+      return Expanded(
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
             borderRadius: BorderRadius.circular(18),
-            child: InkWell(
-              borderRadius: BorderRadius.circular(18),
-              onTap: () {
-                Navigator.of(ctx).pop();
-                onTap();
-              },
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 40,
-                      height: 40,
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: gradient,
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
+            onTap: () {
+              HapticFeedback.selectionClick();
+              Navigator.of(ctx).pop();
+              onTap();
+            },
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(12, 13, 12, 13),
+              decoration: BoxDecoration(
+                color: isDark
+                    ? Colors.white.withValues(alpha: 0.07)
+                    : Colors.white.withValues(alpha: 0.80),
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(
+                  color: isDark
+                      ? Colors.white.withValues(alpha: 0.11)
+                      : Colors.white.withValues(alpha: 0.94),
+                  width: 0.8,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: colors.first.withValues(alpha: isDark ? 0.18 : 0.10),
+                    blurRadius: 12,
+                    offset: const Offset(0, 3),
+                  ),
+                ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: colors,
+                      ),
+                      borderRadius: BorderRadius.circular(11),
+                      boxShadow: [
+                        BoxShadow(
+                          color: colors.first.withValues(alpha: 0.28),
+                          blurRadius: 8,
+                          offset: const Offset(0, 3),
                         ),
-                        borderRadius: BorderRadius.circular(13),
-                        boxShadow: [
-                          BoxShadow(
-                            color: gradient.first.withValues(alpha: .22),
-                            blurRadius: 6,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
-                      ),
-                      child: Icon(icon, size: 20, color: Colors.white),
+                      ],
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: 14.5,
-                              fontWeight: FontWeight.w700,
-                              color: _r(ctx, MinePalette.ink),
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            subtitle,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: 12,
-                              height: 1.35,
-                              color: _r(ctx, MinePalette.ink2),
-                            ),
-                          ),
-                        ],
-                      ),
+                    child: Icon(icon, size: 18, color: Colors.white),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w700,
+                      color: _r(ctx, MinePalette.ink),
                     ),
-                    Icon(
-                      Icons.chevron_right_rounded,
-                      size: 20,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 11,
                       color: _r(ctx, MinePalette.ink2),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
           ),
-        );
-      }
+        ),
+      );
+    }
 
-      // 默认底栏最高只有屏高的 9/16，六项会 BOTTOM OVERFLOW。
-      // 放开高度后仍限制在可视区域里，矮屏或大字号改为内部滚动。
-      final media = MediaQuery.of(ctx);
-      final maxHeight = media.size.height - media.padding.top - 24;
-      // isScrollControlled 时子组件会撑满路由。空白区单独接点击，点面板外即收起。
-      return Column(
-        children: [
-          Expanded(
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: () => Navigator.of(ctx).pop(),
+    Widget option({
+      required IconData icon,
+      required List<Color> iconGradient,
+      required String title,
+      required String subtitle,
+      required VoidCallback onTap,
+    }) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(16),
+            onTap: () {
+              HapticFeedback.selectionClick();
+              Navigator.of(ctx).pop();
+              onTap();
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+              decoration: BoxDecoration(
+                color: isDark
+                    ? Colors.white.withValues(alpha: 0.06)
+                    : Colors.white.withValues(alpha: 0.74),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: isDark
+                      ? Colors.white.withValues(alpha: 0.09)
+                      : Colors.white.withValues(alpha: 0.90),
+                  width: 0.75,
+                ),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 38,
+                    height: 38,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: iconGradient,
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: [
+                        BoxShadow(
+                          color: iconGradient.first.withValues(alpha: .24),
+                          blurRadius: 6,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Icon(icon, size: 19, color: Colors.white),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            color: _r(ctx, MinePalette.ink),
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          subtitle,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            color: _r(ctx, MinePalette.ink2),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Icon(
+                    Icons.chevron_right_rounded,
+                    size: 18,
+                    color: _r(ctx, MinePalette.ink2),
+                  ),
+                ],
+              ),
             ),
           ),
-          ConstrainedBox(
-            constraints: BoxConstraints(maxHeight: maxHeight),
-            child: Material(
-              color: _r(ctx, MinePalette.card, DunesColorRole.surface),
-              clipBehavior: Clip.antiAlias,
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(28),
+        ),
+      );
+    }
+
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxHeight: maxHeight),
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(isDialog ? 24 : 28),
+          boxShadow: [
+            BoxShadow(
+              color: isDark
+                  ? const Color(0x42000000)
+                  : const Color(0x184B348A),
+              blurRadius: 28,
+              offset: const Offset(0, 10),
+            ),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(isDialog ? 24 : 28),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 28, sigmaY: 28),
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: isDark
+                      ? [
+                          const Color(0xFF28243C).withValues(alpha: 0.84),
+                          const Color(0xFF1B192B).withValues(alpha: 0.80),
+                        ]
+                      : [
+                          Colors.white.withValues(alpha: 0.86),
+                          const Color(0xFFF3EEFD).withValues(alpha: 0.80),
+                        ],
+                ),
+                borderRadius: BorderRadius.circular(isDialog ? 24 : 28),
+                border: Border.all(
+                  color: isDark
+                      ? Colors.white.withValues(alpha: 0.14)
+                      : Colors.white.withValues(alpha: 0.94),
+                  width: 1.0,
+                ),
               ),
               child: SingleChildScrollView(
                 padding: EdgeInsets.fromLTRB(
                   16,
-                  10,
+                  isDialog ? 16 : 12,
                   16,
-                  18 + media.viewPadding.bottom,
+                  isDialog ? 16 : 18 + media.viewPadding.bottom,
                 ),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Center(
-                      child: Container(
-                        width: 36,
-                        height: 4,
-                        margin: const EdgeInsets.only(bottom: 14),
-                        decoration: BoxDecoration(
-                          color: _r(
-                            ctx,
-                            const Color(0xFFDCD6E8),
-                            DunesColorRole.border,
+                    if (!isDialog)
+                      Center(
+                        child: Container(
+                          width: 38,
+                          height: 4,
+                          margin: const EdgeInsets.only(bottom: 12),
+                          decoration: BoxDecoration(
+                            color: isDark
+                                ? Colors.white.withValues(alpha: 0.22)
+                                : Colors.black.withValues(alpha: 0.14),
+                            borderRadius: BorderRadius.circular(999),
                           ),
-                          borderRadius: BorderRadius.circular(999),
                         ),
                       ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(4, 0, 4, 10),
-                      child: Text(
-                        '更多',
-                        style: TextStyle(
-                          fontSize: 17,
-                          fontWeight: FontWeight.w700,
-                          color: _r(ctx, MinePalette.ink),
+                    Row(
+                      children: [
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            '快捷发起与更多',
+                            style: TextStyle(
+                              fontSize: 16.5,
+                              fontWeight: FontWeight.w700,
+                              color: _r(ctx, MinePalette.ink),
+                            ),
+                          ),
                         ),
-                      ),
+                        if (isDialog)
+                          InkWell(
+                            borderRadius: BorderRadius.circular(99),
+                            onTap: () => Navigator.of(ctx).pop(),
+                            child: Container(
+                              width: 28,
+                              height: 28,
+                              decoration: BoxDecoration(
+                                color: isDark
+                                    ? Colors.white.withValues(alpha: 0.08)
+                                    : Colors.black.withValues(alpha: 0.05),
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(
+                                Icons.close_rounded,
+                                size: 16,
+                                color: _r(ctx, MinePalette.ink2),
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
+                    if (showProposals) ...[
+                      sectionTitle('新建提案'),
+                      Row(
+                        children: [
+                          proposalCard(
+                            icon: Icons.trending_up_rounded,
+                            colors: const [
+                              Color(0xFF9370ED),
+                              Color(0xFF6B48CE),
+                            ],
+                            title: '销售提案',
+                            subtitle: '商机与报价',
+                            onTap: onSales,
+                          ),
+                          const SizedBox(width: 8),
+                          proposalCard(
+                            icon: Icons.shopping_bag_outlined,
+                            colors: const [
+                              Color(0xFF1E9B8F),
+                              Color(0xFF0F766E),
+                            ],
+                            title: '采购提案',
+                            subtitle: '采购与履约',
+                            onTap: onPurchase,
+                          ),
+                          if (onFunding != null) ...[
+                            const SizedBox(width: 8),
+                            proposalCard(
+                              icon: Icons.account_balance_wallet_outlined,
+                              colors: const [
+                                Color(0xFFD4973A),
+                                Color(0xFFA66B1A),
+                              ],
+                              title: '资金提案',
+                              subtitle: '融资与统筹',
+                              onTap: onFunding,
+                            ),
+                          ],
+                        ],
+                      ),
+                    ],
+                    sectionTitle('办公与协同'),
                     if (onWorkbench != null)
                       option(
                         icon: Icons.apps_rounded,
@@ -771,54 +965,16 @@ Future<void> showMineCreateSheet(
                           Color(0xFF6366F1),
                           Color(0xFF4338CA),
                         ],
-                        bg: MinePalette.wash,
                         title: '工作台',
                         subtitle: '打开任务与协作工作台',
                         onTap: onWorkbench,
                       ),
-                    if (showProposals) ...[
-                      option(
-                        icon: Icons.request_quote_outlined,
-                        iconGradient: const [
-                          Color(0xFF0EA5E9),
-                          Color(0xFF0369A1),
-                        ],
-                        bg: MinePalette.wash,
-                        title: '销售提案',
-                        subtitle: '完成后在提案内发起业务审批',
-                        onTap: onSales,
-                      ),
-                      option(
-                        icon: Icons.shopping_bag_outlined,
-                        iconGradient: const [
-                          Color(0xFFF59E0B),
-                          Color(0xFFB45309),
-                        ],
-                        bg: MinePalette.wash,
-                        title: '采购提案',
-                        subtitle: '完成后在提案内发起业务审批',
-                        onTap: onPurchase,
-                      ),
-                      if (onFunding != null)
-                        option(
-                          icon: Icons.account_balance_outlined,
-                          iconGradient: const [
-                            Color(0xFF34A06A),
-                            Color(0xFF1F6B45),
-                          ],
-                          bg: MinePalette.wash,
-                          title: '资金提案',
-                          subtitle: '融资立项申请，提交后四级审批',
-                          onTap: onFunding,
-                        ),
-                    ],
                     option(
                       icon: Icons.add_task_rounded,
                       iconGradient: const [
                         Color(0xFF7C5CE6),
                         Color(0xFF552D8E),
                       ],
-                      bg: MinePalette.page,
                       title: '审批',
                       subtitle: '进入后选择业务审批或非业务审批',
                       onTap: onApproval,
@@ -829,7 +985,6 @@ Future<void> showMineCreateSheet(
                         Color(0xFF3880FF),
                         Color(0xFF1E40AF),
                       ],
-                      bg: MinePalette.wash,
                       title: '会议纪要',
                       subtitle: '录制、上传并查看 AI 会议纪要',
                       onTap: onMeeting,
@@ -840,7 +995,6 @@ Future<void> showMineCreateSheet(
                         Color(0xFF10B981),
                         Color(0xFF047857),
                       ],
-                      bg: MinePalette.wash,
                       title: '企业知识库',
                       subtitle: '查看组织文档与知识沉淀',
                       onTap: onKnowledge,
@@ -852,7 +1006,6 @@ Future<void> showMineCreateSheet(
                           Color(0xFF7B5CD8),
                           Color(0xFF552D8E),
                         ],
-                        bg: MinePalette.wash,
                         title: '绩效考核',
                         subtitle: '查看考核进度与任务证据',
                         onTap: onHrPerformance,
@@ -864,7 +1017,6 @@ Future<void> showMineCreateSheet(
                           Color(0xFF8C5A91),
                           Color(0xFF6D4574),
                         ],
-                        bg: MinePalette.wash,
                         title: '绩效',
                         subtitle: '查看已发布的月度绩效与得分',
                         onTap: onPerformance,
@@ -885,9 +1037,57 @@ Future<void> showMineCreateSheet(
               ),
             ),
           ),
-        ],
-      );
-    },
+        ),
+      ),
+    );
+  }
+
+  if (isDesktopCommOnly) {
+    return showGeneralDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: '更多',
+      barrierColor: Colors.black.withValues(alpha: 0.24),
+      transitionDuration: const Duration(milliseconds: 220),
+      transitionBuilder: (ctx, anim, _, child) {
+        final curved = CurvedAnimation(
+          parent: anim,
+          curve: Curves.easeOutCubic,
+          reverseCurve: Curves.easeInCubic,
+        );
+        return FadeTransition(
+          opacity: curved,
+          child: ScaleTransition(
+            scale: Tween<double>(begin: 0.94, end: 1.0).animate(curved),
+            child: child,
+          ),
+        );
+      },
+      pageBuilder: (dialogCtx, _, __) => Center(
+        child: Material(
+          color: Colors.transparent,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 480),
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: buildGlassPanel(dialogCtx, isDialog: true),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  return showModalBottomSheet<void>(
+    context: context,
+    useRootNavigator: true,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    barrierColor: Colors.black.withValues(alpha: 0.28),
+    builder: (ctx) => Padding(
+      padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+      child: buildGlassPanel(ctx, isDialog: false),
+    ),
   );
 }
 

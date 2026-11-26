@@ -3901,14 +3901,17 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       fit: StackFit.expand,
       children: [
         for (final entry in _dualChatSlots.entries)
-          Offstage(
-            offstage: entry.key != activeId || overlay != null,
-            child: TickerMode(
-              enabled: entry.key == activeId && overlay == null,
-              child: _buildDualChatPageForSlot(
-                slotId: entry.key,
-                slot: entry.value,
-                active: entry.key == activeId,
+          ExcludeSemantics(
+            excluding: entry.key != activeId || overlay != null,
+            child: Offstage(
+              offstage: entry.key != activeId || overlay != null,
+              child: TickerMode(
+                enabled: entry.key == activeId && overlay == null,
+                child: _buildDualChatPageForSlot(
+                  slotId: entry.key,
+                  slot: entry.value,
+                  active: entry.key == activeId,
+                ),
               ),
             ),
           ),
@@ -3946,15 +3949,18 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     required bool active,
     bool ignoring = false,
   }) {
-    return Offstage(
-      offstage: !active,
-      child: TickerMode(
-        enabled: active,
-        child: IgnorePointer(
-          ignoring: ignoring || !active,
-          child: KeyedSubtree(
-            key: _commDualKeepAliveKey,
-            child: _buildChatDualPane(),
+    return ExcludeSemantics(
+      excluding: !active,
+      child: Offstage(
+        offstage: !active,
+        child: TickerMode(
+          enabled: active,
+          child: IgnorePointer(
+            ignoring: ignoring || !active,
+            child: KeyedSubtree(
+              key: _commDualKeepAliveKey,
+              child: _buildChatDualPane(),
+            ),
           ),
         ),
       ),
@@ -5781,17 +5787,20 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         children: [
           _buildCommDualKeepAlive(active: true),
           if (_lighthouseMounted)
-            Offstage(
-              offstage: true,
-              child: TickerMode(
-                enabled: false,
-                child: NativeLighthousePage(
-                  key: const ValueKey<String>('lighthouse-keep-alive'),
-                  session: widget.session,
-                  navigation: widget.navigation,
-                  commUnread: _commUnread,
-                  workbenchBadge: _workbenchBadge,
-                  active: false,
+            ExcludeSemantics(
+              excluding: true,
+              child: Offstage(
+                offstage: true,
+                child: TickerMode(
+                  enabled: false,
+                  child: NativeLighthousePage(
+                    key: const ValueKey<String>('lighthouse-keep-alive'),
+                    session: widget.session,
+                    navigation: widget.navigation,
+                    commUnread: _commUnread,
+                    workbenchBadge: _workbenchBadge,
+                    active: false,
+                  ),
                 ),
               ),
             ),
@@ -5982,17 +5991,20 @@ class _NativeScreenHostState extends State<NativeScreenHost>
             ignoring: isSearch,
           ),
         if (_lighthouseMounted)
-          Offstage(
-            offstage: !isLighthouse,
-            child: TickerMode(
-              enabled: isLighthouse,
-              child: NativeLighthousePage(
-                key: const ValueKey<String>('lighthouse-keep-alive'),
-                session: widget.session,
-                navigation: widget.navigation,
-                commUnread: _commUnread,
-                workbenchBadge: _workbenchBadge,
-                active: isLighthouse,
+          ExcludeSemantics(
+            excluding: !isLighthouse,
+            child: Offstage(
+              offstage: !isLighthouse,
+              child: TickerMode(
+                enabled: isLighthouse,
+                child: NativeLighthousePage(
+                  key: const ValueKey<String>('lighthouse-keep-alive'),
+                  session: widget.session,
+                  navigation: widget.navigation,
+                  commUnread: _commUnread,
+                  workbenchBadge: _workbenchBadge,
+                  active: isLighthouse,
+                ),
               ),
             ),
           ),
@@ -6264,23 +6276,11 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     );
 
     if (isDesktopCommOnly) {
-      return ColoredBox(
-        color: DunesColors.resolve(
-          context,
-          DunesColors.bgApp,
-          role: DunesColorRole.surface,
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            tabBar,
-            Expanded(
-              child: DesktopSectionTransition(
-                token: _desktopSectionTransitionToken,
-                child: content,
-              ),
-            ),
-          ],
+      return DunesDesktopTranslucentFrame(
+        sideRail: tabBar,
+        child: DesktopSectionTransition(
+          token: _desktopSectionTransitionToken,
+          child: content,
         ),
       );
     }

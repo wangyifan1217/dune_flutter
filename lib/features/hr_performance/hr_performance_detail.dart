@@ -16,6 +16,7 @@ const hrActionLabels = <String, String>{
   'hr_edit_scores': 'HR 修改评分',
   'hr_skip': '跳过当前审批',
   'hr_return': '撤回 / 回退',
+  'hr_assign': '调整考核主管',
   'switch_template': '切换考核模板',
   'update_bonus': '修改加减分',
   'submit_self': '提交自评',
@@ -226,6 +227,7 @@ class _HrPerformanceDetailState extends State<HrPerformanceDetail> {
   }) async {
     if (_busy) return;
     Map<String, dynamic>? data;
+    HrPerformanceRecord? submittedSelf;
     try {
       if (_options == null) {
         await _loadOptions();
@@ -235,8 +237,22 @@ class _HrPerformanceDetailState extends State<HrPerformanceDetail> {
       final rules = Map<String, dynamic>.from(config['rules'] as Map? ?? {});
       if (!mounted) return;
       switch (action) {
-        case 'hr_edit_scores':
         case 'submit_self':
+          data = await showHrScoreSheet(
+            context,
+            _record,
+            config,
+            title: '提交自评',
+            initial: true,
+            self: true,
+            submitInSheet: (values) async {
+              submittedSelf = await widget.service.action(_record, {
+                'action': action,
+                ...values,
+              });
+            },
+          );
+        case 'hr_edit_scores':
         case 'submit_review':
         case 'save_calibration':
           data = await showHrScoreSheet(
@@ -244,8 +260,7 @@ class _HrPerformanceDetailState extends State<HrPerformanceDetail> {
             _record,
             config,
             title: hrActionLabels[action]!,
-            initial: action == 'submit_review' || action == 'submit_self',
-            self: action == 'submit_self',
+            initial: action == 'submit_review',
             hrEdit: action == 'hr_edit_scores',
           );
         case 'approve_final':
@@ -332,6 +347,12 @@ class _HrPerformanceDetailState extends State<HrPerformanceDetail> {
           data = await showHrAdjustmentSheet(context, _record, _options!);
         case 'add_bonus':
           data = await showHrBonusSheet(context, config, record: _record);
+        case 'hr_assign':
+          data = await showHrSupervisorSheet(
+            context,
+            _record,
+            hrMaps(_options!['users']),
+          );
         case 'switch_template':
           final templates = hrMaps(_options!['assignmentTemplates']);
           if (templates.isEmpty) {
@@ -443,13 +464,18 @@ class _HrPerformanceDetailState extends State<HrPerformanceDetail> {
       if (data == null || !mounted) return;
       setState(() => _busy = true);
       final result =
-          (action == 'assign_snapshot' || action == 'switch_template')
-          ? await widget.service.assign(_record, data)
-          : await widget.service.action(_record, {
-              'action': action,
-              ...data,
-              'requestId': ?requestId,
-            });
+          submittedSelf ??
+          (([
+                'assign_snapshot',
+                'switch_template',
+                'hr_assign',
+              ].contains(action))
+              ? await widget.service.assign(_record, data)
+              : await widget.service.action(_record, {
+                  'action': action,
+                  ...data,
+                  'requestId': ?requestId,
+                }));
       if (!mounted) return;
       setState(() {
         _record = result;

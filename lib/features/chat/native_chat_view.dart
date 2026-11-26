@@ -116,6 +116,25 @@ enum NativeChatKind { private, group }
 const double _kChatMessageRowHeight = 76;
 
 /// 会话列表滚动/分页参数，按列表可视高度自适应（Android / iOS、大小屏通用）。
+/// 独立承接键盘高度与底部安全区的占位条：
+/// 用 max(viewInsets.bottom, viewPadding.bottom) 保证键盘从 0 升至 34+ 时高度单调平滑，
+/// 消除 SafeArea(bottom: true) 在安全区临界点跳变，同时把 MediaQuery 订阅隔离在本叶节点内。
+class _ChatKeyboardSpacer extends StatelessWidget {
+  const _ChatKeyboardSpacer();
+
+  @override
+  Widget build(BuildContext context) {
+    final inset = MediaQuery.viewInsetsOf(context).bottom;
+    final safeBottom = MediaQuery.viewPaddingOf(context).bottom;
+    final height = inset > safeBottom ? inset : safeBottom;
+    if (height <= 0) return const SizedBox.shrink();
+    return ColoredBox(
+      color: ImVisualTokens.cardSurface(context),
+      child: SizedBox(width: double.infinity, height: height),
+    );
+  }
+}
+
 class _ChatScrollMetrics {
   const _ChatScrollMetrics({required this.listViewportHeight});
 
@@ -173,17 +192,23 @@ class _ChatListEntry {
   const _ChatListEntry.divider(this.dividerLabel)
     : message = null,
       showSenderMeta = false,
+      groupedWithPrev = false,
+      groupedWithNext = false,
       imageGroup = const [];
 
   const _ChatListEntry.message(
     this.message, {
     this.showSenderMeta = false,
+    this.groupedWithPrev = false,
+    this.groupedWithNext = false,
     this.imageGroup = const [],
   }) : dividerLabel = null;
 
   final String? dividerLabel;
   final NativeChatMessage? message;
   final bool showSenderMeta;
+  final bool groupedWithPrev;
+  final bool groupedWithNext;
   final List<NativeChatMessage> imageGroup;
 }
 
@@ -2844,6 +2869,97 @@ class _NativeChatViewState extends State<NativeChatView>
     return count;
   }
 
+  /// KakaoTalk 风格极简未读人数：私聊未读为 1、已读为 0；群聊为剩余未读人数。
+  int? _unreadCountForMessage(
+    NativeChatMessage message, {
+    required bool mine,
+    required bool peerRead,
+  }) {
+    if (!mine || message.id <= 0 || message.recalled) return null;
+    if (_isPrivate) {
+      if (_conversation?.isSelfMemo == true) return null;
+      return peerRead ? 0 : 1;
+    }
+    final peers = _groupReadPeers();
+    if (peers.isEmpty) return null;
+    final readCount = _groupReadCountForMessage(message.id);
+    final unread = peers.length - readCount;
+    return unread < 0 ? 0 : unread;
+  }
+
+  /// PC 端气泡悬停快捷磨砂浮条（引用 / 复制 / 转发 / 更多），一步直达高频操作。
+  Widget _buildDesktopHoverActions(
+    NativeChatMessage m,
+    bool mine,
+    void Function(Offset anchor) onOpenMore,
+  ) {
+    final canCopy = m.kind.toUpperCase() == 'TEXT' && !m.recalled;
+    final iconColor = DunesColors.resolve(context, DunesColors.text2);
+    final accent = ImVisualTokens.accent(context);
+
+    Widget btn({
+      required IconData icon,
+      required String tooltip,
+      required VoidCallback onTap,
+    }) {
+      return Tooltip(
+        message: tooltip,
+        waitDuration: const Duration(milliseconds: 450),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(999),
+          onTap: onTap,
+          hoverColor: accent.withValues(alpha: 0.12),
+          child: Padding(
+            padding: const EdgeInsets.all(5),
+            child: Icon(icon, size: 15, color: iconColor),
+          ),
+        ),
+      );
+    }
+
+    return ImFrostedIsland(
+      borderRadius: 999,
+      blurSigma: 14,
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          btn(
+            icon: Icons.format_quote_rounded,
+            tooltip: '引用',
+            onTap: () => _startQuote(m),
+          ),
+          if (canCopy)
+            btn(
+              icon: Icons.content_copy_rounded,
+              tooltip: '复制',
+              onTap: () => unawaited(_copyMessageText(_messageCopyText(m))),
+            ),
+          btn(
+            icon: Icons.shortcut_rounded,
+            tooltip: '转发',
+            onTap: () => _forwardMessage(m),
+          ),
+          Builder(
+            builder: (btnCtx) => btn(
+              icon: Icons.more_horiz_rounded,
+              tooltip: '更多',
+              onTap: () {
+                final box = btnCtx.findRenderObject() as RenderBox?;
+                final pos = box != null
+                    ? box.localToGlobal(
+                        Offset(box.size.width / 2, box.size.height / 2),
+                      )
+                    : Offset.zero;
+                onOpenMore(pos);
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   String? _groupReadLabelForMessage(
     NativeChatMessage message, {
     required bool mine,
@@ -2923,6 +3039,51 @@ class _NativeChatViewState extends State<NativeChatView>
       );
       messageIndex += groupedImages.length > 1 ? groupedImages.length : 1;
     }
+    // KakaoTalk 风格连续消息聚合：同发件人 2 分钟内连发，中间省略头像与时间、收紧间距。
+    for (var i = 0; i < entries.length; i++) {
+      final cur = entries[i];
+      final curMsg = cur.message;
+      if (curMsg == null || _isSystemKind(curMsg.kind) || curMsg.recalled) {
+        continue;
+      }
+      var withPrev = false;
+      if (i > 0) {
+        final prevMsg = entries[i - 1].message;
+        if (prevMsg != null &&
+            !_isSystemKind(prevMsg.kind) &&
+            !prevMsg.recalled &&
+            prevMsg.senderUserId == curMsg.senderUserId &&
+            prevMsg.createdAt != null &&
+            curMsg.createdAt != null &&
+            curMsg.createdAt!.difference(prevMsg.createdAt!).abs() <=
+                const Duration(minutes: 2)) {
+          withPrev = true;
+        }
+      }
+      var withNext = false;
+      if (i + 1 < entries.length) {
+        final nextMsg = entries[i + 1].message;
+        if (nextMsg != null &&
+            !_isSystemKind(nextMsg.kind) &&
+            !nextMsg.recalled &&
+            nextMsg.senderUserId == curMsg.senderUserId &&
+            nextMsg.createdAt != null &&
+            curMsg.createdAt != null &&
+            nextMsg.createdAt!.difference(curMsg.createdAt!).abs() <=
+                const Duration(minutes: 2)) {
+          withNext = true;
+        }
+      }
+      if (withPrev || withNext) {
+        entries[i] = _ChatListEntry.message(
+          curMsg,
+          showSenderMeta: cur.showSenderMeta,
+          groupedWithPrev: withPrev,
+          groupedWithNext: withNext,
+          imageGroup: cur.imageGroup,
+        );
+      }
+    }
     _cachedListEntries = entries;
     _cachedListEntriesSource = _messages;
     _cachedListEntriesLen = _messages.length;
@@ -2931,10 +3092,9 @@ class _NativeChatViewState extends State<NativeChatView>
     return entries;
   }
 
-  /// 自己刚发出（服务端时间 8 秒内）的消息才播入场动画；PC、历史消息、
-  /// 设备时钟偏差过大时都返回 null，按原样显示。
+  /// 自己刚发出（服务端时间 8 秒内）的消息播放弹性入场动效（APP 与 PC 双端生效）。
   DateTime? _sendEnterStartFor(NativeChatMessage m, {required bool mine}) {
-    if (!mine || isDesktopCommOnly || m.id <= 0) return null;
+    if (!mine || m.id <= 0) return null;
     final known = _sendEnterStartedAt[m.id];
     if (known != null) return known;
     final created = m.createdAt;
@@ -11384,7 +11544,9 @@ class _NativeChatViewState extends State<NativeChatView>
         : '输入消息 · @人时唤出选择器';
 
     final scaffold = Scaffold(
-      resizeToAvoidBottomInset: true,
+      // 由底部独立的 _ChatKeyboardSpacer 单点承接键盘高度变化，避免 Scaffold 与 SafeArea
+      // 在键盘升降 30+ 帧里逐帧重建整棵聊天树以及安全区高度跳变。
+      resizeToAvoidBottomInset: false,
       backgroundColor: DunesColors.resolve(
         context,
         DunesColors.imSurface,
@@ -11835,6 +11997,29 @@ class _NativeChatViewState extends State<NativeChatView>
                                                   compactDesktop: desktop,
                                                   showSenderMeta:
                                                       entry.showSenderMeta,
+                                                  groupedWithPrev:
+                                                      entry.groupedWithPrev,
+                                                  groupedWithNext:
+                                                      entry.groupedWithNext,
+                                                  unreadCount:
+                                                      _unreadCountForMessage(
+                                                        m,
+                                                        mine: mine,
+                                                        peerRead: peerRead,
+                                                      ),
+                                                  hoverActions:
+                                                      desktop &&
+                                                          canShowActions &&
+                                                          !selecting &&
+                                                          _conversation
+                                                                  ?.dissolved !=
+                                                              true
+                                                      ? _buildDesktopHoverActions(
+                                                          m,
+                                                          mine,
+                                                          openActions,
+                                                        )
+                                                      : null,
                                                   showTimeForMine: mine,
                                                   timeLabel: timeLabel,
                                                   readLabel:
@@ -12167,47 +12352,181 @@ class _NativeChatViewState extends State<NativeChatView>
                                         ),
                                         onTap: _jumpToPendingMessages,
                                         child: _pendingNewMessageCount > 0
-                                            ? Container(
-                                                decoration: BoxDecoration(
-                                                  borderRadius:
-                                                      BorderRadius.circular(
-                                                        999,
+                                            ? Builder(
+                                                builder: (context) {
+                                                  NativeChatMessage? latestPeer;
+                                                  for (
+                                                    var i =
+                                                        _messages.length - 1;
+                                                    i >= 0;
+                                                    i--
+                                                  ) {
+                                                    final item = _messages[i];
+                                                    if (item.senderUserId !=
+                                                            widget
+                                                                .session
+                                                                .userId &&
+                                                        !_isSystemKind(
+                                                          item.kind,
+                                                        )) {
+                                                      latestPeer = item;
+                                                      break;
+                                                    }
+                                                  }
+                                                  final senderName =
+                                                      (latestPeer?.senderName ??
+                                                              '')
+                                                          .trim();
+                                                  final rawPreview =
+                                                      latestPeer == null
+                                                      ? ''
+                                                      : compactMessagePushPreview(
+                                                          kind: latestPeer.kind,
+                                                          body: latestPeer
+                                                              .bodyText,
+                                                        );
+                                                  final countLabel =
+                                                      _pendingNewMessageCount >
+                                                          99
+                                                      ? '99+'
+                                                      : '$_pendingNewMessageCount';
+                                                  return ConstrainedBox(
+                                                    constraints:
+                                                        const BoxConstraints(
+                                                          maxWidth: 320,
+                                                        ),
+                                                    child: Container(
+                                                      decoration: BoxDecoration(
+                                                        borderRadius:
+                                                            BorderRadius.circular(
+                                                              999,
+                                                            ),
+                                                        gradient: ImVisualTokens
+                                                            .primaryGradient(
+                                                              context,
+                                                            ),
+                                                        boxShadow: ImVisualTokens
+                                                            .floatingIslandShadow(
+                                                              context,
+                                                            ),
                                                       ),
-                                                  gradient: ImVisualTokens
-                                                      .primaryGradient(context),
-                                                  boxShadow: ImVisualTokens
-                                                      .floatingIslandShadow(
-                                                        context,
+                                                      padding:
+                                                          const EdgeInsets.fromLTRB(
+                                                            8,
+                                                            6,
+                                                            12,
+                                                            6,
+                                                          ),
+                                                      child: Row(
+                                                        mainAxisSize:
+                                                            MainAxisSize.min,
+                                                        children: [
+                                                          if (latestPeer !=
+                                                              null) ...[
+                                                            ImUserAvatar(
+                                                              initial:
+                                                                  senderName
+                                                                      .isNotEmpty
+                                                                  ? senderName[0]
+                                                                  : '新',
+                                                              seed: latestPeer
+                                                                  .senderUserId,
+                                                              size: 22,
+                                                              borderRadius: 999,
+                                                              avatarPreset:
+                                                                  latestPeer
+                                                                      .senderAvatarPreset,
+                                                              avatarObjectKey:
+                                                                  latestPeer
+                                                                      .senderAvatarObjectKey,
+                                                              avatarUrl:
+                                                                  latestPeer
+                                                                      .senderAvatarUrl,
+                                                              avatarService:
+                                                                  _service,
+                                                            ),
+                                                            const SizedBox(
+                                                              width: 7,
+                                                            ),
+                                                          ],
+                                                          Flexible(
+                                                            child: Text(
+                                                              rawPreview
+                                                                      .isNotEmpty
+                                                                  ? (senderName
+                                                                            .isNotEmpty
+                                                                        ? '$senderName：$rawPreview'
+                                                                        : rawPreview)
+                                                                  : '$countLabel 条新消息',
+                                                              maxLines: 1,
+                                                              overflow:
+                                                                  TextOverflow
+                                                                      .ellipsis,
+                                                              style: DunesTypography.sans(
+                                                                fontSize: 12,
+                                                                fontWeight:
+                                                                    FontWeight
+                                                                        .w600,
+                                                                color: Colors
+                                                                    .white,
+                                                                context:
+                                                                    context,
+                                                              ),
+                                                            ),
+                                                          ),
+                                                          if (rawPreview
+                                                              .isNotEmpty) ...[
+                                                            const SizedBox(
+                                                              width: 6,
+                                                            ),
+                                                            Container(
+                                                              padding:
+                                                                  const EdgeInsets.symmetric(
+                                                                    horizontal:
+                                                                        6,
+                                                                    vertical:
+                                                                        1.5,
+                                                                  ),
+                                                              decoration: BoxDecoration(
+                                                                color: Colors
+                                                                    .white
+                                                                    .withValues(
+                                                                      alpha:
+                                                                          0.22,
+                                                                    ),
+                                                                borderRadius:
+                                                                    BorderRadius.circular(
+                                                                      999,
+                                                                    ),
+                                                              ),
+                                                              child: Text(
+                                                                countLabel,
+                                                                style: const TextStyle(
+                                                                  fontSize:
+                                                                      10.5,
+                                                                  fontWeight:
+                                                                      FontWeight
+                                                                          .w700,
+                                                                  color: Colors
+                                                                      .white,
+                                                                ),
+                                                              ),
+                                                            ),
+                                                          ],
+                                                          const SizedBox(
+                                                            width: 3,
+                                                          ),
+                                                          const Icon(
+                                                            Icons
+                                                                .keyboard_arrow_down_rounded,
+                                                            size: 16,
+                                                            color: Colors.white,
+                                                          ),
+                                                        ],
                                                       ),
-                                                ),
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                      horizontal: 15,
-                                                      vertical: 8,
                                                     ),
-                                                child: Row(
-                                                  mainAxisSize:
-                                                      MainAxisSize.min,
-                                                  children: [
-                                                    const Icon(
-                                                      Icons
-                                                          .keyboard_arrow_down_rounded,
-                                                      size: 16,
-                                                      color: Colors.white,
-                                                    ),
-                                                    const SizedBox(width: 4),
-                                                    Text(
-                                                      '${_pendingNewMessageCount > 99 ? '99+' : _pendingNewMessageCount} 条新消息',
-                                                      style: DunesTypography.sans(
-                                                        fontSize: 12,
-                                                        fontWeight:
-                                                            FontWeight.w600,
-                                                        color: Colors.white,
-                                                        context: context,
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ),
+                                                  );
+                                                },
                                               )
                                             : ImFrostedIsland(
                                                 borderRadius: 999,
@@ -12314,13 +12633,13 @@ class _NativeChatViewState extends State<NativeChatView>
                   if (selecting)
                     _buildMultiSelectBottomBar()
                   else
-                    SafeArea(
-                      top: false,
+                    RepaintBoundary(
                       child: _buildComposerDock(
                         locked: locked,
                         inputHint: inputHint,
                       ),
                     ),
+                  if (!selecting) const _ChatKeyboardSpacer(),
                 ],
               ),
               if (_recording)
@@ -13616,15 +13935,19 @@ class _ChatSendEnter extends StatefulWidget {
 
 class _ChatSendEnterState extends State<_ChatSendEnter>
     with SingleTickerProviderStateMixin {
-  static const _duration = Duration(milliseconds: 320);
+  static const _duration = Duration(milliseconds: 280);
 
   late final AnimationController _controller = AnimationController(
     vsync: this,
     duration: _duration,
   );
-  late final Animation<double> _curve = CurvedAnimation(
+  late final Animation<double> _moveCurve = CurvedAnimation(
     parent: _controller,
     curve: Curves.easeOutCubic,
+  );
+  late final Animation<double> _scaleCurve = CurvedAnimation(
+    parent: _controller,
+    curve: Curves.easeOutBack,
   );
 
   @override
@@ -13647,17 +13970,19 @@ class _ChatSendEnterState extends State<_ChatSendEnter>
 
   @override
   Widget build(BuildContext context) {
+    if (MediaQuery.disableAnimationsOf(context)) return widget.child;
     return AnimatedBuilder(
-      animation: _curve,
+      animation: _controller,
       child: widget.child,
       builder: (context, child) {
-        final t = _curve.value;
+        final t = _moveCurve.value;
+        final s = _scaleCurve.value;
         return Opacity(
-          opacity: (0.2 + 0.8 * t).clamp(0.0, 1.0),
+          opacity: (0.15 + 0.85 * t).clamp(0.0, 1.0),
           child: Transform.translate(
-            offset: Offset(12 * (1 - t), 22 * (1 - t)),
+            offset: Offset(10 * (1 - t), 18 * (1 - t)),
             child: Transform.scale(
-              scale: 0.94 + 0.06 * t,
+              scale: (0.90 + 0.10 * s).clamp(0.88, 1.04),
               alignment: Alignment.bottomRight,
               child: child,
             ),

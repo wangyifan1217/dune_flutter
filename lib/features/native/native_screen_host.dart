@@ -2905,6 +2905,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   }
 
   Future<void> _openTaskAssistant([NativeConversation? hint]) async {
+    final openGen = ++_approvalAssistantOpenGen;
     setState(() {
       _selectedPrivate = null;
       _selectedPrivatePeerUserId = null;
@@ -2930,15 +2931,17 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       final conv = await ConversationService(
         session: widget.session,
       ).ensureTaskAssistantSession();
-      if (!mounted) return;
+      if (!mounted || openGen != _approvalAssistantOpenGen) return;
       setState(() => _selectedTaskAssistant = conv);
       _conversationReadSignal.notifyRead(conv.id);
-      if (widget.navigation.currentScreen != 'TA1') {
+      if (widget.navigation.currentScreen != 'TA1' &&
+          _dualPaneChatScreen != 'TA1') {
         _markUserEnteredChat();
         _goChatScreen('TA1');
       }
     } catch (_) {
-      if (mounted && (_selectedTaskAssistant?.id ?? 0) <= 0) {
+      if (!mounted || openGen != _approvalAssistantOpenGen) return;
+      if ((_selectedTaskAssistant?.id ?? 0) <= 0) {
         showDunesToast(context, '任务助手会话同步失败', kind: DunesToastKind.error);
       }
     }
@@ -2968,6 +2971,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   }
 
   Future<void> _openKpiAssistant([NativeConversation? hint]) async {
+    final openGen = ++_approvalAssistantOpenGen;
     setState(() {
       _selectedPrivate = null;
       _selectedPrivatePeerUserId = null;
@@ -2993,15 +2997,17 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       final conv = await ConversationService(
         session: widget.session,
       ).ensureKpiAssistantSession();
-      if (!mounted) return;
+      if (!mounted || openGen != _approvalAssistantOpenGen) return;
       setState(() => _selectedKpiAssistant = conv);
       _conversationReadSignal.notifyRead(conv.id);
-      if (widget.navigation.currentScreen != 'KA1') {
+      if (widget.navigation.currentScreen != 'KA1' &&
+          _dualPaneChatScreen != 'KA1') {
         _markUserEnteredChat();
         _goChatScreen('KA1');
       }
     } catch (_) {
-      if (mounted && (_selectedKpiAssistant?.id ?? 0) <= 0) {
+      if (!mounted || openGen != _approvalAssistantOpenGen) return;
+      if ((_selectedKpiAssistant?.id ?? 0) <= 0) {
         showDunesToast(context, '绩效助手会话同步失败', kind: DunesToastKind.error);
       }
     }
@@ -3031,6 +3037,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   }
 
   Future<void> _openDriveAssistant([NativeConversation? hint]) async {
+    final openGen = ++_approvalAssistantOpenGen;
     setState(() {
       _selectedPrivate = null;
       _selectedPrivatePeerUserId = null;
@@ -3056,15 +3063,17 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       final conv = await ConversationService(
         session: widget.session,
       ).ensureDriveAssistantSession();
-      if (!mounted) return;
+      if (!mounted || openGen != _approvalAssistantOpenGen) return;
       setState(() => _selectedDriveAssistant = conv);
       _conversationReadSignal.notifyRead(conv.id);
-      if (widget.navigation.currentScreen != 'DA1') {
+      if (widget.navigation.currentScreen != 'DA1' &&
+          _dualPaneChatScreen != 'DA1') {
         _markUserEnteredChat();
         _goChatScreen('DA1');
       }
     } catch (_) {
-      if (mounted && (_selectedDriveAssistant?.id ?? 0) <= 0) {
+      if (!mounted || openGen != _approvalAssistantOpenGen) return;
+      if ((_selectedDriveAssistant?.id ?? 0) <= 0) {
         showDunesToast(context, '企业微盘会话同步失败', kind: DunesToastKind.error);
       }
     }
@@ -3233,6 +3242,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   }
 
   Future<void> _openXrxsAssistant([NativeConversation? hint]) async {
+    final openGen = ++_approvalAssistantOpenGen;
     setState(() {
       _selectedPrivate = null;
       _selectedPrivatePeerUserId = null;
@@ -3258,15 +3268,17 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       final conv = await ConversationService(
         session: widget.session,
       ).ensureXrxsAssistantSession();
-      if (!mounted) return;
+      if (!mounted || openGen != _approvalAssistantOpenGen) return;
       setState(() => _selectedXrxsAssistant = conv);
       _conversationReadSignal.notifyRead(conv.id);
-      if (widget.navigation.currentScreen != 'XA1') {
+      if (widget.navigation.currentScreen != 'XA1' &&
+          _dualPaneChatScreen != 'XA1') {
         _markUserEnteredChat();
         _goChatScreen('XA1');
       }
     } catch (_) {
-      if (mounted && (_selectedXrxsAssistant?.id ?? 0) <= 0) {
+      if (!mounted || openGen != _approvalAssistantOpenGen) return;
+      if ((_selectedXrxsAssistant?.id ?? 0) <= 0) {
         showDunesToast(context, '薪人薪事会话同步失败', kind: DunesToastKind.error);
       }
     }

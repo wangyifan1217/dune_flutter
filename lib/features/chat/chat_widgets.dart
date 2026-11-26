@@ -936,7 +936,12 @@ class ChatInputBar extends StatelessWidget {
                                   key: const ValueKey('send'),
                                   sending: sending,
                                   locked: interactionLocked,
-                                  onTap: interactionLocked ? null : onSend,
+                                  onTap: interactionLocked
+                                      ? null
+                                      : () {
+                                          HapticFeedback.lightImpact();
+                                          onSend();
+                                        },
                                 )
                               : _WeChatPlusBtn(
                                   key: const ValueKey('plus'),
@@ -1034,14 +1039,13 @@ class _PcComposerBox extends StatelessWidget {
                   : const EdgeInsets.fromLTRB(8, 0, 8, 8),
               child: Align(
                 alignment: Alignment.centerRight,
-                child: Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(6),
-                    onTap: showStop
-                        ? onStop
-                        : (interactionLocked ? null : onSend),
-                    child: AnimatedContainer(
+                child: ImTapScale(
+                  borderRadius: BorderRadius.circular(9),
+                  pressedScale: 0.94,
+                  onTap: showStop
+                      ? onStop
+                      : (interactionLocked ? null : onSend),
+                  child: AnimatedContainer(
                       duration: ImVisualTokens.fastAnim,
                       width: isDesktopCommOnly ? 68 : 60,
                       height: isDesktopCommOnly
@@ -1118,7 +1122,6 @@ class _PcComposerBox extends StatelessWidget {
                   ),
                 ),
               ),
-            ),
           ],
         ),
       ),
@@ -1879,7 +1882,7 @@ class _ChatTextFieldState extends State<_ChatTextField> {
 
 const double desktopChatRowAvatarSize = 34;
 
-class ChatMessageRow extends StatelessWidget {
+class ChatMessageRow extends StatefulWidget {
   const ChatMessageRow({
     super.key,
     required this.message,
@@ -1892,6 +1895,10 @@ class ChatMessageRow extends StatelessWidget {
     this.onSecondaryTapDown,
     this.onReadTap,
     this.readTapLabel,
+    this.unreadCount,
+    this.groupedWithPrev = false,
+    this.groupedWithNext = false,
+    this.hoverActions,
     this.avatar,
     this.trailingAvatar,
     this.timeLabel,
@@ -1911,6 +1918,17 @@ class ChatMessageRow extends StatelessWidget {
   final GestureTapDownCallback? onSecondaryTapDown;
   final VoidCallback? onReadTap;
   final String? readTapLabel;
+
+  /// KakaoTalk 风格极简未读数角标（>0 显示品牌紫数字，0 淡出消失；null 回退原有文案）。
+  final int? unreadCount;
+
+  /// 同发件人 2 分钟内连发聚合：收起重复头像与昵称、压缩气泡间距。
+  final bool groupedWithPrev;
+  final bool groupedWithNext;
+
+  /// PC 端鼠标悬停气泡时外侧浮出的快捷操作胶囊。
+  final Widget? hoverActions;
+
   final Widget? avatar;
   final Widget? trailingAvatar;
   final String? timeLabel;
@@ -1918,10 +1936,22 @@ class ChatMessageRow extends StatelessWidget {
   final bool compactDesktop;
 
   @override
+  State<ChatMessageRow> createState() => _ChatMessageRowState();
+}
+
+class _ChatMessageRowState extends State<ChatMessageRow> {
+  bool _hovered = false;
+
+  @override
   Widget build(BuildContext context) {
-    final time = (timeLabel ?? '').trim();
-    final showName = showSenderMeta && !mine;
-    final showTime = time.isNotEmpty && (!mine || showTimeForMine);
+    final time = (widget.timeLabel ?? '').trim();
+    final groupedPrev = widget.groupedWithPrev;
+    final groupedNext = widget.groupedWithNext;
+    final showName = widget.showSenderMeta && !widget.mine && !groupedPrev;
+    final showTime =
+        time.isNotEmpty &&
+        (!widget.mine || widget.showTimeForMine) &&
+        !groupedPrev;
     final showMeta = showName || showTime;
     final metaStyle = DunesTypography.sans(
       fontSize: 11,
@@ -1929,30 +1959,95 @@ class ChatMessageRow extends StatelessWidget {
       color: DunesColors.resolve(context, DunesColors.text3),
       context: context,
     ).copyWith(fontFeatures: const [FontFeature.tabularFigures()]);
-    final avatarSlot = SizedBox(
-      width: compactDesktop ? desktopChatRowAvatarSize : chatMessageAvatarSize,
-    );
-    final avatarWidget = (mine ? trailingAvatar ?? avatar : avatar) ?? avatarSlot;
-    final alignedAvatar = compactDesktop && showMeta
-        ? Padding(padding: const EdgeInsets.only(top: 16), child: avatarWidget)
-        : avatarWidget;
+    final avatarWidth = widget.compactDesktop
+        ? desktopChatRowAvatarSize
+        : chatMessageAvatarSize;
+    final avatarSlot = SizedBox(width: avatarWidth);
+    final rawAvatar = groupedPrev
+        ? avatarSlot
+        : ((widget.mine ? widget.trailingAvatar ?? widget.avatar : widget.avatar) ??
+              avatarSlot);
+    final alignedAvatar = widget.compactDesktop && showMeta
+        ? Padding(padding: const EdgeInsets.only(top: 16), child: rawAvatar)
+        : rawAvatar;
 
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+    final kakaoUnread = widget.unreadCount;
+    final showKakaoBadge = widget.mine && kakaoUnread != null;
+    final accent = ImVisualTokens.accent(context);
+
+    Widget? sideUnreadBadge;
+    if (showKakaoBadge) {
+      final hasUnread = kakaoUnread > 0;
+      sideUnreadBadge = AnimatedOpacity(
+        opacity: hasUnread ? 1.0 : 0.0,
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOutCubic,
+        child: hasUnread
+            ? GestureDetector(
+                onTap: widget.onReadTap,
+                behavior: HitTestBehavior.opaque,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(4, 4, 6, 2),
+                  child: Text(
+                    '$kakaoUnread',
+                    style: metaStyle.copyWith(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: accent,
+                    ),
+                  ),
+                ),
+              )
+            : const SizedBox.shrink(),
+      );
+    }
+
+    final hoverPill = widget.hoverActions != null
+        ? AnimatedOpacity(
+            opacity: _hovered ? 1.0 : 0.0,
+            duration: const Duration(milliseconds: 140),
+            curve: Curves.easeOutCubic,
+            child: IgnorePointer(
+              ignoring: !_hovered,
+              child: Padding(
+                padding: EdgeInsets.only(
+                  left: widget.mine ? 0 : 6,
+                  right: widget.mine ? 6 : 0,
+                  bottom: 2,
+                ),
+                child: widget.hoverActions!,
+              ),
+            ),
+          )
+        : null;
+
+    final bubbleWithSides = Row(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        if (widget.mine && hoverPill != null) hoverPill,
+        if (widget.mine && sideUnreadBadge != null) sideUnreadBadge,
+        Flexible(child: widget.content),
+        if (!widget.mine && hoverPill != null) hoverPill,
+      ],
+    );
+
+    final rowBody = Padding(
+      padding: EdgeInsets.only(bottom: groupedNext ? 4 : 12),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: mine
+        mainAxisAlignment: widget.mine
             ? MainAxisAlignment.end
             : MainAxisAlignment.start,
         children: [
-          if (!mine) ...[alignedAvatar, const SizedBox(width: 8)],
+          if (!widget.mine) ...[alignedAvatar, const SizedBox(width: 8)],
           Flexible(
             child: GestureDetector(
-              onLongPress: onLongPress,
-              onLongPressStart: onLongPressStart,
-              onSecondaryTapDown: onSecondaryTapDown,
+              onLongPress: widget.onLongPress,
+              onLongPressStart: widget.onLongPressStart,
+              onSecondaryTapDown: widget.onSecondaryTapDown,
               child: Column(
-                crossAxisAlignment: mine
+                crossAxisAlignment: widget.mine
                     ? CrossAxisAlignment.end
                     : CrossAxisAlignment.start,
                 children: [
@@ -1969,7 +2064,7 @@ class ChatMessageRow extends StatelessWidget {
                           if (showName)
                             Flexible(
                               child: Text(
-                                message.senderName,
+                                widget.message.senderName,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: metaStyle.copyWith(
@@ -1986,16 +2081,16 @@ class ChatMessageRow extends StatelessWidget {
                         ],
                       ),
                     ),
-                  content,
-                  if (readLabel != null)
+                  bubbleWithSides,
+                  if (!showKakaoBadge && widget.readLabel != null)
                     Padding(
                       padding: const EdgeInsets.only(top: 4, right: 4),
                       child: Text(
-                        readLabel!,
+                        widget.readLabel!,
                         style: metaStyle.copyWith(
                           fontSize: 10.5,
                           fontWeight: FontWeight.w500,
-                          color: readLabel == '已读'
+                          color: widget.readLabel == '已读'
                               ? DunesColors.resolve(
                                   context,
                                   DunesColors.readReceipt,
@@ -2004,17 +2099,17 @@ class ChatMessageRow extends StatelessWidget {
                         ),
                       ),
                     )
-                  else if (onReadTap != null)
+                  else if (!showKakaoBadge && widget.onReadTap != null)
                     Padding(
                       padding: const EdgeInsets.only(top: 4, right: 4),
                       child: GestureDetector(
-                        onTap: onReadTap,
+                        onTap: widget.onReadTap,
                         child: Text(
-                          (readTapLabel ?? '查看已读').trim(),
+                          (widget.readTapLabel ?? '查看已读').trim(),
                           style: metaStyle.copyWith(
                             fontSize: 10.5,
                             fontWeight: FontWeight.w500,
-                            color: (readTapLabel ?? '').trim() != '未读'
+                            color: (widget.readTapLabel ?? '').trim() != '未读'
                                 ? DunesColors.resolve(
                                     context,
                                     DunesColors.readReceipt,
@@ -2031,9 +2126,20 @@ class ChatMessageRow extends StatelessWidget {
               ),
             ),
           ),
-          if (mine) ...[const SizedBox(width: 8), alignedAvatar],
+          if (widget.mine) ...[const SizedBox(width: 8), alignedAvatar],
         ],
       ),
+    );
+
+    if (widget.hoverActions == null) return rowBody;
+    return MouseRegion(
+      onEnter: (_) {
+        if (!_hovered) setState(() => _hovered = true);
+      },
+      onExit: (_) {
+        if (_hovered) setState(() => _hovered = false);
+      },
+      child: rowBody,
     );
   }
 }

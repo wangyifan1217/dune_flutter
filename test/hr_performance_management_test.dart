@@ -44,57 +44,68 @@ class ReturnScopeService extends fixtures.FakeHR {
   }
 }
 
+class TemplateSwitchService extends fixtures.FakeHR {
+  TemplateSwitchService(super.session, super.rows) : super(hr: true);
+
+  Map<String, dynamic>? assignment;
+
+  @override
+  Future<Map<String, dynamic>> options(int id) async => {
+    ...await super.options(id),
+    'assignmentTemplates': [
+      {'id': 'ui', 'name': 'UI设计师考核表'},
+    ],
+  };
+
+  @override
+  Future<HrPerformanceRecord> assign(
+    HrPerformanceRecord record,
+    Map<String, dynamic> values,
+  ) async {
+    assignment = values;
+    return HrPerformanceRecord.fromJson({
+      ...rows.single,
+      'version': record.version + 1,
+      'snapshot': {...record.snapshot, 'templateName': 'UI设计师考核表'},
+    });
+  }
+}
+
 void main() {
-  testWidgets(
-    'supervisor picker searches organization context and returns the selected user',
-    (tester) async {
-      Map<String, dynamic>? result;
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: Builder(
-              builder: (context) {
-                return TextButton(
-                  child: const Text('修改主管'),
-                  onPressed: () async {
-                    result = await showHrSupervisorSheet(context, [
-                      {
-                        'id': 10,
-                        'name': '同名员工',
-                        'department': '财务部',
-                        'position': '会计',
-                      },
-                      {
-                        'id': 20,
-                        'name': '同名员工',
-                        'department': '研发部',
-                        'position': '工程师',
-                      },
-                    ]);
-                  },
-                );
-              },
-            ),
+  testWidgets('HR switches an initial review to a current template', (
+    tester,
+  ) async {
+    final row = fixtures.sample(stage: 'review', actions: ['switch_template']);
+    final service = TemplateSwitchService(fixtures.testSession(4), [row]);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: HrPerformanceDetail(
+            session: service.session,
+            service: service,
+            record: HrPerformanceRecord.fromJson(row),
           ),
         ),
-      );
-      await tester.tap(find.text('修改主管'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byType(HrSelect<int>).first);
-      await tester.pumpAndSettle();
-      await tester.enterText(find.byType(TextField).hitTestable().first, '研发部');
-      await tester.pumpAndSettle();
-      expect(find.text('同名员工 · 财务部 · 会计 · #10'), findsNothing);
-      await tester.tap(find.text('同名员工 · 研发部 · 工程师 · #20'));
-      await tester.pumpAndSettle();
-      await tester.enterText(find.byKey(const ValueKey('hr-reason')), '本月代审');
-      await tester.tap(find.byKey(const ValueKey('hr-sheet-submit')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('hr-confirm-action')));
-      await tester.pumpAndSettle();
-      expect(result?['directSupervisorId'], 20);
-    },
-  );
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('hr-action-switch_template')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(HrSelect<String>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('UI设计师考核表'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const ValueKey('hr-reason')), '切换岗位模板');
+    await tester.tap(find.byKey(const ValueKey('hr-sheet-submit')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('草稿评分'), findsOneWidget);
+    expect(service.assignment, isNull);
+    await tester.tap(find.byKey(const ValueKey('hr-confirm-action')));
+    await tester.pumpAndSettle();
+    expect(service.assignment?['templateId'], 'ui');
+    expect(service.assignment?['reason'], '切换岗位模板');
+    expect(find.textContaining('考核指标 · UI设计师考核表'), findsOneWidget);
+  });
 
   testWidgets(
     'batch rollback previews and submits the chosen node eligibility',

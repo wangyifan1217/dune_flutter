@@ -5,9 +5,9 @@ import '../auth/auth_session.dart';
 import '../shell/dunes_toast.dart';
 import '../tasks/native_task_detail_page.dart';
 import 'hr_performance_service.dart';
+import 'hr_performance_management_ui.dart';
 import 'hr_performance_department_final.dart';
 import 'hr_performance_sheet.dart';
-import 'hr_performance_management_ui.dart';
 import 'hr_performance_sheets.dart';
 import 'hr_performance_template_ui.dart';
 import 'hr_performance_task_evidence.dart';
@@ -16,7 +16,7 @@ const hrActionLabels = <String, String>{
   'hr_edit_scores': 'HR 修改评分',
   'hr_skip': '跳过当前审批',
   'hr_return': '撤回 / 回退',
-  'hr_assign': '修改本月主管',
+  'switch_template': '切换考核模板',
   'update_bonus': '修改加减分',
   'submit_self': '提交自评',
   'request_adjustment': '申请调整',
@@ -24,7 +24,7 @@ const hrActionLabels = <String, String>{
   'reject_adjustment': '驳回调整',
   'submit_review': '提交初评',
   'save_calibration': '调整校准分',
-  'submit_calibration': '整部门提交 HR',
+  'submit_calibration': '提交校准至 HR',
   'approve_hr': 'HR 通过',
   'approve_department_hr': '本部门全部通过',
   'send_department_final': '发送部门终审',
@@ -328,15 +328,19 @@ class _HrPerformanceDetailState extends State<HrPerformanceDetail> {
                 .toList(),
             message: hrAssessmentActionImpact(_record, action),
           );
-        case 'hr_assign':
-          data = await showHrSupervisorSheet(
-            context,
-            hrMaps(_options!['users']),
-          );
         case 'request_adjustment':
           data = await showHrAdjustmentSheet(context, _record, _options!);
         case 'add_bonus':
           data = await showHrBonusSheet(context, config, record: _record);
+        case 'switch_template':
+          final templates = hrMaps(_options!['assignmentTemplates']);
+          if (templates.isEmpty) {
+            showDunesToast(context, '暂无其他可用的考核模板');
+            return;
+          }
+          data = await showHrAssignmentSheet(context, _record, {
+            'templates': templates,
+          });
         case 'assign_snapshot':
           data = await showHrAssignmentSheet(
             context,
@@ -424,7 +428,7 @@ class _HrPerformanceDetailState extends State<HrPerformanceDetail> {
                 : action == 'submit_self'
                 ? _selfSubmissionMessage
                 : action == 'submit_calibration'
-                ? '本部门符合条件的人员全部到达校准后，将一并提交 HR；已进入后续节点的人员保持原节点。'
+                ? '本部门由你负责校准的人员全部到达校准后，将一并提交 HR。'
                 : action == 'undo_exempt'
                 ? '将恢复本月免考核前的考核内容和节点，并取消本次免考核造成的后续暂停。原有截止时间保持不变，若已到期可能自动推进；已开始的其他月份不会自动补生成。'
                 : action == 'urge'
@@ -438,7 +442,8 @@ class _HrPerformanceDetailState extends State<HrPerformanceDetail> {
       }
       if (data == null || !mounted) return;
       setState(() => _busy = true);
-      final result = (action == 'assign_snapshot' || action == 'hr_assign')
+      final result =
+          (action == 'assign_snapshot' || action == 'switch_template')
           ? await widget.service.assign(_record, data)
           : await widget.service.action(_record, {
               'action': action,
@@ -506,7 +511,7 @@ class _HrPerformanceDetailState extends State<HrPerformanceDetail> {
       return '请先发起考核并补齐模板，再修改评分。';
     }
     if (!_options!.containsKey('hrManagementLocked')) {
-      return '当前考核服务尚未提供 HR 改分和修改主管功能。';
+      return '当前考核服务尚未提供 HR 改分功能。';
     }
     return '当前考核节点未开放 HR 改分。';
   }

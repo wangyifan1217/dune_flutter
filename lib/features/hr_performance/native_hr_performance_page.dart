@@ -1557,70 +1557,57 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
       return;
     }
     try {
-      Map<String, dynamic>? values;
-      if (action == 'hr_assign') {
-        final options = await _service.options(records.first.id);
-        if (!mounted) return;
-        final assignment = await showHrSupervisorSheet(
-          context,
-          hrMaps(options['users']),
-          scope: preview(),
-        );
-        if (assignment == null) return;
-        values = {'assignment': assignment, 'reason': assignment['reason']};
-      } else {
-        final allowedByRecord = <HrPerformanceRecord, Set<String>>{};
-        List<String>? targets;
-        if (action == 'hr_return') {
-          for (final r in records) {
-            final allowed = r.hrReturnTargets;
-            if (allowed != null) {
-              allowedByRecord[r] = allowed.toSet();
-            } else {
-              final options = await _service.options(r.id);
-              if (!mounted) return;
-              allowedByRecord[r] = (options['hrReturnTargets'] as List? ?? [])
-                  .map((v) => '$v')
-                  .toSet();
-            }
+      final allowedByRecord = <HrPerformanceRecord, Set<String>>{};
+      List<String>? targets;
+      if (action == 'hr_return') {
+        for (final r in records) {
+          final allowed = r.hrReturnTargets;
+          if (allowed != null) {
+            allowedByRecord[r] = allowed.toSet();
+          } else {
+            final options = await _service.options(r.id);
+            if (!mounted) return;
+            allowedByRecord[r] = (options['hrReturnTargets'] as List? ?? [])
+                .map((v) => '$v')
+                .toSet();
           }
-          targets = _hrStageFlow
-              .where(
-                (stage) => allowedByRecord.values.any((v) => v.contains(stage)),
-              )
-              .toList();
         }
-        if (!mounted) return;
-        if (targets?.isEmpty == true) {
-          for (final r in records) {
-            skipped[r] = '${r.stageLabel} · 无可回退阶段';
-          }
-          await _showBatchUnavailable(preview());
-          return;
+        targets = _hrStageFlow
+            .where(
+              (stage) => allowedByRecord.values.any((v) => v.contains(stage)),
+            )
+            .toList();
+      }
+      if (!mounted) return;
+      if (targets?.isEmpty == true) {
+        for (final r in records) {
+          skipped[r] = '${r.stageLabel} · 无可回退阶段';
         }
-        Map<HrPerformanceRecord, String> skippedFor(String target) => {
-          ...skipped,
-          for (final r in records)
-            if (!allowedByRecord[r]!.contains(target))
-              r: '${r.stageLabel} · 无法回退到${hrPerformanceStageLabels[target] ?? target}',
-        };
-        values = await showHrReasonSheet(
-          context,
-          title: action == 'hr_skip' ? '批量跳过当前审批' : '批量回退阶段',
-          targets: targets,
-          minLength: 1,
-          message: action == 'hr_skip'
-              ? '${preview()}${records.any((r) => r.stage == 'final') ? '\n跳过终审的考核将立即下发结果。' : ''}'
-              : '目标阶段及后续审批将失效。已下发的结果和自动确认将被撤销，历史记录保留。',
-          scopePreview: targets == null
-              ? null
-              : (target) =>
-                    _batchPreview(candidates, skippedFor(target), visible),
-        );
-        if (values != null && targets != null) {
-          final ineligible = skippedFor(hrText(values['target']));
-          records = records.where((r) => !ineligible.containsKey(r)).toList();
-        }
+        await _showBatchUnavailable(preview());
+        return;
+      }
+      Map<HrPerformanceRecord, String> skippedFor(String target) => {
+        ...skipped,
+        for (final r in records)
+          if (!allowedByRecord[r]!.contains(target))
+            r: '${r.stageLabel} · 无法回退到${hrPerformanceStageLabels[target] ?? target}',
+      };
+      final values = await showHrReasonSheet(
+        context,
+        title: action == 'hr_skip' ? '批量跳过当前审批' : '批量回退阶段',
+        targets: targets,
+        minLength: 1,
+        message: action == 'hr_skip'
+            ? '${preview()}${records.any((r) => r.stage == 'final') ? '\n跳过终审的考核将立即下发结果。' : ''}'
+            : '目标阶段及后续审批将失效。已下发的结果和自动确认将被撤销，历史记录保留。',
+        scopePreview: targets == null
+            ? null
+            : (target) =>
+                  _batchPreview(candidates, skippedFor(target), visible),
+      );
+      if (values != null && targets != null) {
+        final ineligible = skippedFor(hrText(values['target']));
+        records = records.where((r) => !ineligible.containsKey(r)).toList();
       }
       if (values == null || !mounted) return;
       setState(() => _busy = true);
@@ -2735,12 +2722,6 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
                                 ? null
                                 : () => _manageBatch('hr_return'),
                             child: const Text('回退阶段'),
-                          ),
-                          TextButton(
-                            onPressed: _busy
-                                ? null
-                                : () => _manageBatch('hr_assign'),
-                            child: const Text('修改主管'),
                           ),
                         ],
                       ],

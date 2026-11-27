@@ -329,9 +329,9 @@ class DunesDesktopTranslucentFrame extends StatelessWidget {
               borderRadius: BorderRadius.circular(14),
               border: Border.all(
                 color: isDark
-                    ? Colors.white.withValues(alpha: 0.08)
-                    : Colors.white.withValues(alpha: 0.65),
-                width: 0.8,
+                    ? Colors.white.withValues(alpha: 0.06)
+                    : Colors.black.withValues(alpha: 0.04),
+                width: 0.5,
               ),
               boxShadow: [
                 BoxShadow(

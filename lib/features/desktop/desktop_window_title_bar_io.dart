@@ -127,29 +127,29 @@ class _WindowsIntegratedTitleBarState extends State<_WindowsIntegratedTitleBar>
                   onDoubleTap: _toggleMaximize,
                   child: Row(
                     children: [
-                      const SizedBox(width: 14),
+                      const SizedBox(width: 12),
                       ClipRRect(
-                        borderRadius: BorderRadius.circular(4.5),
+                        borderRadius: BorderRadius.circular(4),
                         child: Image.asset(
                           'assets/images/app_logo_pc.png',
-                          width: 16,
-                          height: 16,
+                          width: 14,
+                          height: 14,
                           fit: BoxFit.cover,
                           filterQuality: FilterQuality.medium,
                           errorBuilder: (_, _, _) => const SizedBox(
-                            width: 16,
-                            height: 16,
+                            width: 14,
+                            height: 14,
                           ),
                         ),
                       ),
-                      const SizedBox(width: 7),
+                      const SizedBox(width: 6),
                       Text(
                         '沙丘',
                         style: TextStyle(
-                          fontSize: 12,
+                          fontSize: 11.5,
                           fontWeight: FontWeight.w600,
                           letterSpacing: 0.2,
-                          color: fgColor.withValues(alpha: 0.85),
+                          color: fgColor.withValues(alpha: 0.72),
                         ),
                       ),
                       const Spacer(),

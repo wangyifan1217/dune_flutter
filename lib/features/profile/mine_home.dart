@@ -205,12 +205,9 @@ class MineHomeTitleBar extends StatelessWidget {
           decoration: BoxDecoration(
             color: _r(
               context,
-              Colors.white,
+              const Color(0xFFF5F5F7),
               DunesColorRole.surface,
-            ).withValues(alpha: 0.88),
-            border: Border(
-              bottom: DunesColors.topBarHairline(context),
-            ),
+            ).withValues(alpha: 0.90),
           ),
           padding: const EdgeInsets.fromLTRB(
             kMinePageGutter,

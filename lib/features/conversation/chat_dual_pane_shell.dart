@@ -330,16 +330,16 @@ class DunesDesktopTranslucentFrame extends StatelessWidget {
               border: Border.all(
                 color: isDark
                     ? Colors.white.withValues(alpha: 0.08)
-                    : Colors.white.withValues(alpha: 0.92),
-                width: 1,
+                    : Colors.white.withValues(alpha: 0.65),
+                width: 0.8,
               ),
               boxShadow: [
                 BoxShadow(
                   color: isDark
                       ? const Color(0x38000000)
-                      : const Color(0x124B348A),
-                  blurRadius: 18,
-                  offset: const Offset(0, 4),
+                      : const Color(0x0D4B348A),
+                  blurRadius: 16,
+                  offset: const Offset(0, 2),
                 ),
               ],
             ),

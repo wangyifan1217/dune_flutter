@@ -1155,12 +1155,9 @@ class _NativeProposalListPageState extends State<_NativeProposalListPage> {
           decoration: BoxDecoration(
             color: DunesColors.resolve(
               context,
-              Colors.white,
+              const Color(0xFFF5F5F7),
               role: DunesColorRole.surface,
-            ).withValues(alpha: 0.88),
-            border: Border(
-              bottom: DunesColors.topBarHairline(context),
-            ),
+            ).withValues(alpha: 0.90),
           ),
           child: Stack(
             alignment: Alignment.center,

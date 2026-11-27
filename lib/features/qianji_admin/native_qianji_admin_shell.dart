@@ -713,12 +713,9 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
                     decoration: BoxDecoration(
                       color: DunesColors.resolve(
                         context,
-                        Colors.white,
+                        const Color(0xFFF5F5F7),
                         role: DunesColorRole.surface,
-                      ).withValues(alpha: 0.88),
-                      border: Border(
-                        bottom: DunesColors.topBarHairline(context),
-                      ),
+                      ).withValues(alpha: 0.90),
                     ),
                     padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
                     child: SizedBox(

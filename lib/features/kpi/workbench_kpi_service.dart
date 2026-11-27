@@ -9,9 +9,14 @@ import '../profile/work_profile_kpi.dart';
 import 'kpi_followup.dart';
 
 class WorkbenchKpiAccess {
-  const WorkbenchKpiAccess({required this.allowed, this.followup = false});
+  const WorkbenchKpiAccess({
+    required this.allowed,
+    this.followup = false,
+    this.taskManager = false,
+  });
   final bool allowed;
   final bool followup;
+  final bool taskManager;
 }
 
 class WorkbenchKpiPersonRef {
@@ -307,7 +312,65 @@ class WorkbenchKpiService {
     return WorkbenchKpiAccess(
       allowed: map['allowed'] == true,
       followup: map['followup'] == true,
+      taskManager: map['taskManager'] == true,
     );
+  }
+
+  Future<List<Map<String, dynamic>>> listScopeRules() async {
+    final response = await dunesHttpGet(
+      session,
+      '/kpi/scope-rules',
+      client: _client,
+    );
+    final data = _unwrap(response);
+    return (data as List)
+        .whereType<Map>()
+        .map((row) => Map<String, dynamic>.from(row))
+        .toList();
+  }
+
+  Future<List<Map<String, dynamic>>> listScopeCatalog() async {
+    final response = await dunesHttpGet(
+      session,
+      '/kpi/scope-catalog',
+      client: _client,
+    );
+    final data = _unwrap(response);
+    return (data as List)
+        .whereType<Map>()
+        .map((row) => Map<String, dynamic>.from(row))
+        .toList();
+  }
+
+  Future<List<Map<String, dynamic>>> listLighthouseScopeOptions() async {
+    final response = await dunesHttpGet(
+      session,
+      '/kpi/scope-options',
+      client: _client,
+    );
+    final data = _unwrap(response);
+    return (data as List)
+        .whereType<Map>()
+        .map((row) => Map<String, dynamic>.from(row))
+        .toList();
+  }
+
+  Future<void> saveScopeRule(Map<String, dynamic> rule) async {
+    final id = (rule['id'] as num?)?.toInt() ?? 0;
+    final response = id == 0
+        ? await dunesHttpPost(
+            session,
+            '/kpi/scope-rules',
+            body: jsonEncode(rule),
+            client: _client,
+          )
+        : await dunesHttpPatch(
+            session,
+            '/kpi/scope-rules/$id',
+            body: jsonEncode(rule),
+            client: _client,
+          );
+    _unwrap(response);
   }
 
   Future<List<WorkbenchKpiTask>> listMyTasks({

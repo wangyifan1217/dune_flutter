@@ -14,6 +14,7 @@ import '../profile/work_profile_kpi.dart';
 import '../shell/dunes_toast.dart';
 import '../tasks/native_task_home_pane.dart';
 import 'kpi_publish_sheet.dart';
+import 'kpi_scope_dialog.dart';
 import 'kpi_score_summary_card.dart';
 import 'native_workbench_kpi_detail.dart';
 import 'native_workbench_kpi_followup_page.dart';
@@ -60,6 +61,7 @@ class _NativeWorkbenchKpiPageState extends State<NativeWorkbenchKpiPage> {
 
   bool _loading = true;
   bool _busy = false;
+  bool _taskManager = false;
   String _sector = 'all';
   String _group = '';
   String _lens = 'roster';
@@ -97,6 +99,7 @@ class _NativeWorkbenchKpiPageState extends State<NativeWorkbenchKpiPage> {
       if (mounted) _publishChrome();
     });
     unawaited(_load());
+    unawaited(_loadTaskManager());
   }
 
   @override
@@ -134,6 +137,15 @@ class _NativeWorkbenchKpiPageState extends State<NativeWorkbenchKpiPage> {
     _keywordDebounce = Timer(const Duration(milliseconds: 180), () {
       if (mounted) setState(() {});
     });
+  }
+
+  Future<void> _loadTaskManager() async {
+    try {
+      final access = await _service.fetchAccess();
+      if (mounted) setState(() => _taskManager = access.taskManager);
+    } catch (_) {
+      // The regular performance page remains available if this check fails.
+    }
   }
 
   Future<void> _load() async {
@@ -364,10 +376,7 @@ class _NativeWorkbenchKpiPageState extends State<NativeWorkbenchKpiPage> {
     await _applySkip(userId: person.userId, reason: picked.reason);
   }
 
-  Future<void> _applySkip({
-    required int userId,
-    required String reason,
-  }) async {
+  Future<void> _applySkip({required int userId, required String reason}) async {
     final label = reason.isEmpty ? '恢复考核' : kpiSkipLabel(reason);
     setState(() => _busy = true);
     try {
@@ -926,6 +935,21 @@ class _NativeWorkbenchKpiPageState extends State<NativeWorkbenchKpiPage> {
     if (!_canRoster) return const [];
     final idle = !_busy && !_loading;
     return [
+      if (_taskManager)
+        _KpiAction(
+          key: const Key('kpi-scope-settings'),
+          icon: Icons.tune_rounded,
+          label: '绩效任务设置',
+          onTap: idle
+              ? () async {
+                  await showDialog<void>(
+                    context: context,
+                    builder: (_) => KpiScopeDialog(service: _service),
+                  );
+                  if (mounted) await _load();
+                }
+              : null,
+        ),
       _KpiAction(
         key: const Key('kpi-import'),
         icon: Icons.upload_file_outlined,
@@ -2529,9 +2553,7 @@ class _KpiTableRow extends StatelessWidget {
               Expanded(
                 flex: 9,
                 child: Text(
-                  person.omitsScore
-                      ? '—'
-                      : person.mainScore.toStringAsFixed(2),
+                  person.omitsScore ? '—' : person.mainScore.toStringAsFixed(2),
                   textAlign: TextAlign.right,
                   style: TextStyle(
                     fontSize: 13.5,

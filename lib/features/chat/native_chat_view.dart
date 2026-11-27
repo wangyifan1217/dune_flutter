@@ -13931,12 +13931,14 @@ class _ChatSwipeToQuoteState extends State<_ChatSwipeToQuote>
   }
 
   void _onUpdate(DragUpdateDetails details) {
-    _dragRaw = (_dragRaw + details.delta.dx).clamp(0.0, double.infinity);
-    final resisted = _dragRaw <= _trigger
-        ? _dragRaw
-        : _trigger + (_dragRaw - _trigger) * 0.3;
-    _offset.value = resisted.clamp(0.0, _max);
-    final armed = _dragRaw >= _trigger;
+    _dragRaw += details.delta.dx;
+    final sign = _dragRaw >= 0 ? 1.0 : -1.0;
+    final absRaw = _dragRaw.abs();
+    final resisted = absRaw <= _trigger
+        ? absRaw
+        : _trigger + (absRaw - _trigger) * 0.3;
+    _offset.value = sign * resisted.clamp(0.0, _max);
+    final armed = absRaw >= _trigger;
     if (armed && !_armed) HapticFeedback.selectionClick();
     _armed = armed;
   }
@@ -13945,6 +13947,11 @@ class _ChatSwipeToQuoteState extends State<_ChatSwipeToQuote>
     if (_armed) widget.onQuote();
     _armed = false;
     _dragRaw = 0;
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    if (reduceMotion) {
+      _offset.value = 0;
+      return;
+    }
     _offset.animateTo(
       0,
       duration: const Duration(milliseconds: 240),
@@ -13977,43 +13984,56 @@ class _ChatSwipeToQuoteState extends State<_ChatSwipeToQuote>
         child: widget.child,
         builder: (context, child) {
           final dx = _offset.value;
-          final progress = (dx / _trigger).clamp(0.0, 1.0);
+          final absDx = dx.abs();
+          final progress = (absDx / _trigger).clamp(0.0, 1.0);
+          final isArmed = absDx >= _trigger;
+          final badge = Opacity(
+            opacity: progress,
+            child: Transform.scale(
+              scale: 0.6 + 0.4 * progress,
+              child: Container(
+                width: 30,
+                height: 30,
+                decoration: BoxDecoration(
+                  color: isArmed
+                      ? DunesColors.resolve(context, DunesColors.brandPurple)
+                      : DunesColors.resolve(
+                          context,
+                          DunesColors.bgSoft,
+                          role: DunesColorRole.surface,
+                        ),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.reply_rounded,
+                  size: 18,
+                  color: isArmed
+                      ? Colors.white
+                      : DunesColors.resolve(
+                          context,
+                          DunesColors.text2,
+                        ),
+                ),
+              ),
+            ),
+          );
           return Stack(
             clipBehavior: Clip.none,
             children: [
-              Positioned(
-                left: 4,
-                top: 0,
-                bottom: 0,
-                child: Center(
-                  child: Opacity(
-                    opacity: progress,
-                    child: Transform.scale(
-                      scale: 0.6 + 0.4 * progress,
-                      child: Container(
-                        width: 30,
-                        height: 30,
-                        decoration: BoxDecoration(
-                          color: DunesColors.resolve(
-                            context,
-                            DunesColors.bgSoft,
-                            role: DunesColorRole.surface,
-                          ),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(
-                          Icons.reply_rounded,
-                          size: 18,
-                          color: DunesColors.resolve(
-                            context,
-                            DunesColors.text2,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
+              if (dx > 0)
+                Positioned(
+                  left: 4,
+                  top: 0,
+                  bottom: 0,
+                  child: Center(child: badge),
                 ),
-              ),
+              if (dx < 0)
+                Positioned(
+                  right: 4,
+                  top: 0,
+                  bottom: 0,
+                  child: Center(child: badge),
+                ),
               Transform.translate(offset: Offset(dx, 0), child: child),
             ],
           );

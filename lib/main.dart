@@ -17,6 +17,7 @@ import 'features/nova/presence/nova_presence_desktop_window_stub.dart'
     if (dart.library.io) 'features/nova/presence/nova_presence_desktop_window.dart';
 import 'features/chat/im_celebration.dart';
 import 'features/desktop/desktop_esc_minimize.dart';
+import 'features/desktop/desktop_window_title_bar.dart';
 import 'features/desktop/windows_desktop_tray.dart';
 import 'features/push/push_service.dart';
 import 'features/conversation/reply_sla_gallery_page.dart';
@@ -95,6 +96,16 @@ class DunesApp extends StatelessWidget {
               );
             }
             if (isDesktopCommOnly) {
+              if (!kIsWeb &&
+                  defaultTargetPlatform == TargetPlatform.windows &&
+                  home == null) {
+                wrapped = Column(
+                  children: [
+                    const DunesDesktopWindowTitleBar(),
+                    Expanded(child: wrapped),
+                  ],
+                );
+              }
               wrapped = DesktopEscMinimize(child: wrapped);
               // 托盘 / 最小化 / Cmd+H / 切桌面：停动画。失焦不冻，避免双屏切窗看起来卡死。
               wrapped = ValueListenableBuilder<bool>(

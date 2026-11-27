@@ -6939,13 +6939,7 @@ class _NativePlatformTreeShell extends StatelessWidget {
   final DunesNavigationController navigation;
 
   void _soon(BuildContext context, String label) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('$label · 敬请期待'),
-        behavior: SnackBarBehavior.floating,
-        duration: const Duration(milliseconds: 1400),
-      ),
-    );
+    showDunesToast(context, '$label · 敬请期待');
   }
 
   @override

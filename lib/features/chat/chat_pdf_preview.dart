@@ -15,6 +15,7 @@ import '../kb/native_kb_service.dart';
 import 'dunes_pdf_view.dart';
 import 'file_download.dart' as file_dl;
 
+import '../shell/dunes_toast.dart';
 Future<void> showChatPdfPreview({
   required BuildContext context,
   required ConversationService service,
@@ -215,9 +216,7 @@ class _ChatPdfPreviewPageState extends State<ChatPdfPreviewPage> {
       if (ok && mounted) setState(() => _driveSaved = true);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(friendlyErrorText(e, fallback: '存入微盘失败，请稍后重试'))),
-      );
+      showDunesToast(context, friendlyErrorText(e, fallback: '存入微盘失败，请稍后重试'));
     } finally {
       if (mounted) setState(() => _savingToDrive = false);
     }
@@ -230,14 +229,10 @@ class _ChatPdfPreviewPageState extends State<ChatPdfPreviewPage> {
       final bytes = await _loadPdfBytes();
       await file_dl.saveBytesAsFile(bytes, widget.fileName);
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('已保存 ${widget.fileName}')));
+      showDunesToast(context, '已保存 ${widget.fileName}');
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(friendlyErrorText(e, fallback: '下载失败'))),
-      );
+      showDunesToast(context, friendlyErrorText(e, fallback: '下载失败'));
     } finally {
       if (mounted) setState(() => _downloading = false);
     }
@@ -289,16 +284,10 @@ class _ChatPdfPreviewPageState extends State<ChatPdfPreviewPage> {
       );
       KbDocumentCoordinator.instance.notifyChanged();
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('已存入你的知识库，正在后台解析入库')));
+      showDunesToast(context, '已存入你的知识库，正在后台解析入库');
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(friendlyErrorText(e, fallback: '存入知识库失败，请稍后重试')),
-        ),
-      );
+      showDunesToast(context, friendlyErrorText(e, fallback: '存入知识库失败，请稍后重试'));
     } finally {
       if (mounted) setState(() => _savingToKb = false);
     }

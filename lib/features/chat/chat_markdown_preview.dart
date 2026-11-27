@@ -13,6 +13,7 @@ import '../conversation/conversation_service.dart';
 import '../meeting/meeting_minutes_markdown.dart';
 import 'file_download.dart' as file_dl;
 
+import '../shell/dunes_toast.dart';
 bool chatPayloadIsMarkdown(Map<String, dynamic>? payload, String fileName) {
   final name = fileName.trim().toLowerCase();
   if (name.endsWith('.md') || name.endsWith('.markdown')) return true;
@@ -162,14 +163,10 @@ class _ChatMarkdownPreviewPageState extends State<ChatMarkdownPreviewPage> {
       final bytes = await _loadBytes();
       await file_dl.saveBytesAsFile(bytes, widget.fileName);
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('已保存 ${widget.fileName}')));
+      showDunesToast(context, '已保存 ${widget.fileName}');
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(friendlyErrorText(e, fallback: '下载失败'))),
-      );
+      showDunesToast(context, friendlyErrorText(e, fallback: '下载失败'));
     } finally {
       if (mounted) setState(() => _downloading = false);
     }

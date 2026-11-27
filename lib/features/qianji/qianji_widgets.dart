@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../core/theme/dunes_theme.dart';
 import 'qianji_models.dart';
@@ -494,6 +495,136 @@ class QianjiGanttBlock extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// 饕子模块统一的 Apple 质感圆角返回按钮，替代原先拥挤的 `< 饕` 文字返回。
+class QianjiBackButton extends StatelessWidget {
+  const QianjiBackButton({
+    super.key,
+    required this.onBack,
+    this.tooltip = '返回',
+  });
+
+  final VoidCallback onBack;
+  final String tooltip;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bg = DunesColors.resolve(
+      context,
+      Colors.white,
+      role: DunesColorRole.surface,
+    );
+    final border = isDark
+        ? Colors.white.withValues(alpha: 0.10)
+        : const Color(0xFFE7E3F3);
+    final ink = DunesColors.resolve(context, DunesColors.text);
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: bg,
+        borderRadius: BorderRadius.circular(11),
+        elevation: 0,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(11),
+          onTap: () {
+            HapticFeedback.selectionClick();
+            onBack();
+          },
+          child: Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(11),
+              border: Border.all(color: border, width: 0.7),
+              boxShadow: isDark
+                  ? null
+                  : const [
+                      BoxShadow(
+                        color: Color(0x0A1E192B),
+                        blurRadius: 8,
+                        offset: Offset(0, 2),
+                      ),
+                    ],
+            ),
+            alignment: Alignment.center,
+            child: Icon(Icons.arrow_back_ios_new_rounded, size: 15, color: ink),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 饕子模块统一顶部导航栏：圆角触感返回按钮 + 清晰深墨标题 + 可选副标题与右侧操作区。
+class QianjiSubpageHeader extends StatelessWidget {
+  const QianjiSubpageHeader({
+    super.key,
+    required this.title,
+    required this.onBack,
+    this.subtitle,
+    this.trailing,
+    this.padding = const EdgeInsets.fromLTRB(14, 10, 14, 8),
+  });
+
+  final String title;
+  final VoidCallback onBack;
+  final String? subtitle;
+  final Widget? trailing;
+  final EdgeInsetsGeometry padding;
+
+  @override
+  Widget build(BuildContext context) {
+    final ink = DunesColors.resolve(context, DunesColors.text);
+    final sub = DunesColors.resolve(context, DunesColors.text3);
+    return Padding(
+      padding: padding,
+      child: Row(
+        children: [
+          QianjiBackButton(onBack: onBack),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: DunesTypography.sans(
+                    fontSize: 17.5,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: -0.3,
+                    color: ink,
+                    context: context,
+                  ),
+                ),
+                if (subtitle != null && subtitle!.trim().isNotEmpty) ...[
+                  const SizedBox(height: 1),
+                  Text(
+                    subtitle!,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: DunesTypography.sans(
+                      fontSize: 11.5,
+                      color: sub,
+                      context: context,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          if (trailing != null) ...[
+            const SizedBox(width: 8),
+            trailing!,
+          ],
+        ],
+      ),
     );
   }
 }

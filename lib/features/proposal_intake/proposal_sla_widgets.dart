@@ -6,6 +6,7 @@ import 'proposal_intake_models.dart';
 import 'proposal_intake_service.dart';
 import 'proposal_intake_ui.dart';
 
+import '../shell/dunes_toast.dart';
 /// 时限状态配色，沿用提案页现有色：琥珀 = 进行中 / 卡点，橙红 = 驳回 / 超时，绿 = 完成。
 ({Color bg, Color fg, Color solid}) proposalSlaTone(String status) => switch (status) {
   'warning' => (bg: const Color(0xFFFBF1DE), fg: const Color(0xFF8A5A12), solid: const Color(0xFFE3A53A)),
@@ -353,7 +354,7 @@ class _ProposalSlaRecordsDialogState extends State<_ProposalSlaRecordsDialog> {
         if (detail != null) _detail = detail;
         _error = '';
       });
-      ScaffoldMessenger.maybeOf(context)?.showSnackBar(const SnackBar(content: Text('已提交申诉')));
+      showDunesToast(context, '已提交申诉');
     } catch (e) {
       if (!mounted) return;
       setState(() => _error = friendlyErrorText(e));

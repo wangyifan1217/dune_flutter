@@ -91,10 +91,10 @@ flutter_launcher_icons:
     image_path: assets/images/app_logo.png
   windows:
     generate: true
-    image_path: assets/images/app_logo.png
+    image_path: assets/images/app_logo_pc.png
   macos:
     generate: true
-    image_path: assets/images/app_logo.png
+    image_path: assets/images/app_logo_pc.png
 
 flutter:
   config:
@@ -104,6 +104,7 @@ flutter:
   assets:
     - assets/images/im_eggs/
     - assets/images/app_logo.png
+    - assets/images/app_logo_pc.png
     - assets/images/ai_tab_avatar.png
     - assets/images/ai_tab_avatar_icon.png
     - assets/images/ai_avatar_pc_hd.png

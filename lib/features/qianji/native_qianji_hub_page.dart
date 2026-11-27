@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -15,6 +16,7 @@ import '../shell/dunes_main_tab_bar.dart';
 import 'digital_auto/digital_employee_service.dart';
 import 'qianji_chat_panel.dart';
 import 'qianji_chat_service.dart';
+import 'qianji_particle_morph_overlay.dart';
 
 /// 新版对话页开关。改为 false 后只保留旧版卡片页。
 const bool qianjiHubNewLayoutEnabled = true;
@@ -86,8 +88,11 @@ class NativeQianjiHubPage extends StatefulWidget {
   State<NativeQianjiHubPage> createState() => _NativeQianjiHubPageState();
 }
 
-class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
+class _NativeQianjiHubPageState extends State<NativeQianjiHubPage>
+    with SingleTickerProviderStateMixin {
   bool _newLayout = qianjiHubNewLayoutEnabled;
+  late final QianjiParticleMorphController _morphController =
+      QianjiParticleMorphController(vsync: this);
 
   List<RobotRole> _robots = const [];
   bool _loadingRobots = false;
@@ -302,69 +307,107 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
   }
 
   @override
+  void dispose() {
+    _morphController.dispose();
+    super.dispose();
+  }
+
+  void _switchLayout(bool toNew) {
+    if (_newLayout == toNew && !_morphController.isAnimating) return;
+    _morphController.trigger(
+      toNew: toNew,
+      reduceMotion: MediaQuery.disableAnimationsOf(context),
+      onSwap: () {
+        if (mounted) setState(() => _newLayout = toNew);
+      },
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
     if (!_hasAccess || !qianjiHubNewLayoutEnabled) return _buildLegacy();
-    return Stack(
-      children: [
-        Offstage(
-          offstage: _newLayout,
-          child: TickerMode(
-            enabled: !_newLayout,
-            child: Stack(
-              children: [
-                _buildLegacy(),
-                Positioned(
-                  top: 0,
-                  right: 16,
-                  child: SafeArea(
-                    bottom: false,
-                    child: Padding(
-                      padding: const EdgeInsets.only(top: 10),
-                      child: ImFrostedIsland(
-                        padding: EdgeInsets.zero,
-                        child: QianjiPillButton(
-                          icon: Icons.auto_awesome_rounded,
-                          label: '切换新版',
-                          onTap: () {
-                            HapticFeedback.selectionClick();
-                            setState(() => _newLayout = true);
-                          },
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return AnimatedBuilder(
+      animation: _morphController.animation,
+      builder: (context, _) {
+        final t = _morphController.animation.value;
+        final morphing = _morphController.isAnimating;
+        // 简洁 Apple 空间景深缩放 + 轻微由虚转实（420ms，无粒子）
+        final ease = Curves.easeOutCubic.transform(t);
+        final contentOpacity = morphing ? (0.32 + 0.68 * ease).clamp(0.0, 1.0) : 1.0;
+        final contentScale = morphing ? (0.968 + 0.032 * ease) : 1.0;
+        final blurSigma = morphing ? (1.0 - ease) * 5.0 : 0.0;
+        return Stack(
+          children: [
+            ImageFiltered(
+              enabled: morphing && blurSigma > 0.08,
+              imageFilter: ImageFilter.blur(
+                sigmaX: blurSigma,
+                sigmaY: blurSigma,
+              ),
+              child: Transform.scale(
+                scale: contentScale,
+                child: Opacity(
+                  opacity: contentOpacity,
+                  child: Stack(
+                    children: [
+                      Offstage(
+                        offstage: _newLayout,
+                        child: TickerMode(
+                          enabled: !_newLayout,
+                          child: Stack(
+                            children: [
+                              _buildLegacy(),
+                              Positioned(
+                                top: 0,
+                                right: 16,
+                                child: SafeArea(
+                                  bottom: false,
+                                  child: Padding(
+                                    padding: const EdgeInsets.only(top: 10),
+                                    child: ImFrostedIsland(
+                                      padding: EdgeInsets.zero,
+                                      child: QianjiPillButton(
+                                        icon: Icons.auto_awesome_rounded,
+                                        label: '切换新版',
+                                        onTap: () => _switchLayout(true),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
-                    ),
+                      Offstage(
+                        offstage: !_newLayout,
+                        child: TickerMode(
+                          enabled: _newLayout,
+                          child: QianjiChatPanel(
+                            session: widget.session,
+                            chatService: widget.chatService,
+                            scopeGroups: _chatScopeGroups(),
+                            onSwitchLegacy: () => _switchLayout(false),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        Offstage(
-          offstage: !_newLayout,
-          child: TickerMode(
-            enabled: _newLayout,
-            child: AnimatedOpacity(
-              opacity: _newLayout ? 1.0 : 0.0,
-              duration: MediaQuery.disableAnimationsOf(context)
-                  ? Duration.zero
-                  : const Duration(milliseconds: 220),
-              curve: Curves.easeOutCubic,
-              child: AnimatedScale(
-                scale: _newLayout ? 1.0 : 0.985,
-                duration: MediaQuery.disableAnimationsOf(context)
-                    ? Duration.zero
-                    : const Duration(milliseconds: 240),
-                curve: Curves.easeOutCubic,
-                child: QianjiChatPanel(
-                  session: widget.session,
-                  chatService: widget.chatService,
-                  scopeGroups: _chatScopeGroups(),
-                  onSwitchLegacy: () => setState(() => _newLayout = false),
                 ),
               ),
             ),
-          ),
-        ),
-      ],
+            if (morphing)
+              Positioned.fill(
+                child: QianjiParticleMorphOverlay(
+                  progress: t,
+                  toNewLayout: _morphController.toNewLayout,
+                  isDark: isDark,
+                ),
+              ),
+          ],
+        );
+      },
     );
   }
 

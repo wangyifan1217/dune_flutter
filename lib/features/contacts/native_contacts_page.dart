@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../core/theme/dunes_theme.dart';
 import '../../core/widgets/dunes_motion_kit.dart';
@@ -89,6 +90,10 @@ class _NativeContactsPageState extends State<NativeContactsPage> {
   bool _searchOpen = false;
   bool _groupPickMode = false;
   bool _creating = false;
+  bool _alphaMode = false;
+  String? _activeAlphaPreview;
+  final ScrollController _bodyScroll = ScrollController();
+  final Map<String, GlobalKey> _alphaSectionKeys = <String, GlobalKey>{};
   String? _error;
   int _total = 0;
   List<NativeDepartment> _departments = const <NativeDepartment>[];
@@ -165,6 +170,7 @@ class _NativeContactsPageState extends State<NativeContactsPage> {
     _onlineSub?.cancel();
     _rtSub?.cancel();
     _searchController.dispose();
+    _bodyScroll.dispose();
     super.dispose();
   }
 
@@ -773,13 +779,43 @@ class _NativeContactsPageState extends State<NativeContactsPage> {
     }
 
     final searching = _searchController.text.trim().isNotEmpty;
-    return RefreshIndicator(
+    final alphaGroups = (!searching && _alphaMode && _departments.isNotEmpty)
+        ? _buildAlphaGroups()
+        : const <MapEntry<String, List<NativeContact>>>[];
+    final alphaLetters = alphaGroups.map((e) => e.key).toList(growable: false);
+
+    final listView = RefreshIndicator(
       onRefresh: _load,
       child: ListView(
+        controller: _bodyScroll,
         keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-        padding: const EdgeInsets.only(bottom: 24),
+        padding: EdgeInsets.fromLTRB(
+          0,
+          0,
+          !searching && _alphaMode && alphaLetters.isNotEmpty ? 22 : 0,
+          24,
+        ),
         children: [
-          OrgSectionLabel(total: _total),
+          Row(
+            children: [
+              Expanded(child: OrgSectionLabel(total: _total)),
+              if (!searching && _departments.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(right: 12),
+                  child: _ContactsViewModeToggle(
+                    alphaMode: _alphaMode,
+                    onChanged: (v) {
+                      if (_alphaMode == v) return;
+                      HapticFeedback.selectionClick();
+                      setState(() {
+                        _alphaMode = v;
+                        _activeAlphaPreview = null;
+                      });
+                    },
+                  ),
+                ),
+            ],
+          ),
           if (searching) ...[
             if (_searchItems.isEmpty)
               Padding(
@@ -853,6 +889,69 @@ class _NativeContactsPageState extends State<NativeContactsPage> {
                 ),
               ),
             )
+          else if (_alphaMode)
+            for (final group in alphaGroups) ...[
+              Padding(
+                key: _alphaSectionKeys.putIfAbsent(group.key, GlobalKey.new),
+                padding: const EdgeInsets.fromLTRB(18, 10, 14, 4),
+                child: Text(
+                  group.key,
+                  style: DunesTypography.sans(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: DunesColors.resolve(context, DunesColors.brandPurple),
+                    context: context,
+                  ),
+                ),
+              ),
+              Container(
+                margin: const EdgeInsets.symmetric(horizontal: 12),
+                decoration: BoxDecoration(
+                  color: DunesColors.resolve(
+                    context,
+                    Colors.white,
+                    role: DunesColorRole.surface,
+                  ),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Column(
+                  children: [
+                    for (var i = 0; i < group.value.length; i++) ...[
+                      if (i > 0)
+                        Divider(
+                          height: 1,
+                          thickness: 1,
+                          indent: 66,
+                          color: DunesColors.resolve(
+                            context,
+                            Color(0xFFF0F1F3),
+                            role: DunesColorRole.border,
+                          ),
+                        ),
+                      ContactRowTile(
+                        contact: group.value[i],
+                        currentUserId: widget.session.userId,
+                        showOnline: _onlineUsers.contains(
+                          group.value[i].userId,
+                        ),
+                        imStatus: _imStatuses[group.value[i].userId],
+                        onOpenProfile: () => widget.onOpenContact(
+                          _withLiveStatus(group.value[i]),
+                        ),
+                        onMessage: () => _startPrivateChat(group.value[i]),
+                        avatarService: _convService,
+                        pickMode: _groupPickMode,
+                        selected: _selectedUserIds.contains(
+                          group.value[i].userId,
+                        ),
+                        onToggleSelect: () => _toggleSelected(group.value[i]),
+                        allowSelfInPickMode: widget.allowSelfInPickMode,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ]
           else
             Container(
               margin: const EdgeInsets.symmetric(horizontal: 12),
@@ -949,6 +1048,116 @@ class _NativeContactsPageState extends State<NativeContactsPage> {
         ],
       ),
     );
+
+    if (searching || !_alphaMode || alphaLetters.isEmpty) {
+      return listView;
+    }
+    return Stack(
+      children: [
+        listView,
+        Positioned(
+          right: 2,
+          top: 44,
+          bottom: 24,
+          child: Center(
+            child: _ContactsAlphaIndexBar(
+              letters: alphaLetters,
+              activeLetter: _activeAlphaPreview,
+              onSelectLetter: _jumpToAlphaLetter,
+              onScrubEnd: () {
+                if (mounted) setState(() => _activeAlphaPreview = null);
+              },
+            ),
+          ),
+        ),
+        if (_activeAlphaPreview != null)
+          IgnorePointer(
+            child: Center(
+              child: Container(
+                width: 64,
+                height: 64,
+                decoration: BoxDecoration(
+                  color: DunesColors.resolve(
+                    context,
+                    DunesColors.brandPurple,
+                  ).withValues(alpha: 0.9),
+                  borderRadius: BorderRadius.circular(18),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Color(0x28000000),
+                      blurRadius: 18,
+                      offset: Offset(0, 6),
+                    ),
+                  ],
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  _activeAlphaPreview!,
+                  style: DunesTypography.sans(
+                    fontSize: 28,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.white,
+                    context: context,
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  List<MapEntry<String, List<NativeContact>>> _buildAlphaGroups() {
+    final byId = <int, NativeContact>{};
+    void collect(NativeDepartment d) {
+      for (final m in d.users) {
+        byId.putIfAbsent(m.userId, () => m);
+      }
+      for (final child in d.children) {
+        collect(child);
+      }
+    }
+
+    for (final d in _departments) {
+      collect(d);
+    }
+    final groups = <String, List<NativeContact>>{};
+    for (final c in byId.values) {
+      final letter = _contactInitialLetter(c.displayName);
+      groups.putIfAbsent(letter, () => <NativeContact>[]).add(c);
+    }
+    final keys = groups.keys.toList()
+      ..sort((a, b) {
+        if (a == '#') return 1;
+        if (b == '#') return -1;
+        return a.compareTo(b);
+      });
+    return [
+      for (final k in keys)
+        MapEntry(
+          k,
+          groups[k]!..sort((a, b) => a.displayName.compareTo(b.displayName)),
+        ),
+    ];
+  }
+
+  void _jumpToAlphaLetter(String letter) {
+    if (_activeAlphaPreview != letter) {
+      HapticFeedback.selectionClick();
+      setState(() => _activeAlphaPreview = letter);
+    }
+    final key = _alphaSectionKeys[letter];
+    final ctx = key?.currentContext;
+    if (ctx != null) {
+      Scrollable.ensureVisible(
+        ctx,
+        duration: MediaQuery.disableAnimationsOf(context)
+            ? Duration.zero
+            : const Duration(milliseconds: 160),
+        curve: Curves.easeOutCubic,
+        alignment: 0.04,
+      );
+    }
   }
 }
 
@@ -1456,4 +1665,184 @@ class _BulkSelectBar extends StatelessWidget {
       ),
     );
   }
+}
+
+class _ContactsViewModeToggle extends StatelessWidget {
+  const _ContactsViewModeToggle({
+    required this.alphaMode,
+    required this.onChanged,
+  });
+
+  final bool alphaMode;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final bg = DunesColors.resolve(
+      context,
+      const Color(0xFFE9E9F0),
+      role: DunesColorRole.surface,
+    );
+    final activeBg = DunesColors.resolve(
+      context,
+      Colors.white,
+      role: DunesColorRole.surface,
+    );
+    final accent = DunesColors.resolve(context, DunesColors.brandPurple);
+    final muted = DunesColors.resolve(context, DunesColors.text3);
+
+    Widget pill(String label, bool selected, VoidCallback onTap) {
+      return GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+          decoration: BoxDecoration(
+            color: selected ? activeBg : Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Text(
+            label,
+            style: DunesTypography.sans(
+              fontSize: 11.5,
+              fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+              color: selected ? accent : muted,
+              context: context,
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(2),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          pill('按部门', !alphaMode, () => onChanged(false)),
+          pill('按姓名', alphaMode, () => onChanged(true)),
+        ],
+      ),
+    );
+  }
+}
+
+class _ContactsAlphaIndexBar extends StatelessWidget {
+  const _ContactsAlphaIndexBar({
+    required this.letters,
+    required this.activeLetter,
+    required this.onSelectLetter,
+    required this.onScrubEnd,
+  });
+
+  final List<String> letters;
+  final String? activeLetter;
+  final ValueChanged<String> onSelectLetter;
+  final VoidCallback onScrubEnd;
+
+  static const double _itemHeight = 18.0;
+
+  void _handleDy(double localY) {
+    if (letters.isEmpty) return;
+    final idx = (localY / _itemHeight).floor().clamp(0, letters.length - 1);
+    onSelectLetter(letters[idx]);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = DunesColors.resolve(context, DunesColors.brandPurple);
+    final muted = DunesColors.resolve(context, DunesColors.text3);
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onVerticalDragDown: (d) => _handleDy(d.localPosition.dy),
+      onVerticalDragUpdate: (d) => _handleDy(d.localPosition.dy),
+      onVerticalDragEnd: (_) => onScrubEnd(),
+      onVerticalDragCancel: onScrubEnd,
+      onTapUp: (_) => onScrubEnd(),
+      child: Container(
+        width: 22,
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        decoration: BoxDecoration(
+          color: DunesColors.resolve(
+            context,
+            Colors.white,
+            role: DunesColorRole.surface,
+          ).withValues(alpha: 0.78),
+          borderRadius: BorderRadius.circular(999),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (final letter in letters)
+              SizedBox(
+                height: _itemHeight,
+                child: Center(
+                  child: Container(
+                    width: 15,
+                    height: 15,
+                    decoration: letter == activeLetter
+                        ? BoxDecoration(color: accent, shape: BoxShape.circle)
+                        : null,
+                    alignment: Alignment.center,
+                    child: Text(
+                      letter,
+                      style: DunesTypography.sans(
+                        fontSize: 10,
+                        fontWeight: letter == activeLetter
+                            ? FontWeight.w700
+                            : FontWeight.w600,
+                        color: letter == activeLetter ? Colors.white : muted,
+                        context: context,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+const Map<String, String> _commonZhInitials = <String, String>{
+  'A': '阿艾安敖',
+  'B': '白班包鲍毕边卜薄贝',
+  'C': '蔡曹岑常陈程池崔柴车成迟楚丛',
+  'D': '戴邓丁董杜段党狄窦刁东都',
+  'E': '鄂',
+  'F': '范方房费冯符傅樊封丰付',
+  'G': '高葛耿龚巩谷顾关管郭甘盖戈古桂国',
+  'H': '韩郝何贺洪侯胡华黄霍海杭和衡红候花怀桓皇惠',
+  'J': '姬吉纪季贾简江姜蒋金靳焦景井鞠居贾纪',
+  'K': '康柯孔寇蒯邝况',
+  'L': '赖蓝郎劳乐雷黎李连廉梁廖林凌刘柳龙卢鲁陆路吕罗骆兰冷励厉利励',
+  'M': '马麦毛茅梅孟米苗闵明莫牟穆满蒙',
+  'N': '倪聂宁牛农南那',
+  'O': '欧',
+  'P': '潘庞裴彭皮平蒲浦朴',
+  'Q': '戚齐祁钱强乔秦邱秋屈瞿全权曲阙',
+  'R': '冉饶任荣容阮芮茹',
+  'S': '沙单商邵申沈盛施石时史司宋苏孙舒束帅双水司马',
+  'T': '谈谭汤唐陶滕田童涂屠邰',
+  'W': '万汪王危韦卫魏温文闻翁巫吴伍武务乌',
+  'X': '奚席夏鲜肖萧谢辛邢熊徐许薛荀向项解',
+  'Y': '严颜阎闫燕杨阳姚叶易殷尹印应雍尤游于余俞虞宇郁喻袁岳云乐',
+  'Z': '臧曾查翟詹张章赵甄郑钟周朱诸祝庄卓宗邹左祖',
+};
+
+String _contactInitialLetter(String name) {
+  final trimmed = name.trim();
+  if (trimmed.isEmpty) return '#';
+  final first = trimmed[0].toUpperCase();
+  final code = first.codeUnitAt(0);
+  if (code >= 65 && code <= 90) return first;
+  for (final entry in _commonZhInitials.entries) {
+    if (entry.value.contains(first)) return entry.key;
+  }
+  return '#';
 }

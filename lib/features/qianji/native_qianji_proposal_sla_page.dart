@@ -1,12 +1,56 @@
 import 'dart:async';
+import 'dart:convert';
 
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../core/theme/dunes_theme.dart';
 import '../auth/auth_session.dart';
 import '../shell/dunes_toast.dart';
 import 'proposal_sla_lookup_service.dart';
+
+import 'qianji_widgets.dart';
+bool get _isPcPlatform =>
+    kIsWeb ||
+    defaultTargetPlatform == TargetPlatform.windows ||
+    defaultTargetPlatform == TargetPlatform.macOS ||
+    defaultTargetPlatform == TargetPlatform.linux;
+
+String _ymd(DateTime d) =>
+    '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+Future<void> _exportCsvOnPc(
+  BuildContext context, {
+  required String suggestedName,
+  required String csv,
+}) async {
+  try {
+    final location = await getSaveLocation(
+      suggestedName: suggestedName,
+      acceptedTypeGroups: const [
+        XTypeGroup(label: 'CSV 表格 (Excel 可直接打开)', extensions: <String>['csv']),
+      ],
+    );
+    if (location == null) return;
+    final bytes = Uint8List.fromList(utf8.encode(csv));
+    final file = XFile.fromData(
+      bytes,
+      mimeType: 'text/csv;charset=utf-8',
+      name: suggestedName,
+    );
+    await file.saveTo(location.path);
+    if (context.mounted) {
+      showDunesToast(context, '已导出：$suggestedName');
+    }
+  } catch (e) {
+    if (context.mounted) {
+      showDunesToast(context, '导出失败：${_msg(e)}');
+    }
+  }
+}
 
 const _purple = Color(0xFF7B5CD8);
 const _purpleDeep = Color(0xFF5B3FB0);
@@ -121,7 +165,10 @@ class _NativeQianjiProposalSlaPageState
                     child: KeyedSubtree(
                       key: ValueKey(_tab),
                       child: switch (_tab) {
-                        0 => _DashboardPane(api: _api),
+                        0 => _DashboardPane(
+                          api: _api,
+                          onOpenScores: () => setState(() => _tab = 1),
+                        ),
                         1 => _ScoresPane(api: _api),
                         _ => _ExemptPane(api: _api),
                       },
@@ -146,35 +193,20 @@ class _SlaHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final back = DunesColors.resolve(context, DunesColors.text2);
     return Padding(
-      padding: const EdgeInsets.fromLTRB(8, 10, 16, 4),
+      padding: const EdgeInsets.fromLTRB(14, 10, 16, 8),
       child: Row(
         children: [
-          InkWell(
-            borderRadius: BorderRadius.circular(8),
-            onTap: onBack,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.arrow_back_ios_new, size: 14, color: back),
-                  const SizedBox(width: 2),
-                  Text(
-                    '饕',
-                    style: TextStyle(fontSize: 13, color: back),
-                  ),
-                ],
-              ),
-            ),
-          ),
+          QianjiBackButton(onBack: onBack),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
               '提案时效',
-              style: TextStyle(
-                fontSize: 18,
+              style: DunesTypography.sans(
+                fontSize: 17.5,
                 fontWeight: FontWeight.w700,
-                color: DunesColors.resolveNullable(context, _purple),
+                letterSpacing: -0.3,
+                color: DunesColors.resolve(context, DunesColors.text),
+                context: context,
               ),
             ),
           ),
@@ -285,81 +317,178 @@ class _AppleSegmentBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final narrow = MediaQuery.sizeOf(context).width < 560;
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    final activeIdx = current.clamp(0, _items.length - 1);
     return Container(
+      height: 44,
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
         color: _cFill(context),
         borderRadius: BorderRadius.circular(14),
       ),
-      child: Row(
-        children: [
-          for (final item in _items)
-            Expanded(
-              child: GestureDetector(
-                key: ValueKey(item.$4),
-                behavior: HitTestBehavior.opaque,
-                onTap: () => onChanged(item.$1),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 180),
-                  curve: Curves.easeOutCubic,
-                  padding: EdgeInsets.symmetric(
-                    vertical: 8,
-                    horizontal: narrow ? 4 : 10,
-                  ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final slotW = constraints.maxWidth / _items.length;
+          return Stack(
+            children: [
+              AnimatedPositioned(
+                duration: reduceMotion
+                    ? Duration.zero
+                    : const Duration(milliseconds: 240),
+                curve: Curves.easeOutCubic,
+                left: activeIdx * slotW,
+                top: 0,
+                bottom: 0,
+                width: slotW,
+                child: DecoratedBox(
                   decoration: BoxDecoration(
-                    color: current == item.$1
-                        ? _cCard(context)
-                        : Colors.transparent,
+                    color: _cCard(context),
                     borderRadius: BorderRadius.circular(10),
-                    boxShadow: current == item.$1
-                        ? const [
-                            BoxShadow(
-                              color: Color(0x18000000),
-                              blurRadius: 8,
-                              offset: Offset(0, 2),
-                            ),
-                          ]
-                        : null,
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      if (!narrow) ...[
-                        Icon(
-                          item.$3,
-                          size: 15,
-                          color: current == item.$1 ? _cPurple(context) : _cSub(context),
-                        ),
-                        const SizedBox(width: 5),
-                      ],
-                      Flexible(
-                        child: Text(
-                          item.$2,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: narrow ? 12 : 13,
-                            fontWeight: current == item.$1
-                                ? FontWeight.w700
-                                : FontWeight.w500,
-                            color: current == item.$1 ? _cInk(context) : _cSub(context),
-                          ),
-                        ),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Color(0x16000000),
+                        blurRadius: 10,
+                        offset: Offset(0, 2),
                       ),
                     ],
                   ),
                 ),
               ),
-            ),
-        ],
+              Row(
+                children: [
+                  for (final item in _items)
+                    Expanded(
+                      child: GestureDetector(
+                        key: ValueKey(item.$4),
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () {
+                          if (current != item.$1) {
+                            HapticFeedback.selectionClick();
+                            onChanged(item.$1);
+                          }
+                        },
+                        child: Center(
+                          child: Padding(
+                            padding: EdgeInsets.symmetric(
+                              horizontal: narrow ? 4 : 10,
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                if (!narrow) ...[
+                                  Icon(
+                                    item.$3,
+                                    size: 15,
+                                    color: current == item.$1
+                                        ? _cPurple(context)
+                                        : _cSub(context),
+                                  ),
+                                  const SizedBox(width: 5),
+                                ],
+                                Flexible(
+                                  child: Text(
+                                    item.$2,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontSize: narrow ? 12 : 13,
+                                      fontWeight: current == item.$1
+                                          ? FontWeight.w700
+                                          : FontWeight.w500,
+                                      color: current == item.$1
+                                          ? _cInk(context)
+                                          : _cSub(context),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ],
+          );
+        },
       ),
     );
   }
 }
 
+enum _SlaDatePreset {
+  all,
+  days7,
+  days30,
+  thisMonth,
+  lastMonth,
+  days90,
+  custom,
+}
+
+DateTimeRange? _rangeForPreset(_SlaDatePreset preset) {
+  final now = DateTime.now();
+  final today = DateTime(now.year, now.month, now.day);
+  return switch (preset) {
+    _SlaDatePreset.all => null,
+    _SlaDatePreset.days7 => DateTimeRange(
+      start: today.subtract(const Duration(days: 6)),
+      end: today,
+    ),
+    _SlaDatePreset.days30 => DateTimeRange(
+      start: today.subtract(const Duration(days: 29)),
+      end: today,
+    ),
+    _SlaDatePreset.thisMonth => DateTimeRange(
+      start: DateTime(today.year, today.month, 1),
+      end: today,
+    ),
+    _SlaDatePreset.lastMonth => DateTimeRange(
+      start: DateTime(today.year, today.month - 1, 1),
+      end: DateTime(today.year, today.month, 0),
+    ),
+    _SlaDatePreset.days90 => DateTimeRange(
+      start: today.subtract(const Duration(days: 89)),
+      end: today,
+    ),
+    _SlaDatePreset.custom => null,
+  };
+}
+
+String _presetLabel(_SlaDatePreset preset) => switch (preset) {
+  _SlaDatePreset.all => '全部时间',
+  _SlaDatePreset.days7 => '近7天',
+  _SlaDatePreset.days30 => '近30天',
+  _SlaDatePreset.thisMonth => '本月',
+  _SlaDatePreset.lastMonth => '上月',
+  _SlaDatePreset.days90 => '近90天',
+  _SlaDatePreset.custom => '自定义',
+};
+
+const _slaStageOptions = <(String, String)>[
+  ('', '全部环节'),
+  ('initiate', '发起填写'),
+  ('tech', '研发审核'),
+  ('finance', '财务复核'),
+  ('board', '板块复核'),
+  ('final', '最终审批'),
+];
+
+const _slaStatusOptions = <(String, String)>[
+  ('', '全部状态'),
+  ('overdue', '仅看逾期'),
+  ('open', '进行中'),
+  ('finished', '已完成'),
+  ('exempt', '已免责'),
+];
+
+enum _StatSortBy { overdueRate, avgMinutes, nodes }
+
 class _DashboardPane extends StatefulWidget {
-  const _DashboardPane({required this.api});
+  const _DashboardPane({required this.api, required this.onOpenScores});
   final ProposalSlaLookupApi api;
+  final VoidCallback onOpenScores;
   @override
   State<_DashboardPane> createState() => _DashboardPaneState();
 }
@@ -368,9 +497,16 @@ class _DashboardPaneState extends State<_DashboardPane> {
   ProposalSlaDashboard? _data;
   String? _error;
   bool _loading = true;
-  DateTimeRange? _range;
+  _SlaDatePreset _preset = _SlaDatePreset.days30;
+  DateTimeRange? _range = _rangeForPreset(_SlaDatePreset.days30);
+  String _sector = '';
+  String _stage = '';
+  String _status = '';
+  _StatSortBy _sortBy = _StatSortBy.overdueRate;
+  int _statDim = 0; // 0: 按审核环节, 1: 按业务板块, 2: 按责任人
   final _search = TextEditingController();
   String _query = '';
+  int _loadVersion = 0;
 
   @override
   void initState() {
@@ -393,30 +529,77 @@ class _DashboardPaneState extends State<_DashboardPane> {
     setState(() => _query = next);
   }
 
+  bool get _hasActiveFilters =>
+      _preset != _SlaDatePreset.days30 ||
+      _sector.isNotEmpty ||
+      _stage.isNotEmpty ||
+      _status.isNotEmpty ||
+      _query.isNotEmpty;
+
   Future<void> _load() async {
+    final version = ++_loadVersion;
     setState(() {
       _loading = true;
       _error = null;
     });
     try {
-      String ymd(DateTime d) =>
-          '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
       final data = await widget.api.fetchDashboard(
-        from: _range == null ? null : ymd(_range!.start),
-        to: _range == null ? null : ymd(_range!.end),
+        from: _range == null ? null : _ymd(_range!.start),
+        to: _range == null ? null : _ymd(_range!.end),
+        sector: _sector.isEmpty ? null : _sector,
+        stage: _stage.isEmpty ? null : _stage,
+        status: _status.isEmpty ? null : _status,
       );
-      if (!mounted) return;
+      if (!mounted || version != _loadVersion) return;
       setState(() {
         _data = data;
         _loading = false;
       });
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted || version != _loadVersion) return;
       setState(() {
         _error = _msg(e);
         _loading = false;
       });
     }
+  }
+
+  void _selectPreset(_SlaDatePreset preset) {
+    final range = _rangeForPreset(preset);
+    setState(() {
+      _preset = preset;
+      _range = range;
+    });
+    unawaited(_load());
+  }
+
+  Future<void> _pickCustomRange() async {
+    final picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(2024),
+      lastDate: DateTime.now().add(const Duration(days: 1)),
+      initialDateRange: _range,
+    );
+    if (picked == null) return;
+    setState(() {
+      _preset = _SlaDatePreset.custom;
+      _range = picked;
+    });
+    await _load();
+  }
+
+  void _resetFilters() {
+    _search.clear();
+    setState(() {
+      _preset = _SlaDatePreset.days30;
+      _range = _rangeForPreset(_SlaDatePreset.days30);
+      _sector = '';
+      _stage = '';
+      _status = '';
+      _query = '';
+      _sortBy = _StatSortBy.overdueRate;
+    });
+    unawaited(_load());
   }
 
   bool _matchText(List<String> fields) {
@@ -425,89 +608,317 @@ class _DashboardPaneState extends State<_DashboardPane> {
     return fields.any((f) => f.toLowerCase().contains(q));
   }
 
+  List<ProposalSlaStat> _sortStats(List<ProposalSlaStat> list) {
+    final out = List<ProposalSlaStat>.from(list);
+    out.sort((a, b) => switch (_sortBy) {
+      _StatSortBy.overdueRate => b.overdueRate.compareTo(a.overdueRate) != 0
+          ? b.overdueRate.compareTo(a.overdueRate)
+          : b.nodes.compareTo(a.nodes),
+      _StatSortBy.avgMinutes => b.avgMinutes.compareTo(a.avgMinutes),
+      _StatSortBy.nodes => b.nodes.compareTo(a.nodes),
+    });
+    return out;
+  }
+
+  String _stageLabelOf(String key) {
+    for (final item in _slaStageOptions) {
+      if (item.$1 == key) return item.$2;
+    }
+    return key.isEmpty ? '全部环节' : key;
+  }
+
+  String _statusLabelOf(String key) {
+    for (final item in _slaStatusOptions) {
+      if (item.$1 == key) return item.$2;
+    }
+    return key.isEmpty ? '全部状态' : key;
+  }
+
+  String _filterSummary(ProposalSlaDashboard data) {
+    final parts = <String>[
+      '区间：${data.from} 至 ${data.to}',
+      '板块：${_sector.isEmpty ? "全部" : _sector}',
+      '环节：${_stageLabelOf(_stage)}',
+      '状态：${_statusLabelOf(_status)}',
+      if (_query.isNotEmpty) '关键词：$_query',
+    ];
+    return parts.join(' · ');
+  }
+
+  List<String> _sectorChoices(ProposalSlaDashboard? data) {
+    if (data == null) return const [];
+    final set = <String>{
+      ...data.sectorOptions,
+      for (final s in data.bySector)
+        if (s.name.trim().isNotEmpty) s.name.trim(),
+      for (final p in data.items)
+        if (p.sector.trim().isNotEmpty) p.sector.trim(),
+      for (final p in data.overdueOpen)
+        if (p.sector.trim().isNotEmpty) p.sector.trim(),
+    };
+    if (_sector.isNotEmpty) set.add(_sector);
+    final list = set.toList()..sort();
+    return list;
+  }
+
+  List<ProposalSlaInstance> _filteredProposals(ProposalSlaDashboard? data) {
+    if (data == null) return const [];
+    final base = data.items.isNotEmpty
+        ? data.items
+        : (_status == 'overdue' || _status.isEmpty ? data.overdueOpen : const <ProposalSlaInstance>[]);
+    return base.where((e) {
+      if (_sector.isNotEmpty && e.sector != _sector) return false;
+      if (_status == 'overdue' && !e.isOverdue) return false;
+      if (_status == 'open' &&
+          (e.status == 'finished' || e.status == 'finished_overdue')) {
+        return false;
+      }
+      if (_status == 'finished' &&
+          e.status != 'finished' &&
+          e.status != 'finished_overdue') {
+        return false;
+      }
+      if (_status == 'exempt' && !e.exempt && e.status != 'exempt') return false;
+      return _matchText([e.title, e.code, e.sector, e.current]);
+    }).toList();
+  }
+
+  Future<void> _openNodesDialog(ProposalSlaInstance row) async {
+    await showDialog<void>(
+      context: context,
+      builder: (_) => _ProposalNodesDialog(api: widget.api, instance: row),
+    );
+  }
+
+  Future<void> _export(
+    ProposalSlaDashboard data, {
+    required List<ProposalSlaStat> stages,
+    required List<ProposalSlaStat> sectors,
+    required List<ProposalSlaStat> people,
+    required List<ProposalSlaInstance> proposals,
+  }) async {
+    final csv = buildProposalSlaDashboardCsv(
+      data: data,
+      stages: stages,
+      sectors: sectors,
+      people: people,
+      proposals: proposals,
+      filterSummary: _filterSummary(data),
+    );
+    final name = '提案时效看板_${data.from}_${data.to}.csv';
+    await _exportCsvOnPc(context, suggestedName: name, csv: csv);
+  }
+
   @override
   Widget build(BuildContext context) {
     final data = _data;
-    final narrow = MediaQuery.sizeOf(context).width < 700;
+    final narrow = MediaQuery.sizeOf(context).width < 760;
     final stages = data == null
         ? const <ProposalSlaStat>[]
-        : data.byStage.where((e) => _matchText([e.name, e.key])).toList();
+        : _sortStats(
+            data.byStage.where((e) => _matchText([e.name, e.key])).toList(),
+          );
+    final sectors = data == null
+        ? const <ProposalSlaStat>[]
+        : _sortStats(
+            data.bySector.where((e) => _matchText([e.name, e.key])).toList(),
+          );
     final people = data == null
         ? const <ProposalSlaStat>[]
-        : data.byPerson.where((e) => _matchText([e.name, e.key])).toList();
-    final overdue = data == null
-        ? const <ProposalSlaInstance>[]
-        : data.overdueOpen
-              .where(
-                (e) => _matchText([e.title, e.code, e.sector, e.current]),
-              )
-              .toList();
+        : _sortStats(
+            data.byPerson.where((e) => _matchText([e.name, e.key])).toList(),
+          );
+    final proposals = _filteredProposals(data);
+    final sectorChoices = _sectorChoices(data);
+    final rangeText = data != null
+        ? '${data.from} 至 ${data.to}'
+        : _range != null
+        ? '${_ymd(_range!.start)} 至 ${_ymd(_range!.end)}'
+        : '选择日期';
 
-    final rangeControls = Wrap(
-      spacing: 10,
-      runSpacing: 8,
-      crossAxisAlignment: WrapCrossAlignment.center,
-      children: [
-        Icon(CupertinoIcons.calendar, size: 17, color: _cPurple(context)),
-        Text(
-          '统计区间',
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-            color: _cInk(context),
-          ),
-        ),
-        _CapsuleButton(
-          label: data == null ? '选择日期' : '${data.from} 至 ${data.to}',
-          icon: CupertinoIcons.chevron_down,
-          onTap: () async {
-            final picked = await showDateRangePicker(
-              context: context,
-              firstDate: DateTime(2024),
-              lastDate: DateTime.now().add(const Duration(days: 1)),
-              initialDateRange: _range,
-            );
-            if (picked == null) return;
-            setState(() => _range = picked);
-            await _load();
-          },
-        ),
-        _CapsuleButton(
-          label: '刷新',
-          icon: CupertinoIcons.refresh,
-          onTap: _loading ? null : _load,
-        ),
-      ],
-    );
-
-    final searchBox = _AppleSearchBar(
-      controller: _search,
-      hint: '搜索环节 / 责任人 / 超时提案',
-      width: narrow ? double.infinity : 260,
-      onSubmitted: () => setState(() => _query = _search.text.trim()),
-    );
+    final presets = [
+      _SlaDatePreset.days7,
+      _SlaDatePreset.days30,
+      _SlaDatePreset.thisMonth,
+      _SlaDatePreset.lastMonth,
+      _SlaDatePreset.days90,
+    ];
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 10, 16, 28),
       children: [
         _AppleCard(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-          child: narrow
-              ? Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    rangeControls,
-                    const SizedBox(height: 8),
-                    searchBox,
-                  ],
-                )
-              : Row(
-                  children: [
-                    Expanded(child: rangeControls),
-                    const SizedBox(width: 12),
-                    searchBox,
-                  ],
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // 第一行：快捷时间筛选 + 自定义日期 + 刷新 + PC导出
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        CupertinoIcons.calendar,
+                        size: 16,
+                        color: _cPurple(context),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        '统计时间',
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w700,
+                          color: _cInk(context),
+                        ),
+                      ),
+                    ],
+                  ),
+                  for (final p in presets)
+                    _FilterChipPill(
+                      key: ValueKey('proposal-sla-preset-${p.name}'),
+                      label: _presetLabel(p),
+                      selected: _preset == p,
+                      onTap: () => _selectPreset(p),
+                    ),
+                  _CapsuleButton(
+                    key: const ValueKey('proposal-sla-date-picker'),
+                    label: rangeText,
+                    icon: CupertinoIcons.calendar_today,
+                    highlighted: _preset == _SlaDatePreset.custom,
+                    onTap: _pickCustomRange,
+                  ),
+                  _CapsuleButton(
+                    label: '刷新',
+                    icon: CupertinoIcons.refresh,
+                    onTap: _loading ? null : _load,
+                  ),
+                  if (_isPcPlatform)
+                    _PrimaryCapsuleButton(
+                      key: const ValueKey('proposal-sla-dashboard-export'),
+                      label: '导出报表',
+                      icon: CupertinoIcons.arrow_down_doc,
+                      onTap: data == null || _loading
+                          ? null
+                          : () => _export(
+                              data,
+                              stages: stages,
+                              sectors: sectors,
+                              people: people,
+                              proposals: proposals,
+                            ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Divider(height: 1, color: _cLine(context)),
+              const SizedBox(height: 10),
+              // 第二行：多维筛选（板块、环节、状态、排序、关键词、重置）
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  _DropdownFilterPill<String>(
+                    key: const ValueKey('proposal-sla-filter-sector'),
+                    icon: CupertinoIcons.layers_alt,
+                    label: '板块',
+                    value: _sector,
+                    items: [
+                      const ('', '全部板块'),
+                      for (final sec in sectorChoices) (sec, sec),
+                    ],
+                    onChanged: (v) {
+                      setState(() => _sector = v);
+                      unawaited(_load());
+                    },
+                  ),
+                  _DropdownFilterPill<String>(
+                    key: const ValueKey('proposal-sla-filter-stage'),
+                    icon: CupertinoIcons.arrow_branch,
+                    label: '环节',
+                    value: _stage,
+                    items: _slaStageOptions,
+                    onChanged: (v) {
+                      setState(() => _stage = v);
+                      unawaited(_load());
+                    },
+                  ),
+                  _DropdownFilterPill<String>(
+                    key: const ValueKey('proposal-sla-filter-status'),
+                    icon: CupertinoIcons.flag,
+                    label: '状态',
+                    value: _status,
+                    items: _slaStatusOptions,
+                    onChanged: (v) {
+                      setState(() => _status = v);
+                      unawaited(_load());
+                    },
+                  ),
+                  _DropdownFilterPill<_StatSortBy>(
+                    key: const ValueKey('proposal-sla-filter-sort'),
+                    icon: CupertinoIcons.sort_down,
+                    label: '排序',
+                    value: _sortBy,
+                    items: const [
+                      (_StatSortBy.overdueRate, '按超时率'),
+                      (_StatSortBy.avgMinutes, '按平均用时'),
+                      (_StatSortBy.nodes, '按节点数'),
+                    ],
+                    onChanged: (v) => setState(() => _sortBy = v),
+                  ),
+                  _AppleSearchBar(
+                    controller: _search,
+                    hint: '搜索提案编号 / 标题 / 环节 / 责任人',
+                    width: narrow ? double.infinity : 250,
+                    onSubmitted: () => setState(() => _query = _search.text.trim()),
+                  ),
+                  if (_hasActiveFilters)
+                    _CapsuleButton(
+                      key: const ValueKey('proposal-sla-reset-filters'),
+                      label: '重置筛选',
+                      icon: CupertinoIcons.arrow_counterclockwise,
+                      onTap: _resetFilters,
+                    ),
+                ],
+              ),
+              if (data != null) ...[
+                const SizedBox(height: 10),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 7,
+                  ),
+                  decoration: BoxDecoration(
+                    color: _cHead(context),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        CupertinoIcons.info_circle,
+                        size: 14,
+                        color: _cPurple(context),
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          '当前统计口径：${_filterSummary(data)}（共 ${proposals.length} 条提案明细）',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: _cSub(context),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
+              ],
+            ],
+          ),
         ),
         const SizedBox(height: 12),
         if (_loading)
@@ -517,37 +928,54 @@ class _DashboardPaneState extends State<_DashboardPane> {
           ),
         if (_error != null) _ErrorBox(message: _error!, onRetry: _load),
         if (data != null && !_loading) ...[
+          // 核心 KPI 卡片：附带清晰白话解释与点击联动
           LayoutBuilder(
             builder: (context, box) {
-              final wide = box.maxWidth >= 720;
+              final wide = box.maxWidth >= 740;
               final cards = [
                 _MetricSpec(
-                  title: '纳入时限',
-                  value: '${data.proposals}',
-                  hint: '进行中 ${data.open} · 已完成 ${data.finished}',
+                  title: '纳入考核提案',
+                  value: '${data.proposals} 份',
+                  hint: '进行中 ${data.open} 份 · 已办结 ${data.finished} 份',
+                  explain: '区间内进入审核流程的提案总数',
                   icon: CupertinoIcons.doc_on_clipboard,
                   accent: const Color(0xFF5856D6),
+                  active: _status.isEmpty,
+                  onTap: () {
+                    if (_status.isEmpty) return;
+                    setState(() => _status = '');
+                    unawaited(_load());
+                  },
                 ),
                 _MetricSpec(
-                  title: '在途超时',
-                  value: '${data.openOverdue}',
-                  hint: '当前有节点或总时长超时',
+                  title: '当前在途超时',
+                  value: '${data.openOverdue} 份',
+                  hint: data.openOverdue > 0 ? '点击下方明细立即定位卡点' : '当前无在途超时提案',
+                  explain: '单环节超12h或总计超72h未办结',
                   icon: CupertinoIcons.exclamationmark_triangle_fill,
                   accent: const Color(0xFFFF3B30),
+                  active: _status == 'overdue',
+                  onTap: () {
+                    setState(() => _status = _status == 'overdue' ? '' : 'overdue');
+                    unawaited(_load());
+                  },
                 ),
                 _MetricSpec(
-                  title: '平均总用时',
+                  title: '已办结平均用时',
                   value: '${data.avgTotalHours} h',
-                  hint: '轮回 ${data.rejectRounds} 次',
+                  hint: '驳回轮回累计 ${data.rejectRounds} 次',
+                  explain: '仅统计复核有效工时（退回填写暂停）',
                   icon: CupertinoIcons.stopwatch_fill,
                   accent: const Color(0xFF007AFF),
                 ),
                 _MetricSpec(
-                  title: '待复核',
-                  value: '${data.pendingScores}',
-                  hint: '申诉待处理 ${data.pendingAppeals}',
+                  title: '待复核绩效',
+                  value: '${data.pendingScores} 条',
+                  hint: '含申诉待处理 ${data.pendingAppeals} 条 · 点击处理',
+                  explain: '超时触发的扣分记录，复核后生效',
                   icon: CupertinoIcons.bell_fill,
                   accent: const Color(0xFFFF9500),
+                  onTap: widget.onOpenScores,
                 ),
               ];
               if (wide) {
@@ -574,47 +1002,136 @@ class _DashboardPaneState extends State<_DashboardPane> {
             },
           ),
           const SizedBox(height: 12),
-          LayoutBuilder(
-            builder: (context, box) {
-              final stageCard = _StatSectionCard(
-                title: '按环节统计',
-                nameLabel: '环节',
-                rows: stages,
-              );
-              final personCard = _StatSectionCard(
-                title: '按责任人统计',
-                nameLabel: '责任人',
-                rows: people,
-              );
-              if (box.maxWidth >= 820) {
-                return Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(child: stageCard),
-                    const SizedBox(width: 12),
-                    Expanded(child: personCard),
-                  ],
-                );
-              }
-              return Column(
-                children: [
-                  stageCard,
-                  const SizedBox(height: 12),
-                  personCard,
-                ],
-              );
-            },
+          // 瓶颈透视区：支持按审核环节 / 按业务板块 / 按责任人 清晰切换 + 点击行联动筛选
+          _AppleCard(
+            padding: EdgeInsets.zero,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
+                  child: Wrap(
+                    spacing: 10,
+                    runSpacing: 8,
+                    alignment: WrapAlignment.spaceBetween,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '时效瓶颈分析',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                              color: _cInk(context),
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            '点击环节或板块行可快速联动筛选；超时率 = 超时节点数 ÷ 经办节点数',
+                            style: TextStyle(fontSize: 12, color: _cSub(context)),
+                          ),
+                        ],
+                      ),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: [
+                          _FilterChipPill(
+                            key: const ValueKey('proposal-sla-dim-stage'),
+                            label: '按审核环节 (${stages.length})',
+                            selected: _statDim == 0,
+                            onTap: () => setState(() => _statDim = 0),
+                          ),
+                          _FilterChipPill(
+                            key: const ValueKey('proposal-sla-dim-sector'),
+                            label: '按业务板块 (${sectors.length})',
+                            selected: _statDim == 1,
+                            onTap: () => setState(() => _statDim = 1),
+                          ),
+                          _FilterChipPill(
+                            key: const ValueKey('proposal-sla-dim-person'),
+                            label: '按责任人 (${people.length})',
+                            selected: _statDim == 2,
+                            onTap: () => setState(() => _statDim = 2),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                Divider(height: 1, color: _cLine(context)),
+                AnimatedSwitcher(
+                  duration: MediaQuery.disableAnimationsOf(context)
+                      ? Duration.zero
+                      : const Duration(milliseconds: 220),
+                  switchInCurve: Curves.easeOutCubic,
+                  switchOutCurve: Curves.easeInCubic,
+                  child: KeyedSubtree(
+                    key: ValueKey('sla-dim-$_statDim'),
+                    child: switch (_statDim) {
+                      0 => _StatTableBody(
+                        nameLabel: '审核环节',
+                        rows: stages,
+                        selectedKey: _stage,
+                        onTapRow: (row) {
+                          HapticFeedback.selectionClick();
+                          setState(
+                            () => _stage = _stage == row.key ? '' : row.key,
+                          );
+                          unawaited(_load());
+                        },
+                      ),
+                      1 => _StatTableBody(
+                        nameLabel: '业务板块',
+                        rows: sectors,
+                        selectedKey: _sector,
+                        onTapRow: (row) {
+                          HapticFeedback.selectionClick();
+                          final key = row.name.trim();
+                          setState(
+                            () => _sector = _sector == key ? '' : key,
+                          );
+                          unawaited(_load());
+                        },
+                      ),
+                      _ => _StatTableBody(
+                        nameLabel: '责任人',
+                        rows: people,
+                        selectedKey: _query,
+                        onTapRow: (row) {
+                          HapticFeedback.selectionClick();
+                          final name = row.name.trim();
+                          if (name.isEmpty) return;
+                          _search.text = _query == name ? '' : name;
+                          setState(() => _query = _search.text.trim());
+                        },
+                      ),
+                    },
+                  ),
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 12),
+          // 提案明细列表（支持点击查看每个节点的耗时详情）
           _AppleCard(
-            title: '在途超时提案',
-            subtitle: '当前有节点超时或总时长超时的在途提案',
+            title: _status == 'overdue'
+                ? '在途超时提案明细 (${proposals.length})'
+                : '区间内提案时效明细 (${proposals.length})',
+            subtitle: '点击任意提案可查看各审核节点耗时与当前卡点',
             padding: EdgeInsets.zero,
-            child: overdue.isEmpty
+            child: proposals.isEmpty
                 ? _Empty(
-                    text: _query.isEmpty ? '当前没有在途超时提案' : '没有匹配的在途超时提案',
+                    text: _hasActiveFilters
+                        ? '当前筛选条件下没有匹配的提案'
+                        : '该时间区间暂无提案记录',
                   )
-                : _ResponsiveInstanceView(rows: overdue),
+                : _ResponsiveInstanceView(
+                    rows: proposals,
+                    onTapRow: _openNodesDialog,
+                  ),
           ),
         ],
       ],
@@ -627,15 +1144,21 @@ class _MetricSpec {
     required this.title,
     required this.value,
     required this.hint,
+    required this.explain,
     required this.icon,
     required this.accent,
+    this.active = false,
+    this.onTap,
   });
 
   final String title;
   final String value;
   final String hint;
+  final String explain;
   final IconData icon;
   final Color accent;
+  final bool active;
+  final VoidCallback? onTap;
 }
 
 class _MetricCard extends StatelessWidget {
@@ -644,11 +1167,17 @@ class _MetricCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
+    final content = Container(
+      padding: const EdgeInsets.all(15),
       decoration: BoxDecoration(
         color: _cCard(context),
         borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: spec.active
+              ? spec.accent.withValues(alpha: 0.65)
+              : _cLine(context).withValues(alpha: 0.7),
+          width: spec.active ? 1.2 : 0.6,
+        ),
         boxShadow: const [
           BoxShadow(
             color: Color(0x0A000000),
@@ -677,165 +1206,438 @@ class _MetricCard extends StatelessWidget {
                   spec.title,
                   style: TextStyle(
                     fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: _cSub(context),
+                    fontWeight: FontWeight.w700,
+                    color: _cInk(context),
                   ),
                 ),
               ),
+              if (spec.onTap != null)
+                Icon(
+                  CupertinoIcons.chevron_right,
+                  size: 13,
+                  color: _cSub(context),
+                ),
             ],
           ),
           const SizedBox(height: 10),
           Text(
             spec.value,
             style: TextStyle(
-              fontSize: 26,
+              fontSize: 24,
               fontWeight: FontWeight.w800,
               color: _cInk(context),
-              letterSpacing: -0.5,
+              letterSpacing: -0.4,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            spec.hint,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: spec.accent,
             ),
           ),
           const SizedBox(height: 3),
-          Text(spec.hint, style: TextStyle(fontSize: 12, color: _cSub(context))),
+          Text(
+            spec.explain,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(fontSize: 11.5, color: _cSub(context)),
+          ),
         ],
+      ),
+    );
+    if (spec.onTap == null) return content;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(18),
+        onTap: spec.onTap,
+        child: content,
       ),
     );
   }
 }
 
-class _StatSectionCard extends StatelessWidget {
-  const _StatSectionCard({
-    required this.title,
+class _StatTableBody extends StatelessWidget {
+  const _StatTableBody({
     required this.nameLabel,
     required this.rows,
+    required this.selectedKey,
+    this.onTapRow,
   });
 
-  final String title;
   final String nameLabel;
   final List<ProposalSlaStat> rows;
+  final String selectedKey;
+  final ValueChanged<ProposalSlaStat>? onTapRow;
 
   @override
   Widget build(BuildContext context) {
-    final compact = MediaQuery.sizeOf(context).width < 520;
-    return _AppleCard(
-      title: title,
-      padding: EdgeInsets.zero,
-      child: rows.isEmpty
-          ? const _Empty(text: '暂无匹配的统计数据')
-          : compact
-          ? Column(
+    if (rows.isEmpty) {
+      return const _Empty(text: '当前筛选条件下暂无统计数据');
+    }
+    final compact = MediaQuery.sizeOf(context).width < 680;
+    if (compact) {
+      return Column(
+        children: [
+          for (var i = 0; i < rows.length; i++)
+            _buildCompactRow(context, rows[i], isFirst: i == 0),
+        ],
+      );
+    }
+    return Column(
+      children: [
+        Container(
+          color: _cHead(context),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          child: Row(
+            children: [
+              Expanded(flex: 3, child: _th(context, nameLabel)),
+              Expanded(child: _th(context, '涉及提案')),
+              Expanded(child: _th(context, '经办节点')),
+              Expanded(flex: 2, child: _th(context, '平均用时')),
+              Expanded(flex: 3, child: _th(context, '超时率（超时/总节点）')),
+              Expanded(child: _th(context, '驳回轮回')),
+            ],
+          ),
+        ),
+        for (final row in rows) _buildWideRow(context, row),
+      ],
+    );
+  }
+
+  bool _isSelected(ProposalSlaStat row) =>
+      selectedKey.isNotEmpty &&
+      (row.key == selectedKey || row.name == selectedKey);
+
+  Color _rateColor(double rate) {
+    if (rate >= 30) return const Color(0xFFFF3B30);
+    if (rate > 0) return const Color(0xFFFF9500);
+    return const Color(0xFF34C759);
+  }
+
+  Widget _buildCompactRow(
+    BuildContext context,
+    ProposalSlaStat row, {
+    required bool isFirst,
+  }) {
+    final selected = _isSelected(row);
+    final rateColor = _rateColor(row.overdueRate);
+    return InkWell(
+      onTap: onTapRow == null ? null : () => onTapRow!(row),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: selected ? _cSoft(context).withValues(alpha: 0.6) : null,
+          border: isFirst
+              ? null
+              : Border(top: BorderSide(color: _cLine(context))),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
               children: [
-                for (var i = 0; i < rows.length; i++)
-                  Container(
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      border: i == 0
-                          ? null
-                          : Border(top: BorderSide(color: _cLine(context))),
+                Expanded(
+                  child: Text(
+                    row.name.isEmpty ? '未命名' : row.name,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: selected ? _cPurple(context) : _cInk(context),
                     ),
-                    child: Row(
+                  ),
+                ),
+                _PillTag(
+                  label: '超时率 ${row.overdueRate}%',
+                  fg: rateColor,
+                  bg: rateColor.withValues(alpha: 0.12),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(999),
+              child: LinearProgressIndicator(
+                value: (row.overdueRate / 100).clamp(0.0, 1.0),
+                minHeight: 5,
+                backgroundColor: _cFill(context),
+                valueColor: AlwaysStoppedAnimation<Color>(rateColor),
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              '提案 ${row.proposalCount} 份 · 节点 ${row.nodes} 个（超时 ${row.overdueCount}）· 平均 ${proposalSlaMinutes(row.avgMinutes.round())} · 轮回 ${row.rejectRounds} 次',
+              style: TextStyle(fontSize: 12, color: _cSub(context)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildWideRow(BuildContext context, ProposalSlaStat row) {
+    final selected = _isSelected(row);
+    final rateColor = _rateColor(row.overdueRate);
+    return InkWell(
+      onTap: onTapRow == null ? null : () => onTapRow!(row),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: selected ? _cSoft(context).withValues(alpha: 0.65) : null,
+          border: Border(top: BorderSide(color: _cLine(context))),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              flex: 3,
+              child: Row(
+                children: [
+                  Flexible(
+                    child: Text(
+                      row.name.isEmpty ? '未命名' : row.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: selected ? _cPurple(context) : _cInk(context),
+                      ),
+                    ),
+                  ),
+                  if (selected) ...[
+                    const SizedBox(width: 6),
+                    _PillTag(
+                      label: '已筛选',
+                      fg: _cPurple(context),
+                      bg: _cSoft(context),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            Expanded(child: _td(context, '${row.proposalCount} 份')),
+            Expanded(child: _td(context, '${row.nodes} 个')),
+            Expanded(
+              flex: 2,
+              child: _td(context, proposalSlaMinutes(row.avgMinutes.round())),
+            ),
+            Expanded(
+              flex: 3,
+              child: Padding(
+                padding: const EdgeInsets.only(right: 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                        Text(
+                          '${row.overdueRate}%',
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w700,
+                            color: rateColor,
+                          ),
+                        ),
+                        Text(
+                          '${row.overdueCount} / ${row.nodes}',
+                          style: TextStyle(fontSize: 11, color: _cSub(context)),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(999),
+                      child: LinearProgressIndicator(
+                        value: (row.overdueRate / 100).clamp(0.0, 1.0),
+                        minHeight: 5,
+                        backgroundColor: _cFill(context),
+                        valueColor: AlwaysStoppedAnimation<Color>(rateColor),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            Expanded(child: _td(context, '${row.rejectRounds} 次')),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ProposalNodesDialog extends StatefulWidget {
+  const _ProposalNodesDialog({required this.api, required this.instance});
+  final ProposalSlaLookupApi api;
+  final ProposalSlaInstance instance;
+
+  @override
+  State<_ProposalNodesDialog> createState() => _ProposalNodesDialogState();
+}
+
+class _ProposalNodesDialogState extends State<_ProposalNodesDialog> {
+  List<ProposalSlaNode> _nodes = const [];
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_load());
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final rows = await widget.api.fetchNodes(widget.instance.id);
+      if (!mounted) return;
+      setState(() {
+        _nodes = rows;
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = _msg(e);
+        _loading = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final inst = widget.instance;
+    return Dialog(
+      backgroundColor: _cCard(context),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 680, maxHeight: 580),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 12, 12),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          inst.title.isEmpty ? inst.code : inst.title,
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: _cInk(context),
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '${inst.code} · ${inst.sector.isEmpty ? "未填写板块" : inst.sector} · 总用时 ${inst.elapsedHours} / ${inst.totalHours} h',
+                          style: TextStyle(fontSize: 12, color: _cSub(context)),
+                        ),
+                      ],
+                    ),
+                  ),
+                  _StatusBadge(status: inst.status),
+                  const SizedBox(width: 6),
+                  IconButton(
+                    icon: Icon(CupertinoIcons.xmark_circle_fill, color: _cSub(context)),
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                ],
+              ),
+            ),
+            Divider(height: 1, color: _cLine(context)),
+            Expanded(
+              child: _loading
+                  ? const Center(child: CupertinoActivityIndicator(radius: 12))
+                  : _error != null
+                  ? _ErrorBox(message: _error!, onRetry: _load)
+                  : _nodes.isEmpty
+                  ? const _Empty(text: '暂无节点流转记录')
+                  : ListView.separated(
+                      padding: const EdgeInsets.all(16),
+                      itemCount: _nodes.length,
+                      separatorBuilder: (_, _) => const SizedBox(height: 8),
+                      itemBuilder: (context, index) {
+                        final n = _nodes[index];
+                        final over = n.limitMinutes > 0 &&
+                            n.effectiveMinutes >= n.limitMinutes &&
+                            !n.exempt;
+                        return Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: _cHead(context),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: over
+                                  ? const Color(0xFFFF3B30).withValues(alpha: 0.4)
+                                  : _cLine(context),
+                            ),
+                          ),
+                          child: Row(
                             children: [
-                              Text(
-                                rows[i].name.isEmpty ? '—' : rows[i].name,
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                  color: _cInk(context),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Text(
+                                          '第${n.round}轮 · ${n.label}',
+                                          style: TextStyle(
+                                            fontSize: 13.5,
+                                            fontWeight: FontWeight.w700,
+                                            color: _cInk(context),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        if (n.assigneeName.isNotEmpty)
+                                          _PillTag(
+                                            label: n.assigneeName,
+                                            fg: _cPurple(context),
+                                            bg: _cSoft(context),
+                                          ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      '耗时 ${proposalSlaMinutes(n.effectiveMinutes)} / 限额 ${proposalSlaMinutes(n.limitMinutes)}',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: over
+                                            ? const Color(0xFFFF3B30)
+                                            : _cSub(context),
+                                        fontWeight: over
+                                            ? FontWeight.w600
+                                            : FontWeight.w400,
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
-                              const SizedBox(height: 4),
-                              Text(
-                                '节点 ${rows[i].nodes} · 提案 ${rows[i].proposalCount} · 平均 ${proposalSlaMinutes(rows[i].avgMinutes.round())} · 轮回 ${rows[i].rejectRounds}',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: _cSub(context),
-                                ),
+                              _StatusBadge(
+                                status: n.exempt ? 'exempt' : n.state,
                               ),
                             ],
                           ),
-                        ),
-                        _PillTag(
-                          label: '超时 ${rows[i].overdueRate}%',
-                          fg: rows[i].overdueRate > 0
-                              ? const Color(0xFFFF3B30)
-                              : _cSub(context),
-                          bg: rows[i].overdueRate > 0
-                              ? const Color(0xFFFFF1F0)
-                              : _cBg(context),
-                        ),
-                      ],
+                        );
+                      },
                     ),
-                  ),
-              ],
-            )
-          : Column(
-              children: [
-                Container(
-                  color: _cHead(context),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 10,
-                  ),
-                  child: Row(
-                    children: [
-                      Expanded(flex: 3, child: _th(context, nameLabel)),
-                      Expanded(child: _th(context, '节点数')),
-                      Expanded(child: _th(context, '提案')),
-                      Expanded(flex: 2, child: _th(context, '平均用时')),
-                      Expanded(child: _th(context, '超时率')),
-                      Expanded(child: _th(context, '轮回')),
-                    ],
-                  ),
-                ),
-                for (final row in rows)
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 12,
-                    ),
-                    decoration: BoxDecoration(
-                      border: Border(top: BorderSide(color: _cLine(context))),
-                    ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          flex: 3,
-                          child: Text(
-                            row.name.isEmpty ? '—' : row.name,
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color: _cInk(context),
-                            ),
-                          ),
-                        ),
-                        Expanded(child: _td(context, '${row.nodes}')),
-                        Expanded(child: _td(context, '${row.proposalCount}')),
-                        Expanded(
-                          flex: 2,
-                          child: _td(context, proposalSlaMinutes(row.avgMinutes.round())),
-                        ),
-                        Expanded(
-                          child: Text(
-                            '${row.overdueRate}%',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: row.overdueRate > 0
-                                  ? const Color(0xFFFF3B30)
-                                  : _cSub(context),
-                            ),
-                          ),
-                        ),
-                        Expanded(child: _td(context, '${row.rejectRounds}')),
-                      ],
-                    ),
-                  ),
-              ],
             ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -849,6 +1651,10 @@ class _ScoresPane extends StatefulWidget {
 
 class _ScoresPaneState extends State<_ScoresPane> {
   String _status = 'pending';
+  _SlaDatePreset _preset = _SlaDatePreset.all;
+  DateTimeRange? _range;
+  String _sector = '';
+  String _kind = '';
   final _search = TextEditingController();
   List<ProposalSlaScore> _list = const [];
   bool _loading = true;
@@ -877,6 +1683,10 @@ class _ScoresPaneState extends State<_ScoresPane> {
       final rows = await widget.api.fetchScores(
         status: _status,
         q: _search.text,
+        from: _range == null ? null : _ymd(_range!.start),
+        to: _range == null ? null : _ymd(_range!.end),
+        sector: _sector.isEmpty ? null : _sector,
+        kind: _kind.isEmpty ? null : _kind,
       );
       if (!mounted || version != _loadVersion) return;
       setState(() {
@@ -890,6 +1700,58 @@ class _ScoresPaneState extends State<_ScoresPane> {
         _loading = false;
       });
     }
+  }
+
+  void _selectPreset(_SlaDatePreset preset) {
+    setState(() {
+      _preset = preset;
+      _range = _rangeForPreset(preset);
+    });
+    unawaited(_load());
+  }
+
+  Future<void> _pickCustomRange() async {
+    final picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(2024),
+      lastDate: DateTime.now().add(const Duration(days: 1)),
+      initialDateRange: _range,
+    );
+    if (picked == null) return;
+    setState(() {
+      _preset = _SlaDatePreset.custom;
+      _range = picked;
+    });
+    await _load();
+  }
+
+  List<String> get _sectorChoices {
+    final set = <String>{
+      for (final r in _list)
+        if (r.sector.trim().isNotEmpty) r.sector.trim(),
+    };
+    if (_sector.isNotEmpty) set.add(_sector);
+    return set.toList()..sort();
+  }
+
+  Future<void> _exportScores() async {
+    final rangeText = _range == null
+        ? '全部时间'
+        : '${_ymd(_range!.start)} 至 ${_ymd(_range!.end)}';
+    final summary = [
+      '状态：${_status.isEmpty ? "全部" : proposalSlaStatusLabel(_status)}',
+      '时间：$rangeText',
+      if (_sector.isNotEmpty) '板块：$_sector',
+      if (_kind.isNotEmpty) '类型：${proposalSlaKindLabel(_kind)}',
+      if (_search.text.trim().isNotEmpty) '关键词：${_search.text.trim()}',
+    ].join(' · ');
+    final csv = buildProposalSlaScoresCsv(rows: _list, filterSummary: summary);
+    final suffix = _range == null ? _ymd(DateTime.now()) : '${_ymd(_range!.start)}_${_ymd(_range!.end)}';
+    await _exportCsvOnPc(
+      context,
+      suggestedName: '提案时效绩效申诉_$suffix.csv',
+      csv: csv,
+    );
   }
 
   Future<ProposalSlaScore?> _review(
@@ -1029,6 +1891,9 @@ class _ScoresPaneState extends State<_ScoresPane> {
 
   @override
   Widget build(BuildContext context) {
+    final rangeLabel = _range == null
+        ? '选择日期'
+        : '${_ymd(_range!.start)} 至 ${_ymd(_range!.end)}';
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 10, 16, 20),
       child: Column(
@@ -1051,6 +1916,66 @@ class _ScoresPaneState extends State<_ScoresPane> {
               unawaited(_load());
             },
             onSearch: _load,
+            extraRow: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                for (final p in const [
+                  _SlaDatePreset.all,
+                  _SlaDatePreset.days7,
+                  _SlaDatePreset.days30,
+                  _SlaDatePreset.thisMonth,
+                ])
+                  _FilterChipPill(
+                    label: _presetLabel(p),
+                    selected: _preset == p,
+                    onTap: () => _selectPreset(p),
+                  ),
+                _CapsuleButton(
+                  label: rangeLabel,
+                  icon: CupertinoIcons.calendar_today,
+                  highlighted: _preset == _SlaDatePreset.custom,
+                  onTap: _pickCustomRange,
+                ),
+                if (_sectorChoices.isNotEmpty)
+                  _DropdownFilterPill<String>(
+                    icon: CupertinoIcons.layers_alt,
+                    label: '板块',
+                    value: _sector,
+                    items: [
+                      const ('', '全部板块'),
+                      for (final sec in _sectorChoices) (sec, sec),
+                    ],
+                    onChanged: (v) {
+                      setState(() => _sector = v);
+                      unawaited(_load());
+                    },
+                  ),
+                _DropdownFilterPill<String>(
+                  icon: CupertinoIcons.tag,
+                  label: '类型',
+                  value: _kind,
+                  items: const [
+                    ('', '全部类型'),
+                    ('total', '总时长超时'),
+                    ('node', '节点超时'),
+                    ('leader', '部门负责人连带'),
+                  ],
+                  onChanged: (v) {
+                    setState(() => _kind = v);
+                    unawaited(_load());
+                  },
+                ),
+                if (_isPcPlatform)
+                  _PrimaryCapsuleButton(
+                    key: const ValueKey('proposal-sla-scores-export'),
+                    label: '导出明细',
+                    icon: CupertinoIcons.arrow_down_doc,
+                    onTap: _loading || _list.isEmpty ? null : _exportScores,
+                  ),
+              ],
+            ),
           ),
           const SizedBox(height: 12),
           Expanded(
@@ -1614,6 +2539,9 @@ class _ExemptPane extends StatefulWidget {
 
 class _ExemptPaneState extends State<_ExemptPane> {
   String _status = 'open';
+  _SlaDatePreset _preset = _SlaDatePreset.all;
+  DateTimeRange? _range;
+  String _sector = '';
   final _search = TextEditingController();
   List<ProposalSlaInstance> _list = const [];
   bool _loading = true;
@@ -1640,6 +2568,9 @@ class _ExemptPaneState extends State<_ExemptPane> {
       final rows = await widget.api.fetchInstances(
         status: _status,
         q: _search.text,
+        from: _range == null ? null : _ymd(_range!.start),
+        to: _range == null ? null : _ymd(_range!.end),
+        sector: _sector.isEmpty ? null : _sector,
       );
       if (!mounted) return;
       setState(() {
@@ -1653,6 +2584,57 @@ class _ExemptPaneState extends State<_ExemptPane> {
         _loading = false;
       });
     }
+  }
+
+  void _selectPreset(_SlaDatePreset preset) {
+    setState(() {
+      _preset = preset;
+      _range = _rangeForPreset(preset);
+    });
+    unawaited(_load());
+  }
+
+  Future<void> _pickCustomRange() async {
+    final picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(2024),
+      lastDate: DateTime.now().add(const Duration(days: 1)),
+      initialDateRange: _range,
+    );
+    if (picked == null) return;
+    setState(() {
+      _preset = _SlaDatePreset.custom;
+      _range = picked;
+    });
+    await _load();
+  }
+
+  List<String> get _sectorChoices {
+    final set = <String>{
+      for (final r in _list)
+        if (r.sector.trim().isNotEmpty) r.sector.trim(),
+    };
+    if (_sector.isNotEmpty) set.add(_sector);
+    return set.toList()..sort();
+  }
+
+  Future<void> _exportInstances() async {
+    final rangeText = _range == null
+        ? '全部时间'
+        : '${_ymd(_range!.start)} 至 ${_ymd(_range!.end)}';
+    final summary = [
+      '状态：${_status.isEmpty ? "全部" : proposalSlaStatusLabel(_status)}',
+      '时间：$rangeText',
+      if (_sector.isNotEmpty) '板块：$_sector',
+      if (_search.text.trim().isNotEmpty) '关键词：${_search.text.trim()}',
+    ].join(' · ');
+    final csv = buildProposalSlaInstancesCsv(rows: _list, filterSummary: summary);
+    final suffix = _range == null ? _ymd(DateTime.now()) : '${_ymd(_range!.start)}_${_ymd(_range!.end)}';
+    await _exportCsvOnPc(
+      context,
+      suggestedName: '提案时效免责列表_$suffix.csv',
+      csv: csv,
+    );
   }
 
   Future<void> _exempt(ProposalSlaInstance row) async {
@@ -1784,6 +2766,9 @@ class _ExemptPaneState extends State<_ExemptPane> {
 
   @override
   Widget build(BuildContext context) {
+    final rangeLabel = _range == null
+        ? '选择日期'
+        : '${_ymd(_range!.start)} 至 ${_ymd(_range!.end)}';
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 10, 16, 20),
       child: Column(
@@ -1792,8 +2777,8 @@ class _ExemptPaneState extends State<_ExemptPane> {
             status: _status,
             options: const {
               'open': '进行中',
-              'overdue': '已超时',
-              'warning': '卡点',
+              'overdue': '已逾期',
+              'warning': '即将逾期',
               'finished': '已完成',
               'exempt': '已免责',
               '': '全部',
@@ -1805,6 +2790,51 @@ class _ExemptPaneState extends State<_ExemptPane> {
               unawaited(_load());
             },
             onSearch: _load,
+            extraRow: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                for (final p in const [
+                  _SlaDatePreset.all,
+                  _SlaDatePreset.days7,
+                  _SlaDatePreset.days30,
+                  _SlaDatePreset.thisMonth,
+                ])
+                  _FilterChipPill(
+                    label: _presetLabel(p),
+                    selected: _preset == p,
+                    onTap: () => _selectPreset(p),
+                  ),
+                _CapsuleButton(
+                  label: rangeLabel,
+                  icon: CupertinoIcons.calendar_today,
+                  highlighted: _preset == _SlaDatePreset.custom,
+                  onTap: _pickCustomRange,
+                ),
+                if (_sectorChoices.isNotEmpty)
+                  _DropdownFilterPill<String>(
+                    icon: CupertinoIcons.layers_alt,
+                    label: '板块',
+                    value: _sector,
+                    items: [
+                      const ('', '全部板块'),
+                      for (final sec in _sectorChoices) (sec, sec),
+                    ],
+                    onChanged: (v) {
+                      setState(() => _sector = v);
+                      unawaited(_load());
+                    },
+                  ),
+                if (_isPcPlatform)
+                  _PrimaryCapsuleButton(
+                    key: const ValueKey('proposal-sla-exempt-export'),
+                    label: '导出列表',
+                    icon: CupertinoIcons.arrow_down_doc,
+                    onTap: _loading || _list.isEmpty ? null : _exportInstances,
+                  ),
+              ],
+            ),
           ),
           const SizedBox(height: 12),
           Expanded(
@@ -1839,10 +2869,15 @@ class _ExemptPaneState extends State<_ExemptPane> {
 }
 
 class _ResponsiveInstanceView extends StatelessWidget {
-  const _ResponsiveInstanceView({required this.rows, this.onExempt});
+  const _ResponsiveInstanceView({
+    required this.rows,
+    this.onExempt,
+    this.onTapRow,
+  });
 
   final List<ProposalSlaInstance> rows;
   final ValueChanged<ProposalSlaInstance>? onExempt;
+  final ValueChanged<ProposalSlaInstance>? onTapRow;
 
   @override
   Widget build(BuildContext context) {
@@ -1857,6 +2892,7 @@ class _ResponsiveInstanceView extends StatelessWidget {
                   if (i > 0) const SizedBox(height: 10),
                   _InstanceMobileCard(
                     row: rows[i],
+                    onTap: onTapRow == null ? null : () => onTapRow!(rows[i]),
                     onExempt: onExempt == null || rows[i].exempt
                         ? null
                         : () => onExempt!(rows[i]),
@@ -1866,17 +2902,26 @@ class _ResponsiveInstanceView extends StatelessWidget {
             ),
           );
         }
-        return _InstanceTable(rows: rows, onExempt: onExempt);
+        return _InstanceTable(
+          rows: rows,
+          onExempt: onExempt,
+          onTapRow: onTapRow,
+        );
       },
     );
   }
 }
 
 class _InstanceTable extends StatelessWidget {
-  const _InstanceTable({required this.rows, this.onExempt});
+  const _InstanceTable({
+    required this.rows,
+    this.onExempt,
+    this.onTapRow,
+  });
 
   final List<ProposalSlaInstance> rows;
   final ValueChanged<ProposalSlaInstance>? onExempt;
+  final ValueChanged<ProposalSlaInstance>? onTapRow;
 
   @override
   Widget build(BuildContext context) {
@@ -1900,78 +2945,100 @@ class _InstanceTable extends StatelessWidget {
           ),
         ),
         for (final row in rows)
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 13),
-            decoration: BoxDecoration(
-              border: Border(top: BorderSide(color: _cLine(context))),
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  flex: 4,
-                  child: _ProposalCell(title: row.title, code: row.code),
-                ),
-                Expanded(
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: _PillTag(
-                      label: row.sector.isEmpty ? '未填写' : row.sector,
-                      fg: _cInk(context),
-                      bg: _cBg(context),
+          InkWell(
+            onTap: onTapRow == null ? null : () => onTapRow!(row),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 13),
+              decoration: BoxDecoration(
+                border: Border(top: BorderSide(color: _cLine(context))),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    flex: 4,
+                    child: _ProposalCell(title: row.title, code: row.code),
+                  ),
+                  Expanded(
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: _PillTag(
+                        label: row.sector.isEmpty ? '未填写' : row.sector,
+                        fg: _cInk(context),
+                        bg: _cBg(context),
+                      ),
                     ),
                   ),
-                ),
-                Expanded(
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: _StatusBadge(status: row.status),
-                  ),
-                ),
-                Expanded(child: _td(context, '${row.round > 0 ? row.round - 1 : 0}')),
-                Expanded(
-                  flex: 2,
-                  child: _UsageBarCell(
-                    elapsed: row.elapsedHours,
-                    total: row.totalHours,
-                  ),
-                ),
-                Expanded(
-                  flex: 3,
-                  child: _td(context, row.current.isEmpty ? '—' : row.current),
-                ),
-                Expanded(
-                  child: Text(
-                    '${row.overdueNodes}',
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: row.overdueNodes > 0
-                          ? FontWeight.w700
-                          : FontWeight.w500,
-                      color: row.overdueNodes > 0
-                          ? const Color(0xFFFF3B30)
-                          : _cInk(context),
-                    ),
-                  ),
-                ),
-                Expanded(
-                  flex: 2,
-                  child: _td(context, proposalSlaTimeText(row.startedAt)),
-                ),
-                if (onExempt != null)
-                  SizedBox(
-                    width: 92,
-                    child: row.exempt
-                        ? _td(context, '—')
-                        : Align(
-                            alignment: Alignment.centerLeft,
-                            child: _ActionPill(
-                              key: ValueKey('proposal-sla-exempt-${row.id}'),
-                              label: '登记免责',
-                              onTap: () => onExempt!(row),
+                  Expanded(
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _StatusBadge(status: row.effectiveStatus),
+                          if (row.isOverdue) ...[
+                            const SizedBox(height: 3),
+                            Text(
+                              row.totalHours > 0 && row.elapsedHours > row.totalHours
+                                  ? '超时 +${(row.elapsedHours - row.totalHours).toStringAsFixed(1)}h'
+                                  : '节点逾期 ${row.overdueNodes} 个',
+                              style: const TextStyle(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFFFF3B30),
+                              ),
                             ),
-                          ),
+                          ],
+                        ],
+                      ),
+                    ),
                   ),
-              ],
+                  Expanded(child: _td(context, '${row.round > 0 ? row.round - 1 : 0}')),
+                  Expanded(
+                    flex: 2,
+                    child: _UsageBarCell(
+                      elapsed: row.elapsedHours,
+                      total: row.totalHours,
+                    ),
+                  ),
+                  Expanded(
+                    flex: 3,
+                    child: _td(context, row.current.isEmpty ? '—' : row.current),
+                  ),
+                  Expanded(
+                    child: Text(
+                      '${row.overdueNodes}',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: row.overdueNodes > 0
+                            ? FontWeight.w700
+                            : FontWeight.w500,
+                        color: row.overdueNodes > 0
+                            ? const Color(0xFFFF3B30)
+                            : _cInk(context),
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    flex: 2,
+                    child: _td(context, proposalSlaTimeText(row.startedAt)),
+                  ),
+                  if (onExempt != null)
+                    SizedBox(
+                      width: 92,
+                      child: row.exempt
+                          ? _td(context, '—')
+                          : Align(
+                              alignment: Alignment.centerLeft,
+                              child: _ActionPill(
+                                key: ValueKey('proposal-sla-exempt-${row.id}'),
+                                label: '登记免责',
+                                onTap: () => onExempt!(row),
+                              ),
+                            ),
+                    ),
+                ],
+              ),
             ),
           ),
       ],
@@ -1980,15 +3047,20 @@ class _InstanceTable extends StatelessWidget {
 }
 
 class _InstanceMobileCard extends StatelessWidget {
-  const _InstanceMobileCard({required this.row, this.onExempt});
+  const _InstanceMobileCard({
+    required this.row,
+    this.onExempt,
+    this.onTap,
+  });
 
   final ProposalSlaInstance row;
   final VoidCallback? onExempt;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final round = row.round > 0 ? row.round - 1 : 0;
-    return Container(
+    final card = Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: _cHead(context),
@@ -2004,7 +3076,7 @@ class _InstanceMobileCard extends StatelessWidget {
               Expanded(
                 child: _ProposalCell(title: row.title, code: row.code),
               ),
-              _StatusBadge(status: row.status),
+              _StatusBadge(status: row.effectiveStatus),
             ],
           ),
           const SizedBox(height: 10),
@@ -2056,6 +3128,15 @@ class _InstanceMobileCard extends StatelessWidget {
             ],
           ),
         ],
+      ),
+    );
+    if (onTap == null) return card;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: onTap,
+        child: card,
       ),
     );
   }
@@ -2152,7 +3233,14 @@ class _StatusBadge extends StatelessWidget {
         const Color(0xFFFF3B30),
         const Color(0xFFFFF0EF),
       ),
-      'exempt' => (const Color(0xFF34C759), const Color(0xFFEAF9EE)),
+      'finished_overdue' => (
+        const Color(0xFFD9480F),
+        const Color(0xFFFFF1EB),
+      ),
+      'finished' || 'exempt' => (
+        const Color(0xFF28A745),
+        const Color(0xFFEAF9EE),
+      ),
       'adjusted' => (_cPurple(context), _cSoft(context)),
       _ => (_cSub(context), _cBg(context)),
     };
@@ -2217,6 +3305,54 @@ class _ActionPill extends StatelessWidget {
 
 class _CapsuleButton extends StatelessWidget {
   const _CapsuleButton({
+    super.key,
+    required this.label,
+    required this.icon,
+    required this.onTap,
+    this.highlighted = false,
+  });
+
+  final String label;
+  final IconData icon;
+  final VoidCallback? onTap;
+  final bool highlighted;
+
+  @override
+  Widget build(BuildContext context) {
+    final bg = highlighted ? _cSoft(context) : _cBg(context);
+    final fg = highlighted ? _cPurple(context) : _cInk(context);
+    return Material(
+      color: bg,
+      borderRadius: BorderRadius.circular(999),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(999),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 14, color: fg),
+              const SizedBox(width: 5),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600,
+                  color: fg,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PrimaryCapsuleButton extends StatelessWidget {
+  const _PrimaryCapsuleButton({
+    super.key,
     required this.label,
     required this.icon,
     required this.onTap,
@@ -2228,25 +3364,362 @@ class _CapsuleButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final disabled = onTap == null;
     return Material(
-      color: _cBg(context),
+      color: disabled ? _cFill(context) : _purple,
       borderRadius: BorderRadius.circular(999),
       child: InkWell(
         borderRadius: BorderRadius.circular(999),
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+          padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, size: 14, color: _cInk(context)),
+              Icon(
+                icon,
+                size: 14,
+                color: disabled ? _cSub(context) : Colors.white,
+              ),
               const SizedBox(width: 5),
               Text(
                 label,
                 style: TextStyle(
                   fontSize: 12.5,
-                  fontWeight: FontWeight.w600,
-                  color: _cInk(context),
+                  fontWeight: FontWeight.w700,
+                  color: disabled ? _cSub(context) : Colors.white,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _FilterChipPill extends StatelessWidget {
+  const _FilterChipPill({
+    super.key,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: selected ? _cSoft(context) : _cBg(context),
+      borderRadius: BorderRadius.circular(999),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(999),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(
+              color: selected
+                  ? _cPurple(context).withValues(alpha: 0.45)
+                  : Colors.transparent,
+              width: 0.8,
+            ),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+              color: selected ? _cPurple(context) : _cInk(context),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DropdownFilterPill<T> extends StatefulWidget {
+  const _DropdownFilterPill({
+    super.key,
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.items,
+    required this.onChanged,
+  });
+
+  final IconData icon;
+  final String label;
+  final T value;
+  final List<(T, String)> items;
+  final ValueChanged<T> onChanged;
+
+  @override
+  State<_DropdownFilterPill<T>> createState() => _DropdownFilterPillState<T>();
+}
+
+class _DropdownFilterPillState<T> extends State<_DropdownFilterPill<T>> {
+  bool _open = false;
+
+  Future<void> _openPicker() async {
+    HapticFeedback.selectionClick();
+    final narrow = MediaQuery.sizeOf(context).width < 700;
+    setState(() => _open = true);
+    T? picked;
+    try {
+      if (narrow) {
+        picked = await showModalBottomSheet<T>(
+          context: context,
+          backgroundColor: Colors.transparent,
+          isScrollControlled: true,
+          builder: (sheetCtx) {
+            return SafeArea(
+              top: false,
+              child: Container(
+                margin: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+                decoration: BoxDecoration(
+                  color: _cCard(sheetCtx),
+                  borderRadius: BorderRadius.circular(22),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Color(0x22000000),
+                      blurRadius: 24,
+                      offset: Offset(0, 8),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const SizedBox(height: 10),
+                    Container(
+                      width: 36,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: _cLine(sheetCtx),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(18, 12, 18, 10),
+                      child: Row(
+                        children: [
+                          Icon(
+                            widget.icon,
+                            size: 16,
+                            color: _cPurple(sheetCtx),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            '选择${widget.label}',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                              color: _cInk(sheetCtx),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Divider(height: 1, color: _cLine(sheetCtx)),
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxHeight: 340),
+                      child: ListView.separated(
+                        shrinkWrap: true,
+                        padding: const EdgeInsets.symmetric(vertical: 6),
+                        itemCount: widget.items.length,
+                        separatorBuilder: (_, _) => Divider(
+                          height: 1,
+                          indent: 18,
+                          endIndent: 18,
+                          color: _cLine(sheetCtx).withValues(alpha: 0.6),
+                        ),
+                        itemBuilder: (_, idx) {
+                          final item = widget.items[idx];
+                          final selected = item.$1 == widget.value;
+                          return InkWell(
+                            onTap: () {
+                              HapticFeedback.selectionClick();
+                              Navigator.of(sheetCtx).pop(item.$1);
+                            },
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 18,
+                                vertical: 13,
+                              ),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      item.$2,
+                                      style: TextStyle(
+                                        fontSize: 14.5,
+                                        fontWeight: selected
+                                            ? FontWeight.w700
+                                            : FontWeight.w500,
+                                        color: selected
+                                            ? _cPurple(sheetCtx)
+                                            : _cInk(sheetCtx),
+                                      ),
+                                    ),
+                                  ),
+                                  if (selected)
+                                    Container(
+                                      width: 22,
+                                      height: 22,
+                                      decoration: BoxDecoration(
+                                        color: _cSoft(sheetCtx),
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: Icon(
+                                        CupertinoIcons.checkmark_alt,
+                                        size: 14,
+                                        color: _cPurple(sheetCtx),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      } else {
+        final box = context.findRenderObject() as RenderBox?;
+        final overlay =
+            Overlay.of(context).context.findRenderObject() as RenderBox?;
+        if (box != null && overlay != null) {
+          final topLeft = box.localToGlobal(Offset.zero, ancestor: overlay);
+          final rect = RelativeRect.fromLTRB(
+            topLeft.dx,
+            topLeft.dy + box.size.height + 6,
+            overlay.size.width - topLeft.dx - box.size.width,
+            0,
+          );
+          picked = await showMenu<T>(
+            context: context,
+            position: rect,
+            color: _cCard(context),
+            elevation: 10,
+            shadowColor: const Color(0x22000000),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+              side: BorderSide(color: _cLine(context), width: 0.7),
+            ),
+            items: [
+              for (final item in widget.items)
+                PopupMenuItem<T>(
+                  value: item.$1,
+                  height: 38,
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          item.$2,
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: item.$1 == widget.value
+                                ? FontWeight.w700
+                                : FontWeight.w500,
+                            color: item.$1 == widget.value
+                                ? _cPurple(context)
+                                : _cInk(context),
+                          ),
+                        ),
+                      ),
+                      if (item.$1 == widget.value)
+                        Icon(
+                          CupertinoIcons.checkmark_alt,
+                          size: 15,
+                          color: _cPurple(context),
+                        ),
+                    ],
+                  ),
+                ),
+            ],
+          );
+        }
+      }
+    } finally {
+      if (mounted) setState(() => _open = false);
+    }
+    if (picked != null && picked != widget.value) {
+      widget.onChanged(picked);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    String currentText = widget.label;
+    for (final item in widget.items) {
+      if (item.$1 == widget.value) {
+        currentText = item.$2;
+        break;
+      }
+    }
+    final isActive =
+        widget.items.isNotEmpty && widget.value != widget.items.first.$1;
+    final highlighted = isActive || _open;
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    return Material(
+      color: highlighted ? _cSoft(context) : _cBg(context),
+      borderRadius: BorderRadius.circular(999),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(999),
+        onTap: _openPicker,
+        child: AnimatedContainer(
+          duration: reduceMotion
+              ? Duration.zero
+              : const Duration(milliseconds: 160),
+          padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(
+              color: highlighted
+                  ? _cPurple(context).withValues(alpha: 0.5)
+                  : Colors.transparent,
+              width: 0.85,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                widget.icon,
+                size: 13.5,
+                color: highlighted ? _cPurple(context) : _cSub(context),
+              ),
+              const SizedBox(width: 5),
+              Text(
+                '${widget.label}：$currentText',
+                style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: highlighted ? FontWeight.w700 : FontWeight.w600,
+                  color: highlighted ? _cPurple(context) : _cInk(context),
+                ),
+              ),
+              const SizedBox(width: 4),
+              AnimatedRotation(
+                turns: _open ? 0.5 : 0.0,
+                duration: reduceMotion
+                    ? Duration.zero
+                    : const Duration(milliseconds: 180),
+                curve: Curves.easeOutCubic,
+                child: Icon(
+                  CupertinoIcons.chevron_down,
+                  size: 12,
+                  color: highlighted ? _cPurple(context) : _cSub(context),
                 ),
               ),
             ],
@@ -2390,6 +3863,7 @@ class _FilterBar extends StatelessWidget {
     required this.hint,
     required this.onStatus,
     required this.onSearch,
+    this.extraRow,
   });
 
   final String status;
@@ -2398,6 +3872,7 @@ class _FilterBar extends StatelessWidget {
   final String hint;
   final ValueChanged<String> onStatus;
   final VoidCallback onSearch;
+  final Widget? extraRow;
 
   @override
   Widget build(BuildContext context) {
@@ -2459,22 +3934,35 @@ class _FilterBar extends StatelessWidget {
       queryKey: const ValueKey('proposal-sla-query'),
     );
 
+    final topRow = narrow
+        ? Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              chips,
+              const SizedBox(height: 8),
+              searchRow,
+            ],
+          )
+        : Row(
+            children: [
+              Expanded(child: chips),
+              const SizedBox(width: 12),
+              searchRow,
+            ],
+          );
+
     return _AppleCard(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      child: narrow
-          ? Column(
+      child: extraRow == null
+          ? topRow
+          : Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                chips,
+                topRow,
                 const SizedBox(height: 8),
-                searchRow,
-              ],
-            )
-          : Row(
-              children: [
-                Expanded(child: chips),
-                const SizedBox(width: 12),
-                searchRow,
+                Divider(height: 1, color: _cLine(context)),
+                const SizedBox(height: 8),
+                extraRow!,
               ],
             ),
     );

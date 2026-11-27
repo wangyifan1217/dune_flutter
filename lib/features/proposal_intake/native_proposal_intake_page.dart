@@ -51,6 +51,7 @@ import 'proposal_sla_widgets.dart';
 import 'settlement_catalog.dart';
 import 'supplier_product_picker.dart';
 
+import '../shell/dunes_toast.dart';
 enum _ProposalPage { list, form }
 
 const _proposalPlatformConfigNote = '请准确填写内容，审核通过后业务平台将自动上线产品配置和结算规则。';
@@ -17310,7 +17311,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
 
   void _showProductClipboardMessage(String text) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
+    showDunesToast(context, text);
   }
 
   void _pasteSkuProductAsNew({required bool child}) {
@@ -18148,9 +18149,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     );
     if (result == null || !mounted || !_canEditProducts) return;
     if (child && _childCouponInUse(result.row)) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('同一业务产品下类型和面值不能重复')));
+      showDunesToast(context, '同一业务产品下类型和面值不能重复');
       return;
     }
     if (child) {
@@ -20432,9 +20431,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     required bool child,
   }) {
     if (_skuNameInUse(name, id)) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('产品名称不能与提案内其他产品重复')));
+      showDunesToast(context, '产品名称不能与提案内其他产品重复');
       return;
     }
     final update = (ProposalSkuDetailRow current) => current.copyWith(

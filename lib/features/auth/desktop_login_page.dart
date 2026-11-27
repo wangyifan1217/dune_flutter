@@ -37,7 +37,10 @@ class _DesktopLoginPageState extends State<DesktopLoginPage> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       unawaited(
-        precacheImage(const AssetImage('assets/images/app_logo.png'), context),
+        precacheImage(
+          const AssetImage('assets/images/app_logo_pc.png'),
+          context,
+        ),
       );
     });
   }

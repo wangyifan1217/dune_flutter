@@ -9,6 +9,7 @@ import '../../core/platform/desktop_features.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../chat/native_audio_recorder.dart';
 import '../shell/dunes_main_tab_bar.dart';
+import '../shell/dunes_toast.dart';
 import 'meeting_live_controller.dart';
 
 String meetingRecordingElapsed(Duration duration) {
@@ -217,10 +218,11 @@ class _MeetingRecordingCoordinatorState
   Widget build(BuildContext context) => widget.child;
 }
 
-/// 顶部居中「会议录音灵动岛」容器：
-/// 不再占据或遮挡底部 IM 输入框与底栏，以紧凑深色灵动岛胶囊悬停在顶部安全区下方居中，
-/// 左侧 `< 返回` 与右侧菜单完全无遮挡；点击灵动岛即可一键回到会议录音页。
-class MeetingRecordingLayout extends StatelessWidget {
+/// 顶部居中、支持自由拖拽与直接暂停/继续的「会议录音灵动岛」容器：
+/// - 默认悬停顶部安全区居中，不遮挡底部 IM 输入框与底栏；
+/// - 支持手指 / 鼠标自由拖拽到屏幕任意安全区域，自动贴合安全边界并避开软键盘；
+/// - 内置一键暂停/继续录音按钮，点击胶囊主体或「返回」即可回到会议录音页。
+class MeetingRecordingLayout extends StatefulWidget {
   const MeetingRecordingLayout({
     super.key,
     required this.child,
@@ -235,17 +237,144 @@ class MeetingRecordingLayout extends StatelessWidget {
   final double bottomNavigationExtent;
 
   @override
+  State<MeetingRecordingLayout> createState() => _MeetingRecordingLayoutState();
+}
+
+class _MeetingRecordingLayoutState extends State<MeetingRecordingLayout> {
+  static const double _kIslandHeight = 38.0;
+  static const double _kEstimatedMaxWidth = 248.0;
+
+  final GlobalKey _islandKey = GlobalKey();
+  Offset? _position;
+  bool _dragging = false;
+
+  Size _islandSize() {
+    final box = _islandKey.currentContext?.findRenderObject();
+    if (box is RenderBox && box.hasSize) return box.size;
+    return const Size(_kEstimatedMaxWidth, _kIslandHeight);
+  }
+
+  Offset _clampPosition(
+    Offset raw, {
+    required Size viewport,
+    required EdgeInsets padding,
+    required double keyboardInset,
+    required Size islandSize,
+  }) {
+    const margin = 10.0;
+    final minX = margin;
+    final maxX = (viewport.width - islandSize.width - margin).clamp(
+      minX,
+      double.infinity,
+    );
+    final minY = isDesktopCommOnly
+        ? 10.0
+        : (padding.top > 14 ? padding.top + 4.0 : 10.0);
+    final bottomLimit =
+        viewport.height -
+        (keyboardInset > 0 ? keyboardInset : padding.bottom) -
+        islandSize.height -
+        margin;
+    final maxY = bottomLimit > minY ? bottomLimit : minY;
+    return Offset(raw.dx.clamp(minX, maxX), raw.dy.clamp(minY, maxY));
+  }
+
+  @override
   Widget build(BuildContext context) {
     final live = MeetingLiveController.instance;
     return ValueListenableBuilder<bool>(
       valueListenable: live.active,
-      child: child,
+      child: widget.child,
       builder: (context, active, content) {
-        final show = visible && active;
-        final topInset = MediaQuery.paddingOf(context).top;
-        final islandTop = isDesktopCommOnly
+        if (!active && _position != null) {
+          _position = null;
+          _dragging = false;
+        }
+        final show = widget.visible && active;
+        final media = MediaQuery.of(context);
+        final topDefault = isDesktopCommOnly
             ? 10.0
-            : (topInset > 14 ? topInset + 4.0 : 10.0);
+            : (media.padding.top > 14 ? media.padding.top + 4.0 : 10.0);
+
+        Widget buildIsland() {
+          final bar = KeyedSubtree(
+            key: _islandKey,
+            child: MeetingRecordingBar(
+              onOpen: widget.onOpen,
+              dragging: _dragging,
+            ),
+          );
+          return GestureDetector(
+            behavior: HitTestBehavior.translucent,
+            onPanStart: (_) {
+              final islandSize = _islandSize();
+              final current =
+                  _position ??
+                  Offset(
+                    ((media.size.width - islandSize.width) / 2).clamp(
+                      10.0,
+                      double.infinity,
+                    ),
+                    topDefault,
+                  );
+              setState(() {
+                _position = current;
+                _dragging = true;
+              });
+            },
+            onPanUpdate: (details) {
+              final islandSize = _islandSize();
+              final base =
+                  _position ??
+                  Offset(
+                    ((media.size.width - islandSize.width) / 2).clamp(
+                      10.0,
+                      double.infinity,
+                    ),
+                    topDefault,
+                  );
+              final next = _clampPosition(
+                base + details.delta,
+                viewport: media.size,
+                padding: media.padding,
+                keyboardInset: media.viewInsets.bottom,
+                islandSize: islandSize,
+              );
+              setState(() => _position = next);
+            },
+            onPanEnd: (_) {
+              if (!mounted) return;
+              final islandSize = _islandSize();
+              setState(() {
+                _dragging = false;
+                if (_position != null) {
+                  _position = _clampPosition(
+                    _position!,
+                    viewport: media.size,
+                    padding: media.padding,
+                    keyboardInset: media.viewInsets.bottom,
+                    islandSize: islandSize,
+                  );
+                }
+              });
+            },
+            onPanCancel: () {
+              if (mounted) setState(() => _dragging = false);
+            },
+            child: bar,
+          );
+        }
+
+        final clampedPos = _position == null
+            ? null
+            : _clampPosition(
+                _position!,
+                viewport: media.size,
+                padding: media.padding,
+                keyboardInset: media.viewInsets.bottom,
+                islandSize: _islandSize(),
+              );
+
         return MeetingRecordingChromeInset(
           extra: 0.0,
           child: Stack(
@@ -253,15 +382,22 @@ class MeetingRecordingLayout extends StatelessWidget {
             children: [
               content!,
               if (show)
-                Positioned(
-                  top: islandTop,
-                  left: 56,
-                  right: 56,
-                  child: Align(
-                    alignment: Alignment.topCenter,
-                    child: MeetingRecordingBar(onOpen: onOpen),
+                if (clampedPos == null)
+                  Positioned(
+                    top: topDefault,
+                    left: 12,
+                    right: 12,
+                    child: Align(
+                      alignment: Alignment.topCenter,
+                      child: buildIsland(),
+                    ),
+                  )
+                else
+                  Positioned(
+                    left: clampedPos.dx,
+                    top: clampedPos.dy,
+                    child: buildIsland(),
                   ),
-                ),
             ],
           ),
         );
@@ -271,8 +407,14 @@ class MeetingRecordingLayout extends StatelessWidget {
 }
 
 class MeetingRecordingBar extends StatefulWidget {
-  const MeetingRecordingBar({super.key, required this.onOpen});
+  const MeetingRecordingBar({
+    super.key,
+    required this.onOpen,
+    this.dragging = false,
+  });
+
   final VoidCallback onOpen;
+  final bool dragging;
 
   @override
   State<MeetingRecordingBar> createState() => _MeetingRecordingBarState();
@@ -281,6 +423,33 @@ class MeetingRecordingBar extends StatefulWidget {
 class _MeetingRecordingBarState extends State<MeetingRecordingBar> {
   bool _hovered = false;
   bool _pressed = false;
+  bool _toggling = false;
+
+  Future<void> _togglePause() async {
+    if (_toggling) return;
+    final live = MeetingLiveController.instance;
+    if (!live.isActive || live.isStopping || live.saveFailed.value) return;
+    HapticFeedback.selectionClick();
+    setState(() => _toggling = true);
+    try {
+      if (live.paused.value) {
+        await live.resume();
+      } else {
+        await live.pause();
+      }
+    } catch (e) {
+      if (mounted) {
+        final msg = '$e'.replaceFirst(RegExp(r'^Exception:\s*'), '');
+        showDunesToast(
+          context,
+          msg.isEmpty ? '切换录音状态失败' : msg,
+          kind: DunesToastKind.error,
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _toggling = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -319,149 +488,188 @@ class _MeetingRecordingBarState extends State<MeetingRecordingBar> {
             : '会议录音中';
         final elapsed = meetingRecordingElapsed(live.elapsed.value);
         final title = live.meetingTitle.value.trim();
+        final canToggle = !recovering && !failed && !live.isStopping;
+
+        final scale = disableAnim
+            ? 1.0
+            : widget.dragging
+            ? 1.04
+            : _pressed
+            ? 0.96
+            : 1.0;
 
         return Semantics(
-          label: '$fullLabel，$elapsed，点击进入当前会议',
+          label: '$fullLabel，$elapsed，点击进入当前会议，可拖拽移动',
           button: true,
           child: MouseRegion(
-            cursor: SystemMouseCursors.click,
+            cursor: widget.dragging
+                ? SystemMouseCursors.grabbing
+                : SystemMouseCursors.click,
             onEnter: (_) {
               if (mounted) setState(() => _hovered = true);
             },
             onExit: (_) {
               if (mounted) setState(() => _hovered = false);
             },
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTapDown: (_) {
-                if (mounted) setState(() => _pressed = true);
-              },
-              onTapUp: (_) {
-                if (mounted) setState(() => _pressed = false);
-              },
-              onTapCancel: () {
-                if (mounted) setState(() => _pressed = false);
-              },
-              onTap: () {
-                HapticFeedback.selectionClick();
-                widget.onOpen();
-              },
-              child: AnimatedScale(
-                scale: _pressed && !disableAnim ? 0.95 : 1.0,
-                duration: const Duration(milliseconds: 110),
-                curve: Curves.easeOutCubic,
-                child: Tooltip(
-                  message: title.isEmpty ? '$fullLabel · 点击返回' : '$title · 点击返回',
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(999),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.36),
-                          blurRadius: _hovered ? 22 : 16,
-                          spreadRadius: -4,
-                          offset: const Offset(0, 6),
+            child: AnimatedScale(
+              scale: scale,
+              duration: const Duration(milliseconds: 120),
+              curve: Curves.easeOutCubic,
+              child: Tooltip(
+                message: title.isEmpty
+                    ? '$fullLabel · 拖拽可移动，点击返回'
+                    : '$title · 拖拽可移动，点击返回',
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(999),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(
+                          alpha: widget.dragging ? 0.46 : 0.36,
                         ),
-                        BoxShadow(
-                          color: accentColor.withValues(
-                            alpha: _hovered ? 0.34 : 0.22,
-                          ),
-                          blurRadius: _hovered ? 18 : 12,
-                          spreadRadius: -5,
-                          offset: const Offset(0, 2),
+                        blurRadius: widget.dragging || _hovered ? 24 : 16,
+                        spreadRadius: -4,
+                        offset: Offset(0, widget.dragging ? 10 : 6),
+                      ),
+                      BoxShadow(
+                        color: accentColor.withValues(
+                          alpha: widget.dragging || _hovered ? 0.38 : 0.22,
                         ),
-                      ],
-                    ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(999),
-                      child: BackdropFilter(
-                        filter: ImageFilter.blur(sigmaX: 22, sigmaY: 22),
-                        child: AnimatedContainer(
-                          key: const Key('meeting-recording-bar'),
-                          duration: const Duration(milliseconds: 150),
-                          height: 36,
-                          padding: const EdgeInsets.fromLTRB(6, 0, 6, 0),
-                          decoration: BoxDecoration(
-                            color: failed
-                                ? const Color(0xF5210D0E)
-                                : const Color(0xF50B0B10),
-                            borderRadius: BorderRadius.circular(999),
-                            border: Border.all(
-                              color: accentColor.withValues(
-                                alpha: _hovered ? 0.52 : 0.32,
-                              ),
-                              width: 0.85,
+                        blurRadius: widget.dragging || _hovered ? 18 : 12,
+                        spreadRadius: -5,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(999),
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 22, sigmaY: 22),
+                      child: AnimatedContainer(
+                        key: const Key('meeting-recording-bar'),
+                        duration: const Duration(milliseconds: 150),
+                        height: 38,
+                        padding: const EdgeInsets.fromLTRB(6, 0, 6, 0),
+                        decoration: BoxDecoration(
+                          color: failed
+                              ? const Color(0xF5210D0E)
+                              : const Color(0xF50B0B10),
+                          borderRadius: BorderRadius.circular(999),
+                          border: Border.all(
+                            color: accentColor.withValues(
+                              alpha: widget.dragging || _hovered ? 0.56 : 0.32,
                             ),
+                            width: 0.85,
                           ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.center,
-                            children: [
-                              Container(
-                                width: 24,
-                                height: 24,
-                                decoration: BoxDecoration(
-                                  color: accentColor.withValues(alpha: 0.18),
-                                  shape: BoxShape.circle,
-                                ),
-                                child: recovering
-                                    ? Padding(
-                                        padding: const EdgeInsets.all(6),
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 1.8,
-                                          color: accentColor,
-                                        ),
-                                      )
-                                    : paused || failed
-                                    ? Icon(
-                                        failed
-                                            ? Icons.warning_amber_rounded
-                                            : Icons.pause_rounded,
-                                        color: accentColor,
-                                        size: 14,
-                                      )
-                                    : _MeetingIslandEqualizer(
-                                        color: accentColor,
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            // 点击左侧状态与计时区 -> 返回会议页
+                            GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              onTapDown: (_) {
+                                if (mounted) setState(() => _pressed = true);
+                              },
+                              onTapUp: (_) {
+                                if (mounted) setState(() => _pressed = false);
+                              },
+                              onTapCancel: () {
+                                if (mounted) setState(() => _pressed = false);
+                              },
+                              onTap: () {
+                                HapticFeedback.selectionClick();
+                                widget.onOpen();
+                              },
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Container(
+                                    width: 24,
+                                    height: 24,
+                                    decoration: BoxDecoration(
+                                      color: accentColor.withValues(
+                                        alpha: 0.18,
                                       ),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: recovering
+                                        ? Padding(
+                                            padding: const EdgeInsets.all(6),
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 1.8,
+                                              color: accentColor,
+                                            ),
+                                          )
+                                        : paused || failed
+                                        ? Icon(
+                                            failed
+                                                ? Icons.warning_amber_rounded
+                                                : Icons.pause_rounded,
+                                            color: accentColor,
+                                            size: 14,
+                                          )
+                                        : _MeetingIslandEqualizer(
+                                            color: accentColor,
+                                          ),
+                                  ),
+                                  const SizedBox(width: 7),
+                                  Text(
+                                    shortLabel,
+                                    maxLines: 1,
+                                    style: DunesTypography.sans(
+                                      fontSize: 12.5,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.white,
+                                      context: context,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    elapsed,
+                                    maxLines: 1,
+                                    style: DunesTypography.sans(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w700,
+                                      color: accentColor,
+                                      context: context,
+                                    ).copyWith(
+                                      fontFeatures: const [
+                                        FontFeature.tabularFigures(),
+                                      ],
+                                    ),
+                                  ),
+                                ],
                               ),
+                            ),
+                            if (canToggle) ...[
                               const SizedBox(width: 7),
-                              Text(
-                                shortLabel,
-                                maxLines: 1,
-                                style: DunesTypography.sans(
-                                  fontSize: 12.5,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.white,
-                                  context: context,
-                                ),
+                              _IslandPauseToggleBtn(
+                                paused: paused,
+                                busy: _toggling,
+                                accent: accentColor,
+                                onTap: _togglePause,
                               ),
-                              const SizedBox(width: 6),
-                              Text(
-                                elapsed,
-                                maxLines: 1,
-                                style: DunesTypography.sans(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w700,
-                                  color: accentColor,
-                                  context: context,
-                                ).copyWith(
-                                  fontFeatures: const [
-                                    FontFeature.tabularFigures(),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(width: 7),
-                              Container(
+                            ],
+                            const SizedBox(width: 5),
+                            GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              onTap: () {
+                                HapticFeedback.selectionClick();
+                                widget.onOpen();
+                              },
+                              child: Container(
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: 8,
-                                  vertical: 3.5,
+                                  vertical: 4,
                                 ),
                                 decoration: BoxDecoration(
                                   color: accentColor.withValues(alpha: 0.24),
                                   borderRadius: BorderRadius.circular(999),
                                 ),
                                 child: Text(
-                                  paused || failed ? '处理' : '返回',
+                                  failed ? '处理' : '返回',
                                   style: DunesTypography.sans(
                                     fontSize: 11,
                                     fontWeight: FontWeight.w600,
@@ -470,8 +678,8 @@ class _MeetingRecordingBarState extends State<MeetingRecordingBar> {
                                   ),
                                 ),
                               ),
-                            ],
-                          ),
+                            ),
+                          ],
                         ),
                       ),
                     ),
@@ -482,6 +690,89 @@ class _MeetingRecordingBarState extends State<MeetingRecordingBar> {
           ),
         );
       },
+    );
+  }
+}
+
+class _IslandPauseToggleBtn extends StatefulWidget {
+  const _IslandPauseToggleBtn({
+    required this.paused,
+    required this.busy,
+    required this.accent,
+    required this.onTap,
+  });
+
+  final bool paused;
+  final bool busy;
+  final Color accent;
+  final VoidCallback onTap;
+
+  @override
+  State<_IslandPauseToggleBtn> createState() => _IslandPauseToggleBtnState();
+}
+
+class _IslandPauseToggleBtnState extends State<_IslandPauseToggleBtn> {
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final disableAnim = MediaQuery.disableAnimationsOf(context);
+    return Tooltip(
+      message: widget.paused ? '继续录音' : '暂停录音',
+      child: GestureDetector(
+        key: const Key('meeting-island-toggle-pause'),
+        behavior: HitTestBehavior.opaque,
+        onTapDown: (_) {
+          if (mounted) setState(() => _pressed = true);
+        },
+        onTapUp: (_) {
+          if (mounted) setState(() => _pressed = false);
+        },
+        onTapCancel: () {
+          if (mounted) setState(() => _pressed = false);
+        },
+        onTap: widget.busy ? null : widget.onTap,
+        child: AnimatedScale(
+          scale: _pressed && !disableAnim ? 0.88 : 1.0,
+          duration: const Duration(milliseconds: 100),
+          curve: Curves.easeOutCubic,
+          child: Container(
+            width: 26,
+            height: 26,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: widget.paused
+                  ? const Color(0xFF34C759).withValues(alpha: 0.24)
+                  : Colors.white.withValues(alpha: 0.14),
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: widget.paused
+                    ? const Color(0xFF34C759).withValues(alpha: 0.55)
+                    : Colors.white.withValues(alpha: 0.22),
+                width: 0.7,
+              ),
+            ),
+            child: widget.busy
+                ? SizedBox(
+                    width: 12,
+                    height: 12,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 1.6,
+                      color: widget.accent,
+                    ),
+                  )
+                : Icon(
+                    widget.paused
+                        ? Icons.play_arrow_rounded
+                        : Icons.pause_rounded,
+                    size: 15,
+                    color: widget.paused
+                        ? const Color(0xFF5CE682)
+                        : Colors.white,
+                  ),
+          ),
+        ),
+      ),
     );
   }
 }

@@ -4,11 +4,13 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:just_audio/just_audio.dart';
 
 import '../../core/platform/desktop_features.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
+import '../../core/widgets/dunes_motion_kit.dart';
 import '../auth/auth_session.dart';
 import '../chat/file_download.dart' as file_dl;
 import '../conversation/conversation_picker_sheet.dart';
@@ -27,6 +29,7 @@ import 'meeting_upload_storage.dart';
 import 'native_meeting_models.dart';
 import 'native_meeting_service.dart';
 
+import '../shell/dunes_toast.dart';
 enum _MeetingBarAction {
   openExternal,
   forward,
@@ -223,6 +226,10 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
   double _downloadProgress = 0;
   String? _downloadLabel;
   bool _transcriptExpanded = false;
+  int _activeSectionIdx = 0;
+  final GlobalKey _summarySectionKey = GlobalKey();
+  final GlobalKey _tasksSectionKey = GlobalKey();
+  final GlobalKey _transcriptSectionKey = GlobalKey();
   int _segmentVisibleCount = 30;
   static const int _segmentPageSize = 30;
   String? _error;
@@ -359,9 +366,7 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
       await _showSaveSuccessDialog(fileName: fileName, savedPath: savedPath);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(friendlyErrorText(e, fallback: '下载失败，请稍后重试'))),
-      );
+      showDunesToast(context, friendlyErrorText(e, fallback: '下载失败，请稍后重试'));
     } finally {
       if (mounted) {
         setState(() {
@@ -423,9 +428,7 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
     final detail = _detail;
     if (detail == null || _uploadingSummaryToKb) return;
     if (!MeetingMinutesExport.canExport(detail)) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('纪要尚未生成，暂无法上传知识库')));
+      showDunesToast(context, '纪要尚未生成，暂无法上传知识库');
       return;
     }
     final toOwnKb = widget.summaryOnly;
@@ -522,9 +525,7 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
       if (existing != null && !shouldReplace) {
         if (mounted) {
           setState(() => _kbUploadedDoc = existing);
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(const SnackBar(content: Text('该会议纪要已在你的知识库中')));
+          showDunesToast(context, '该会议纪要已在你的知识库中');
         }
         return;
       }
@@ -533,11 +534,7 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
           await _kbService.deleteDocument(existing.id, doc: existing);
         } catch (e) {
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('删除旧 Nova 文档失败：${friendlyErrorText(e)}，将继续尝试上传'),
-              ),
-            );
+            showDunesToast(context, '删除旧 Nova 文档失败：${friendlyErrorText(e)}，将继续尝试上传');
           }
         }
         if (mounted) setState(() => _kbUploadedDoc = null);
@@ -564,15 +561,9 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
           _kbSyncedMeetingUpdatedAt = detail.updatedAt;
         });
         KbDocumentCoordinator.instance.notifyChanged();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              shouldReplace
+        showDunesToast(context, shouldReplace
                   ? '已更新到你的知识库（不含逐句转写），正在后台解析入库'
-                  : '已存入你的知识库，正在后台解析入库',
-            ),
-          ),
-        );
+                  : '已存入你的知识库，正在后台解析入库');
         return;
       }
 
@@ -599,20 +590,10 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
         _kbSyncedMeetingUpdatedAt = updated.updatedAt;
       });
       KbDocumentCoordinator.instance.notifyChanged();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            shouldReplace ? '已更新知识库文档（不含逐句转写），正在后台解析入库' : '已上传至知识库，正在后台解析入库',
-          ),
-        ),
-      );
+      showDunesToast(context, shouldReplace ? '已更新知识库文档（不含逐句转写），正在后台解析入库' : '已上传至知识库，正在后台解析入库');
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(friendlyErrorText(e, fallback: '上传知识库失败，请稍后重试')),
-        ),
-      );
+      showDunesToast(context, friendlyErrorText(e, fallback: '上传知识库失败，请稍后重试'));
     } finally {
       if (mounted) setState(() => _uploadingSummaryToKb = false);
     }
@@ -622,9 +603,7 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
     final detail = _detail;
     if (detail == null || _downloadingAudio || _forwarding) return;
     if (!MeetingMinutesExport.canExport(detail)) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('纪要尚未生成，暂无法导出')));
+      showDunesToast(context, '纪要尚未生成，暂无法导出');
       return;
     }
 
@@ -651,9 +630,7 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
       await _showSaveSuccessDialog(fileName: fileName, savedPath: savedPath);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(friendlyErrorText(e, fallback: '导出失败，请稍后重试'))),
-      );
+      showDunesToast(context, friendlyErrorText(e, fallback: '导出失败，请稍后重试'));
     } finally {
       if (mounted) {
         setState(() {
@@ -676,9 +653,7 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
       return;
     }
     if (!MeetingMinutesExport.canExport(detail)) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('纪要尚未生成，暂无法打开')));
+      showDunesToast(context, '纪要尚未生成，暂无法打开');
       return;
     }
 
@@ -696,18 +671,14 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
       final savedPath = await file_dl.saveBytesAsFile(bytes, fileName);
       if (!mounted) return;
       if (savedPath == null || savedPath.isEmpty) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('无法保存文件以供打开')));
+        showDunesToast(context, '无法保存文件以供打开');
         return;
       }
       setState(() => _downloadProgress = 1);
       await file_dl.openLocalFile(savedPath);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(friendlyErrorText(e, fallback: '无法用其他应用打开'))),
-      );
+      showDunesToast(context, friendlyErrorText(e, fallback: '无法用其他应用打开'));
     } finally {
       if (mounted) {
         setState(() {
@@ -725,9 +696,7 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
       return;
     }
     if (!MeetingMinutesExport.canExport(detail)) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('纪要尚未生成，暂无法转发')));
+      showDunesToast(context, '纪要尚未生成，暂无法转发');
       return;
     }
 
@@ -762,14 +731,10 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
         },
       );
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('已转发到会话')));
+      showDunesToast(context, '已转发到会话');
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(friendlyErrorText(e, fallback: '转发失败，请稍后重试'))),
-      );
+      showDunesToast(context, friendlyErrorText(e, fallback: '转发失败，请稍后重试'));
     } finally {
       if (mounted) {
         setState(() {
@@ -803,9 +768,7 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
       return;
     }
     if (!MeetingMinutesExport.canExport(detail)) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('纪要尚未生成，暂无法存入微盘')));
+      showDunesToast(context, '纪要尚未生成，暂无法存入微盘');
       return;
     }
 
@@ -833,9 +796,7 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
       }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(friendlyErrorText(e, fallback: '存入微盘失败，请稍后重试'))),
-      );
+      showDunesToast(context, friendlyErrorText(e, fallback: '存入微盘失败，请稍后重试'));
     } finally {
       if (mounted) {
         setState(() {
@@ -865,9 +826,7 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
   }) async {
     if (!mounted) return;
     if (savedPath == null || savedPath.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('已保存 $fileName')));
+      showDunesToast(context, '已保存 $fileName');
       return;
     }
     await showDialog<void>(
@@ -1001,22 +960,14 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
           refreshed != null &&
           refreshed.transcriptSegments.isEmpty &&
           refreshed.status.toUpperCase() == 'TRANSCRIBING';
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            restarted
+      showDunesToast(context, restarted
                 ? '已开始重新转写，请稍候查看进度'
                 : hadKbUpload
                 ? '已重新生成纪要，请重新上传以更新知识库'
-                : '已重新生成纪要',
-          ),
-        ),
-      );
+                : '已重新生成纪要');
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(friendlyErrorText(e, fallback: '重新生成失败，请稍后重试'))),
-      );
+      showDunesToast(context, friendlyErrorText(e, fallback: '重新生成失败，请稍后重试'));
     } finally {
       if (mounted) setState(() => _regenerating = false);
     }
@@ -1030,14 +981,10 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
       await _service.startTranscriptionForDraft(detail);
       await _load();
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('已开始转写并生成会议纪要')));
+      showDunesToast(context, '已开始转写并生成会议纪要');
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(friendlyErrorText(e, fallback: '开始转写失败，请稍后重试'))),
-      );
+      showDunesToast(context, friendlyErrorText(e, fallback: '开始转写失败，请稍后重试'));
     } finally {
       if (mounted) setState(() => _startingTranscription = false);
     }
@@ -1100,9 +1047,7 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
           : hadKb
           ? '名称已更新，知识库里的同一份纪要已换成新名称，正在重新解析'
           : '名称已更新';
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(message)));
+      showDunesToast(context, message);
     } catch (e) {
       if (!mounted) return;
       final message = friendlyErrorText(e, fallback: '修改名称失败，请稍后重试');
@@ -1111,9 +1056,7 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
         await _load();
       }
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(message)));
+      showDunesToast(context, message);
     } finally {
       if (mounted) setState(() => _renaming = false);
     }
@@ -1160,9 +1103,7 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
       widget.onBack();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(friendlyErrorText(e, fallback: '删除失败，请稍后重试'))),
-      );
+      showDunesToast(context, friendlyErrorText(e, fallback: '删除失败，请稍后重试'));
     }
   }
 
@@ -1539,6 +1480,214 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
             _buildDownloadOverlay(),
         ],
       ),
+      bottomNavigationBar: (!isDesktopCommOnly &&
+              d != null &&
+              MeetingMinutesExport.canExport(d))
+          ? _buildMobileQuickActionBar(d)
+          : null,
+    );
+  }
+
+  Future<void> _copyMeetingSummary(NativeMeetingDetail d) async {
+    final text = _summaryDisplayMarkdown(d).trim();
+    if (text.isEmpty) {
+      showDunesToast(context, '暂无可复制的会议纪要');
+      return;
+    }
+    await Clipboard.setData(ClipboardData(text: text));
+    HapticFeedback.selectionClick();
+    if (!mounted) return;
+    showDunesToast(context, '已复制会议纪要');
+  }
+
+  void _jumpToDetailSection(int idx) {
+    HapticFeedback.selectionClick();
+    setState(() {
+      _activeSectionIdx = idx;
+      if (idx == 2 && !_transcriptExpanded) {
+        _transcriptExpanded = true;
+      }
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final key = switch (idx) {
+        0 => _summarySectionKey,
+        1 => _tasksSectionKey,
+        _ => _transcriptSectionKey,
+      };
+      final targetCtx = key.currentContext;
+      if (targetCtx == null) return;
+      Scrollable.ensureVisible(
+        targetCtx,
+        duration: MediaQuery.disableAnimationsOf(context)
+            ? Duration.zero
+            : const Duration(milliseconds: 240),
+        curve: Curves.easeOutCubic,
+        alignment: 0.04,
+      );
+    });
+  }
+
+  Widget _buildStickySectionBar(NativeMeetingDetail d, bool readOnly) {
+    final items = <(int, String)>[
+      (0, '会议摘要'),
+      if (!readOnly) (1, '任务建议'),
+      (2, d.transcriptSegments.isEmpty ? '逐句转写' : '逐句转写 (${d.transcriptSegments.length})'),
+    ];
+    final bg = DunesColors.resolve(
+      context,
+      Colors.white,
+      role: DunesColorRole.surface,
+    );
+    final border = DunesColors.resolve(
+      context,
+      DunesColors.borderSoft,
+      role: DunesColorRole.border,
+    );
+    final accent = DunesColors.resolve(context, DunesColors.brandPurple);
+    final accentSoft = DunesColors.resolve(
+      context,
+      DunesColors.brandPurpleSoft,
+      role: DunesColorRole.surface,
+    );
+    final muted = DunesColors.resolve(context, DunesColors.text2);
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+      decoration: BoxDecoration(
+        color: bg,
+        border: Border(bottom: BorderSide(color: border, width: 0.6)),
+      ),
+      child: Row(
+        children: [
+          for (var i = 0; i < items.length; i++) ...[
+            if (i > 0) const SizedBox(width: 8),
+            Expanded(
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => _jumpToDetailSection(items[i].$1),
+                child: AnimatedContainer(
+                  duration: MediaQuery.disableAnimationsOf(context)
+                      ? Duration.zero
+                      : const Duration(milliseconds: 180),
+                  padding: const EdgeInsets.symmetric(vertical: 7),
+                  decoration: BoxDecoration(
+                    color: _activeSectionIdx == items[i].$1
+                        ? accentSoft
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(
+                    items[i].$2,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: DunesTypography.sans(
+                      fontSize: 12.5,
+                      fontWeight: _activeSectionIdx == items[i].$1
+                          ? FontWeight.w700
+                          : FontWeight.w500,
+                      color: _activeSectionIdx == items[i].$1 ? accent : muted,
+                      context: context,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMobileQuickActionBar(NativeMeetingDetail d) {
+    final busy = _forwarding || _savingToDrive;
+    final bg = DunesColors.resolve(
+      context,
+      Colors.white,
+      role: DunesColorRole.surface,
+    );
+    final border = DunesColors.resolve(
+      context,
+      DunesColors.borderSoft,
+      role: DunesColorRole.border,
+    );
+    final accent = DunesColors.resolve(context, DunesColors.brandPurple);
+    final text = DunesColors.resolve(context, DunesColors.text);
+
+    Widget btn({
+      required IconData icon,
+      required String label,
+      required VoidCallback? onTap,
+      bool primary = false,
+    }) {
+      return Expanded(
+        child: Material(
+          color: primary
+              ? accent
+              : DunesColors.resolve(
+                  context,
+                  DunesColors.bgSoft,
+                  role: DunesColorRole.surface,
+                ),
+          borderRadius: BorderRadius.circular(12),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(12),
+            onTap: onTap,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 10),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(icon, size: 16, color: primary ? Colors.white : text),
+                  const SizedBox(width: 5),
+                  Text(
+                    label,
+                    style: DunesTypography.sans(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600,
+                      color: primary ? Colors.white : text,
+                      context: context,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return SafeArea(
+      top: false,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(14, 8, 14, 10),
+        decoration: BoxDecoration(
+          color: bg,
+          border: Border(top: BorderSide(color: border, width: 0.6)),
+        ),
+        child: Row(
+          children: [
+            btn(
+              icon: Icons.copy_rounded,
+              label: '复制纪要',
+              onTap: () => unawaited(_copyMeetingSummary(d)),
+            ),
+            const SizedBox(width: 8),
+            btn(
+              icon: Icons.folder_shared_outlined,
+              label: _driveSaved ? '再存微盘' : '存微盘',
+              onTap: busy ? null : _saveMeetingToDrive,
+            ),
+            const SizedBox(width: 8),
+            btn(
+              icon: Icons.forward_to_inbox_rounded,
+              label: '转发群聊',
+              primary: true,
+              onTap: busy ? null : _forwardMeetingMinutes,
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -1663,29 +1812,30 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
   Widget _buildBody(NativeMeetingDetail? d) {
     final summaryOnly = widget.summaryOnly;
     final readOnly = widget.readOnly;
-    return _loading && d == null
-        ? const Center(child: CircularProgressIndicator())
-        : _error != null && d == null
-        ? _buildErrorState()
-        : d == null
-        ? _buildEmptyState()
-        : ListView(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
-            children: [
-              if (!summaryOnly) ...[
-                if (MeetingUploadCoordinator.instance.jobForMeeting(d.meetingId)
-                    case final job?)
-                  _buildUploadBanner(job),
-                _buildHero(d),
-                const SizedBox(height: 16),
-                if (d.audioPlayUrl.isNotEmpty ||
-                    d.audioObjectKey.isNotEmpty) ...[
-                  _buildAudioCard(),
-                  const SizedBox(height: 16),
-                ],
-              ],
-              _buildSection(
-                title: '会议摘要',
+    if (_loading && d == null) {
+      return const DunesListSkeleton(itemCount: 4);
+    }
+    if (_error != null && d == null) return _buildErrorState();
+    if (d == null) return _buildEmptyState();
+    final listView = ListView(
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 100),
+      children: [
+        if (!summaryOnly) ...[
+          if (MeetingUploadCoordinator.instance.jobForMeeting(d.meetingId)
+              case final job?)
+            _buildUploadBanner(job),
+          _buildHero(d),
+          const SizedBox(height: 16),
+          if (d.audioPlayUrl.isNotEmpty ||
+              d.audioObjectKey.isNotEmpty) ...[
+            _buildAudioCard(),
+            const SizedBox(height: 16),
+          ],
+        ],
+        KeyedSubtree(
+          key: _summarySectionKey,
+          child: _buildSection(
+            title: '会议摘要',
                 icon: Icons.auto_awesome_outlined,
                 trailing: summaryOnly || readOnly
                     ? (summaryOnly
@@ -1760,17 +1910,23 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
                   ],
                 ),
               ),
+              ),
               // 任务建议：组织者可见（非组织者拿到空数据，整块不渲染）
               if (!summaryOnly && !readOnly)
-                MeetingTaskSuggestionsSection(
-                  session: widget.session,
-                  meetingId: d.meetingId,
-                  canLinkTasks: d.organizerUserId == widget.session.userId,
+                KeyedSubtree(
+                  key: _tasksSectionKey,
+                  child: MeetingTaskSuggestionsSection(
+                    session: widget.session,
+                    meetingId: d.meetingId,
+                    canLinkTasks: d.organizerUserId == widget.session.userId,
+                  ),
                 ),
               if (!summaryOnly) ...[
                 const SizedBox(height: 16),
-                _buildSection(
-                  title: '原始逐句转写',
+                KeyedSubtree(
+                  key: _transcriptSectionKey,
+                  child: _buildSection(
+                    title: '原始逐句转写',
                   icon: Icons.article_outlined,
                   trailing: d.transcriptSegments.isNotEmpty
                       ? TextButton.icon(
@@ -1897,6 +2053,7 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
                           ),
                         ),
                 ),
+                ),
                 const SizedBox(height: 20),
                 if (!readOnly && _isDraftWithAudio(d)) ...[
                   FilledButton.icon(
@@ -1967,6 +2124,13 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
               ],
             ],
           );
+    if (summaryOnly) return listView;
+    return Column(
+      children: [
+        _buildStickySectionBar(d, readOnly),
+        Expanded(child: listView),
+      ],
+    );
   }
 
   Widget _buildDownloadOverlay() {

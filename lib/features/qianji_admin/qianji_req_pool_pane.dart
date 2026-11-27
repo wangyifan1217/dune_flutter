@@ -4,6 +4,7 @@ import '../../core/theme/dunes_theme.dart';
 import '../auth/auth_session.dart';
 import 'qianji_admin_api.dart';
 
+import '../shell/dunes_toast.dart';
 const _themePurple = Color(0xFF7B5CD8);
 
 const _statusPending = 'pending';
@@ -154,16 +155,12 @@ class _QianjiReqPoolPaneState extends State<QianjiReqPoolPane> {
         _page = _ReqPoolPage.list;
         _selected = null;
       });
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('已提交至需求池')));
+      showDunesToast(context, '已提交至需求池');
       await _load();
     } catch (e) {
       if (!mounted) return;
       setState(() => _mutating = false);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('提交失败: $e')));
+      showDunesToast(context, '提交失败: $e');
     }
   }
 
@@ -191,16 +188,12 @@ class _QianjiReqPoolPaneState extends State<QianjiReqPoolPane> {
         _statusVoided => '已作废',
         _ => '已更新',
       };
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(label)));
+      showDunesToast(context, label);
       await _load();
     } catch (e) {
       if (!mounted) return;
       setState(() => _mutating = false);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('操作失败: $e')));
+      showDunesToast(context, '操作失败: $e');
     }
   }
 

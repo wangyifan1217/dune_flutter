@@ -7,6 +7,7 @@ import '../../../core/widgets/horizontal_drag_scroll_view.dart';
 import '../../auth/auth_session.dart';
 import 'travel_service.dart';
 
+import '../../shell/dunes_toast.dart';
 const _issuePurple = Color(0xFF7B5CD8);
 
 enum _IssueRangePreset { week, d7, d30, all, custom }
@@ -581,9 +582,7 @@ class _TravelIssueDetailPageState extends State<TravelIssueDetailPage> {
       Navigator.of(context).pop(true);
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('保存复核结果失败：$error')));
+      showDunesToast(context, '保存复核结果失败：$error');
     }
   }
 

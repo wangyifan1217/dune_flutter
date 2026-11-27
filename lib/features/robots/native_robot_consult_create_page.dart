@@ -6,6 +6,7 @@ import 'robot_character.dart';
 import 'robot_consult_store.dart';
 import 'robot_models.dart';
 
+import '../shell/dunes_toast.dart';
 /// 新建咨询 → POST /robot/consults
 class NativeRobotConsultCreatePage extends StatefulWidget {
   const NativeRobotConsultCreatePage({
@@ -40,16 +41,12 @@ class _NativeRobotConsultCreatePageState
   Future<void> _start() async {
     final q = _controller.text.trim();
     if (q.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('请先填写要咨询的问题')));
+      showDunesToast(context, '请先填写要咨询的问题');
       return;
     }
     final session = widget.session;
     if (session == null || session.token.trim().isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('未登录，无法发起咨询')));
+      showDunesToast(context, '未登录，无法发起咨询');
       return;
     }
 
@@ -63,7 +60,7 @@ class _NativeRobotConsultCreatePageState
     } catch (e) {
       if (!mounted) return;
       setState(() => _submitting = false);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      showDunesToast(context, '$e');
     }
   }
 

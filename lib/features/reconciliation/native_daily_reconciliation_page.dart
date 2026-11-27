@@ -17,6 +17,7 @@ import 'recon_daily_progress.dart';
 import 'recon_report_summary.dart';
 import 'reconciliation_share_card.dart';
 
+import '../shell/dunes_toast.dart';
 enum _ReconLevel { dates, table }
 
 /// 工作台「每日对账」：日期列表 → 日清月结表。
@@ -294,12 +295,7 @@ class _NativeDailyReconciliationPageState
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(friendlyErrorText(e)),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      showDunesToast(context, friendlyErrorText(e));
     }
   }
 
@@ -342,26 +338,14 @@ class _NativeDailyReconciliationPageState
       final snap = await _api.fetchTag2Entity(asOfDate: _asOfDate);
       if (!mounted) return;
       setState(() => _tag2 = snap);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            confirm
+      showDunesToast(context, confirm
                 ? '已确认 ${row.title}'
                 : reject
                 ? '已驳回 ${row.title} 并退回业务确认'
-                : '已记录 ${row.title} 的意见',
-          ),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+                : '已记录 ${row.title} 的意见');
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(friendlyErrorText(e)),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      showDunesToast(context, friendlyErrorText(e));
     } finally {
       if (mounted) setState(() => _tag2Busy.remove(row.rowKey));
     }
@@ -397,12 +381,7 @@ class _NativeDailyReconciliationPageState
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(friendlyErrorText(e)),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      showDunesToast(context, friendlyErrorText(e));
     }
   }
 
@@ -462,16 +441,9 @@ class _NativeDailyReconciliationPageState
       if (_tag3DailyPreview) {
         _appendPreviewComment(row, confirm: confirm, body: remark);
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              confirm
+        showDunesToast(context, confirm
                   ? '已确认 ${row.projectName} · ${row.periodLabel}'
-                  : '已记录 ${row.projectName} · ${row.periodLabel} 的意见',
-            ),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
+                  : '已记录 ${row.projectName} · ${row.periodLabel} 的意见');
         return;
       }
       if (confirm) {
@@ -496,24 +468,12 @@ class _NativeDailyReconciliationPageState
       final snap = await _api.fetchTag3Daily(asOfDate: _asOfDate);
       if (!mounted) return;
       setState(() => _tag3Daily = snap);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            confirm
+      showDunesToast(context, confirm
                 ? '已确认 ${row.projectName} · ${row.periodLabel}'
-                : '已记录 ${row.projectName} · ${row.periodLabel} 的意见',
-          ),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+                : '已记录 ${row.projectName} · ${row.periodLabel} 的意见');
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(friendlyErrorText(e)),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      showDunesToast(context, friendlyErrorText(e));
     } finally {
       if (mounted) {
         setState(() => _tag3ConfirmingKeys.remove(row.actionId));

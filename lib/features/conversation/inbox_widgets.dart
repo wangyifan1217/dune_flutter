@@ -3520,6 +3520,9 @@ class _SwipeableChatInboxRowState extends State<SwipeableChatInboxRow> {
                       vx < -320 || (vx <= 180 && _offset < -_openWidth * 0.42);
                   final target = shouldOpen ? -_openWidth : 0.0;
                   if (shouldOpen) {
+                    if (_offset > -_openWidth + 2) {
+                      HapticFeedback.selectionClick();
+                    }
                     widget.swipeGroup?.open(widget.rowKey ?? this);
                   } else {
                     widget.swipeGroup?.closeIf(widget.rowKey ?? this);

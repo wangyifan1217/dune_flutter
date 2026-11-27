@@ -6,6 +6,7 @@ import '../auth/auth_session.dart';
 import 'qianji_monthly_bill_api.dart';
 import 'qianji_monthly_bill_demo.dart';
 
+import 'qianji_widgets.dart';
 const _themePurple = Color(0xFF7B5CD8);
 const _cardBorder = Color(0xFFE8EAED);
 const _pageBg = Color(0xFFF5F6F8);
@@ -308,36 +309,9 @@ class _NativeQianjiMonthlyBillPageState
   }
 
   Widget _buildHeader() {
-    final back = Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(8),
-        onTap: widget.onBack,
-        child: Padding(
-          padding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.arrow_back_ios_new,
-                size: 14,
-                color: DunesColors.resolve(context, DunesColors.text2),
-              ),
-              SizedBox(width: 2),
-              Text(
-                '饕',
-                style: TextStyle(
-                  fontSize: 13,
-                  color: DunesColors.resolve(context, DunesColors.text2),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
+    final back = QianjiBackButton(onBack: widget.onBack);
     return Padding(
-      padding: const EdgeInsets.fromLTRB(8, 10, 16, 6),
+      padding: const EdgeInsets.fromLTRB(14, 10, 16, 8),
       child: Row(
         children: [
           back,
@@ -347,10 +321,12 @@ class _NativeQianjiMonthlyBillPageState
               '月结',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 18,
+              style: DunesTypography.sans(
+                fontSize: 17.5,
                 fontWeight: FontWeight.w700,
-                color: DunesColors.resolveNullable(context, _themePurple),
+                letterSpacing: -0.3,
+                color: DunesColors.resolve(context, DunesColors.text),
+                context: context,
               ),
             ),
           ),

@@ -7,6 +7,7 @@ import '../conversation/conversation_service.dart';
 import 'tag2_entity_models.dart';
 import 'tag3_daily_models.dart';
 
+import '../shell/dunes_toast.dart';
 Map<String, dynamic> buildReconciliationSharePayload({
   required Tag3DailySnapshot snapshot,
   required String asOfDate,
@@ -197,9 +198,7 @@ class _ReconciliationShareActionState extends State<ReconciliationShareAction> {
       );
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('转发失败：${friendlyErrorText(e)}')));
+        showDunesToast(context, '转发失败：${friendlyErrorText(e)}');
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -239,9 +238,7 @@ Future<void> sendReconciliationCard(
       await service.sendText(id, summary, payload: payload);
     }
     if (context.mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('卡片已转发')));
+      showDunesToast(context, '卡片已转发');
     }
   } finally {
     service.close();
@@ -282,9 +279,7 @@ class _ChatReconciliationMessageState extends State<ChatReconciliationMessage> {
       );
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('转发失败：${friendlyErrorText(e)}')));
+        showDunesToast(context, '转发失败：${friendlyErrorText(e)}');
       }
     } finally {
       if (mounted) setState(() => _busy = false);

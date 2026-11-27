@@ -111,6 +111,25 @@ class ProposalSlaInstance {
   final int overdueNodes;
   final String startedAt;
 
+  /// 是否存在总时长逾期或节点逾期（已免责除外）。
+  bool get isOverdue =>
+      !exempt &&
+      (status == 'overdue' ||
+          status == 'finished_overdue' ||
+          overdueNodes > 0 ||
+          (totalHours > 0 && elapsedHours > totalHours));
+
+  /// 用于展示与筛选的统一有效状态（区分「已逾期」与「逾期完成」）。
+  String get effectiveStatus {
+    if (exempt || status == 'exempt') return 'exempt';
+    if (status == 'finished_overdue') return 'finished_overdue';
+    if (status == 'finished') {
+      return isOverdue ? 'finished_overdue' : 'finished';
+    }
+    if (isOverdue) return 'overdue';
+    return status;
+  }
+
   factory ProposalSlaInstance.fromJson(Map<String, dynamic> json) {
     return ProposalSlaInstance(
       id: _int(json['id']),
@@ -138,6 +157,8 @@ class ProposalSlaNode {
     required this.endedAt,
     required this.state,
     required this.exempt,
+    this.effectiveMinutes = 0,
+    this.limitMinutes = 0,
   });
 
   final int id;
@@ -147,6 +168,8 @@ class ProposalSlaNode {
   final String endedAt;
   final String state;
   final bool exempt;
+  final int effectiveMinutes;
+  final int limitMinutes;
 
   factory ProposalSlaNode.fromJson(Map<String, dynamic> json) {
     return ProposalSlaNode(
@@ -157,6 +180,8 @@ class ProposalSlaNode {
       endedAt: '${json['endedAt'] ?? ''}',
       state: '${json['state'] ?? ''}',
       exempt: json['exempt'] == true,
+      effectiveMinutes: _int(json['effectiveMinutes']),
+      limitMinutes: _int(json['limitMinutes']),
     );
   }
 }
@@ -279,6 +304,9 @@ class ProposalSlaStat {
     required this.overdueRate,
     required this.proposalCount,
     required this.rejectRounds,
+    this.warningRate = 0,
+    this.exemptRate = 0,
+    this.overdueCount = 0,
   });
 
   final String key;
@@ -286,6 +314,9 @@ class ProposalSlaStat {
   final int nodes;
   final double avgMinutes;
   final double overdueRate;
+  final double warningRate;
+  final double exemptRate;
+  final int overdueCount;
   final int proposalCount;
   final int rejectRounds;
 
@@ -296,6 +327,9 @@ class ProposalSlaStat {
       nodes: _int(json['nodes']),
       avgMinutes: _double(json['avgMinutes']),
       overdueRate: _double(json['overdueRate']),
+      warningRate: _double(json['warningRate']),
+      exemptRate: _double(json['exemptRate']),
+      overdueCount: _int(json['overdueCount']),
       proposalCount: _int(json['proposalCount']),
       rejectRounds: _int(json['rejectRounds']),
     );
@@ -317,6 +351,9 @@ class ProposalSlaDashboard {
     required this.byStage,
     required this.byPerson,
     required this.overdueOpen,
+    this.bySector = const [],
+    this.sectorOptions = const [],
+    this.items = const [],
   });
 
   final String from;
@@ -331,7 +368,10 @@ class ProposalSlaDashboard {
   final int pendingAppeals;
   final List<ProposalSlaStat> byStage;
   final List<ProposalSlaStat> byPerson;
+  final List<ProposalSlaStat> bySector;
+  final List<String> sectorOptions;
   final List<ProposalSlaInstance> overdueOpen;
+  final List<ProposalSlaInstance> items;
 
   factory ProposalSlaDashboard.fromJson(Map<String, dynamic> json) {
     List<T> listOf<T>(Object? raw, T Function(Map<String, dynamic>) parse) {
@@ -339,6 +379,7 @@ class ProposalSlaDashboard {
       return rows.whereType<Map>().map((e) => parse(Map<String, dynamic>.from(e))).toList();
     }
 
+    final rawSectors = json['sectorOptions'] is List ? json['sectorOptions'] as List : const [];
     return ProposalSlaDashboard(
       from: '${json['from'] ?? ''}',
       to: '${json['to'] ?? ''}',
@@ -352,7 +393,13 @@ class ProposalSlaDashboard {
       pendingAppeals: _int(json['pendingAppeals']),
       byStage: listOf(json['byStage'], ProposalSlaStat.fromJson),
       byPerson: listOf(json['byPerson'], ProposalSlaStat.fromJson),
+      bySector: listOf(json['bySector'], ProposalSlaStat.fromJson),
+      sectorOptions: rawSectors
+          .map((e) => '$e'.trim())
+          .where((e) => e.isNotEmpty)
+          .toList(),
       overdueOpen: listOf(json['overdueOpen'], ProposalSlaInstance.fromJson),
+      items: listOf(json['items'], ProposalSlaInstance.fromJson),
     );
   }
 }
@@ -373,12 +420,21 @@ class ProposalSlaLookupApi {
     return ProposalSlaConfig.fromJson(_map(data));
   }
 
-  Future<ProposalSlaDashboard> fetchDashboard({String? from, String? to}) async {
+  Future<ProposalSlaDashboard> fetchDashboard({
+    String? from,
+    String? to,
+    String? sector,
+    String? stage,
+    String? status,
+  }) async {
     final data = await _data(
       'GET',
       '/xflow/proposal-sla/dashboard${_query({
         if (from != null && from.isNotEmpty) 'from': from,
         if (to != null && to.isNotEmpty) 'to': to,
+        if (sector != null && sector.isNotEmpty) 'sector': sector,
+        if (stage != null && stage.isNotEmpty) 'stage': stage,
+        if (status != null && status.isNotEmpty) 'status': status,
       })}',
     );
     return ProposalSlaDashboard.fromJson(_map(data));
@@ -387,10 +443,22 @@ class ProposalSlaLookupApi {
   Future<List<ProposalSlaScore>> fetchScores({
     required String status,
     String q = '',
+    String? from,
+    String? to,
+    String? sector,
+    String? kind,
   }) async {
     final data = await _data(
       'GET',
-      '/xflow/proposal-sla/scores${_query({'status': status, 'q': q.trim(), 'grouped': '1'})}',
+      '/xflow/proposal-sla/scores${_query({
+        'status': status,
+        'q': q.trim(),
+        'grouped': '1',
+        if (from != null && from.isNotEmpty) 'from': from,
+        if (to != null && to.isNotEmpty) 'to': to,
+        if (sector != null && sector.isNotEmpty) 'sector': sector,
+        if (kind != null && kind.isNotEmpty) 'kind': kind,
+      })}',
     );
     return _list(data, ProposalSlaScore.fromJson);
   }
@@ -408,10 +476,22 @@ class ProposalSlaLookupApi {
     });
   }
 
-  Future<List<ProposalSlaInstance>> fetchInstances({required String status, String q = ''}) async {
+  Future<List<ProposalSlaInstance>> fetchInstances({
+    required String status,
+    String q = '',
+    String? from,
+    String? to,
+    String? sector,
+  }) async {
     final data = await _data(
       'GET',
-      '/xflow/proposal-sla/instances${_query({'status': status, 'q': q.trim()})}',
+      '/xflow/proposal-sla/instances${_query({
+        'status': status,
+        'q': q.trim(),
+        if (from != null && from.isNotEmpty) 'from': from,
+        if (to != null && to.isNotEmpty) 'to': to,
+        if (sector != null && sector.isNotEmpty) 'sector': sector,
+      })}',
     );
     return _list(data, ProposalSlaInstance.fromJson);
   }
@@ -504,11 +584,12 @@ int? proposalSlaClockToMinute(String raw) {
 }
 
 String proposalSlaStatusLabel(String status) => switch (status) {
-  'normal' => '正常',
-  'warning' => '卡点',
-  'overdue' => '已超时',
+  'normal' => '正常进行',
+  'warning' => '即将逾期',
+  'overdue' => '已逾期',
+  'finished_overdue' => '逾期完成',
   'exempt' => '已免责',
-  'finished' => '已完成',
+  'finished' => '按时完成',
   'pending' => '待复核',
   'confirmed' => '已确认',
   'rejected' => '已撤销',
@@ -538,4 +619,170 @@ String proposalSlaTimeText(String raw) {
   if (d == null) return raw;
   String two(int n) => n.toString().padLeft(2, '0');
   return '${d.year}-${two(d.month)}-${two(d.day)} ${two(d.hour)}:${two(d.minute)}';
+}
+
+String _csvCell(Object? value) {
+  final raw = '${value ?? ''}'.replaceAll('\r\n', ' ').replaceAll('\n', ' ');
+  final needsQuote = raw.contains(',') || raw.contains('"');
+  final escaped = raw.replaceAll('"', '""');
+  return needsQuote ? '"$escaped"' : escaped;
+}
+
+String _csvRow(List<Object?> cells) => cells.map(_csvCell).join(',');
+
+/// 构建「时效看板」按当前筛选条件导出的 UTF-8 BOM CSV（Excel / WPS 直接打开不乱码）。
+String buildProposalSlaDashboardCsv({
+  required ProposalSlaDashboard data,
+  required List<ProposalSlaStat> stages,
+  required List<ProposalSlaStat> sectors,
+  required List<ProposalSlaStat> people,
+  required List<ProposalSlaInstance> proposals,
+  required String filterSummary,
+}) {
+  final buf = StringBuffer('\uFEFF');
+  final now = proposalSlaTimeText(DateTime.now().toIso8601String());
+  buf.writeln(_csvRow(['提案时效看板报表']));
+  buf.writeln(_csvRow(['统计区间', '${data.from} 至 ${data.to}']));
+  buf.writeln(_csvRow(['筛选条件', filterSummary]));
+  buf.writeln(_csvRow(['导出时间', now]));
+  buf.writeln();
+
+  buf.writeln(_csvRow(['一、核心指标汇总']));
+  buf.writeln(_csvRow(['纳入考核提案', '进行中', '已完成', '当前在途超时', '已办结平均总用时(h)', '驳回轮回次数', '待复核扣分', '申诉待处理']));
+  buf.writeln(_csvRow([
+    data.proposals,
+    data.open,
+    data.finished,
+    data.openOverdue,
+    data.avgTotalHours,
+    data.rejectRounds,
+    data.pendingScores,
+    data.pendingAppeals,
+  ]));
+  buf.writeln();
+
+  void writeStats(String sectionTitle, String dimLabel, List<ProposalSlaStat> rows) {
+    buf.writeln(_csvRow([sectionTitle]));
+    buf.writeln(_csvRow([dimLabel, '涉及提案数', '经办节点数', '平均用时', '超时节点数', '超时率(%)', '预警率(%)', '免责率(%)', '驳回轮回']));
+    for (final r in rows) {
+      buf.writeln(_csvRow([
+        r.name.isEmpty ? '—' : r.name,
+        r.proposalCount,
+        r.nodes,
+        proposalSlaMinutes(r.avgMinutes.round()),
+        r.overdueCount,
+        '${r.overdueRate}%',
+        '${r.warningRate}%',
+        '${r.exemptRate}%',
+        r.rejectRounds,
+      ]));
+    }
+    buf.writeln();
+  }
+
+  writeStats('二、按审核环节统计', '审核环节', stages);
+  writeStats('三、按业务板块统计', '业务板块', sectors);
+  writeStats('四、按责任人统计', '责任人', people);
+
+  buf.writeln(_csvRow(['五、提案时效明细（共 ${proposals.length} 条）']));
+  buf.writeln(_csvRow(['提案编号', '提案名称', '所属板块', '状态', '已耗时(h)', '总时限(h)', '当前节点/责任人', '超时节点数', '驳回轮回', '开始时间']));
+  for (final p in proposals) {
+    buf.writeln(_csvRow([
+      p.code,
+      p.title,
+      p.sector.isEmpty ? '未填写' : p.sector,
+      proposalSlaStatusLabel(p.effectiveStatus),
+      p.elapsedHours,
+      p.totalHours,
+      p.current.isEmpty ? '—' : p.current,
+      p.overdueNodes,
+      p.round > 0 ? p.round - 1 : 0,
+      proposalSlaTimeText(p.startedAt),
+    ]));
+  }
+  return buf.toString();
+}
+
+/// 构建「绩效与申诉」按当前筛选条件导出的 UTF-8 BOM CSV。
+String buildProposalSlaScoresCsv({
+  required List<ProposalSlaScore> rows,
+  required String filterSummary,
+}) {
+  final buf = StringBuffer('\uFEFF');
+  final now = proposalSlaTimeText(DateTime.now().toIso8601String());
+  buf.writeln(_csvRow(['提案时效绩效与申诉明细']));
+  buf.writeln(_csvRow(['筛选条件', filterSummary]));
+  buf.writeln(_csvRow(['导出时间', now]));
+  buf.writeln();
+  buf.writeln(_csvRow([
+    '提案编号',
+    '提案名称',
+    '所属板块',
+    '轮次',
+    '超时类型',
+    '卡点环节',
+    '责任人',
+    '源责任人',
+    '超时时长',
+    '建议扣分',
+    '最终扣分',
+    '复核状态',
+    '申诉状态',
+    '申诉理由',
+    '复核人',
+    '复核意见',
+    '记录时间',
+  ]));
+  for (final r in rows) {
+    buf.writeln(_csvRow([
+      r.code,
+      r.title,
+      r.sector.isEmpty ? '未填写' : r.sector,
+      r.round,
+      proposalSlaKindLabel(r.kind),
+      r.nodeLabel.isEmpty ? '—' : r.nodeLabel,
+      r.userName,
+      r.sourceUserName,
+      proposalSlaMinutes(r.overdueMinutes),
+      r.suggestedPoints,
+      r.finalPoints ?? '',
+      proposalSlaStatusLabel(r.status),
+      r.appealStatus.isEmpty ? '无' : proposalSlaStatusLabel(r.appealStatus),
+      r.appealReason,
+      r.reviewerName,
+      r.reviewComment,
+      proposalSlaTimeText(r.createdAt),
+    ]));
+  }
+  return buf.toString();
+}
+
+/// 构建「提案列表 / 免责登记」按当前筛选条件导出的 UTF-8 BOM CSV。
+String buildProposalSlaInstancesCsv({
+  required List<ProposalSlaInstance> rows,
+  required String filterSummary,
+}) {
+  final buf = StringBuffer('\uFEFF');
+  final now = proposalSlaTimeText(DateTime.now().toIso8601String());
+  buf.writeln(_csvRow(['提案时效实例与免责明细']));
+  buf.writeln(_csvRow(['筛选条件', filterSummary]));
+  buf.writeln(_csvRow(['导出时间', now]));
+  buf.writeln();
+  buf.writeln(_csvRow(['提案编号', '提案名称', '所属板块', '状态', '是否免责', '已耗时(h)', '总时限(h)', '当前节点/责任人', '超时节点数', '驳回轮回', '开始时间']));
+  for (final p in rows) {
+    buf.writeln(_csvRow([
+      p.code,
+      p.title,
+      p.sector.isEmpty ? '未填写' : p.sector,
+      proposalSlaStatusLabel(p.effectiveStatus),
+      p.exempt ? '是' : '否',
+      p.elapsedHours,
+      p.totalHours,
+      p.current.isEmpty ? '—' : p.current,
+      p.overdueNodes,
+      p.round > 0 ? p.round - 1 : 0,
+      proposalSlaTimeText(p.startedAt),
+    ]));
+  }
+  return buf.toString();
 }

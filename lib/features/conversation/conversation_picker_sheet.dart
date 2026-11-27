@@ -12,6 +12,7 @@ import '../contacts/contact_service.dart';
 import 'conversation_models.dart';
 import 'conversation_service.dart';
 
+import '../shell/dunes_toast.dart';
 /// 底部弹窗选择私聊/群聊会话，返回会话 ID；取消返回 null。
 ///
 /// 默认列出已有会话；搜索时可命中尚未建会话的联系人，选中后会先
@@ -49,9 +50,7 @@ Future<Set<int>?> showConversationMultiPickerSheet({
     rows = await service.fetchConversations();
   } catch (e) {
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('会话列表加载失败：${friendlyErrorText(e)}')),
-      );
+      showDunesToast(context, '会话列表加载失败：${friendlyErrorText(e)}');
     }
     return null;
   }
@@ -203,9 +202,7 @@ class _ConversationPickerBodyState extends State<_ConversationPickerBody> {
           .ensurePrivateConversationForPeer(contact.userId);
       if (!mounted) return;
       if (conversationId == null || conversationId <= 0) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('无法创建私聊会话')));
+        showDunesToast(context, '无法创建私聊会话');
         return;
       }
       if (!widget.multiSelect) {
@@ -216,18 +213,14 @@ class _ConversationPickerBodyState extends State<_ConversationPickerBody> {
         if (_selected.contains(conversationId)) {
           _selected.remove(conversationId);
         } else if (_selected.length >= widget.maxCount) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('最多选择 ${widget.maxCount} 个会话')),
-          );
+          showDunesToast(context, '最多选择 ${widget.maxCount} 个会话');
         } else {
           _selected.add(conversationId);
         }
       });
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('打开私聊失败：${friendlyErrorText(e)}')));
+      showDunesToast(context, '打开私聊失败：${friendlyErrorText(e)}');
     } finally {
       if (mounted) setState(() => _resolvingContact = false);
     }
@@ -461,9 +454,7 @@ class _ConversationPickerBodyState extends State<_ConversationPickerBody> {
             _selected.remove(c.id);
           } else {
             if (_selected.length >= widget.maxCount) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('最多选择 ${widget.maxCount} 个会话')),
-              );
+              showDunesToast(context, '最多选择 ${widget.maxCount} 个会话');
               return;
             }
             _selected.add(c.id);

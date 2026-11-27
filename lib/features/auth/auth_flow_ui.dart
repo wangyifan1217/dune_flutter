@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../core/platform/desktop_features.dart';
 import '../../core/theme/dunes_theme.dart';
 
 const authBlue = DunesColors.brandPurple;
@@ -274,7 +275,11 @@ class _AuthEntranceSlideState extends State<AuthEntranceSlide>
 class AuthAppLogo extends StatelessWidget {
   const AuthAppLogo({super.key, required this.size});
 
-  static const _assetPath = 'assets/images/app_logo.png';
+  static const _mobileAssetPath = 'assets/images/app_logo.png';
+  static const _pcAssetPath = 'assets/images/app_logo_pc.png';
+
+  static String get _assetPath =>
+      isDesktopCommOnly ? _pcAssetPath : _mobileAssetPath;
 
   final double size;
 

@@ -618,16 +618,9 @@ class _NativeReconciliationAssistantPageState
       if (_tag3DailyPreview) {
         _appendPreviewComment(row, confirm: confirm, body: remark);
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              confirm
+        showDunesToast(context, confirm
                   ? '已确认 ${row.projectName} · ${row.periodLabel}'
-                  : '已记录 ${row.projectName} · ${row.periodLabel} 的意见',
-            ),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
+                  : '已记录 ${row.projectName} · ${row.periodLabel} 的意见');
         return;
       }
       if (confirm) {
@@ -652,24 +645,12 @@ class _NativeReconciliationAssistantPageState
       final snap = await _shucai.fetchTag3Daily(asOfDate: _detailAsOfDate);
       if (!mounted) return;
       setState(() => _tag3Daily = snap);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            confirm
+      showDunesToast(context, confirm
                 ? '已确认 ${row.projectName} · ${row.periodLabel}'
-                : '已记录 ${row.projectName} · ${row.periodLabel} 的意见',
-          ),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+                : '已记录 ${row.projectName} · ${row.periodLabel} 的意见');
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(friendlyErrorText(e)),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      showDunesToast(context, friendlyErrorText(e));
     } finally {
       if (mounted) {
         setState(() => _tag3ConfirmingKeys.remove(row.actionId));
@@ -718,12 +699,7 @@ class _NativeReconciliationAssistantPageState
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(friendlyErrorText(e)),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      showDunesToast(context, friendlyErrorText(e));
     }
   }
 
@@ -913,12 +889,7 @@ class _NativeReconciliationAssistantPageState
     if (!status.canConfirm || status.confirmed) return;
     final pending = _pendingRowCount();
     if (!_isL2 && pending > 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('还有 $pending 条明细未确认或反驳'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      showDunesToast(context, '还有 $pending 条明细未确认或反驳');
       return;
     }
     setState(() => _confirming = true);
@@ -931,20 +902,10 @@ class _NativeReconciliationAssistantPageState
       );
       await _reload(silent: true);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('已记录你的对账意见并完成确认'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      showDunesToast(context, '已记录你的对账意见并完成确认');
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(friendlyErrorText(e)),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      showDunesToast(context, friendlyErrorText(e));
     } finally {
       if (mounted) setState(() => _confirming = false);
     }
@@ -1032,12 +993,7 @@ class _NativeReconciliationAssistantPageState
       return true;
     } catch (e) {
       if (!mounted) return false;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(friendlyErrorText(e)),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      showDunesToast(context, friendlyErrorText(e));
       return false;
     } finally {
       if (mounted) setState(() => _savingRows = false);
@@ -1543,15 +1499,11 @@ class _NativeReconciliationAssistantPageState
     try {
       final opened = await openMaybeAmSsoUrl(widget.session, uri);
       if (!opened && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('无法打开系统浏览器，请检查默认浏览器设置后重试')),
-        );
+        showDunesToast(context, '无法打开系统浏览器，请检查默认浏览器设置后重试');
       }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(friendlyErrorText(e))));
+      showDunesToast(context, friendlyErrorText(e));
     }
   }
 

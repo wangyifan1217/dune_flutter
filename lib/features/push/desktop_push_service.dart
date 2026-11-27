@@ -244,6 +244,7 @@ List<WindowsImage> _windowsToastLogoImages() {
 String? _resolveWindowsNotificationIconPath() {
   return _resolveWindowsAssetPath(const <String>[
     'assets/images/tray_icon.ico',
+    'assets/images/app_logo_pc.png',
     'assets/images/app_logo.png',
   ]);
 }
@@ -251,6 +252,7 @@ String? _resolveWindowsNotificationIconPath() {
 /// 解析 Toast 左侧圆形 logo（优先高清 png）。
 String? _resolveWindowsNotificationLogoPath() {
   return _resolveWindowsAssetPath(const <String>[
+    'assets/images/app_logo_pc.png',
     'assets/images/app_logo.png',
     'assets/images/tray_icon.ico',
   ]);

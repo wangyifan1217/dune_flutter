@@ -14,6 +14,7 @@ import '../kb/native_kb_service.dart';
 import 'file_download.dart' as file_dl;
 import 'im_ui_kit.dart';
 
+import '../shell/dunes_toast.dart';
 /// IM / 微盘 / 知识库上传共用：可入库扩展名。
 const Set<String> kChatKbUploadExtensions = <String>{
   // 文档
@@ -296,9 +297,7 @@ class _ChatFilePreviewPageState extends State<ChatFilePreviewPage> {
   Future<void> _downloadOnly() async {
     final path = await _ensureDownloaded(force: _localPath != null);
     if (!mounted || path == null) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text('已保存 ${widget.fileName}')));
+    showDunesToast(context, '已保存 ${widget.fileName}');
   }
 
   Future<void> _openWithOtherApp() async {
@@ -308,9 +307,7 @@ class _ChatFilePreviewPageState extends State<ChatFilePreviewPage> {
       await file_dl.openLocalFile(path);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(friendlyErrorText(e, fallback: '无法打开文件'))),
-      );
+      showDunesToast(context, friendlyErrorText(e, fallback: '无法打开文件'));
     }
   }
 
@@ -369,9 +366,7 @@ class _ChatFilePreviewPageState extends State<ChatFilePreviewPage> {
       if (ok && mounted) setState(() => _driveSaved = true);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(friendlyErrorText(e, fallback: '存入微盘失败，请稍后重试'))),
-      );
+      showDunesToast(context, friendlyErrorText(e, fallback: '存入微盘失败，请稍后重试'));
     } finally {
       if (mounted) setState(() => _savingToDrive = false);
     }
@@ -432,16 +427,10 @@ class _ChatFilePreviewPageState extends State<ChatFilePreviewPage> {
       );
       KbDocumentCoordinator.instance.notifyChanged();
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('已存入你的知识库，正在后台解析入库')));
+      showDunesToast(context, '已存入你的知识库，正在后台解析入库');
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(friendlyErrorText(e, fallback: '存入知识库失败，请稍后重试')),
-        ),
-      );
+      showDunesToast(context, friendlyErrorText(e, fallback: '存入知识库失败，请稍后重试'));
     } finally {
       if (mounted) setState(() => _savingToKb = false);
     }

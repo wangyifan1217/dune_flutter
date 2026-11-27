@@ -8,6 +8,7 @@ import '../../auth/auth_session.dart';
 import 'efficiency_models.dart';
 import 'efficiency_service.dart';
 
+import '../../shell/dunes_toast.dart';
 const _purple = Color(0xFF7651B8);
 const _purpleSoft = Color(0xFFF1EAF8);
 const _metricGap = 12.0;
@@ -303,14 +304,10 @@ class _NativeQianjiEfficiencyPageState extends State<NativeQianjiEfficiencyPage>
       );
       await Clipboard.setData(ClipboardData(text: text));
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('汇报摘要已复制')));
+      showDunesToast(context, '汇报摘要已复制');
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(_friendlyError(error))));
+      showDunesToast(context, _friendlyError(error));
     }
   }
 

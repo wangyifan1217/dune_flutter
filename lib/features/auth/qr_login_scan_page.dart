@@ -9,6 +9,7 @@ import '../../core/theme/dunes_theme.dart';
 import '../../core/util/native_permissions.dart';
 import 'auth_session.dart';
 
+import '../shell/dunes_toast.dart';
 class QrLoginScanPage extends StatefulWidget {
   const QrLoginScanPage({super.key, required this.session});
 
@@ -109,9 +110,7 @@ class _QrLoginScanPageState extends State<QrLoginScanPage> {
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
         if (!mounted) return;
         Navigator.of(context).pop(true);
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('扫码确认成功，工作台正在登录')));
+        showDunesToast(context, '扫码确认成功，工作台正在登录');
         return;
       }
       final msg = _extractMessage(resp.body) ?? '扫码确认失败';

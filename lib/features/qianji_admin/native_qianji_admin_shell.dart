@@ -114,6 +114,7 @@ enum _WorkbenchView {
 
 class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
   final ScrollController _overviewScroll = ScrollController();
+  double _savedOverviewOffset = 0.0;
   final TextEditingController _overviewSearchCtrl = TextEditingController();
   String _overviewSearchQuery = '';
   late AuthSession _session;
@@ -175,6 +176,7 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
     unawaited(_loadWorkbenchAccess());
     unawaited(_refreshSessionOnEnter());
     userAvatarRefresh.addListener(_onAvatarRefresh);
+    _overviewScroll.addListener(_captureOverviewScroll);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       if (widget.active) _syncBackInterceptor();
@@ -519,8 +521,29 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
     userAvatarRefresh.removeListener(_onAvatarRefresh);
     _clearBackInterceptor();
     _overviewSearchCtrl.dispose();
+    _overviewScroll.removeListener(_captureOverviewScroll);
     _overviewScroll.dispose();
     super.dispose();
+  }
+
+  void _captureOverviewScroll() {
+    if (_pageIndex != 0 || !_overviewScroll.hasClients) return;
+    _savedOverviewOffset = _overviewScroll.positions.last.pixels;
+  }
+
+  void _restoreOverviewScroll() {
+    if (!mounted || _pageIndex != 0 || _savedOverviewOffset <= 0) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _pageIndex != 0 || !_overviewScroll.hasClients) return;
+      final pos = _overviewScroll.positions.last;
+      final target = _savedOverviewOffset.clamp(
+        pos.minScrollExtent,
+        pos.maxScrollExtent,
+      );
+      if ((pos.pixels - target).abs() > 0.5) {
+        pos.jumpTo(target);
+      }
+    });
   }
 
   void _onAvatarRefresh() {
@@ -640,10 +663,16 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
 
   void _goPage(int index) {
     if (_pageIndex == index) return;
+    if (_pageIndex == 0 && _overviewScroll.hasClients) {
+      _savedOverviewOffset = _overviewScroll.positions.last.pixels;
+    }
     setState(() {
       _pageIndex = index;
       _applyShellChrome(overview: index == 0);
     });
+    if (index == 0) {
+      _restoreOverviewScroll();
+    }
     _syncBackInterceptor();
   }
 
@@ -1335,6 +1364,7 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
                 ];
 
                 return ListView(
+                  key: const PageStorageKey<String>('workbench-overview-scroll'),
                   controller: _overviewScroll,
                   primary: false,
                   physics: const ClampingScrollPhysics(),
@@ -2441,9 +2471,7 @@ class _ProductsAdminPaneState extends State<_ProductsAdminPane> {
       await _load();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('保存失败: $e')));
+      showDunesToast(context, '保存失败: $e');
     }
   }
 
@@ -2471,9 +2499,7 @@ class _ProductsAdminPaneState extends State<_ProductsAdminPane> {
       await _load();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('删除失败: $e')));
+      showDunesToast(context, '删除失败: $e');
     }
   }
 
@@ -3795,14 +3821,10 @@ class _DisplaySettingsPaneState extends State<_DisplaySettingsPane> {
         fieldVisibility: Map<String, dynamic>.from(_visibility),
       );
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('展示设置已保存')));
+      showDunesToast(context, '展示设置已保存');
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('保存失败: $e')));
+      showDunesToast(context, '保存失败: $e');
     }
   }
 

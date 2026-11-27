@@ -582,6 +582,15 @@ class _NativeGlobalSearchPageState extends State<NativeGlobalSearchPage> {
         itemBuilder: (context, i) {
           final tab = _tabs[i];
           final on = _tab == tab && _thread == null;
+          final group = _snap != null && tab != GlobalSearchCategory.all
+              ? _snap!.group(tab)
+              : null;
+          final hitCount = group == null
+              ? 0
+              : (group.total > 0 ? group.total : group.items.length);
+          final labelText = hitCount > 0
+              ? '${tab.label} ${hitCount > 99 ? "99+" : hitCount}'
+              : tab.label;
           return Center(
             child: ImTapScale(
               borderRadius: BorderRadius.circular(999),
@@ -607,7 +616,7 @@ class _NativeGlobalSearchPageState extends State<NativeGlobalSearchPage> {
                   ),
                 ),
                 child: Text(
-                  tab.label,
+                  labelText,
                   style: DunesTypography.sans(
                     fontSize: 13,
                     fontWeight: on ? FontWeight.w600 : FontWeight.w500,
@@ -657,6 +666,7 @@ class _NativeGlobalSearchPageState extends State<NativeGlobalSearchPage> {
     final recents = _facade.recentContacts();
     final apps = _facade.recentApps();
     return ListView(
+      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
       padding: _listInsets,
       children: [
         SizedBox(
@@ -785,6 +795,7 @@ class _NativeGlobalSearchPageState extends State<NativeGlobalSearchPage> {
 
   Widget _buildCategoryIdle() {
     return ListView(
+      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
       padding: _listInsets,
       children: [
         if (_tab == GlobalSearchCategory.messages) _messageFilters(),
@@ -844,12 +855,17 @@ class _NativeGlobalSearchPageState extends State<NativeGlobalSearchPage> {
             GlobalSearchGroupStatus.loading) {
       children.add(_emptyAll());
     }
-    return ListView(padding: _listInsets, children: children);
+    return ListView(
+      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+      padding: _listInsets,
+      children: children,
+    );
   }
 
   Widget _buildCategory(GlobalSearchCategory cat) {
     final g = _snap?.group(cat);
     return ListView(
+      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
       padding: _listInsets,
       children: [
         if (cat == GlobalSearchCategory.messages) _messageFilters(),
@@ -867,6 +883,7 @@ class _NativeGlobalSearchPageState extends State<NativeGlobalSearchPage> {
     final thread = _thread!;
     final q = _controller.text.trim();
     return ListView(
+      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
       padding: _listInsets,
       children: [
         _HoverSurface(

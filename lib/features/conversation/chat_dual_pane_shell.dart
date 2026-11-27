@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -319,9 +320,11 @@ class DunesDesktopTranslucentFrame extends StatelessWidget {
           : const [Color(0xFFECE8F7), Color(0xFFF4F1FB), Color(0xFFEBE8F5)],
     );
 
+    final hasCustomTopBar =
+        !kIsWeb && defaultTargetPlatform == TargetPlatform.windows;
     final Widget mainCanvas = floating
         ? Container(
-            margin: const EdgeInsets.fromLTRB(0, 8, 8, 8),
+            margin: EdgeInsets.fromLTRB(0, hasCustomTopBar ? 0 : 8, 8, 8),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(14),
               border: Border.all(

@@ -187,6 +187,8 @@ class WindowsDesktopTray with WindowListener, TrayListener {
           minimumSize: kDesktopWindowMinSize,
           skipTaskbar: false,
           title: '沙丘',
+          titleBarStyle: TitleBarStyle.hidden,
+          windowButtonVisibility: false,
         ),
         () async {
           await windowManager.setPreventClose(true);

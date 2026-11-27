@@ -13,6 +13,7 @@ import 'travel_issue_pages.dart';
 import 'travel_mock_data.dart';
 import 'travel_service.dart';
 
+import '../qianji_widgets.dart';
 const _themePurple = Color(0xFF7B5CD8);
 
 enum _TravelView { list, map }
@@ -454,42 +455,20 @@ class _NativeQianjiTravelPageState extends State<NativeQianjiTravelPage> {
 
   Widget _buildHeader() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(8, 10, 16, 4),
+      padding: const EdgeInsets.fromLTRB(14, 10, 16, 8),
       child: Row(
         children: [
-          InkWell(
-            borderRadius: BorderRadius.circular(8),
-            onTap: widget.onBack,
-            child: Padding(
-              padding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.arrow_back_ios_new,
-                    size: 14,
-                    color: DunesColors.resolve(context, DunesColors.text2),
-                  ),
-                  SizedBox(width: 2),
-                  Text(
-                    '饕',
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: DunesColors.resolve(context, DunesColors.text2),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
+          QianjiBackButton(onBack: widget.onBack),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
               '差旅管理',
-              style: TextStyle(
-                fontSize: 18,
+              style: DunesTypography.sans(
+                fontSize: 17.5,
                 fontWeight: FontWeight.w700,
-                color: DunesColors.resolveNullable(context, _themePurple),
+                letterSpacing: -0.3,
+                color: DunesColors.resolve(context, DunesColors.text),
+                context: context,
               ),
             ),
           ),

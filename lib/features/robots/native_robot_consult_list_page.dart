@@ -10,6 +10,7 @@ import 'robot_markdown.dart';
 import 'robot_models.dart';
 import 'robot_service.dart';
 
+import '../shell/dunes_toast.dart';
 /// 咨询列表 → GET /robot/consults
 class NativeRobotConsultListPage extends StatefulWidget {
   const NativeRobotConsultListPage({
@@ -309,7 +310,7 @@ class _NativeRobotConsultListPageState
       widget.onOpenDetail(created.id);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      showDunesToast(context, '$e');
     } finally {
       if (mounted) setState(() => _retryingId = null);
     }
@@ -353,9 +354,7 @@ class _NativeRobotConsultListPageState
       return true;
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('$e')));
+        showDunesToast(context, '$e');
       }
       return false;
     }

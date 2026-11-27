@@ -14,6 +14,7 @@ import 'meeting_upload_storage.dart';
 import 'native_meeting_models.dart';
 import 'native_meeting_service.dart';
 
+import '../shell/dunes_toast.dart';
 class NativeMeetingListPage extends StatefulWidget {
   const NativeMeetingListPage({
     super.key,
@@ -393,9 +394,7 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
       _persistListSnapshot();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(friendlyErrorText(e, fallback: '删除失败，请稍后重试'))),
-      );
+      showDunesToast(context, friendlyErrorText(e, fallback: '删除失败，请稍后重试'));
     }
   }
 
@@ -408,9 +407,7 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
       setState(() => _folders = [..._folders, folder]);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(friendlyErrorText(e, fallback: '创建文件夹失败'))),
-      );
+      showDunesToast(context, friendlyErrorText(e, fallback: '创建文件夹失败'));
     }
   }
 
@@ -431,9 +428,7 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
       });
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(friendlyErrorText(e, fallback: '重命名失败'))),
-      );
+      showDunesToast(context, friendlyErrorText(e, fallback: '重命名失败'));
     }
   }
 
@@ -468,9 +463,7 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
       await _load(reset: true, silent: true);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(friendlyErrorText(e, fallback: '删除文件夹失败'))),
-      );
+      showDunesToast(context, friendlyErrorText(e, fallback: '删除文件夹失败'));
     }
   }
 
@@ -490,9 +483,7 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
       await _load(reset: true, silent: true);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(friendlyErrorText(e, fallback: '移动失败'))),
-      );
+      showDunesToast(context, friendlyErrorText(e, fallback: '移动失败'));
     }
   }
 

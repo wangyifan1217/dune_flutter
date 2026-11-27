@@ -1000,7 +1000,7 @@ class _DriveMembersPageState extends State<DriveMembersPage> {
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      showDunesToast(context, '$e');
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -2576,9 +2576,7 @@ class _DriveSpaceNotificationSettingsPageState
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(friendlyErrorText(e, fallback: '保存失败'))),
-      );
+      showDunesToast(context, friendlyErrorText(e, fallback: '保存失败'));
     } finally {
       if (mounted) setState(() => _saving = false);
     }

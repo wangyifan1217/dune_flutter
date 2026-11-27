@@ -9,6 +9,7 @@ import 'native_qianji_cash_flow_ai_sheet.dart';
 import 'native_qianji_cash_flow_tour.dart';
 import 'qianji_cash_flow_api.dart';
 
+import 'qianji_widgets.dart';
 const _themePurple = Color(0xFF7B5CD8);
 const _cardBorder = Color(0xFFE8EAED);
 const _pageBg = Color(0xFFF5F6F8);
@@ -649,40 +650,18 @@ class _NativeQianjiCashFlowBoardPageState
   }
 
   Widget _buildHeader() {
-    final back = InkWell(
-      borderRadius: BorderRadius.circular(8),
-      onTap: widget.onBack,
-      child: Padding(
-        padding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.arrow_back_ios_new,
-              size: 14,
-              color: DunesColors.resolve(context, DunesColors.text2),
-            ),
-            SizedBox(width: 2),
-            Text(
-              '饕',
-              style: TextStyle(
-                fontSize: 13,
-                color: DunesColors.resolve(context, DunesColors.text2),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
+    final back = QianjiBackButton(onBack: widget.onBack);
     final title = Text(
       '公司账户资金流向',
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
-      style: TextStyle(
-        fontSize: 18,
-        fontWeight: FontWeight.w700,
-        color: DunesColors.resolveNullable(context, _themePurple),
-      ),
+      style: DunesTypography.sans(
+                fontSize: 17.5,
+                fontWeight: FontWeight.w700,
+                letterSpacing: -0.3,
+                color: DunesColors.resolve(context, DunesColors.text),
+                context: context,
+              ),
     );
     final actions = <Widget>[
       _TourEntryChip(onTap: _openTour),
@@ -717,7 +696,7 @@ class _NativeQianjiCashFlowBoardPageState
       ),
     ];
     return Padding(
-      padding: const EdgeInsets.fromLTRB(8, 10, 16, 6),
+      padding: const EdgeInsets.fromLTRB(14, 10, 16, 8),
       child: LayoutBuilder(
         builder: (context, constraints) {
           final stacked = constraints.maxWidth < 640;

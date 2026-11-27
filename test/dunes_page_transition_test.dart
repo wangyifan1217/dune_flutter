@@ -223,4 +223,73 @@ void main() {
       await mouse.moveTo(backCenter2 + Offset(i * 2.0, i.toDouble()));
     }
   });
+
+  testWidgets('NativeQianjiAdminShell preserves overview scroll offset after returning from module', (tester) async {
+    tester.view.physicalSize = const Size(420, 360);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final nav = DunesNavigationController();
+    addTearDown(nav.dispose);
+    const session = AuthSession(
+      phone: '13800138000',
+      userId: 1,
+      token: 'test-token',
+      apiBase: 'http://127.0.0.1:9',
+      roles: ['admin'],
+      displayName: '测试用户',
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: DunesTheme.light(),
+        home: Scaffold(
+          body: NativeQianjiAdminShell(
+            session: session,
+            navigation: nav,
+          ),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 120));
+
+    final listFinder = find.byKey(const PageStorageKey<String>('workbench-overview-scroll'));
+    expect(listFinder, findsOneWidget);
+
+    // Scroll overview list down
+    await tester.drag(listFinder, const Offset(0, -260));
+    await tester.pumpAndSettle();
+
+    final scrollableBefore = tester.state<ScrollableState>(
+      find.descendant(of: listFinder, matching: find.byType(Scrollable)).first,
+    );
+    final offsetBefore = scrollableBefore.position.pixels;
+    expect(offsetBefore, greaterThan(80));
+
+    // Enter a visible tile (企业微盘)
+    final driveTile = find.text('企业微盘');
+    await tester.ensureVisible(driveTile.first);
+    await tester.pumpAndSettle();
+    final savedOffset = scrollableBefore.position.pixels;
+    expect(savedOffset, greaterThan(40));
+    await tester.tap(driveTile.first);
+    for (var i = 0; i < 12; i++) {
+      await tester.pump(const Duration(milliseconds: 30));
+    }
+
+    // Return to Workbench
+    final backBtn = find.text('工作台');
+    expect(backBtn, findsWidgets);
+    await tester.tap(backBtn.first);
+    for (var i = 0; i < 12; i++) {
+      await tester.pump(const Duration(milliseconds: 30));
+    }
+    await tester.pump();
+
+    final scrollableAfter = tester.state<ScrollableState>(
+      find.descendant(of: listFinder, matching: find.byType(Scrollable)).first,
+    );
+    expect(scrollableAfter.position.pixels, closeTo(savedOffset, 2.0));
+  });
 }

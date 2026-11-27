@@ -19,6 +19,7 @@ import 'tau_voice_call_playback.dart';
 import '../nova_welcome_view.dart';
 import 'package:dunes_app/core/theme/dunes_theme.dart';
 
+import '../../shell/dunes_toast.dart';
 enum TauVoiceCallMode { professional, casual }
 
 enum TauVoiceCallState { listening, thinking, speaking, muted }
@@ -468,9 +469,7 @@ class _TauVoiceCallPageState extends State<TauVoiceCallPage>
   }
 
   void _showError(String message) {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(_friendlyCallError(message))));
+    showDunesToast(context, _friendlyCallError(message));
   }
 
   String _friendlyCallError(String message) {

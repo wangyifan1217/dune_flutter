@@ -14,6 +14,7 @@ import 'xrxs_h5_browser.dart';
 import 'xrxs_service.dart';
 import 'xrxs_opening_indicator.dart';
 
+import '../shell/dunes_toast.dart';
 const _xrxsNavHandler = 'xrxsNav';
 
 /// 薪人薪事 H5 无自带返回，钩住 pushState / hash 以便容器提供「返回」。
@@ -290,15 +291,11 @@ class _NativeXrxsH5PageState extends State<NativeXrxsH5Page> {
       );
       if (!mounted) return;
       if (!ok) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('未安装可打开该链接的应用')));
+        showDunesToast(context, '未安装可打开该链接的应用');
       }
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('无法打开外部应用')));
+        showDunesToast(context, '无法打开外部应用');
       }
     }
   }

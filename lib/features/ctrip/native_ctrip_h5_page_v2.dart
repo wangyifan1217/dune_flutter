@@ -17,6 +17,7 @@ import 'ctrip_document_start_geo.dart';
 import 'ctrip_h5_browser.dart';
 import 'ctrip_h5_service.dart';
 
+import '../shell/dunes_toast.dart';
 const _paymentSchemes = <String>{'alipay', 'alipays', 'weixin', 'wechat'};
 const _mapAppSchemes = <String>{
   'amapuri',
@@ -83,16 +84,12 @@ class _NativeCtripH5PageState extends State<NativeCtripH5Page> {
     if (!allowed) {
       final status = await Permission.locationWhenInUse.status;
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(locationPermissionHint(status))));
+        showDunesToast(context, locationPermissionHint(status));
       }
     } else {
       final result = await _geo.prefetch();
       if (mounted && result['ok'] != true) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${result['message'] ?? '原生定位失败'}')),
-        );
+        showDunesToast(context, '${result['message'] ?? '原生定位失败'}');
       }
     }
     if (mounted) await _openCtrip();
@@ -212,19 +209,13 @@ class _NativeCtripH5PageState extends State<NativeCtripH5Page> {
       );
       if (!mounted) return;
       if (!ok) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('未安装可打开该链接的应用')));
+        showDunesToast(context, '未安装可打开该链接的应用');
       } else if (tip != null) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(tip)));
+        showDunesToast(context, tip);
       }
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('无法打开外部应用')));
+        showDunesToast(context, '无法打开外部应用');
       }
     }
   }

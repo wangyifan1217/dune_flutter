@@ -383,10 +383,11 @@ class _NativeConversationPageState extends State<NativeConversationPage>
     final max = pos.maxScrollExtent;
     if (max <= 0) return;
 
-    // 优先定位下一条未读会话，已过最后一条未读或无未读时平滑滚回顶部。
+    // 基于当前可见会话列表循环定位下一条未读会话；无未读或已在唯一未读处时平滑回顶。
+    final visible = _items.where(_matchesActiveFilter).toList(growable: false);
     final unreadIndices = <int>[];
-    for (var i = 0; i < _items.length; i++) {
-      if (_isConvUnreadForFilter(_items[i])) unreadIndices.add(i);
+    for (var i = 0; i < visible.length; i++) {
+      if (_isConvUnreadForFilter(visible[i])) unreadIndices.add(i);
     }
     const estimatedRowHeight = 72.0;
     double target = 0.0;
@@ -394,11 +395,10 @@ class _NativeConversationPageState extends State<NativeConversationPage>
       final currentRow = (pos.pixels / estimatedRowHeight).floor();
       final nextIdx = unreadIndices.firstWhere(
         (idx) => idx > currentRow,
-        orElse: () => -1,
+        orElse: () => unreadIndices.first,
       );
-      if (nextIdx >= 0) {
-        target = (nextIdx * estimatedRowHeight).clamp(0.0, max);
-      }
+      final candidate = (nextIdx * estimatedRowHeight).clamp(0.0, max);
+      target = (pos.pixels - candidate).abs() < 8 ? 0.0 : candidate;
     }
     if ((pos.pixels - target).abs() < 4) return;
     HapticFeedback.selectionClick();

@@ -6399,33 +6399,49 @@ class _NativeChatViewState extends State<NativeChatView>
       context: context,
       barrierLabel: 'message_actions',
       barrierDismissible: true,
-      barrierColor: Colors.black.withValues(alpha: dark ? 0.24 : 0.08),
-      transitionDuration: const Duration(milliseconds: 160),
+      barrierColor: Colors.black.withValues(alpha: dark ? 0.30 : 0.12),
+      transitionDuration: const Duration(milliseconds: 180),
       pageBuilder: (ctx, _, _) {
         final media = MediaQuery.of(ctx);
         final size = media.size;
         final safeTop = media.padding.top + 8;
         final safeBottom = size.height - media.padding.bottom - 8;
         final isDark = ImVisualTokens.isDark(ctx);
-        final accent = ImVisualTokens.accent(ctx);
-        final accentSoft = ImVisualTokens.accentSoftSurface(ctx);
         final dangerColor = DunesColors.resolve(ctx, DunesColors.coral);
-        final dangerSoft = dangerColor.withValues(alpha: isDark ? 0.20 : 0.12);
         final textColor = DunesColors.resolve(ctx, DunesColors.text);
 
+        Color toneFor(String id) => switch (id) {
+          'recall' || 'delete' => dangerColor,
+          'forward' || 'transcribe' => DunesColors.resolve(ctx, DunesColors.blue),
+          'favorite' || 'star' || 'pin' || 'unpin' => DunesColors.resolve(
+            ctx,
+            DunesColors.amber,
+          ),
+          'save' || 'download' || 'redownload' => DunesColors.resolve(
+            ctx,
+            DunesColors.green,
+          ),
+          'multi_msg' ||
+          'multi' ||
+          'select' ||
+          'save_to_kb' ||
+          'save_to_drive' => DunesColors.resolve(ctx, DunesColors.accent),
+          _ => ImVisualTokens.accent(ctx),
+        };
+
         final colCount = actions.length <= 4 ? actions.length : 4;
-        const itemWidth = 64.0;
-        const itemSpacing = 8.0;
-        const horizontalPadding = 24.0;
+        const itemWidth = 74.0;
+        const itemSpacing = 4.0;
+        const horizontalPadding = 20.0;
         final naturalWidth =
             colCount * itemWidth +
             (colCount - 1) * itemSpacing +
             horizontalPadding;
         final menuWidth = math
-            .min(size.width - 24, math.max(naturalWidth, 220.0))
+            .min(size.width - 24, math.max(naturalWidth, 210.0))
             .toDouble();
         final rowCount = (actions.length / colCount).ceil();
-        final estimatedHeight = rowCount * 74.0 + 24.0;
+        final estimatedHeight = rowCount * 72.0 + 20.0;
         final left =
             (anchor == null
                     ? (size.width - menuWidth) / 2
@@ -6455,19 +6471,26 @@ class _NativeChatViewState extends State<NativeChatView>
                 child: Material(
                   color: Colors.transparent,
                   child: ImFrostedIsland(
-                    borderRadius: 22,
-                    blurSigma: 22,
-                    padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+                    borderRadius: 20,
+                    blurSigma: 24,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 10,
+                    ),
                     child: ConstrainedBox(
-                      constraints: BoxConstraints(maxWidth: menuWidth - 24),
+                      constraints: BoxConstraints(maxWidth: menuWidth - 20),
                       child: Wrap(
                         spacing: itemSpacing,
-                        runSpacing: 8,
+                        runSpacing: 6,
                         children: actions
                             .map((item) {
-                              final isDanger = item.id == 'recall';
-                              final iconBg = isDanger ? dangerSoft : accentSoft;
-                              final iconFg = isDanger ? dangerColor : accent;
+                              final isDanger =
+                                  item.id == 'recall' || item.id == 'delete';
+                              final tone = toneFor(item.id);
+                              final topTone =
+                                  Color.lerp(tone, Colors.white, 0.22) ?? tone;
+                              final bottomTone =
+                                  Color.lerp(tone, Colors.black, 0.12) ?? tone;
                               final labelColor = isDanger
                                   ? dangerColor
                                   : textColor;
@@ -6475,47 +6498,52 @@ class _NativeChatViewState extends State<NativeChatView>
                                 width: itemWidth,
                                 child: ImTapScale(
                                   borderRadius: BorderRadius.circular(14),
-                                  pressedScale: 0.94,
+                                  pressedScale: 0.91,
                                   onTap: () {
                                     HapticFeedback.selectionClick();
                                     Navigator.of(ctx).pop(item.id);
                                   },
-                                  child: Container(
+                                  child: Padding(
                                     padding: const EdgeInsets.symmetric(
-                                      vertical: 7,
-                                      horizontal: 4,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: ImVisualTokens.cardSurface(
-                                        ctx,
-                                      ).withValues(alpha: isDark ? 0.72 : 0.86),
-                                      borderRadius: BorderRadius.circular(14),
-                                      border: Border.all(
-                                        color: ImVisualTokens.hairlineBorder(
-                                          ctx,
-                                        ),
-                                        width: 0.7,
-                                      ),
+                                      vertical: 6,
+                                      horizontal: 2,
                                     ),
                                     child: Column(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
                                         Container(
-                                          width: 32,
-                                          height: 32,
+                                          width: 38,
+                                          height: 38,
                                           decoration: BoxDecoration(
-                                            color: iconBg,
-                                            borderRadius: BorderRadius.circular(
-                                              10,
+                                            gradient: LinearGradient(
+                                              begin: Alignment.topLeft,
+                                              end: Alignment.bottomRight,
+                                              colors: [
+                                                topTone,
+                                                tone,
+                                                bottomTone,
+                                              ],
                                             ),
+                                            borderRadius: BorderRadius.circular(
+                                              12,
+                                            ),
+                                            boxShadow: [
+                                              BoxShadow(
+                                                color: tone.withValues(
+                                                  alpha: isDark ? 0.30 : 0.22,
+                                                ),
+                                                blurRadius: 7,
+                                                offset: const Offset(0, 3),
+                                              ),
+                                            ],
                                           ),
                                           child: Icon(
                                             item.icon,
-                                            size: 17,
-                                            color: iconFg,
+                                            size: 19,
+                                            color: Colors.white,
                                           ),
                                         ),
-                                        const SizedBox(height: 5),
+                                        const SizedBox(height: 6),
                                         Text(
                                           item.label,
                                           maxLines: 1,
@@ -6546,12 +6574,15 @@ class _NativeChatViewState extends State<NativeChatView>
       transitionBuilder: (context, animation, _, child) {
         final curve = CurvedAnimation(
           parent: animation,
-          curve: Curves.easeOutCubic,
+          curve: Curves.easeOutBack,
         );
         return FadeTransition(
-          opacity: curve,
+          opacity: CurvedAnimation(
+            parent: animation,
+            curve: Curves.easeOut,
+          ),
           child: ScaleTransition(
-            scale: Tween<double>(begin: 0.96, end: 1).animate(curve),
+            scale: Tween<double>(begin: 0.92, end: 1).animate(curve),
             child: child,
           ),
         );

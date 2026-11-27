@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/theme/dunes_theme.dart';
 import 'im_ui_kit.dart';
 
 class DesktopMessageMenuItem {
@@ -24,49 +25,65 @@ Future<String?> showDesktopMessageMenu(
       : overlay.globalToLocal(anchor);
   final dark = ImVisualTokens.isDark(context);
   final accent = ImVisualTokens.accent(context);
+  final dangerColor = DunesColors.resolve(context, DunesColors.coral);
   final surfaceColor = dark ? const Color(0xFF272536) : Colors.white;
   final borderColor = dark
       ? Colors.white.withValues(alpha: 0.12)
-      : const Color(0x247B5CD8);
+      : const Color(0xFFE5E5EA);
+
+  Color toneFor(String id) => switch (id) {
+    'recall' || 'delete' => dangerColor,
+    'forward' || 'transcribe' => DunesColors.resolve(context, DunesColors.blue),
+    'favorite' || 'star' || 'pin' || 'unpin' => DunesColors.resolve(
+      context,
+      DunesColors.amber,
+    ),
+    'save' || 'download' || 'redownload' => DunesColors.resolve(
+      context,
+      DunesColors.green,
+    ),
+    'multi_msg' ||
+    'multi' ||
+    'select' ||
+    'save_to_kb' ||
+    'save_to_drive' => DunesColors.resolve(context, DunesColors.accent),
+    _ => accent,
+  };
 
   return showMenu<String>(
     context: context,
     color: surfaceColor,
-    elevation: 14,
-    shadowColor: const Color(0xFF2D1E5F).withValues(alpha: dark ? 0.45 : 0.16),
+    elevation: 16,
+    shadowColor: Colors.black.withValues(alpha: dark ? 0.45 : 0.14),
     shape: RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(14),
-      side: BorderSide(color: borderColor, width: 0.8),
+      borderRadius: BorderRadius.circular(16),
+      side: BorderSide(color: borderColor, width: 0.6),
     ),
     position: RelativeRect.fromRect(
       Rect.fromLTWH(point.dx, point.dy, 1, 1),
       Offset.zero & overlay.size,
     ),
-    constraints: const BoxConstraints(minWidth: 206, maxWidth: 268),
+    constraints: const BoxConstraints(minWidth: 214, maxWidth: 276),
     items: [
       for (final item in actions) ...[
         if (item.id == 'recall') const PopupMenuDivider(height: 8),
         PopupMenuItem<String>(
           value: item.id,
           height: 38,
-          padding: const EdgeInsets.symmetric(horizontal: 14),
+          padding: const EdgeInsets.symmetric(horizontal: 12),
           child: Row(
             children: [
               Container(
-                width: 24,
-                height: 24,
+                width: 26,
+                height: 26,
                 decoration: BoxDecoration(
-                  color: item.id == 'recall'
-                      ? Theme.of(context).colorScheme.error.withValues(alpha: 0.10)
-                      : accent.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(7),
+                  color: toneFor(item.id).withValues(alpha: dark ? 0.18 : 0.10),
+                  borderRadius: BorderRadius.circular(8),
                 ),
                 child: Icon(
                   item.icon,
                   size: 15,
-                  color: item.id == 'recall'
-                      ? Theme.of(context).colorScheme.error
-                      : accent,
+                  color: toneFor(item.id),
                 ),
               ),
               const SizedBox(width: 10),
@@ -77,7 +94,7 @@ Future<String?> showDesktopMessageMenu(
                     fontSize: 13,
                     fontWeight: FontWeight.w500,
                     color: item.id == 'recall'
-                        ? Theme.of(context).colorScheme.error
+                        ? dangerColor
                         : Theme.of(context).colorScheme.onSurface,
                   ),
                 ),

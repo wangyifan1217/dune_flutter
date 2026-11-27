@@ -5,6 +5,65 @@ import FlutterMacOS
 class AppDelegate: FlutterAppDelegate {
   private var desktopWindowChannel: FlutterMethodChannel?
   private var desktopFileDragChannel: FlutterMethodChannel?
+  private static let iconRefreshVersionDefaultsKey = "dunes.last_icon_refresh_version"
+
+  override func applicationDidFinishLaunching(_ notification: Notification) {
+    super.applicationDidFinishLaunching(notification)
+    refreshBundleIconCacheIfVersionChanged()
+  }
+
+  /// 覆盖升级（Sparkle 或 DMG 拖装）后，macOS 的 LaunchServices 与 Dock 常缓存旧图标。
+  /// 仅在版本号变化后的首次启动执行一次：更新 Bundle mtime、重注册 LaunchServices 并刷新 Dock。
+  private func refreshBundleIconCacheIfVersionChanged() {
+    let info = Bundle.main.infoDictionary
+    let shortVersion = (info?["CFBundleShortVersionString"] as? String) ?? ""
+    let buildNumber = (info?["CFBundleVersion"] as? String) ?? ""
+    let currentKey = "\(shortVersion)+\(buildNumber)"
+    guard !currentKey.isEmpty, currentKey != "+" else { return }
+
+    let defaults = UserDefaults.standard
+    let lastKey = defaults.string(forKey: Self.iconRefreshVersionDefaultsKey)
+    guard lastKey != currentKey else { return }
+    defaults.set(currentKey, forKey: Self.iconRefreshVersionDefaultsKey)
+
+    if let freshIcon = NSImage(named: NSImage.applicationIconName) {
+      NSApp.applicationIconImage = freshIcon
+    }
+
+    let bundlePath = Bundle.main.bundlePath
+    guard bundlePath.hasSuffix(".app") else { return }
+
+    DispatchQueue.global(qos: .utility).async {
+      try? FileManager.default.setAttributes(
+        [.modificationDate: Date()],
+        ofItemAtPath: bundlePath
+      )
+      DispatchQueue.main.async {
+        NSWorkspace.shared.setIcon(nil, forFile: bundlePath, options: [])
+        NSWorkspace.shared.noteFileSystemChanged(bundlePath)
+      }
+
+      let lsregisterPath =
+        "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
+      if FileManager.default.isExecutableFile(atPath: lsregisterPath) {
+        let regProc = Process()
+        regProc.executableURL = URL(fileURLWithPath: lsregisterPath)
+        regProc.arguments = ["-f", bundlePath]
+        try? regProc.run()
+        regProc.waitUntilExit()
+      }
+
+      // 刷新固定在 Dock 上的旧图标缓存（仅在版本升级后的首次启动执行一次）。
+      let killallPath = "/usr/bin/killall"
+      if FileManager.default.isExecutableFile(atPath: killallPath) {
+        let dockProc = Process()
+        dockProc.executableURL = URL(fileURLWithPath: killallPath)
+        dockProc.arguments = ["Dock"]
+        try? dockProc.run()
+        dockProc.waitUntilExit()
+      }
+    }
+  }
 
   /// 由 MainFlutterWindow 在引擎就绪后挂上，用于 Dock reopen → Flutter 恢复窗口。
   func setupDesktopWindowChannel(with messenger: FlutterBinaryMessenger) {

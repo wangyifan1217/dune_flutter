@@ -1,7 +1,7 @@
 ; 与 dist/windows/dunes-setup.iss 保持同一 AppId / 权限，否则升级找不到旧目录。
 #define MyAppName "沙丘"
-#define MyAppVersion "2.1.5"
-#define MyAppBuild "215"
+#define MyAppVersion "2.1.6"
+#define MyAppBuild "216"
 #define MyAppPublisher "沙丘"
 #define MyAppExeName "dunes_app.exe"
 
@@ -25,7 +25,8 @@ WizardStyle=modern
 ; 与历史包一致：默认当前用户安装，才能读到 HKCU 里旧目录（如 D:\DunesDesktop）。
 PrivilegesRequired=lowest
 PrivilegesRequiredOverridesAllowed=dialog
-UninstallDisplayIcon={app}\{#MyAppExeName}
+UninstallDisplayIcon={app}\app_icon_{#MyAppBuild}.ico
+ChangesAssociations=yes
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 ; 不能用 MinVersion=10.0。兼容模式会让安装器把 Windows 11 谎报成 Windows 7，
@@ -41,13 +42,20 @@ AppMutex=Local\DunesDesktop.B5A14F5D-32E5-484D-BCB1-0156D5F7F5E5
 [Messages]
 WindowsVersionNotSupported=沙丘 PC 端需要 64 位 Windows 10 或更高版本。%n%n当前系统版本过低，无法安装。请升级到 Windows 10 或 Windows 11。
 
+[InstallDelete]
+Type: files; Name: "{app}\app_icon_*.ico"
+
 [Files]
 Source: "..\..\build\windows\x64\runner\Release\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\runner\resources\app_icon.ico"; DestDir: "{app}"; DestName: "app_icon_{#MyAppBuild}.ico"; Flags: ignoreversion
 
 [Icons]
-Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
+Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\app_icon_{#MyAppBuild}.ico"
 Name: "{group}\Uninstall {#MyAppName}"; Filename: "{uninstallexe}"
-Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\app_icon_{#MyAppBuild}.ico"; Tasks: desktopicon
+; 覆盖升级时若桌面已存在快捷方式，即便未勾选 desktopicon（或静默升级）也自动刷新为新版本图标。
+Name: "{userdesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\app_icon_{#MyAppBuild}.ico"; Check: ShouldRefreshUserDesktopShortcut
+Name: "{commondesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\app_icon_{#MyAppBuild}.ico"; Check: ShouldRefreshCommonDesktopShortcut
 
 [Tasks]
 Name: "desktopicon"; Description: "创建桌面快捷方式"; GroupDescription: "附加任务："; Flags: unchecked
@@ -59,6 +67,20 @@ Filename: "{app}\{#MyAppExeName}"; Description: "启动 {#MyAppName}"; Flags: no
 Type: filesandordirs; Name: "{app}"
 
 [Code]
+var
+  HadUserDesktopShortcut: Boolean;
+  HadCommonDesktopShortcut: Boolean;
+
+function ShouldRefreshUserDesktopShortcut: Boolean;
+begin
+  Result := HadUserDesktopShortcut and (not WizardIsTaskSelected('desktopicon'));
+end;
+
+function ShouldRefreshCommonDesktopShortcut: Boolean;
+begin
+  Result := HadCommonDesktopShortcut and IsAdminInstallMode and (not WizardIsTaskSelected('desktopicon'));
+end;
+
 function IsRealWindows10OrNewer: Boolean;
 var
   Root: Integer;
@@ -84,6 +106,8 @@ end;
 
 function InitializeSetup: Boolean;
 begin
+  HadUserDesktopShortcut := FileExists(ExpandConstant('{userdesktop}\{#MyAppName}.lnk'));
+  HadCommonDesktopShortcut := FileExists(ExpandConstant('{commondesktop}\{#MyAppName}.lnk'));
   Result := IsRealWindows10OrNewer;
   if not Result then
     MsgBox('沙丘 PC 端需要 64 位 Windows 10 或更高版本。' + #13#10 + #13#10 +
@@ -100,4 +124,15 @@ begin
   { 不用 /T：更新时安装器可能是 dunes_app 拉起来的，/T 会把安装器一起杀掉。 }
   Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM dunes_app.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   Sleep(800);
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+var
+  ResultCode: Integer;
+begin
+  if CurStep = ssPostInstall then
+  begin
+    { 通知 Windows Explorer 立即刷新桌面和任务栏图标缓存。 }
+    Exec(ExpandConstant('{sys}\ie4uinit.exe'), '-show', '', SW_HIDE, ewNoWait, ResultCode);
+  end;
 end;

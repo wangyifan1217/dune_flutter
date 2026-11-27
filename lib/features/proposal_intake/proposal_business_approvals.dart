@@ -1091,6 +1091,17 @@ class _ProposalBusinessApprovalsState extends State<ProposalBusinessApprovals> {
             people.add(person);
           }
         }
+      } on XflowRequestException catch (error) {
+        if (!mounted) return;
+        if (error.statusCode != 404 && error.statusCode != 501) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('外部人员名单加载失败，请重试')));
+          return;
+        }
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('外部人员暂不可选，其他人员可正常设置')));
       } catch (_) {
         if (!mounted) return;
         ScaffoldMessenger.of(

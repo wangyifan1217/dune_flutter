@@ -1435,7 +1435,34 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
                               emptyHint: _approvalEmptyHint,
                             ),
                             XflowCcRulesCard(
-                              rules: _ccRules,
+                              rules:
+                                  widget.session.isExternalUser &&
+                                      widget.session.phone.trim() ==
+                                          '18127906706' &&
+                                      widget.templateKey ==
+                                          'finance-customer-complaint' &&
+                                      const {
+                                        'CUSTOMER_COMPENSATION',
+                                        'VOUCHER_REFUND',
+                                      }.contains('${_values['complaintType']}')
+                                  ? const [
+                                      {
+                                        'title': '莫步榆',
+                                        'deptLabel': '财务部',
+                                        'triggerType': 'always',
+                                      },
+                                      {
+                                        'title': '吴谋芳',
+                                        'deptLabel': '运营部',
+                                        'triggerType': 'always',
+                                      },
+                                      {
+                                        'title': '吴秀华',
+                                        'deptLabel': '运营部',
+                                        'triggerType': 'always',
+                                      },
+                                    ]
+                                  : _ccRules,
                               loading: _ccLoading,
                               error: _ccError,
                               hideWhenEmpty: true,

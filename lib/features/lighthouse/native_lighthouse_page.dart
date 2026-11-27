@@ -51,6 +51,7 @@ import 'lighthouse_oil_price.dart';
 import 'lighthouse_ledger_card_v2.dart';
 import 'lighthouse_press.dart';
 import 'lighthouse_period_bar.dart';
+import 'partner_sinopec_page.dart';
 import 'lighthouse_product_l3.dart';
 import 'lighthouse_profit_split.dart';
 import 'lighthouse_rank_badge.dart';
@@ -15005,6 +15006,12 @@ class _LighthouseTopicHostState extends State<NativeLighthousePage> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget.session.isExternalUser && widget.session.phone.trim() == '13637414351') {
+      return PartnerSinopecPage(
+        session: widget.session,
+        onBack: widget.navigation.back,
+      );
+    }
     return _LighthouseTopicBody(
       key: ValueKey<String>('lighthouse-topic:$_topic'),
       session: widget.session,

@@ -22704,6 +22704,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     var estimateReady = false;
     if (remoteLine == null) {
       estimate = _remoteFinance.loading ? '正在测算…' : '测算暂不可用，请重试。';
+    } else if (remoteLine['pending'] == true) {
+      estimate = remoteLine['substitution']?.toString() ?? '';
     } else if (way == _settleWayTier) {
       // 后端按套档规模算出了金额就直接显示（利差、电子券采购款按阶梯都靠这一行看数）。
       // 多个省时套档规模是该省产品合计，否则仍是整张提案规模。

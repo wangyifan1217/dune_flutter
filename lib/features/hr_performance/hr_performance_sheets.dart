@@ -810,15 +810,16 @@ Future<Map<String, dynamic>?> showHrAssignmentSheet(
   BuildContext context,
   HrPerformanceRecord record,
   Map<String, dynamic> config, {
+  bool switchTemplate = false,
   List<Map<String, dynamic>> positions = const [],
 }) => hrFormSheet(
   context,
-  title: record.stage == 'review' ? '切换考核模板' : '补配本周期考核表',
-  message: record.stage == 'review'
-      ? '当前模板：${record.snapshot['templateName']}。请选择新的模板，切换后仍由主管初评。'
+  title: switchTemplate ? '切换考核模板' : '补配本周期考核表',
+  message: switchTemplate
+      ? '当前模板：${record.snapshot['templateName']}。切换后仍处于${record.stageLabel}。'
       : '部门和主管跟随当前组织关系。这里可补配本周期模板和人员资料。',
-  confirmationMessage: record.stage == 'review'
-      ? () => '将使用新模板的指标和权重。原指标、草稿评分及待处理的指标调整申请不会带入，变更会记录在操作日志。'
+  confirmationMessage: switchTemplate
+      ? () => '新模板将替换原指标和草稿评分，待处理的指标调整申请将失效。变更会记录在操作日志。'
       : null,
   values: {'reason': ''},
   fields: (v, update) => [
@@ -846,13 +847,13 @@ Future<Map<String, dynamic>?> showHrAssignmentSheet(
         onChanged: (x) => v['probationEndAt'] = x,
       ),
     ],
-    if (['opening', 'indicators', 'review'].contains(record.stage))
+    if (switchTemplate || ['opening', 'indicators'].contains(record.stage))
       HrSelect<String>(
         decoration: InputDecoration(
-          labelText: record.stage == 'review' ? '新考核模板' : '本周期模板（留空保持）',
+          labelText: switchTemplate ? '新考核模板' : '本周期模板（留空保持）',
         ),
         items: hrMaps(config['templates'])
-            .where((t) => record.stage == 'review' || t['enabled'] == true)
+            .where((t) => switchTemplate || t['enabled'] == true)
             .map(
               (t) => DropdownMenuItem(
                 value: '${t['id']}',
@@ -866,7 +867,7 @@ Future<Map<String, dynamic>?> showHrAssignmentSheet(
   ],
   submit: (v) {
     if (hrText(v['reason']).isEmpty) throw const FormatException('请填写修改原因');
-    if (record.stage == 'review' && v['templateId'] == null) {
+    if (switchTemplate && v['templateId'] == null) {
       throw const FormatException('请选择新的考核模板');
     }
     if ([

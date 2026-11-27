@@ -361,7 +361,7 @@ class _HrPerformanceDetailState extends State<HrPerformanceDetail> {
           }
           data = await showHrAssignmentSheet(context, _record, {
             'templates': templates,
-          });
+          }, switchTemplate: true);
         case 'assign_snapshot':
           data = await showHrAssignmentSheet(
             context,

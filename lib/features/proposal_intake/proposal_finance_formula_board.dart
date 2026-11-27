@@ -1080,6 +1080,13 @@ class _CategoryDetail extends StatelessWidget {
 
   ProposalCostCategory get category => bucket.category;
 
+  List<String> _selectedNamesWithout(ProposalFinanceLine removed) => [
+    for (final line in bucket.lines)
+      if (line.name != removed.name &&
+          (category.key != kProposalCostCategoryBusiness || !line.locked))
+        line.name,
+  ];
+
   Future<void> _pick(BuildContext context) async {
     final locked = {
       for (final line in bucket.lines)
@@ -1092,7 +1099,11 @@ class _CategoryDetail extends StatelessWidget {
       locked: locked,
     );
     if (next == null) return;
-    onItemsChanged?.call(next);
+    onItemsChanged?.call(
+      category.key == kProposalCostCategoryBusiness
+          ? next.where((name) => !locked.contains(name)).toList()
+          : next,
+    );
   }
 
   @override
@@ -1101,10 +1112,7 @@ class _CategoryDetail extends StatelessWidget {
       category: category,
       line: line,
       onRemove: allowItemEdit && !line.locked && onItemsChanged != null
-          ? () => onItemsChanged!([
-              for (final name in bucket.names)
-                if (name != line.name) name,
-            ])
+          ? () => onItemsChanged!(_selectedNamesWithout(line))
           : null,
       onFormula: onFormula == null || line.locked
           ? null
@@ -1176,10 +1184,7 @@ class _CategoryDetail extends StatelessWidget {
             category: category,
             line: line,
             onRemove: allowItemEdit && !line.locked && onItemsChanged != null
-                ? () => onItemsChanged!([
-                    for (final name in bucket.names)
-                      if (name != line.name) name,
-                  ])
+                ? () => onItemsChanged!(_selectedNamesWithout(line))
                 : null,
             onFormula: onFormula == null || line.locked
                 ? null
@@ -1896,7 +1901,7 @@ class _CostLine extends StatelessWidget {
                 style: _sans(context, size: 11, color: _K.grey),
               ),
             ),
-          if (category.key == kProposalCostCategoryBusiness)
+          if (category.key == kProposalCostCategoryBusiness && !line.locked)
             _businessRatio(context),
           if (canChoose &&
               category.key == kProposalCostCategoryTax &&

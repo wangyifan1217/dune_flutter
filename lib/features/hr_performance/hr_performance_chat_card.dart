@@ -187,9 +187,49 @@ class _HrPerformanceChatCardState extends State<HrPerformanceChatCard> {
     }
   }
 
+  bool _isDepartmentHeadRow(
+    Map<String, dynamic> row, {
+    HrPerformanceRecord? current,
+    NativeContact? contact,
+  }) {
+    if (row['isDepartmentHead'] == true) return true;
+    final pos =
+        '${row['position'] ?? row['positionName'] ?? current?.position ?? contact?.title ?? ''}';
+    if (pos.contains('负责人')) return true;
+    final uid = int.tryParse('${row['userId'] ?? current?.userId ?? ''}');
+    if (uid != null && _currentFinalRows.isNotEmpty) {
+      for (final rec in _currentFinalRows.values) {
+        if (rec.directSupervisorId == uid && rec.userId != uid) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  List<Map<String, dynamic>> _orderedRows(List<Map<String, dynamic>> rawRows) {
+    if (rawRows.length <= 1) return rawRows;
+    final heads = <Map<String, dynamic>>[];
+    final others = <Map<String, dynamic>>[];
+    for (final row in rawRows) {
+      final id = int.tryParse('${row['id']}') ?? 0;
+      final current = _currentFinalRows[id];
+      final name = '${row['name'] ?? ''}'.trim();
+      final uid = int.tryParse('${row['userId'] ?? current?.userId ?? ''}');
+      final contact =
+          (uid != null ? _orgPeople[uid] : null) ?? _orgPeopleByName[name];
+      if (_isDepartmentHeadRow(row, current: current, contact: contact)) {
+        heads.add(row);
+      } else {
+        others.add(row);
+      }
+    }
+    return [...heads, ...others];
+  }
+
   @override
   Widget build(BuildContext context) {
-    final p = widget.payload, rows = hrMaps(widget.payload['rows']);
+    final p = widget.payload, rows = _orderedRows(hrMaps(widget.payload['rows']));
     final notice = p['hrPerformanceNotice'] == true;
     if (notice) return _noticeCard(p);
     final departmentFinal = p['hrPerformanceFinalSummary'] == true;
@@ -748,6 +788,14 @@ class _HrPerformanceChatCardState extends State<HrPerformanceChatCard> {
     final grade = _loadedFinal && current != null
         ? current.snapshot['grade']
         : row['grade'];
+    final rawCoef = _loadedFinal && current != null
+        ? (current.snapshot['coefficient'] ?? row['coefficient'])
+        : row['coefficient'];
+    final coefVal = rawCoef is num
+        ? rawCoef.toDouble()
+        : double.tryParse('${rawCoef ?? ''}');
+    final coefNotOne = coefVal != null && (coefVal - 1.0).abs() > 0.0001;
+    final coefHigh = coefVal != null && coefVal > 1.0;
     final canReject =
         id > 0 &&
         !_loadingFinal &&
@@ -759,8 +807,10 @@ class _HrPerformanceChatCardState extends State<HrPerformanceChatCard> {
     final position =
         '${row['position'] ?? row['positionName'] ?? current?.position ?? contact?.title ?? ''}'
             .trim();
+    final isHead = _isDepartmentHeadRow(row, current: current, contact: contact);
     final initial = name.isEmpty ? '?' : name.substring(0, 1);
     final danger = DunesColors.resolve(context, const Color(0xFFD9383A));
+    final highTone = DunesColors.resolve(context, const Color(0xFFD97706));
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 7),
       child: Row(
@@ -784,15 +834,42 @@ class _HrPerformanceChatCardState extends State<HrPerformanceChatCard> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  position.isNotEmpty ? '$name · $position' : name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: DunesTypography.sans(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: text,
-                  ),
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        position.isNotEmpty ? '$name · $position' : name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: DunesTypography.sans(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: text,
+                        ),
+                      ),
+                    ),
+                    if (isHead) ...[
+                      const SizedBox(width: 5),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 5,
+                          vertical: 1,
+                        ),
+                        decoration: BoxDecoration(
+                          color: accent.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          '负责人',
+                          style: DunesTypography.sans(
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w700,
+                            color: accent,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
                 const SizedBox(height: 3.5),
                 Wrap(
@@ -837,14 +914,34 @@ class _HrPerformanceChatCardState extends State<HrPerformanceChatCard> {
                           ),
                         ),
                       ),
-                    if (row['coefficient'] != null)
-                      Text(
-                        '系数 ${row['coefficient']}',
-                        style: DunesTypography.sans(
-                          fontSize: 10.5,
-                          color: muted,
-                        ),
-                      ),
+                    if (rawCoef != null)
+                      coefNotOne
+                          ? Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 5.5,
+                                vertical: 1,
+                              ),
+                              decoration: BoxDecoration(
+                                color: (coefHigh ? highTone : danger)
+                                    .withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(5),
+                              ),
+                              child: Text(
+                                '系数 $rawCoef',
+                                style: DunesTypography.sans(
+                                  fontSize: 10.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: coefHigh ? highTone : danger,
+                                ),
+                              ),
+                            )
+                          : Text(
+                              '系数 $rawCoef',
+                              style: DunesTypography.sans(
+                                fontSize: 10.5,
+                                color: muted,
+                              ),
+                            ),
                   ],
                 ),
               ],

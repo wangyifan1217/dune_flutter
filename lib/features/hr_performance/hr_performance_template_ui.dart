@@ -82,9 +82,13 @@ ThemeData hrConfigTheme(BuildContext context) {
       tertiary: accent,
       onTertiary: onAccent,
     ),
+    dialogTheme: base.dialogTheme.copyWith(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      surfaceTintColor: Colors.transparent,
+    ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
-      fillColor: hrConfigSurface(context, const Color(0xFFF7F6FA)),
+      fillColor: hrConfigSurface(context, const Color(0xFFF5F5F7)),
       isDense: true,
       contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       hintStyle: TextStyle(
@@ -92,15 +96,15 @@ ThemeData hrConfigTheme(BuildContext context) {
         color: hrConfigColor(context, const Color(0xFFA39BAE)),
       ),
       border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(12),
         borderSide: BorderSide.none,
       ),
       enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(12),
         borderSide: BorderSide.none,
       ),
       focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(12),
         borderSide: BorderSide(color: accent, width: 1.2),
       ),
     ),
@@ -108,8 +112,8 @@ ThemeData hrConfigTheme(BuildContext context) {
       style: FilledButton.styleFrom(
         backgroundColor: accent,
         foregroundColor: onAccent,
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 13),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(11)),
         textStyle: base.textTheme.labelLarge?.copyWith(
           fontSize: 13,
           fontWeight: FontWeight.w600,

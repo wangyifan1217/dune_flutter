@@ -276,6 +276,9 @@ class _HrPerformanceDetailState extends State<HrPerformanceDetail> {
             final confirmed = await showDialog<bool>(
               context: context,
               builder: (context) => AlertDialog(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(18),
+                ),
                 title: const Text('确认终审通过'),
                 content: Text(
                   '确认通过 ${_record.name} 的绩效考核？\n当前得分 ${_record.snapshot['total'] ?? '—'} · 等级 ${_record.snapshot['grade'] ?? '—'} · 系数 ${_record.snapshot['coefficient'] ?? '—'}\n通过后结果立即下发给员工。',
@@ -1672,7 +1675,7 @@ class _HrActionButton extends StatelessWidget {
         ),
         minimumSize: const Size(0, 36),
         padding: const EdgeInsets.symmetric(horizontal: 14),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(11)),
         textStyle: DunesTypography.sans(
           fontSize: 13,
           fontWeight: FontWeight.w600,

@@ -107,6 +107,7 @@ class _HrPerformanceNoticePageState extends State<HrPerformanceNoticePage> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
         title: const Text('清空绩效提醒'),
         content: const Text('只清空这里的提醒记录，不影响已填写的考核表。'),
         actions: [

@@ -1,7 +1,9 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
+import '../../core/theme/dunes_theme.dart';
 import 'hr_performance_service.dart';
 import 'hr_performance_template_ui.dart';
 import 'hr_performance_task_evidence.dart';
@@ -29,8 +31,27 @@ Future<bool> hrConfirmAction(
       builder: (context) => Theme(
         data: hrConfigTheme(context),
         child: AlertDialog(
-          title: Text(title.startsWith('确认') ? title : '确认$title'),
-          content: SingleChildScrollView(child: Text(message)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18),
+          ),
+          title: Text(
+            title.startsWith('确认') ? title : '确认$title',
+            style: DunesTypography.sans(
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+              color: DunesColors.resolve(context, DunesColors.text),
+            ),
+          ),
+          content: SingleChildScrollView(
+            child: Text(
+              message,
+              style: DunesTypography.sans(
+                fontSize: 13.5,
+                height: 1.5,
+                color: DunesColors.resolve(context, DunesColors.text2),
+              ),
+            ),
+          ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context, false),
@@ -38,7 +59,15 @@ Future<bool> hrConfirmAction(
             ),
             FilledButton(
               key: const ValueKey('hr-confirm-action'),
-              onPressed: () => Navigator.pop(context, true),
+              style: FilledButton.styleFrom(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+              onPressed: () {
+                HapticFeedback.selectionClick();
+                Navigator.pop(context, true);
+              },
               child: const Text('确认提交'),
             ),
           ],
@@ -67,28 +96,52 @@ Future<Map<String, dynamic>?> hrFormSheet(
     Theme(
       data: hrConfigTheme(context),
       child: StatefulBuilder(
-        builder: (context, update) => Padding(
-          padding: EdgeInsets.zero,
-          child: SizedBox(
+        builder: (context, update) {
+          final isDark = Theme.of(context).brightness == Brightness.dark;
+          final border = DunesColors.resolve(
+            context,
+            const Color(0xFFE5E5EA),
+            role: DunesColorRole.border,
+          );
+          final subtleBg = hrConfigSurface(
+            context,
+            isDark ? const Color(0xFF282538) : const Color(0xFFF5F5F7),
+          );
+          return SizedBox(
             width: double.infinity,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Padding(
-                  padding: const EdgeInsets.all(16),
+                Container(
+                  padding: const EdgeInsets.fromLTRB(20, 14, 12, 12),
+                  decoration: BoxDecoration(
+                    border: Border(
+                      bottom: BorderSide(
+                        color: border.withValues(alpha: 0.6),
+                        width: 0.5,
+                      ),
+                    ),
+                  ),
                   child: Row(
                     children: [
                       Expanded(
                         child: Text(
                           title,
-                          style: Theme.of(context).textTheme.titleLarge,
+                          style: DunesTypography.sans(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.text,
+                            ),
+                          ),
                         ),
                       ),
                       IconButton(
                         onPressed: submitting
                             ? null
                             : () => Navigator.pop(context),
-                        icon: const Icon(Icons.close),
+                        icon: const Icon(Icons.close_rounded, size: 20),
                       ),
                     ],
                   ),
@@ -96,22 +149,67 @@ Future<Map<String, dynamic>?> hrFormSheet(
                 Flexible(
                   fit: FlexFit.loose,
                   child: SingleChildScrollView(
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    padding: const EdgeInsets.fromLTRB(20, 14, 20, 16),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        if (message != null)
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 16),
-                            child: Text(message),
+                        if (message != null && message.trim().isNotEmpty)
+                          Container(
+                            margin: const EdgeInsets.only(bottom: 14),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 10,
+                            ),
+                            decoration: BoxDecoration(
+                              color: subtleBg,
+                              borderRadius: BorderRadius.circular(11),
+                            ),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Icon(
+                                  Icons.info_outline_rounded,
+                                  size: 16,
+                                  color: hrConfigColor(
+                                    context,
+                                    DunesColors.brandPurple,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    message,
+                                    style: DunesTypography.sans(
+                                      fontSize: 12.5,
+                                      height: 1.45,
+                                      color: DunesColors.resolve(
+                                        context,
+                                        DunesColors.text2,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ...fields(values, update),
                         if (error != null && submitInSheet == null)
-                          Padding(
-                            padding: const EdgeInsets.all(12),
+                          Container(
+                            margin: const EdgeInsets.only(top: 10),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 9,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.error.withValues(alpha: 0.08),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
                             child: Text(
                               error!,
                               style: TextStyle(
+                                fontSize: 12.5,
                                 color: Theme.of(context).colorScheme.error,
                               ),
                             ),
@@ -122,67 +220,112 @@ Future<Map<String, dynamic>?> hrFormSheet(
                 ),
                 if (error != null && submitInSheet != null)
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
-                    child: Text(
-                      error!,
-                      key: const ValueKey('hr-sheet-submit-error'),
-                      maxLines: 3,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.error,
+                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 4),
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.error.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        error!,
+                        key: const ValueKey('hr-sheet-submit-error'),
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          color: Theme.of(context).colorScheme.error,
+                        ),
                       ),
                     ),
                   ),
-                Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: FilledButton(
-                    key: const ValueKey('hr-sheet-submit'),
-                    onPressed: submitting
-                        ? null
-                        : () async {
-                            try {
-                              final result = submit(values);
-                              if (submitInSheet != null) {
-                                update(() {
-                                  submitting = true;
-                                  error = null;
-                                });
-                              }
-                              if (confirmSubmission &&
-                                  !await hrConfirmAction(
-                                    context,
-                                    title: title,
-                                    message:
-                                        confirmationMessage?.call() ??
-                                        '$title\n${message ?? '请核对填写的内容，确认后提交。'}${hrText(result['reason']).isEmpty ? '' : '\n原因：${result['reason']}'}${hrText(result['target']).isEmpty ? '' : '\n目标阶段：${hrPerformanceStageLabels[hrText(result['target'])] ?? result['target']}'}',
-                                  )) {
-                                return;
-                              }
-                              if (!context.mounted) return;
-                              if (submitInSheet != null) {
-                                await submitInSheet(result);
-                              }
-                              if (!context.mounted) return;
-                              Navigator.pop(context, result);
-                            } on FormatException catch (e) {
-                              if (context.mounted) {
-                                update(() => error = e.message);
-                              }
-                            } catch (e) {
-                              if (context.mounted) update(() => error = '$e');
-                            } finally {
-                              if (context.mounted && submitting) {
-                                update(() => submitting = false);
-                              }
-                            }
-                          },
-                    child: Text(submitting ? '提交中…' : submitLabel),
+                Container(
+                  padding: const EdgeInsets.fromLTRB(20, 10, 20, 12),
+                  decoration: BoxDecoration(
+                    color: subtleBg.withValues(alpha: 0.65),
+                    border: Border(
+                      top: BorderSide(
+                        color: border.withValues(alpha: 0.6),
+                        width: 0.5,
+                      ),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      TextButton(
+                        onPressed: submitting
+                            ? null
+                            : () => Navigator.pop(context),
+                        child: const Text('取消'),
+                      ),
+                      const SizedBox(width: 8),
+                      FilledButton(
+                        key: const ValueKey('hr-sheet-submit'),
+                        style: FilledButton.styleFrom(
+                          minimumSize: const Size(0, 38),
+                          padding: const EdgeInsets.symmetric(horizontal: 18),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                        onPressed: submitting
+                            ? null
+                            : () async {
+                                HapticFeedback.selectionClick();
+                                try {
+                                  final result = submit(values);
+                                  if (submitInSheet != null) {
+                                    update(() {
+                                      submitting = true;
+                                      error = null;
+                                    });
+                                  }
+                                  if (confirmSubmission &&
+                                      !await hrConfirmAction(
+                                        context,
+                                        title: title,
+                                        message:
+                                            confirmationMessage?.call() ??
+                                            '$title\n${message ?? '请核对填写的内容，确认后提交。'}${hrText(result['reason']).isEmpty ? '' : '\n原因：${result['reason']}'}${hrText(result['target']).isEmpty ? '' : '\n目标阶段：${hrPerformanceStageLabels[hrText(result['target'])] ?? result['target']}'}',
+                                      )) {
+                                    return;
+                                  }
+                                  if (!context.mounted) return;
+                                  if (submitInSheet != null) {
+                                    await submitInSheet(result);
+                                  }
+                                  if (!context.mounted) return;
+                                  Navigator.pop(context, result);
+                                } on FormatException catch (e) {
+                                  if (context.mounted) {
+                                    update(() => error = e.message);
+                                  }
+                                } catch (e) {
+                                  if (context.mounted) {
+                                    update(() => error = '$e');
+                                  }
+                                } finally {
+                                  if (context.mounted && submitting) {
+                                    update(() => submitting = false);
+                                  }
+                                }
+                              },
+                        child: Text(submitting ? '提交中…' : submitLabel),
+                      ),
+                    ],
                   ),
                 ),
               ],
             ),
-          ),
-        ),
+          );
+        },
       ),
     ),
     maxWidth: maxWidth,
@@ -194,16 +337,19 @@ Widget hrReasonField(
   Map<String, dynamic> values, {
   String label = '说明 / 理由',
   String keyName = 'reason',
+  TextEditingController? controller,
 }) => Padding(
-  padding: const EdgeInsets.symmetric(vertical: 12),
+  padding: const EdgeInsets.symmetric(vertical: 10),
   child: TextFormField(
     key: ValueKey('hr-$keyName'),
-    initialValue: hrText(values[keyName]),
+    controller: controller,
+    initialValue: controller == null ? hrText(values[keyName]) : null,
     minLines: 2,
     maxLines: 5,
     decoration: InputDecoration(
       labelText: label,
-      border: const OutlineInputBorder(),
+      hintText: '请填写$label',
+      filled: true,
     ),
     onChanged: (v) => values[keyName] = v,
   ),
@@ -261,6 +407,12 @@ Future<Map<String, dynamic>?> showHrReasonSheet(
   String Function(String target)? scopePreview,
 }) {
   final values = {'reason': '', 'target': targets?.firstOrNull};
+  final reasonCtrl = TextEditingController();
+  const quickReasons = [
+    ('分数偏差较大', '分数与初评偏差较大，请核实依据'),
+    ('补充佐证材料', '请补充关键工作成果与佐证材料'),
+    ('系数需校准', '绩效等级/系数需重新校准'),
+  ];
   return hrFormSheet(
     context,
     title: title,
@@ -296,7 +448,45 @@ Future<Map<String, dynamic>?> showHrReasonSheet(
           onChanged: (x) => update(() => v['target'] = x),
         ),
       if (scopePreview != null) Text(scopePreview(hrText(v['target']))),
-      hrReasonField(v),
+      if (targets == null && minLength > 0) ...[
+        Text(
+          '快捷理由',
+          style: DunesTypography.sans(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: DunesColors.resolve(context, DunesColors.text2),
+          ),
+        ),
+        const SizedBox(height: 6),
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: [
+            for (final item in quickReasons)
+              ActionChip(
+                label: Text(item.$1),
+                labelStyle: DunesTypography.sans(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w500,
+                  color: DunesColors.resolve(context, DunesColors.text),
+                ),
+                backgroundColor: hrConfigSurface(
+                  context,
+                  const Color(0xFFF5F5F7),
+                ),
+                side: BorderSide.none,
+                shape: const StadiumBorder(),
+                onPressed: () {
+                  HapticFeedback.selectionClick();
+                  reasonCtrl.text = item.$2;
+                  update(() => v['reason'] = item.$2);
+                },
+              ),
+          ],
+        ),
+        const SizedBox(height: 4),
+      ],
+      hrReasonField(v, controller: reasonCtrl),
     ],
     submit: (v) {
       if (hrText(v['reason']).runes.length < minLength) {
@@ -307,7 +497,7 @@ Future<Map<String, dynamic>?> showHrReasonSheet(
         if (targets != null) 'target': v['target'],
       };
     },
-  );
+  ).whenComplete(reasonCtrl.dispose);
 }
 
 String hrScoreEditImpact(HrPerformanceRecord record) =>
@@ -376,30 +566,50 @@ Future<Map<String, dynamic>?> showHrScoreSheet(
     submitLabel: self ? '提交自评' : (initial ? '提交初评' : '保存并提交'),
     submitInSheet: submitInSheet,
     message: hrEdit
-        ? '请逐项核对得分并填写改分理由。${hrScoreEditImpact(record)}'
+        ? '可同时核对或修改每项指标得分与备注，并填写改分理由。${hrScoreEditImpact(record)}'
         : initial
         ? '按每项满分填写得分；无建议分、与建议分不一致或低于备注线时须填写备注。'
         : '改动任何分数都须填写改分理由。',
     fields: (v, update) => [
-      Padding(
-        padding: const EdgeInsets.only(bottom: 8),
-        child: Text(
-          '共 ${lines.length} 项 · ${lines.where((l) => scoreError(l) == null && (!needsRemark(l) || hrText(l['remark']).isNotEmpty)).length} 项已填写完整',
-          style: TextStyle(
-            fontSize: 13,
-            color: hrConfigColor(context, hrConfigPurple),
-            fontWeight: FontWeight.w600,
-          ),
+      Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+        decoration: BoxDecoration(
+          color: hrConfigSurface(context, DunesColors.brandPurpleSoft),
+          borderRadius: BorderRadius.circular(11),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                '共 ${lines.length} 项 · ${lines.where((l) => scoreError(l) == null && (!needsRemark(l) || hrText(l['remark']).isNotEmpty)).length} 项已填写完整',
+                style: DunesTypography.sans(
+                  fontSize: 12.5,
+                  color: hrConfigColor(context, hrConfigPurple),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            Text(
+              '预估总分 ${(lines.fold<double>(0, (n, l) => n + (double.tryParse('${l['score']}') ?? 0) * (l['directScore'] == true ? 1 : ((l['weight'] as num?)?.toDouble() ?? 0) / 100)) + record.bonuses.fold<double>(0, (n, b) => n + ((b['points'] as num?)?.toDouble() ?? 0))).toStringAsFixed(1)}',
+              style: DunesTypography.sans(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: hrConfigColor(context, hrConfigPurple),
+              ),
+            ),
+          ],
         ),
       ),
       for (final line in lines)
-        Card(
-          color: hrConfigSurface(context, Colors.white),
-          elevation: 0,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-            side: BorderSide(
-              color: hrConfigBorder(context, const Color(0xFFECE7F3)),
+        Container(
+          margin: const EdgeInsets.only(bottom: 10),
+          decoration: BoxDecoration(
+            color: hrConfigSurface(context, Colors.white),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: hrConfigBorder(context, const Color(0xFFE5E5EA)),
+              width: 0.7,
             ),
           ),
           child: Padding(
@@ -407,45 +617,121 @@ Future<Map<String, dynamic>?> showHrScoreSheet(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  '${line['name']}',
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  self && line['directScore'] == true
-                      ? '本项满分 ${line['weight']} 分 · 建议分 ${line['suggestedScore'] ?? '无'}'
-                      : '权重 ${line['weight']}% · 建议分 ${line['suggestedScore'] ?? '无'}',
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: Color(0xFF827A8C),
-                  ),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        '${line['name']}',
+                        style: DunesTypography.sans(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: DunesColors.resolve(context, DunesColors.text),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 7,
+                        vertical: 2.5,
+                      ),
+                      decoration: BoxDecoration(
+                        color: hrConfigSurface(
+                          context,
+                          DunesColors.brandPurpleSoft,
+                        ),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        self && line['directScore'] == true
+                            ? '满分 ${line['weight']} 分'
+                            : '权重 ${line['weight']}%',
+                        style: DunesTypography.sans(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: hrConfigColor(context, hrConfigPurple),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 7,
+                        vertical: 2.5,
+                      ),
+                      decoration: BoxDecoration(
+                        color: hrConfigSurface(
+                          context,
+                          const Color(0xFFF5F5F7),
+                        ),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        '建议分 ${line['suggestedScore'] ?? '无'}',
+                        style: DunesTypography.sans(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.text2,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
                 if (hrText(line['instructions']).isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.only(top: 6),
                     child: Text(
                       hrText(line['instructions']),
-                      style: const TextStyle(fontSize: 12),
+                      style: DunesTypography.sans(
+                        fontSize: 12,
+                        color: DunesColors.resolve(context, DunesColors.text2),
+                      ),
                     ),
                   ),
-                for (final band in hrMaps(line['bands']))
-                  Text(
-                    '${band['min']}–${band['max']} 分：${band['description']}',
-                    style: const TextStyle(fontSize: 12, height: 1.4),
+                if (hrMaps(line['bands']).isNotEmpty)
+                  Container(
+                    width: double.infinity,
+                    margin: const EdgeInsets.only(top: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: hrConfigSurface(
+                        context,
+                        const Color(0xFFF5F5F7),
+                      ),
+                      borderRadius: BorderRadius.circular(9),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        for (final band in hrMaps(line['bands']))
+                          Text(
+                            '${band['min']}–${band['max']} 分：${band['description']}',
+                            style: DunesTypography.sans(
+                              fontSize: 11.5,
+                              height: 1.45,
+                              color: DunesColors.resolve(
+                                context,
+                                DunesColors.text2,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
-                const SizedBox(height: 8),
-                ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 500),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      SizedBox(
-                        width: 100,
-                        child: Column(
+                const SizedBox(height: 10),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SizedBox(
+                      width: 112,
+                      child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
@@ -481,14 +767,18 @@ Future<Map<String, dynamic>?> showHrScoreSheet(
                           ],
                         ),
                       ),
-                      if (initial) ...[
+                      if (initial || hrEdit) ...[
                         const SizedBox(width: 10),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                needsRemark(line) ? '评分备注（必填）' : '评分备注（选填）',
+                                hrEdit
+                                    ? '指标备注（可查看/修改）'
+                                    : needsRemark(line)
+                                    ? '评分备注（必填）'
+                                    : '评分备注（选填）',
                                 style: TextStyle(
                                   fontSize: 12,
                                   color: hrConfigColor(
@@ -504,10 +794,10 @@ Future<Map<String, dynamic>?> showHrScoreSheet(
                                 ),
                                 initialValue: hrText(line['remark']),
                                 style: const TextStyle(fontSize: 13),
-                                decoration: const InputDecoration(
-                                  hintText: '填写评分说明',
+                                decoration: InputDecoration(
+                                  hintText: hrEdit ? '可查看或修改该项备注' : '填写评分说明',
                                   isDense: true,
-                                  contentPadding: EdgeInsets.symmetric(
+                                  contentPadding: const EdgeInsets.symmetric(
                                     horizontal: 12,
                                     vertical: 10,
                                   ),
@@ -523,7 +813,6 @@ Future<Map<String, dynamic>?> showHrScoreSheet(
                       ],
                     ],
                   ),
-                ),
                 if (scoreError(line) != null)
                   Padding(
                     padding: const EdgeInsets.only(top: 5),
@@ -552,8 +841,21 @@ Future<Map<String, dynamic>?> showHrScoreSheet(
             ),
           ),
         ),
-      Text(
-        '指标得分：${lines.fold<double>(0, (n, l) => n + (double.tryParse('${l['score']}') ?? 0) * (l['directScore'] == true ? 1 : ((l['weight'] as num?)?.toDouble() ?? 0) / 100)).toStringAsFixed(1)}；本月加减分：${record.bonuses.fold<double>(0, (n, b) => n + ((b['points'] as num?)?.toDouble() ?? 0)).toStringAsFixed(1)}',
+      Container(
+        margin: const EdgeInsets.only(top: 2, bottom: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+        decoration: BoxDecoration(
+          color: hrConfigSurface(context, const Color(0xFFF5F5F7)),
+          borderRadius: BorderRadius.circular(11),
+        ),
+        child: Text(
+          '指标得分：${lines.fold<double>(0, (n, l) => n + (double.tryParse('${l['score']}') ?? 0) * (l['directScore'] == true ? 1 : ((l['weight'] as num?)?.toDouble() ?? 0) / 100)).toStringAsFixed(1)}  ·  本月加减分：${record.bonuses.fold<double>(0, (n, b) => n + ((b['points'] as num?)?.toDouble() ?? 0)).toStringAsFixed(1)}',
+          style: DunesTypography.sans(
+            fontSize: 12.5,
+            fontWeight: FontWeight.w600,
+            color: DunesColors.resolve(context, DunesColors.text),
+          ),
+        ),
       ),
       if (!initial) hrReasonField(v, label: '改分理由（改动时必填）'),
     ],
@@ -653,16 +955,45 @@ Future<Map<String, dynamic>?> showHrAdjustmentSheet(
     maxWidth: 760,
     values: {'reason': ''},
     message: '一次只能有一条待审批申请。主管通过前，原考核表保持不变。',
-    fields: (v, update) => [
-      for (final i in indicators.values)
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(12),
+    fields: (v, update) {
+      final weightSum = weights.values.fold<double>(
+        0,
+        (a, b) => a + (double.tryParse(b) ?? 0),
+      );
+      final weightValid = (weightSum - 100).abs() < 0.01;
+      return [
+        for (final i in indicators.values)
+          Container(
+            margin: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.fromLTRB(12, 6, 12, 10),
+            decoration: BoxDecoration(
+              color: weights.containsKey('${i['id']}')
+                  ? hrConfigSurface(context, DunesColors.brandPurpleSoft)
+                        .withValues(alpha: 0.45)
+                  : hrConfigSurface(context, const Color(0xFFF5F5F7)),
+              borderRadius: BorderRadius.circular(13),
+              border: Border.all(
+                color: weights.containsKey('${i['id']}')
+                    ? hrConfigColor(
+                        context,
+                        hrConfigPurple,
+                      ).withValues(alpha: 0.3)
+                    : hrConfigBorder(context, const Color(0xFFE5E5EA)),
+                width: 0.7,
+              ),
+            ),
             child: Column(
               children: [
                 CheckboxListTile(
                   contentPadding: EdgeInsets.zero,
-                  title: Text('${i['name']}'),
+                  title: Text(
+                    '${i['name']}',
+                    style: DunesTypography.sans(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w600,
+                      color: DunesColors.resolve(context, DunesColors.text),
+                    ),
+                  ),
                   subtitle: i['enabled'] != true
                       ? const Text('指标已停用，现有快照可保留')
                       : null,
@@ -671,6 +1002,7 @@ Future<Map<String, dynamic>?> showHrAdjustmentSheet(
                       i['enabled'] != true && !weights.containsKey('${i['id']}')
                       ? null
                       : (checked) => update(() {
+                          HapticFeedback.selectionClick();
                           if (checked == true) {
                             weights['${i['id']}'] = '${i['weight'] ?? 0}';
                           } else {
@@ -682,7 +1014,10 @@ Future<Map<String, dynamic>?> showHrAdjustmentSheet(
                   TextFormField(
                     key: ValueKey('hr-weight-${i['id']}'),
                     initialValue: weights['${i['id']}'],
-                    decoration: const InputDecoration(labelText: '权重 %'),
+                    decoration: const InputDecoration(
+                      labelText: '权重 %',
+                      filled: true,
+                    ),
                     keyboardType: const TextInputType.numberWithOptions(
                       decimal: true,
                     ),
@@ -691,27 +1026,63 @@ Future<Map<String, dynamic>?> showHrAdjustmentSheet(
               ],
             ),
           ),
+        Container(
+          margin: const EdgeInsets.only(top: 2, bottom: 10),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: (weightValid
+                    ? const Color(0xFF1F9D76)
+                    : const Color(0xFFD97706))
+                .withValues(alpha: 0.10),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Text(
+            '权重合计 ${weightSum.toStringAsFixed(1)}%${weightValid ? '（已满 100%）' : '（需等于 100%）'}',
+            key: const ValueKey('hr-weight-total'),
+            style: DunesTypography.sans(
+              fontSize: 12.5,
+              fontWeight: FontWeight.w600,
+              color: weightValid
+                  ? const Color(0xFF1A8463)
+                  : const Color(0xFFD97706),
+            ),
+          ),
         ),
-      Text(
-        '权重合计 ${weights.values.fold<double>(0, (a, b) => a + (double.tryParse(b) ?? 0)).toStringAsFixed(1)}%',
-        key: const ValueKey('hr-weight-total'),
-      ),
-      const Divider(),
-      const Text('任务证据（仅本人在考核月完成的任务）'),
-      for (final e in taskMap.entries)
-        CheckboxListTile(
-          title: HrTaskEvidenceContent(task: e.value, ownerName: record.name),
-          value: selected.contains(e.key),
-          onChanged: (x) => update(() {
-            if (x == true) {
-              selected.add(e.key);
-            } else {
-              selected.remove(e.key);
-            }
-          }),
+        Text(
+          '任务证据（仅本人在考核月完成的任务）',
+          style: DunesTypography.sans(
+            fontSize: 12.5,
+            fontWeight: FontWeight.w600,
+            color: DunesColors.resolve(context, DunesColors.text2),
+          ),
         ),
-      hrReasonField(v, label: '调整原因（必填）'),
-    ],
+        const SizedBox(height: 6),
+        for (final e in taskMap.entries)
+          Container(
+            margin: const EdgeInsets.only(bottom: 6),
+            decoration: BoxDecoration(
+              color: hrConfigSurface(context, const Color(0xFFF5F5F7)),
+              borderRadius: BorderRadius.circular(11),
+            ),
+            child: CheckboxListTile(
+              title: HrTaskEvidenceContent(
+                task: e.value,
+                ownerName: record.name,
+              ),
+              value: selected.contains(e.key),
+              onChanged: (x) => update(() {
+                HapticFeedback.selectionClick();
+                if (x == true) {
+                  selected.add(e.key);
+                } else {
+                  selected.remove(e.key);
+                }
+              }),
+            ),
+          ),
+        hrReasonField(v, label: '调整原因（必填）'),
+      ];
+    },
     submit: (v) {
       final total = weights.values.fold<double>(0, (a, b) => a + hrNumber(b));
       if ((total - 100).abs() > 0.00001) {

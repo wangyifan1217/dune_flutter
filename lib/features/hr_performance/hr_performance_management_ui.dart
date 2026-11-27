@@ -146,23 +146,39 @@ Future<Map<String, dynamic>?> showHrExportSheet(
           query = '';
         }),
       ),
+      const SizedBox(height: 10),
       TextField(
         key: ValueKey('hr-export-search-$mode'),
         decoration: InputDecoration(
-          labelText: mode == 'people' ? '搜索姓名、部门、岗位' : '搜索部门',
+          hintText: mode == 'people' ? '搜索姓名、部门、岗位' : '搜索部门',
+          prefixIcon: const Icon(Icons.search_rounded, size: 18),
         ),
         onChanged: (s) => update(() => query = s.trim()),
       ),
       if (mode == 'department')
-        CheckboxListTile(
-          title: const Text('包含下级部门'),
-          value: descendants,
-          onChanged: (b) => update(() => descendants = b == true),
+        Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: CheckboxListTile(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+            title: const Text('包含下级部门'),
+            value: descendants,
+            onChanged: (b) => update(() => descendants = b == true),
+          ),
         ),
-      Padding(
-        padding: const EdgeInsets.symmetric(vertical: 12),
+      Container(
+        margin: const EdgeInsets.symmetric(vertical: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF3EEFA),
+          borderRadius: BorderRadius.circular(10),
+        ),
         child: Text(
           '将${forForward ? '转发' : '导出'} ${targets().length} 人${mode == 'department' ? ' · 已选 ${departmentIds.length} 个部门' : ''}',
+          style: const TextStyle(
+            fontSize: 12.5,
+            fontWeight: FontWeight.w600,
+            color: Color(0xFF7B5CD8),
+          ),
         ),
       ),
       if (mode == 'people')

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
+import 'package:flutter/services.dart';
 
 import '../../core/theme/dunes_theme.dart';
 import '../auth/auth_session.dart';
@@ -14,7 +15,6 @@ import '../conversation/conversation_service.dart';
 import '../conversation/conversation_picker_sheet.dart';
 import '../shell/dunes_toast.dart';
 import 'dart:convert';
-import 'dart:typed_data';
 import 'package:file_selector/file_selector.dart';
 import 'hr_performance_service.dart';
 import 'hr_performance_template_ui.dart';
@@ -529,19 +529,13 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
     return '${r.stageLabel} · 当前环节或权限不支持此操作';
   }
 
-  Future<void> _showBatchUnavailable(String message) => showDialog<void>(
-    context: context,
-    builder: (context) => AlertDialog(
-      title: const Text('没有可办理的人员'),
-      content: SingleChildScrollView(child: Text(message)),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('关闭'),
-        ),
-      ],
-    ),
-  );
+  Future<void> _showBatchUnavailable(String message) async {
+    showDunesToast(
+      context,
+      '没有可办理的人员：$message',
+      kind: DunesToastKind.error,
+    );
+  }
 
   List<HrPerformanceRecord> _deptRecords(_HrRosterDept node) {
     final people = <HrPerformanceRecord>[...node.people];
@@ -913,6 +907,17 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
           ),
           child: const Text('批量督办'),
         ),
+        if (_operationRows.any((r) => r.actions.contains('approve_hr')))
+          FilledButton.tonal(
+            onPressed: _busy ? null : () => _batch('approve_hr'),
+            style: actionStyle.copyWith(
+              backgroundColor: WidgetStatePropertyAll(
+                purple.withValues(alpha: 0.12),
+              ),
+              foregroundColor: WidgetStatePropertyAll(purple),
+            ),
+            child: const Text('批量复核'),
+          ),
         if (_operationRows.any((r) => r.actions.contains('reject_final')))
           OutlinedButton(
             onPressed: _busy ? null : () => _batch('reject_final'),
@@ -942,15 +947,29 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
     return Container(
       key: const ValueKey('hr-batch-actions'),
       margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
       decoration: BoxDecoration(
         color: DunesColors.resolve(
           context,
           Colors.white,
           role: DunesColorRole.surface,
         ),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: border),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFE5E5EA),
+            role: DunesColorRole.border,
+          ).withValues(alpha: 0.8),
+          width: 0.6,
+        ),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x0A000000),
+            blurRadius: 12,
+            offset: Offset(0, 3),
+          ),
+        ],
       ),
       child: LayoutBuilder(
         builder: (context, constraints) {
@@ -1420,8 +1439,10 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
         progress.update(record.stage, (count) => count + 1, ifAbsent: () => 1);
         final person = <String, dynamic>{
           'id': record.id,
+          'userId': record.userId,
           'name': record.name,
           'department': record.department,
+          if (record.position.isNotEmpty) 'position': record.position,
           'stage': record.stage,
         };
         // Use the viewer-filtered roster response and copy only card fields.
@@ -1620,31 +1641,34 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
       if (!mounted) return;
       final failures = result.where((v) => v['success'] != true).toList();
       final names = {for (final r in records) r.id: r.name};
-      await showDialog<void>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: Text(
-            '成功 ${result.length - failures.length} 人 · 失败 ${failures.length} 人',
-          ),
-          content: SingleChildScrollView(
-            child: Text(
-              failures.isEmpty
-                  ? '操作已完成'
-                  : failures
-                        .map(
-                          (v) => '${names[v['id']] ?? v['id']}：${v['message']}',
-                        )
-                        .join('\n'),
+      if (failures.isEmpty) {
+        showDunesToast(context, '已成功处理 ${result.length} 人');
+      } else {
+        await showDialog<void>(
+          context: context,
+          builder: (context) => AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(18),
             ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('关闭'),
+            title: Text(
+              '成功 ${result.length - failures.length} 人 · 失败 ${failures.length} 人',
             ),
-          ],
-        ),
-      );
+            content: SingleChildScrollView(
+              child: Text(
+                failures
+                    .map((v) => '${names[v['id']] ?? v['id']}：${v['message']}')
+                    .join('\n'),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('关闭'),
+              ),
+            ],
+          ),
+        );
+      }
       await _load();
     } catch (e) {
       if (mounted) showDunesToast(context, '$e', kind: DunesToastKind.error);
@@ -2198,8 +2222,19 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
       await _showBatchUnavailable(preview);
       return;
     }
+    final hasWarnings = rows.any((r) => r.warnings.isNotEmpty);
     final reason = action == 'urge'
         ? await showHrUrgeSheet(context, scope: preview)
+        : action == 'approve_hr'
+        ? await showHrReasonSheet(
+            context,
+            title: '批量 HR 复核',
+            minLength: hasWarnings ? 1 : 0,
+            submitLabel: '确认批量复核',
+            message: hasWarnings
+                ? '$preview\n部分人员存在预警，请填写 HR 复核说明。'
+                : '$preview\n确认后将批量通过 HR 复核并进入待终审。',
+          )
         : await showHrReasonSheet(
             context,
             title: '批量驳回至初评',
@@ -2218,8 +2253,11 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
           failed.isEmpty
               ? action == 'urge'
                     ? '已提交 ${result.length} 条督办，等待消息发送'
+                    : action == 'approve_hr'
+                    ? '已完成 ${result.length} 人批量 HR 复核'
                     : '已完成 ${result.length} 人'
               : '完成 ${result.length - failed.length} 人；${failed.map((r) => '${names[r['id']] ?? r['id']}：${r['message']}').join('；')}',
+          kind: failed.isEmpty ? DunesToastKind.normal : DunesToastKind.error,
         );
       }
       await _load();
@@ -3327,7 +3365,12 @@ class _HrActionButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return TextButton.icon(
-      onPressed: action.onTap,
+      onPressed: action.onTap == null
+          ? null
+          : () {
+              HapticFeedback.selectionClick();
+              action.onTap!();
+            },
       style: TextButton.styleFrom(
         foregroundColor: DunesColors.resolve(
           context,
@@ -3344,19 +3387,20 @@ class _HrActionButton extends StatelessWidget {
         ),
         disabledBackgroundColor: DunesColors.resolve(
           context,
-          const Color(0xFFF3F1F6),
+          const Color(0xFFF5F5F7),
           role: DunesColorRole.surface,
         ),
         side: BorderSide(
           color: DunesColors.resolve(
             context,
-            _hrLine,
+            const Color(0xFFE5E5EA),
             role: DunesColorRole.border,
           ),
+          width: 0.7,
         ),
         minimumSize: const Size(0, 34),
         padding: const EdgeInsets.symmetric(horizontal: 12),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
       ),
       icon: Icon(action.icon, size: 16),
@@ -3464,13 +3508,14 @@ class _HrSearchField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final border = OutlineInputBorder(
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: BorderRadius.circular(999),
       borderSide: BorderSide(
         color: DunesColors.resolve(
           context,
-          _hrLine,
+          const Color(0xFFE5E5EA),
           role: DunesColorRole.border,
         ),
+        width: 0.7,
       ),
     );
     return TextField(
@@ -3503,7 +3548,7 @@ class _HrSearchField extends StatelessWidget {
         filled: true,
         fillColor: DunesColors.resolve(
           context,
-          Colors.white,
+          const Color(0xFFF5F5F7),
           role: DunesColorRole.surface,
         ),
         contentPadding: const EdgeInsets.symmetric(vertical: 8),
@@ -3516,6 +3561,7 @@ class _HrSearchField extends StatelessWidget {
               DunesColors.brandPurpleLine,
               role: DunesColorRole.border,
             ),
+            width: 1,
           ),
         ),
       ),

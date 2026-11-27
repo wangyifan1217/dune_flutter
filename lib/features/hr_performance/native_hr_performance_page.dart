@@ -1742,60 +1742,102 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
     HrPerformanceRecord record, {
     String? initialAction,
   }) async {
+    final navRows = _visible;
+    var current = record;
     await showGeneralDialog<void>(
       context: context,
       barrierDismissible: true,
       barrierLabel: '关闭考核详情',
-      pageBuilder: (context, animation, secondary) => Align(
-        alignment: Alignment.center,
-        child: SizedBox(
-          key: const ValueKey('hr-assessment-dialog'),
-          width: (MediaQuery.sizeOf(context).width - 48)
-              .clamp(0, 1180)
-              .toDouble(),
-          height: MediaQuery.sizeOf(context).height - 64,
-          child: Theme(
-            data: hrConfigTheme(context),
-            child: Material(
-              borderRadius: BorderRadius.circular(18),
-              clipBehavior: Clip.antiAlias,
-              child: SafeArea(
-                child: Column(
-                  children: [
-                    Row(
+      pageBuilder: (context, animation, secondary) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          final idx = navRows.indexWhere((r) => r.id == current.id);
+          final hasPrev = idx > 0;
+          final hasNext = idx >= 0 && idx < navRows.length - 1;
+          return Align(
+            alignment: Alignment.center,
+            child: SizedBox(
+              key: const ValueKey('hr-assessment-dialog'),
+              width: (MediaQuery.sizeOf(context).width - 48)
+                  .clamp(0, 1180)
+                  .toDouble(),
+              height: MediaQuery.sizeOf(context).height - 64,
+              child: Theme(
+                data: hrConfigTheme(context),
+                child: Material(
+                  borderRadius: BorderRadius.circular(18),
+                  clipBehavior: Clip.antiAlias,
+                  child: SafeArea(
+                    child: Column(
                       children: [
-                        IconButton(
-                          onPressed: () => Navigator.pop(context),
-                          icon: const Icon(Icons.close),
+                        Row(
+                          children: [
+                            IconButton(
+                              onPressed: () => Navigator.pop(context),
+                              icon: const Icon(Icons.close),
+                            ),
+                            Expanded(child: Text('${current.name} · 考核详情')),
+                            if (navRows.length > 1 && idx >= 0) ...[
+                              IconButton(
+                                tooltip: '上一位',
+                                onPressed: hasPrev
+                                    ? () {
+                                        HapticFeedback.selectionClick();
+                                        setDialogState(
+                                          () => current = navRows[idx - 1],
+                                        );
+                                      }
+                                    : null,
+                                icon: const Icon(Icons.chevron_left_rounded),
+                              ),
+                              Text(
+                                '${idx + 1}/${navRows.length}',
+                                style: const TextStyle(fontSize: 12),
+                              ),
+                              IconButton(
+                                tooltip: '下一位',
+                                onPressed: hasNext
+                                    ? () {
+                                        HapticFeedback.selectionClick();
+                                        setDialogState(
+                                          () => current = navRows[idx + 1],
+                                        );
+                                      }
+                                    : null,
+                                icon: const Icon(Icons.chevron_right_rounded),
+                              ),
+                            ],
+                            if (_access.hr)
+                              TextButton.icon(
+                                onPressed: _busy
+                                    ? null
+                                    : () => _exportAssessment(person: current),
+                                icon: const Icon(Icons.download),
+                                label: const Text('导出考核表'),
+                              ),
+                          ],
                         ),
-                        Expanded(child: Text('${record.name} · 考核详情')),
-                        if (_access.hr)
-                          TextButton.icon(
-                            onPressed: _busy
-                                ? null
-                                : () => _exportAssessment(person: record),
-                            icon: const Icon(Icons.download),
-                            label: const Text('导出考核表'),
+                        Expanded(
+                          child: HrPerformanceDetail(
+                            key: ValueKey('hr-dialog-detail-${current.id}'),
+                            session: widget.session,
+                            record: current,
+                            service: _service,
+                            monthStarted: _monthStarted,
+                            hrAccess: _access.hr,
+                            onChanged: _load,
+                            initialAction: current.id == record.id
+                                ? initialAction
+                                : null,
                           ),
+                        ),
                       ],
                     ),
-                    Expanded(
-                      child: HrPerformanceDetail(
-                        session: widget.session,
-                        record: record,
-                        service: _service,
-                        monthStarted: _monthStarted,
-                        hrAccess: _access.hr,
-                        onChanged: _load,
-                        initialAction: initialAction,
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
               ),
             ),
-          ),
-        ),
+          );
+        },
       ),
     );
   }
@@ -2906,57 +2948,129 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
                         )
                       : wide
                       ? _assessmentTable(rows)
-                      : Row(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            if (!wide || !_rosterCollapsed)
-                              SizedBox(
-                                width: wide
-                                    ? (constraints.maxWidth < 1200 ? 300 : 360)
-                                    : constraints.maxWidth - 24,
-                                child: Column(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.stretch,
-                                  children: [
-                                    if (wide)
-                                      Row(
-                                        children: [
-                                          const SizedBox(width: 6),
-                                          Expanded(
-                                            child: Text(
-                                              '人员名单 · ${rows.length}',
-                                              style: TextStyle(
-                                                fontSize: 12,
-                                                fontWeight: FontWeight.w600,
-                                                color: DunesColors.resolve(
-                                                  context,
-                                                  DunesColors.text2,
+                      : CallbackShortcuts(
+                          bindings: {
+                            const SingleActivator(LogicalKeyboardKey.arrowUp):
+                                () {
+                                  if (!wide || rows.isEmpty) return;
+                                  final idx = _selected == null
+                                      ? 0
+                                      : rows.indexWhere(
+                                          (r) => r.id == _selected!.id,
+                                        );
+                                  if (idx > 0) {
+                                    HapticFeedback.selectionClick();
+                                    setState(() => _selected = rows[idx - 1]);
+                                  }
+                                },
+                            const SingleActivator(LogicalKeyboardKey.arrowDown):
+                                () {
+                                  if (!wide || rows.isEmpty) return;
+                                  final idx = _selected == null
+                                      ? -1
+                                      : rows.indexWhere(
+                                          (r) => r.id == _selected!.id,
+                                        );
+                                  if (idx < rows.length - 1) {
+                                    HapticFeedback.selectionClick();
+                                    setState(() => _selected = rows[idx + 1]);
+                                  }
+                                },
+                          },
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              if (!wide || !_rosterCollapsed)
+                                SizedBox(
+                                  width: wide
+                                      ? (constraints.maxWidth < 1200 ? 300 : 360)
+                                      : constraints.maxWidth - 24,
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.stretch,
+                                    children: [
+                                      if (wide || (_access.allowed && rows.isNotEmpty))
+                                        Row(
+                                          children: [
+                                            const SizedBox(width: 6),
+                                            Expanded(
+                                              child: Text(
+                                                '人员名单 · ${rows.length}',
+                                                style: TextStyle(
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: DunesColors.resolve(
+                                                    context,
+                                                    DunesColors.text2,
+                                                  ),
                                                 ),
                                               ),
                                             ),
-                                          ),
-                                          IconButton(
-                                            key: const ValueKey(
-                                              'hr-roster-collapse',
-                                            ),
-                                            tooltip: '收起人员名单',
-                                            onPressed: () => setState(
-                                              () => _rosterCollapsed = true,
-                                            ),
-                                            icon: const Icon(
-                                              Icons
-                                                  .keyboard_double_arrow_left_rounded,
-                                              size: 20,
-                                            ),
-                                            color: DunesColors.resolve(
-                                              context,
-                                              DunesColors.brandPurpleDeep,
-                                            ),
-                                            visualDensity:
-                                                VisualDensity.compact,
-                                          ),
-                                        ],
-                                      ),
+                                            if (_access.allowed && rows.isNotEmpty)
+                                              TextButton(
+                                                style: TextButton.styleFrom(
+                                                  visualDensity:
+                                                      VisualDensity.compact,
+                                                  padding:
+                                                      const EdgeInsets.symmetric(
+                                                        horizontal: 8,
+                                                      ),
+                                                  minimumSize: const Size(0, 28),
+                                                ),
+                                                onPressed: () {
+                                                  HapticFeedback.selectionClick();
+                                                  final allSelected = rows.every(
+                                                    (r) => _selectedIds
+                                                        .contains(r.id),
+                                                  );
+                                                  setState(() {
+                                                    if (allSelected) {
+                                                      for (final r in rows) {
+                                                        _selectedIds
+                                                            .remove(r.id);
+                                                      }
+                                                    } else {
+                                                      for (final r in rows) {
+                                                        _selectedIds.add(r.id);
+                                                      }
+                                                    }
+                                                  });
+                                                },
+                                                child: Text(
+                                                  rows.every(
+                                                        (r) => _selectedIds
+                                                            .contains(r.id),
+                                                      )
+                                                      ? '取消全选'
+                                                      : '全选当前',
+                                                  style: const TextStyle(
+                                                    fontSize: 11.5,
+                                                  ),
+                                                ),
+                                              ),
+                                            if (wide)
+                                              IconButton(
+                                                key: const ValueKey(
+                                                  'hr-roster-collapse',
+                                                ),
+                                                tooltip: '收起人员名单',
+                                                onPressed: () => setState(
+                                                  () => _rosterCollapsed = true,
+                                                ),
+                                                icon: const Icon(
+                                                  Icons
+                                                      .keyboard_double_arrow_left_rounded,
+                                                  size: 20,
+                                                ),
+                                                color: DunesColors.resolve(
+                                                  context,
+                                                  DunesColors.brandPurpleDeep,
+                                                ),
+                                                visualDensity:
+                                                    VisualDensity.compact,
+                                              ),
+                                          ],
+                                        ),
                                     Expanded(
                                       child: ListView.builder(
                                         key: PageStorageKey(
@@ -3028,19 +3142,41 @@ class _NativeHrPerformancePageState extends State<NativeHrPerformancePage> {
                                 child:
                                     _selected != null &&
                                         rows.any((r) => r.id == _selected!.id)
-                                    ? HrPerformanceDetail(
-                                        key: ValueKey(_selected!.id),
-                                        session: widget.session,
-                                        record: _selected!,
-                                        service: _service,
-                                        monthStarted: _monthStarted,
-                                        hrAccess: _access.hr,
-                                        onChanged: () => _load(),
+                                    ? Builder(
+                                        builder: (context) {
+                                          final idx = rows.indexWhere(
+                                            (r) => r.id == _selected!.id,
+                                          );
+                                          return HrPerformanceDetail(
+                                            key: ValueKey(_selected!.id),
+                                            session: widget.session,
+                                            record: _selected!,
+                                            service: _service,
+                                            monthStarted: _monthStarted,
+                                            hrAccess: _access.hr,
+                                            onChanged: () => _load(),
+                                            positionLabel:
+                                                '${idx + 1} / ${rows.length}',
+                                            onPrev: idx > 0
+                                                ? () => setState(
+                                                    () =>
+                                                        _selected = rows[idx - 1],
+                                                  )
+                                                : null,
+                                            onNext: idx < rows.length - 1
+                                                ? () => setState(
+                                                    () =>
+                                                        _selected = rows[idx + 1],
+                                                  )
+                                                : null,
+                                          );
+                                        },
                                       )
                                     : const Center(child: Text('选择一位员工查看考核表')),
                               ),
                           ],
                         ),
+                      ),
                 ),
                 if (_selectedIds.isNotEmpty) _buildBatchActions(),
               ],

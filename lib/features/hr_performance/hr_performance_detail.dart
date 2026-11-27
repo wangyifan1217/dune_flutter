@@ -122,6 +122,9 @@ class HrPerformanceDetail extends StatefulWidget {
     this.onChanged,
     this.initialAction,
     this.hrAccess = false,
+    this.onPrev,
+    this.onNext,
+    this.positionLabel,
   });
   final AuthSession session;
   final HrPerformanceRecord record;
@@ -130,6 +133,9 @@ class HrPerformanceDetail extends StatefulWidget {
   final VoidCallback? onChanged;
   final String? initialAction;
   final bool hrAccess;
+  final VoidCallback? onPrev;
+  final VoidCallback? onNext;
+  final String? positionLabel;
   @override
   State<HrPerformanceDetail> createState() => _HrPerformanceDetailState();
 }
@@ -597,6 +603,39 @@ class _HrPerformanceDetailState extends State<HrPerformanceDetail> {
                     28,
                   ),
                   children: [
+                    if (widget.onPrev != null || widget.onNext != null)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 10),
+                        child: Row(
+                          children: [
+                            _HrNavPill(
+                              icon: Icons.chevron_left_rounded,
+                              label: '上一位',
+                              onTap: widget.onPrev,
+                            ),
+                            const Spacer(),
+                            if (widget.positionLabel != null)
+                              Text(
+                                widget.positionLabel!,
+                                style: DunesTypography.sans(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: DunesColors.resolve(
+                                    context,
+                                    DunesColors.text2,
+                                  ),
+                                ),
+                              ),
+                            const Spacer(),
+                            _HrNavPill(
+                              icon: Icons.chevron_right_rounded,
+                              label: '下一位',
+                              trailing: true,
+                              onTap: widget.onNext,
+                            ),
+                          ],
+                        ),
+                      ),
                     _HrPanel(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1682,6 +1721,72 @@ class _HrActionButton extends StatelessWidget {
         ),
       ),
       child: Text(label),
+    );
+  }
+}
+
+class _HrNavPill extends StatelessWidget {
+  const _HrNavPill({
+    required this.icon,
+    required this.label,
+    this.onTap,
+    this.trailing = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback? onTap;
+  final bool trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = onTap != null;
+    final fg = DunesColors.resolve(
+      context,
+      enabled ? DunesColors.brandPurpleDeep : DunesColors.text3,
+    );
+    return Material(
+      color: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
+      borderRadius: BorderRadius.circular(999),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(999),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(
+              color: DunesColors.resolve(
+                context,
+                const Color(0xFFE5E5EA),
+                role: DunesColorRole.border,
+              ),
+              width: 0.6,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (!trailing) Icon(icon, size: 16, color: fg),
+              if (!trailing) const SizedBox(width: 2),
+              Text(
+                label,
+                style: DunesTypography.sans(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: fg,
+                ),
+              ),
+              if (trailing) const SizedBox(width: 2),
+              if (trailing) Icon(icon, size: 16, color: fg),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

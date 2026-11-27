@@ -172,13 +172,58 @@ Future<Map<String, dynamic>?> showHrExportSheet(
           color: const Color(0xFFF3EEFA),
           borderRadius: BorderRadius.circular(10),
         ),
-        child: Text(
-          '将${forForward ? '转发' : '导出'} ${targets().length} 人${mode == 'department' ? ' · 已选 ${departmentIds.length} 个部门' : ''}',
-          style: const TextStyle(
-            fontSize: 12.5,
-            fontWeight: FontWeight.w600,
-            color: Color(0xFF7B5CD8),
-          ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                '将${forForward ? '转发' : '导出'} ${targets().length} 人${mode == 'department' ? ' · 已选 ${departmentIds.length} 个部门' : ''}',
+                style: const TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF7B5CD8),
+                ),
+              ),
+            ),
+            TextButton(
+              style: TextButton.styleFrom(
+                visualDensity: VisualDensity.compact,
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                minimumSize: const Size(0, 28),
+              ),
+              onPressed: () => update(() {
+                if (mode == 'people') {
+                  for (final r in records.where(
+                    (r) =>
+                        '${r.name} ${r.department} ${r.position}'.contains(query),
+                  )) {
+                    selected.add(r.id);
+                  }
+                } else {
+                  for (final d in departments.where(
+                    (d) => '${d['name']}'.contains(query),
+                  )) {
+                    departmentIds.add((d['id'] as num).toInt());
+                  }
+                }
+              }),
+              child: const Text('全选可见', style: TextStyle(fontSize: 12)),
+            ),
+            TextButton(
+              style: TextButton.styleFrom(
+                visualDensity: VisualDensity.compact,
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                minimumSize: const Size(0, 28),
+              ),
+              onPressed: () => update(() {
+                if (mode == 'people') {
+                  selected.clear();
+                } else {
+                  departmentIds.clear();
+                }
+              }),
+              child: const Text('清空', style: TextStyle(fontSize: 12)),
+            ),
+          ],
         ),
       ),
       if (mode == 'people')

@@ -526,6 +526,19 @@ Future<Map<String, dynamic>?> showHrScoreSheet(
         'remark': '${(self ? line['selfRemark'] : line['remark']) ?? ''}',
       },
   ];
+  final scoreCtrls = <String, TextEditingController>{
+    for (final line in lines)
+      '${line['indicatorId']}': TextEditingController(
+        text: hrText(line['score']),
+      ),
+  };
+  final reasonCtrl = TextEditingController();
+  const quickEditReasons = [
+    '部门横向校准',
+    '结合任务佐证微调',
+    '修正评分笔误',
+  ];
+  final hasSuggestedScores = lines.any((l) => l['suggestedScore'] != null);
   final rules = Map<String, dynamic>.from(config['rules'] as Map? ?? {});
   String? scoreError(Map<String, dynamic> line) {
     final value = hrText(line['score']);
@@ -598,6 +611,43 @@ Future<Map<String, dynamic>?> showHrScoreSheet(
                 color: hrConfigColor(context, hrConfigPurple),
               ),
             ),
+            if (hasSuggestedScores) ...[
+              const SizedBox(width: 8),
+              InkWell(
+                borderRadius: BorderRadius.circular(999),
+                onTap: () {
+                  HapticFeedback.selectionClick();
+                  update(() {
+                    for (final l in lines) {
+                      final s = l['suggestedScore'];
+                      if (s != null) {
+                        final txt = '$s';
+                        l['score'] = txt;
+                        scoreCtrls['${l['indicatorId']}']?.text = txt;
+                      }
+                    }
+                  });
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3.5,
+                  ),
+                  decoration: BoxDecoration(
+                    color: hrConfigSurface(context, Colors.white),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    '一键填入建议分',
+                    style: DunesTypography.sans(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: hrConfigColor(context, hrConfigPurple),
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       ),
@@ -747,7 +797,7 @@ Future<Map<String, dynamic>?> showHrScoreSheet(
                             const SizedBox(height: 5),
                             TextFormField(
                               key: ValueKey('hr-score-${line['indicatorId']}'),
-                              initialValue: hrText(line['score']),
+                              controller: scoreCtrls['${line['indicatorId']}'],
                               keyboardType:
                                   const TextInputType.numberWithOptions(
                                     decimal: true,
@@ -857,7 +907,40 @@ Future<Map<String, dynamic>?> showHrScoreSheet(
           ),
         ),
       ),
-      if (!initial) hrReasonField(v, label: '改分理由（改动时必填）'),
+      if (!initial) ...[
+        const SizedBox(height: 6),
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: [
+            for (final chip in quickEditReasons)
+              ActionChip(
+                label: Text(chip),
+                labelStyle: DunesTypography.sans(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w500,
+                  color: DunesColors.resolve(context, DunesColors.text),
+                ),
+                backgroundColor: hrConfigSurface(
+                  context,
+                  const Color(0xFFF5F5F7),
+                ),
+                side: BorderSide.none,
+                shape: const StadiumBorder(),
+                onPressed: () {
+                  HapticFeedback.selectionClick();
+                  reasonCtrl.text = chip;
+                  update(() => v['reason'] = chip);
+                },
+              ),
+          ],
+        ),
+        hrReasonField(
+          v,
+          label: '改分理由（改动时必填）',
+          controller: reasonCtrl,
+        ),
+      ],
     ],
     submit: (v) {
       final incomplete = lines
@@ -917,7 +1000,12 @@ Future<Map<String, dynamic>?> showHrScoreSheet(
       }
       return {'lines': result, 'reason': hrText(v['reason'])};
     },
-  );
+  ).whenComplete(() {
+    for (final c in scoreCtrls.values) {
+      c.dispose();
+    }
+    reasonCtrl.dispose();
+  });
 }
 
 Future<Map<String, dynamic>?> showHrAdjustmentSheet(

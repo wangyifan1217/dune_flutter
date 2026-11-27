@@ -413,6 +413,13 @@ const _xflowSkipRequiredTypes = {'section', 'action', 'computed', 'row'};
 bool xflowParseFormCond(String expr, Map<String, dynamic> values) {
   final trimmed = expr.trim();
   if (trimmed.isEmpty) return true;
+  final ne = trimmed.indexOf('!=');
+  if (ne > 0 && !trimmed.substring(0, ne).contains('=')) {
+    return !xflowParseFormCond(
+      '${trimmed.substring(0, ne).trim()}=${trimmed.substring(ne + 2).trim()}',
+      values,
+    );
+  }
   final eq = trimmed.indexOf('=');
   if (eq <= 0) return true;
   final key = trimmed.substring(0, eq).trim();

@@ -31,10 +31,9 @@ void main() {
   });
 
   test('非说明文字资料用印必须关联提案', () {
-    expect(
-      xflowMissingRequiredLabels(fields, {'isExplanatorySeal': '否'}),
-      ['关联提案'],
-    );
+    expect(xflowMissingRequiredLabels(fields, {'isExplanatorySeal': '否'}), [
+      '关联提案',
+    ]);
     expect(
       xflowMissingRequiredLabels(fields, {
         'isExplanatorySeal': '否',
@@ -48,5 +47,36 @@ void main() {
     expect(fields[0].requiredIn({'isExplanatorySeal': '是'}), isTrue);
     expect(fields[1].requiredIn({'isExplanatorySeal': '是'}), isFalse);
     expect(fields[1].requiredIn({'isExplanatorySeal': '否'}), isTrue);
+  });
+  test('劳动合同和其他合同显示各自的必填字段', () {
+    final conditional = [
+      XflowField.fromJson({
+        'key': 'purpose',
+        'label': '合同标的',
+        'required': true,
+        'visibleWhen': 'contractCategory!=劳动合同',
+      }),
+      XflowField.fromJson({
+        'key': 'parties',
+        'label': '签约主体',
+        'required': true,
+        'visibleWhen': 'contractCategory=劳动合同',
+      }),
+    ];
+    expect(
+      xflowMissingRequiredLabels(conditional, {'contractCategory': '劳动合同'}),
+      ['签约主体'],
+    );
+    expect(
+      xflowMissingRequiredLabels(conditional, {'contractCategory': '采购合同'}),
+      ['合同标的'],
+    );
+    expect(
+      xflowMissingRequiredLabels(conditional, {
+        'contractCategory': '采购合同',
+        'purpose': '采购',
+      }),
+      isEmpty,
+    );
   });
 }

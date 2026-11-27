@@ -832,6 +832,15 @@ class XflowService {
     '${_proposalRoot(proposalId, funding: funding)}/cost-collection',
   );
 
+  Future<List<Map<String, dynamic>>> fetchExternalComplaintCandidates(
+    int proposalId,
+  ) async {
+    final rows = await _requestList(
+      '/proposal-intakes/$proposalId/external-complaint-candidates',
+    );
+    return rows.whereType<Map<String, dynamic>>().toList();
+  }
+
   /// 设置提案「可发起人」（整体替换）。只有提案负责人可以改。
   Future<Map<String, dynamic>> saveProposalApprovalLaunchers(
     int proposalId,

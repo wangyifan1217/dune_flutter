@@ -13,7 +13,6 @@ import '../../core/widgets/dunes_month_picker.dart';
 import '../../core/widgets/cached_network_image.dart';
 import '../auth/auth_session.dart';
 import '../hr_performance/hr_performance_screen.dart';
-import '../lighthouse/partner_sinopec_page.dart';
 import '../auth/qr_login_scan_page.dart';
 import '../attendance/native_attendance_page.dart';
 import '../conversation/comm_unread_notifier.dart';
@@ -1494,12 +1493,8 @@ class _NativeMyWorkProfileCenterPageState
                                   ),
                                 ),
                                 if (widget.session.isExternalUser &&
-                                    const {
-                                      '18922438001',
-                                      '13719011828',
-                                      '15768997871',
-                                      '18127906706',
-                                    }.contains(widget.session.phone.trim()))
+                                    widget.session.phone.trim() ==
+                                        '18127906706')
                                   Padding(
                                     padding: const EdgeInsets.symmetric(
                                       horizontal: kMinePageGutter,
@@ -1535,13 +1530,7 @@ class _NativeMyWorkProfileCenterPageState
                                         trailing: const Icon(
                                           Icons.chevron_right,
                                         ),
-                                        onTap: () => Navigator.of(context).push(
-                                          MaterialPageRoute<void>(
-                                            builder: (_) => PartnerSinopecPage(
-                                              session: widget.session,
-                                            ),
-                                          ),
-                                        ),
+                                        onTap: () => widget.navigation.go('LH'),
                                       ),
                                     ),
                                   ),

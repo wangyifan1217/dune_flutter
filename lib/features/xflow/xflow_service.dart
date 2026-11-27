@@ -494,6 +494,16 @@ class XflowService {
       // 旧服可能没有该接口；失败时回退用 my-initiated 展示非销售审批。
       err2 = e;
     }
+    if (session.isExternalUser && session.phone.trim() == '18127906706') {
+      if (!submissionsOk) throw err2 ?? Exception('客诉申请加载失败');
+      final items = byId.values.toList(growable: true)
+        ..sort(
+          (a, b) => (b.createdAt?.millisecondsSinceEpoch ?? 0).compareTo(
+            a.createdAt?.millisecondsSinceEpoch ?? 0,
+          ),
+        );
+      return items;
+    }
     // `my-initiated`：我已正式发起、进入审批流的提案。
     try {
       final rows = await _requestList(

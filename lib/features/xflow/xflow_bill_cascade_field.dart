@@ -47,6 +47,7 @@ class XflowBillCascadeField extends StatelessWidget {
             remainingKind: _cfg.remainingKind,
             billDirection: _cfg.billDirection,
             readonly: readonly,
+            allowUnreconciled: _cfg.allowUnreconciled,
             onRemove: readonly
                 ? null
                 : () {
@@ -274,7 +275,9 @@ class _BillCascadeSheetState extends State<_BillCascadeSheet> {
     final id = xflowBillId(row);
     if (id == null) return;
     final exists = _picked.any((e) => xflowBillHasId(e, id));
-    if (!exists && !xflowBillReconcileSelectable(row)) {
+    if (!exists &&
+        !widget.config.allowUnreconciled &&
+        !xflowBillReconcileSelectable(row)) {
       showDunesToast(
         context,
         xflowBillReconcileBlockedHint,
@@ -461,6 +464,7 @@ class _BillCascadeSheetState extends State<_BillCascadeSheet> {
               else
                 for (final row in _rows)
                   _ResultBillTile(
+                    allowUnreconciled: widget.config.allowUnreconciled,
                     row: row,
                     remainingKind: widget.config.remainingKind,
                     billDirection: widget.config.billDirection,
@@ -503,6 +507,7 @@ class _SelectedBillTile extends StatelessWidget {
     required this.remainingKind,
     required this.billDirection,
     required this.readonly,
+    required this.allowUnreconciled,
     this.onRemove,
   });
 
@@ -510,6 +515,7 @@ class _SelectedBillTile extends StatelessWidget {
   final String remainingKind;
   final String billDirection;
   final bool readonly;
+  final bool allowUnreconciled;
   final VoidCallback? onRemove;
 
   @override
@@ -569,7 +575,9 @@ class _SelectedBillTile extends StatelessWidget {
             remainingKind: remainingKind,
             billDirection: billDirection,
           ),
-          if (!readonly && !xflowBillReconcileSelectable(row)) ...[
+          if (!readonly &&
+              !allowUnreconciled &&
+              !xflowBillReconcileSelectable(row)) ...[
             const SizedBox(height: 6),
             const _ReconcileBlockedHint(),
           ],
@@ -585,6 +593,7 @@ class _ResultBillTile extends StatelessWidget {
     required this.remainingKind,
     required this.billDirection,
     required this.selected,
+    required this.allowUnreconciled,
     required this.onTap,
   });
 
@@ -592,11 +601,12 @@ class _ResultBillTile extends StatelessWidget {
   final String remainingKind;
   final String billDirection;
   final bool selected;
+  final bool allowUnreconciled;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final blocked = !xflowBillReconcileSelectable(row);
+    final blocked = !allowUnreconciled && !xflowBillReconcileSelectable(row);
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: InkWell(

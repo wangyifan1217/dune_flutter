@@ -262,9 +262,9 @@ String? xflowUnreconciledBillProblem({
   required String label,
   required dynamic value,
 }) {
-  final blocked = xflowBillSelectedList(value)
-      .where((row) => !xflowBillReconcileSelectable(row))
-      .length;
+  final blocked = xflowBillSelectedList(
+    value,
+  ).where((row) => !xflowBillReconcileSelectable(row)).length;
   if (blocked == 0) return null;
   final name = label.trim().isEmpty ? '关联账单' : label.trim();
   return '$name含未对账账单，需要对账才能进行审批';
@@ -388,10 +388,12 @@ class XflowBillCascadeConfig {
   const XflowBillCascadeConfig({
     required this.billDirection,
     this.remainingKind = 'payable',
+    this.allowUnreconciled = false,
   });
 
   final String billDirection;
   final String remainingKind;
+  final bool allowUnreconciled;
 
   factory XflowBillCascadeConfig.fromField(Map<String, dynamic> raw) {
     final dir = '${raw['billDirection'] ?? ''}'.trim().toUpperCase();
@@ -399,6 +401,7 @@ class XflowBillCascadeConfig {
     return XflowBillCascadeConfig(
       billDirection: dir == 'AR' || dir == 'AP' ? dir : 'AR',
       remainingKind: kind == 'invoice' ? 'invoice' : 'payable',
+      allowUnreconciled: raw['allowUnreconciled'] == true,
     );
   }
 }

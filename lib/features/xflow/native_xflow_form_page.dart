@@ -806,7 +806,9 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
       return;
     }
     for (final field in _template?.fields ?? const []) {
-      if (field.type != 'billCascade') continue;
+      if (field.type != 'billCascade' ||
+          XflowBillCascadeConfig.fromField(field.raw).allowUnreconciled)
+        continue;
       final blocked = xflowUnreconciledBillProblem(
         label: field.label,
         value: _values[field.key],

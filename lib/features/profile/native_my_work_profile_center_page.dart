@@ -13,6 +13,7 @@ import '../../core/widgets/dunes_month_picker.dart';
 import '../../core/widgets/cached_network_image.dart';
 import '../auth/auth_session.dart';
 import '../hr_performance/hr_performance_screen.dart';
+import '../lighthouse/partner_sinopec_page.dart';
 import '../auth/qr_login_scan_page.dart';
 import '../attendance/native_attendance_page.dart';
 import '../conversation/comm_unread_notifier.dart';
@@ -1443,14 +1444,12 @@ class _NativeMyWorkProfileCenterPageState
                                     onOpenPerformance:
                                         widget.session.isExternalUser
                                         ? null
-                                        : () =>
-                                              widget.navigation.go('B2PERF'),
+                                        : () => widget.navigation.go('B2PERF'),
                                     onOpenWorkbench:
                                         !isDesktopCommOnly &&
                                             !widget.session.isExternalUser
                                         ? () {
-                                            final open =
-                                                widget.onOpenWorkbench;
+                                            final open = widget.onOpenWorkbench;
                                             if (open != null) {
                                               open();
                                             } else {
@@ -1479,10 +1478,9 @@ class _NativeMyWorkProfileCenterPageState
                                         context,
                                         '已为你打开小饕（指令已复制，可直接粘贴发送）',
                                       );
-                                      final openAi =
-                                          NovaPresenceScope.maybeOf(
-                                            context,
-                                          )?.open;
+                                      final openAi = NovaPresenceScope.maybeOf(
+                                        context,
+                                      )?.open;
                                       if (openAi != null) {
                                         openAi();
                                       } else {
@@ -1495,6 +1493,58 @@ class _NativeMyWorkProfileCenterPageState
                                         widget.onOpenReleaseHistory,
                                   ),
                                 ),
+                                if (widget.session.isExternalUser &&
+                                    const {
+                                      '18922438001',
+                                      '13719011828',
+                                      '15768997871',
+                                      '18127906706',
+                                    }.contains(widget.session.phone.trim()))
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: kMinePageGutter,
+                                    ),
+                                    child: Card(
+                                      child: ListTile(
+                                        leading: const Icon(
+                                          Icons.support_agent,
+                                        ),
+                                        title: const Text('客诉申请'),
+                                        subtitle: const Text('电子券退款、卡券补发、客户赔付'),
+                                        trailing: const Icon(
+                                          Icons.chevron_right,
+                                        ),
+                                        onTap: () => widget.onOpenXflowForm(
+                                          'finance-customer-complaint',
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                if (widget.session.isExternalUser &&
+                                    widget.session.phone.trim() ==
+                                        '13637414351')
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: kMinePageGutter,
+                                    ),
+                                    child: Card(
+                                      child: ListTile(
+                                        leading: const Icon(Icons.bar_chart),
+                                        title: const Text('中石化数据'),
+                                        subtitle: const Text('WOA、GMV'),
+                                        trailing: const Icon(
+                                          Icons.chevron_right,
+                                        ),
+                                        onTap: () => Navigator.of(context).push(
+                                          MaterialPageRoute<void>(
+                                            builder: (_) => PartnerSinopecPage(
+                                              session: widget.session,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
                                 Padding(
                                   padding: const EdgeInsets.symmetric(
                                     horizontal: kMinePageGutter,
@@ -1504,8 +1554,7 @@ class _NativeMyWorkProfileCenterPageState
                                     month: _month,
                                     counts: counts,
                                     showProposals: showProposals,
-                                    companyView:
-                                        widget.session.mineCompanyView,
+                                    companyView: widget.session.mineCompanyView,
                                     refreshToken: _mineRefreshToken,
                                     onOpenPendingApprovals: () =>
                                         widget.navigation.go('B1'),
@@ -1514,10 +1563,8 @@ class _NativeMyWorkProfileCenterPageState
                                     onOpenInitiated: () => widget.onOpenB14(),
                                     onOpenCc: () => widget.navigation.go('P1'),
                                     onOpenRejected: () => widget.onOpenB14(),
-                                    onOpenPendingInitiate: () =>
-                                        widget.onOpenB14(
-                                          filter: 'PENDING_INITIATE',
-                                        ),
+                                    onOpenPendingInitiate: () => widget
+                                        .onOpenB14(filter: 'PENDING_INITIATE'),
                                     onOpenLighthouse: () =>
                                         widget.navigation.go('LH'),
                                     onOpenProposalList: _openProposalIntake,
@@ -1599,9 +1646,7 @@ class _NativeMyWorkProfileCenterPageState
           Colors.white,
           role: DunesColorRole.surface,
         ),
-        border: Border(
-          bottom: DunesColors.topBarHairline(context),
-        ),
+        border: Border(bottom: DunesColors.topBarHairline(context)),
       ),
       child: Row(
         children: [

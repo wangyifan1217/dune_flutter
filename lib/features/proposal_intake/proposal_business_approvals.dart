@@ -1079,6 +1079,27 @@ class _ProposalBusinessApprovalsState extends State<ProposalBusinessApprovals> {
   Future<void> _editLaunchers() async {
     final selected = {for (final item in _launchers) item.userId};
     final people = widget.people.where((p) => p.userId > 0).toList();
+    if (!widget.funding) {
+      try {
+        final candidates = await _service.fetchExternalComplaintCandidates(
+          widget.proposal.id,
+        );
+        final existing = people.map((person) => person.userId).toSet();
+        for (final candidate in candidates) {
+          final person = ProposalPerson.fromJson(candidate);
+          if (person.userId > 0 && existing.add(person.userId)) {
+            people.add(person);
+          }
+        }
+      } catch (_) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('外部人员名单加载失败，请重试')));
+        return;
+      }
+      if (!mounted) return;
+    }
     var query = '';
     final result = await showDialog<Set<int>>(
       context: context,

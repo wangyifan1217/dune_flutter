@@ -209,14 +209,7 @@ class MineHomeTitleBar extends StatelessWidget {
               DunesColorRole.surface,
             ).withValues(alpha: 0.88),
             border: Border(
-              bottom: BorderSide(
-                color: _r(
-                  context,
-                  const Color(0xFFE5E5EA),
-                  DunesColorRole.border,
-                ),
-                width: 0.5,
-              ),
+              bottom: DunesColors.topBarHairline(context),
             ),
           ),
           padding: const EdgeInsets.fromLTRB(

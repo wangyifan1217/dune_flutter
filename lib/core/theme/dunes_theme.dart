@@ -14,6 +14,17 @@ abstract final class DunesColors {
     DunesColorRole role = DunesColorRole.foreground,
   }) => brightness == Brightness.dark ? _resolveNight(light, role) : light;
 
+  static BorderSide topBarHairline(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final dpr = MediaQuery.devicePixelRatioOf(context);
+    return BorderSide(
+      color: isDark
+          ? Colors.white.withValues(alpha: 0.065)
+          : Colors.black.withValues(alpha: 0.045),
+      width: (1 / dpr).clamp(0.33, 0.5),
+    );
+  }
+
   /// Resolve shared form decorations without changing their layout or shape.
   static InputDecoration inputDecoration(
     BuildContext? context,

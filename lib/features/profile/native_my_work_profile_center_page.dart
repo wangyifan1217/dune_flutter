@@ -1600,13 +1600,7 @@ class _NativeMyWorkProfileCenterPageState
           role: DunesColorRole.surface,
         ),
         border: Border(
-          bottom: BorderSide(
-            color: DunesColors.resolve(
-              context,
-              Color(0xFFEFE8F5),
-              role: DunesColorRole.border,
-            ),
-          ),
+          bottom: DunesColors.topBarHairline(context),
         ),
       ),
       child: Row(

@@ -1159,14 +1159,7 @@ class _NativeProposalListPageState extends State<_NativeProposalListPage> {
               role: DunesColorRole.surface,
             ).withValues(alpha: 0.88),
             border: Border(
-              bottom: BorderSide(
-                color: DunesColors.resolve(
-                  context,
-                  const Color(0xFFE5E5EA),
-                  role: DunesColorRole.border,
-                ),
-                width: 0.5,
-              ),
+              bottom: DunesColors.topBarHairline(context),
             ),
           ),
           child: Stack(

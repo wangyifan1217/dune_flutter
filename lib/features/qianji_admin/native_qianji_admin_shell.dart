@@ -717,14 +717,7 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
                         role: DunesColorRole.surface,
                       ).withValues(alpha: 0.88),
                       border: Border(
-                        bottom: BorderSide(
-                          color: DunesColors.resolve(
-                            context,
-                            const Color(0xFFE5E5EA),
-                            role: DunesColorRole.border,
-                          ),
-                          width: 0.5,
-                        ),
+                        bottom: DunesColors.topBarHairline(context),
                       ),
                     ),
                     padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),

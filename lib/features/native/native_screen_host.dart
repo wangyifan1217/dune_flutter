@@ -8057,13 +8057,7 @@ class _NativeB2PageState extends State<_NativeB2Page> {
           role: DunesColorRole.surface,
         ),
         border: Border(
-          bottom: BorderSide(
-            color: DunesColors.resolve(
-              context,
-              DunesColors.borderSoft,
-              role: DunesColorRole.border,
-            ),
-          ),
+          bottom: DunesColors.topBarHairline(context),
         ),
       ),
       child: Row(
@@ -8786,13 +8780,7 @@ class _NativeB2PageState extends State<_NativeB2Page> {
     final withBorder = Container(
       decoration: BoxDecoration(
         border: Border(
-          bottom: BorderSide(
-            color: DunesColors.resolve(
-              context,
-              DunesColors.borderSoft,
-              role: DunesColorRole.border,
-            ),
-          ),
+          bottom: DunesColors.topBarHairline(context),
         ),
       ),
       child: row,
